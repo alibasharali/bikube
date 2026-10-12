@@ -102,7 +102,7 @@ test('AC2: create via dialog defaults the name and shows the default columns', a
   await expect(items.first()).toContainText('alpha')
   await expect(items.first()).toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
-  expect(await columnNames()).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
 })
 
 test('AC3: validation errors are inline and block creation', async () => {
@@ -146,13 +146,13 @@ test('AC4: switching shows independent boards', async () => {
   await expect(items.nth(0)).toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
   await addColumn('Review')
-  expect(await columnNames()).toEqual(['Backlog', 'Running', 'Needs me', 'Done', 'Review'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done', 'Review'])
 
   await items.nth(1).click()
   await expect(items.nth(1)).toHaveAttribute('aria-current', 'true')
   await expect(items.nth(0)).not.toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('beta')
-  expect(await columnNames()).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
 })
 
 test('AC5: edit renames, changes directory and rejects duplicates', async () => {
@@ -232,7 +232,7 @@ test('AC7: column add, rename, move, delete and validation', async () => {
   await page.getByTestId('add-column-input').press('Enter')
   await expect(page.getByTestId('column-error')).toBeVisible()
   await page.getByTestId('add-column-input').press('Escape')
-  expect(await columnNames()).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
 
   // Double-click renames inline; a duplicate is rejected.
   await page.getByRole('heading', { name: 'Review', exact: true }).dblclick()
@@ -240,7 +240,7 @@ test('AC7: column add, rename, move, delete and validation', async () => {
   await page.getByTestId('column-rename-input').press('Enter')
   await expect(page.getByTestId('column-error')).toBeVisible()
   await page.getByTestId('column-rename-input').press('Escape')
-  expect(await columnNames()).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
 
   // The last remaining column cannot be deleted.
   await columnAction('Review', 'menu-delete')
@@ -293,10 +293,11 @@ test('AC9: Esc cancels and Enter submits dialogs and inline edits', async () => 
   await page.getByRole('heading', { name: 'Backlog', exact: true }).dblclick()
   await page.getByTestId('column-rename-input').fill('Ideas')
   await page.getByTestId('column-rename-input').press('Escape')
-  expect(await columnNames()).toContain('Backlog')
+  await expect.poll(columnNames).toContain('Backlog')
+  await expect.poll(columnNames).not.toContain('Ideas')
 
   await page.getByRole('heading', { name: 'Backlog', exact: true }).dblclick()
   await page.getByTestId('column-rename-input').fill('Ideas')
   await page.getByTestId('column-rename-input').press('Enter')
-  expect(await columnNames()).toContain('Ideas')
+  await expect.poll(columnNames).toContain('Ideas')
 })

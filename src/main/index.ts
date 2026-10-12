@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerClipboard } from './clipboard'
+import { registerDirectories } from './directories'
 import { registerTerminals } from './terminals'
 
 function createWindow(): void {
@@ -29,6 +30,7 @@ function createWindow(): void {
 
 const terminals = registerTerminals()
 registerClipboard()
+registerDirectories()
 
 // No PTY process outlives the app.
 app.on('before-quit', () => terminals.killAll())

@@ -7,6 +7,12 @@ const api: DrovrApi = {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
     write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text)
   },
+  fs: {
+    isDirectory: (path) => ipcRenderer.invoke(IPC.fsIsDirectory, path)
+  },
+  dialog: {
+    pickDirectory: () => ipcRenderer.invoke(IPC.dialogPickDirectory)
+  },
   terminal: {
     spawn: (cols, rows) => ipcRenderer.invoke(IPC.spawn, cols, rows),
     write: (id, data) => ipcRenderer.send(IPC.write, id, data),

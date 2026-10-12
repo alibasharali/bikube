@@ -7,7 +7,9 @@ export const IPC = {
   data: 'terminal:data',
   exit: 'terminal:exit',
   clipboardRead: 'clipboard:read',
-  clipboardWrite: 'clipboard:write'
+  clipboardWrite: 'clipboard:write',
+  fsIsDirectory: 'fs:isDirectory',
+  dialogPickDirectory: 'dialog:pickDirectory'
 } as const
 
 export interface TerminalExit {
@@ -34,9 +36,23 @@ export interface ClipboardApi {
   write(text: string): Promise<void>
 }
 
+/** Filesystem checks, run by main. */
+export interface FsApi {
+  /** True only for an existing directory; false for files, missing paths and invalid arguments. */
+  isDirectory(path: string): Promise<boolean>
+}
+
+/** Native dialogs, opened by main. */
+export interface DialogApi {
+  /** Opens the native folder picker; resolves to the chosen absolute path, or null when cancelled. */
+  pickDirectory(): Promise<string | null>
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
   terminal: TerminalApi
   clipboard: ClipboardApi
+  fs: FsApi
+  dialog: DialogApi
 }

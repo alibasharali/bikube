@@ -2,7 +2,7 @@
 item: 1
 type: feature
 title: "PoC: terminal in Electron"
-status: draft
+status: approved
 branch: claude/1-start-drovr
 ---
 

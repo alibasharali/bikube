@@ -8,6 +8,8 @@ interface SidebarProps {
   onToggle: () => void
   onSelect: (id: string) => void
   onAdd: () => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
 }
 
 function Sidebar({
@@ -16,7 +18,9 @@ function Sidebar({
   collapsed,
   onToggle,
   onSelect,
-  onAdd
+  onAdd,
+  onEdit,
+  onDelete
 }: SidebarProps): React.JSX.Element {
   return (
     <nav
@@ -52,7 +56,7 @@ function Sidebar({
         {workspaces.map((w) => {
           const active = w.id === activeId
           return (
-            <li key={w.id}>
+            <li key={w.id} className="workspace-row">
               <button
                 type="button"
                 className={active ? 'workspace-item active' : 'workspace-item'}
@@ -67,6 +71,30 @@ function Sidebar({
                 </span>
                 {!collapsed && <span className="workspace-name">{w.name}</span>}
               </button>
+              {!collapsed && (
+                <span className="workspace-actions">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    data-testid="workspace-edit"
+                    aria-label={`Edit ${w.name}`}
+                    title="Edit workspace"
+                    onClick={() => onEdit(w.id)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    data-testid="workspace-delete"
+                    aria-label={`Delete ${w.name}`}
+                    title="Delete workspace"
+                    onClick={() => onDelete(w.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
             </li>
           )
         })}

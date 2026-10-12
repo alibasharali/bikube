@@ -7,6 +7,7 @@
   --text-muted: #9094a3;
   --accent: #6d8dfa;
   --accent-text: #0e1220;
+  --danger: #e5484d;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -259,4 +260,115 @@ button {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.workspace-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.workspace-actions {
+  position: absolute;
+  right: var(--space-1);
+  display: none;
+  gap: var(--space-1);
+}
+
+.workspace-row:hover .workspace-actions,
+.workspace-row:focus-within .workspace-actions {
+  display: flex;
+}
+
+.workspace-actions .icon-btn {
+  background: var(--surface);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10;
+}
+
+.modal {
+  width: min(440px, calc(100vw - 32px));
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-title {
+  margin: 0 0 var(--space-4);
+  font-size: 16px;
+}
+
+.modal-message {
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.field label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.field-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

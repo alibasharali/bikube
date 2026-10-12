@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import '@xterm/xterm/css/xterm.css'
 
 /** One live terminal: an xterm.js view bound to a PTY session in the main process. */
@@ -14,6 +16,33 @@ function Terminal(): React.JSX.Element {
     term.loadAddon(fit)
     term.open(host)
     fit.fit()
+
+    // WebGL where available; xterm's DOM renderer stays in place otherwise (D8).
+    let webgl: WebglAddon | undefined
+    try {
+      webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        webgl?.dispose()
+        webgl = undefined
+      })
+      term.loadAddon(webgl)
+    } catch {
+      webgl?.dispose()
+      webgl = undefined
+    }
+
+    // Copy and paste go through the main process clipboard; paste uses term.paste for bracketed paste.
+    const clipboard = window.drovr.clipboard
+    term.attachCustomKeyEventHandler((event) => {
+      const action = clipboardShortcut(event, window.drovr.platform)
+      if (!action) return true
+      // Stop the native paste event too, or xterm would paste twice.
+      event.preventDefault()
+      if (action === 'copy') void copySelection(term, clipboard)
+      else void pasteFromClipboard(term, clipboard)
+      return false
+    })
+
     // Handle for the smoke tests, which read the buffer and size.
     ;(host as HTMLDivElement & { __xterm?: XTerm }).__xterm = term
 
@@ -55,6 +84,7 @@ function Terminal(): React.JSX.Element {
       offData()
       offExit()
       if (sessionId) api.kill(sessionId)
+      webgl?.dispose()
       term.dispose()
     }
   }, [])

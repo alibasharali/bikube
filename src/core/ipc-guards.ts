@@ -22,3 +22,6 @@ export function isWriteData(data: unknown): data is string {
     Buffer.byteLength(data, 'utf8') <= MAX_WRITE_BYTES
   )
 }
+
+/** Clipboard text shares the write cap: it ends up in a PTY when pasted. */
+export const isClipboardText = isWriteData

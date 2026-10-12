@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_WRITE_BYTES, isSessionId, isValidSize, isWriteData } from './ipc-guards'
+import {
+  MAX_WRITE_BYTES,
+  isClipboardText,
+  isSessionId,
+  isValidSize,
+  isWriteData
+} from './ipc-guards'
 
 describe('isValidSize', () => {
   it('accepts integers from 1 to 1000', () => {
@@ -56,5 +62,20 @@ describe('isWriteData', () => {
     expect(isWriteData(42)).toBe(false)
     expect(isWriteData(undefined)).toBe(false)
     expect(isWriteData(new Uint8Array(1))).toBe(false)
+  })
+})
+
+describe('isClipboardText', () => {
+  it('accepts strings up to the cap, including empty and multi-line', () => {
+    expect(isClipboardText('')).toBe(true)
+    expect(isClipboardText('a\nb')).toBe(true)
+    expect(isClipboardText('x'.repeat(MAX_WRITE_BYTES))).toBe(true)
+  })
+
+  it('rejects non-strings and oversized text', () => {
+    expect(isClipboardText(42)).toBe(false)
+    expect(isClipboardText(null)).toBe(false)
+    expect(isClipboardText('x'.repeat(MAX_WRITE_BYTES + 1))).toBe(false)
+    expect(isClipboardText('€'.repeat(MAX_WRITE_BYTES / 2))).toBe(false)
   })
 })

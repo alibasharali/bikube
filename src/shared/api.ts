@@ -5,7 +5,9 @@ export const IPC = {
   resize: 'terminal:resize',
   kill: 'terminal:kill',
   data: 'terminal:data',
-  exit: 'terminal:exit'
+  exit: 'terminal:exit',
+  clipboardRead: 'clipboard:read',
+  clipboardWrite: 'clipboard:write'
 } as const
 
 export interface TerminalExit {
@@ -26,8 +28,15 @@ export interface TerminalApi {
   onExit(listener: (exit: TerminalExit) => void): () => void
 }
 
+/** System clipboard text, owned by main; the renderer has no direct access. */
+export interface ClipboardApi {
+  read(): Promise<string>
+  write(text: string): Promise<void>
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
   terminal: TerminalApi
+  clipboard: ClipboardApi
 }

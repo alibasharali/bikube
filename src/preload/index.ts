@@ -3,6 +3,10 @@ import { IPC, type DrovrApi, type TerminalExit } from '../shared/api'
 
 const api: DrovrApi = {
   platform: process.platform,
+  clipboard: {
+    read: () => ipcRenderer.invoke(IPC.clipboardRead),
+    write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text)
+  },
   terminal: {
     spawn: (cols, rows) => ipcRenderer.invoke(IPC.spawn, cols, rows),
     write: (id, data) => ipcRenderer.send(IPC.write, id, data),

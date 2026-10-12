@@ -1,4 +1,5 @@
-import { ipcMain, type WebContents } from 'electron'
+import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { isSessionId, isValidSize, isWriteData } from '../core/ipc-guards'
 import { SessionManager } from '../core/session-manager'
 import { IPC, type TerminalExit } from '../shared/api'
 
@@ -18,18 +19,33 @@ export function registerTerminals(): SessionManager {
     if (owner && !owner.isDestroyed()) owner.send(IPC.exit, exit)
   })
 
-  ipcMain.handle(IPC.spawn, (event, cols: number, rows: number) => {
-    const { id } = manager.spawn({ cols, rows })
+  // Only a window's own top-level page may drive terminals, never a subframe.
+  const fromMainFrame = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
+    event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
+  // Calls on an existing session must come from the window that spawned it.
+  const ownedBy = (event: IpcMainEvent, id: unknown): id is string =>
+    fromMainFrame(event) && isSessionId(id) && owners.get(id) === event.sender
+
+  ipcMain.handle(IPC.spawn, (event, cols: unknown, rows: unknown) => {
+    if (!fromMainFrame(event)) throw new Error('terminal:spawn rejected: untrusted sender')
+    if (!isValidSize(cols, rows)) throw new Error('terminal:spawn rejected: invalid size')
+    const { id } = manager.spawn({ cols: cols as number, rows: rows as number })
     owners.set(id, event.sender)
     // A closed window must not leave its shells behind.
     event.sender.once('destroyed', () => manager.kill(id))
     return id
   })
-  ipcMain.on(IPC.write, (_event, id: string, data: string) => manager.write(id, data))
-  ipcMain.on(IPC.resize, (_event, id: string, cols: number, rows: number) =>
-    manager.resize(id, cols, rows)
-  )
-  ipcMain.on(IPC.kill, (_event, id: string) => manager.kill(id))
+  ipcMain.on(IPC.write, (event, id: unknown, data: unknown) => {
+    if (ownedBy(event, id) && isWriteData(data)) manager.write(id, data)
+  })
+  ipcMain.on(IPC.resize, (event, id: unknown, cols: unknown, rows: unknown) => {
+    if (ownedBy(event, id) && isValidSize(cols, rows)) {
+      manager.resize(id, cols as number, rows as number)
+    }
+  })
+  ipcMain.on(IPC.kill, (event, id: unknown) => {
+    if (ownedBy(event, id)) manager.kill(id)
+  })
 
   return manager
 }

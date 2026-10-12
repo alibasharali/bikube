@@ -26,7 +26,7 @@ Work items live on the project's board in **Software Factory**, not in GitHub Is
 |---|---|---|
 | Backlog | item exists, no work started | — |
 | Spec | agent is grilling the developer and writing the spec | agent |
-| Ready to build | the developer approved the spec, in the session or with the factory's approve button | agent on the developer's word, or the factory on the button |
+| Ready to build | the developer approved the spec, in the session or with the factory's approve button (or sent it back with **Request changes**) | agent on the developer's word, or the factory on the button |
 | In progress | slices being implemented | agent |
 | In review | PR into the base branch open; CI and Claude review running | factory, when the agent opens the PR |
 | delivery columns | see the preset | factory (GitHub webhooks) |

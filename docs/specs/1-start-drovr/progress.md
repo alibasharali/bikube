@@ -12,7 +12,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | S4 | done | `1e3295c..19b93ac` | CLEAN | window.drovr.clipboard.read()/write(text) (IPC clipboard:read/write, guarded, main-frame sender); src/core/clipboard.ts (clipboardShortcut, copySelection, pasteFromClipboard); Terminal.tsx loads WebglAddon per instance (try/catch, onContextLoss falls back to DOM; Chromium ~16 WebGL context limit matters for S5); shortcuts Cmd+C/V mac, Ctrl+Shift+C/V elsewhere; smoke: `xvfb-run -a npx playwright test` (needs `node node_modules/electron/install.js` after --ignore-scripts install) |
 | S5 | done | `d9f1807..0538f22` | CLEAN | Grid + toolbar (testids new-terminal, terminal-count); `xvfb-run -a npm run benchmark` (BENCH_PROFILE=firehose for stress) writes test-results/benchmark-<profile>.md; software-GL detection (src/core/webgl-support.ts) falls back to DOM. Numbers in Verification section. Flow-control idea = #16 |
 | S6 | done | `2262c14..9e39b7c` | CLEAN | .github/workflows/release.yml (release published -> macos-latest, npm run dist, gh release upload dist/*.dmg); actionlint 1.7.7 via go install in ci.yml, check.sh fails in CI if missing; dmg named from package.json version (not the tag); `npm run pack` fails in sandbox (proxy blocks Electron headers), `electron-builder --dir --config.npmRebuild=false` works; real macOS run unverified (developer on beta) |
-| S7 | todo | | | |
+| S7 | done | factory calls only | n/a | propose_stack_change: https://github.com/alibasharali/software-factory/pull/2 (electron-desktop, experimental) |
 
 ## Rulings
 

@@ -271,13 +271,20 @@ button {
 .workspace-actions {
   position: absolute;
   right: var(--space-1);
-  display: none;
+  display: flex;
   gap: var(--space-1);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .workspace-row:hover .workspace-actions,
 .workspace-row:focus-within .workspace-actions {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-collapsed .workspace-actions {
+  display: none;
 }
 
 .workspace-actions .icon-btn {

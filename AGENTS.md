@@ -10,7 +10,8 @@ Built with Software Factory's workflow: read `docs/agents/workflow.md` before st
 - `npm run dev` starts the app with hot reload; `npm start` previews the production build.
 - `.claude/check.sh` runs everything that must be green: typecheck, lint, Vitest, build, `node .factory/check-stack.mjs`. CI's `check` job runs it.
 - Individually: `npm run typecheck`, `npm run lint`, `npm test` (Vitest), `npm run build`, `npm run format`.
-- `npm run test:smoke` builds, then runs the Playwright-Electron smoke tests in `e2e/` (window, "1 terminal", typing, resize). Needs a display: `xvfb-run -a npm run test:smoke` on Linux. CI runs it after `check.sh`.
+- `npm run test:smoke` builds, then runs the Playwright-Electron smoke tests in `e2e/` (window, "1 terminal", typing, resize, colours, copy and paste). Needs a display: `xvfb-run -a npm run test:smoke` on Linux. CI runs it after `check.sh`.
+- `npm run benchmark` builds, then runs the 10-terminal performance benchmark (`e2e/benchmark.spec.ts`, `playwright.benchmark.config.ts`) and writes `test-results/benchmark-<profile>.md`. Needs a display: `xvfb-run -a npm run benchmark`; `BENCH_PROFILE=firehose` for the stress profile.
 - `npm run dist` builds the unsigned macOS .dmg (macOS only); `npm run pack` builds an unpacked app for the current OS.
 - CI also runs `actionlint` (via `check.sh`; install with `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7`). `.github/workflows/release.yml` builds the .dmg on a published release and attaches `dist/*.dmg`.
 - Headless launch: `xvfb-run -a npx electron . --no-sandbox` (after `npm run build`).

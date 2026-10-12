@@ -1,0 +1,22 @@
+appId: com.drovr.app
+productName: Drovr
+directories:
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - '**/node_modules/node-pty/**'
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+  category: Development
+npmRebuild: true
+publish: null

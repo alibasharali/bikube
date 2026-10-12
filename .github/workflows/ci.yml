@@ -6,9 +6,14 @@ on:
 
 jobs:
   # job id is the required status check in the develop/main rulesets; don't rename it.
-  # v1 adds the stack's setup steps (runtime, dependencies) before the check.
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: .claude/check.sh
+      # later slices add here: xvfb Electron smoke test (xvfb-run), actionlint

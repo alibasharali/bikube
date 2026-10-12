@@ -1,6 +1,19 @@
 {
   "$comment": "The stack this repo uses; the factory reads it on every merge into the base branch. Change it in the same PR as the code (.factory/check-stack.mjs enforces it).",
   "options": [],
-  "described": {},
+  "described": {
+    "native-ui": [
+      "Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl addons) + node-pty + Vitest + ESLint + electron-builder + npm"
+    ],
+    "hosting": [
+      "none"
+    ],
+    "database": [
+      "none"
+    ],
+    "auth": [
+      "none"
+    ]
+  },
   "ignore": {}
 }

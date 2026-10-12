@@ -12,6 +12,7 @@ Built with Software Factory's workflow: read `docs/agents/workflow.md` before st
 - Individually: `npm run typecheck`, `npm run lint`, `npm test` (Vitest), `npm run build`, `npm run format`.
 - `npm run test:smoke` builds, then runs the Playwright-Electron smoke tests in `e2e/` (window, "1 terminal", typing, resize). Needs a display: `xvfb-run -a npm run test:smoke` on Linux. CI runs it after `check.sh`.
 - `npm run dist` builds the unsigned macOS .dmg (macOS only); `npm run pack` builds an unpacked app for the current OS.
+- CI also runs `actionlint` (via `check.sh`; install with `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7`). `.github/workflows/release.yml` builds the .dmg on a published release and attaches `dist/*.dmg`.
 - Headless launch: `xvfb-run -a npx electron . --no-sandbox` (after `npm run build`).
 
 ## Architecture

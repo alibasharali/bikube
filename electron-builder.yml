@@ -11,6 +11,7 @@ mac:
   category: public.app-category.developer-tools
   target:
     - dmg
+  identity: null
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}

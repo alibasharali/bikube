@@ -15,7 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - run: .claude/check.sh
       - name: Electron smoke test
         run: xvfb-run -a npm run test:smoke
-      # later slices add here: actionlint

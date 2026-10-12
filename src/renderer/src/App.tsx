@@ -1,32 +1,36 @@
 import { useState } from 'react'
-import Terminal from './Terminal'
+import BoardPlaceholder from './BoardPlaceholder'
+import EmptyState from './EmptyState'
+import Sidebar from './Sidebar'
+import { useWorkspaceState, workspaceStore } from './store'
 
 function App(): React.JSX.Element {
-  // Terminal ids only; each Terminal owns its PTY session and kills it on unmount.
-  const [ids, setIds] = useState<number[]>([0])
-  const [nextId, setNextId] = useState(1)
+  const { workspaces, activeId } = useWorkspaceState()
+  const [collapsed, setCollapsed] = useState(false)
+  const active = workspaces.find((w) => w.id === activeId) ?? null
+  const darwin = window.drovr?.platform === 'darwin'
 
-  const add = (): void => {
-    setIds((prev) => [...prev, nextId])
-    setNextId((n) => n + 1)
-  }
+  // S4 replaces this with opening the create-workspace dialog.
+  const onCreateWorkspace = (): void => {}
 
   return (
-    <main data-testid="app" className="app">
-      <header className="toolbar" data-testid="toolbar">
-        <button type="button" data-testid="new-terminal" onClick={add}>
-          New terminal
-        </button>
-        <span data-testid="terminal-count">
-          {ids.length} {ids.length === 1 ? 'terminal' : 'terminals'}
-        </span>
-      </header>
-      <section className="terminals">
-        {ids.map((id) => (
-          <Terminal key={id} />
-        ))}
-      </section>
-    </main>
+    <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
+      <Sidebar
+        workspaces={workspaces}
+        activeId={activeId}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        onSelect={(id) => workspaceStore.selectWorkspace(id)}
+        onAdd={onCreateWorkspace}
+      />
+      <main className="main">
+        {active ? (
+          <BoardPlaceholder key={active.id} workspace={active} />
+        ) : (
+          <EmptyState onCreateWorkspace={onCreateWorkspace} />
+        )}
+      </main>
+    </div>
   )
 }
 

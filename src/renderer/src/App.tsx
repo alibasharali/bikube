@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
-import BoardPlaceholder from './BoardPlaceholder'
+import Board from './Board'
 import EmptyState from './EmptyState'
 import Sidebar from './Sidebar'
 import { useWorkspaceState, workspaceStore } from './store'
@@ -33,7 +33,7 @@ function App(): React.JSX.Element {
       />
       <main className="main">
         {active ? (
-          <BoardPlaceholder key={active.id} workspace={active} />
+          <Board key={active.id} workspace={active} />
         ) : (
           <EmptyState onCreateWorkspace={onCreateWorkspace} />
         )}

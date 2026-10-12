@@ -34,4 +34,4 @@ AC8 benchmark (sustained profile, Linux 6.18 x64, 4 vCPU Xeon 2.1 GHz, xvfb, sof
 
 Noise: one earlier run had a 99.9 ms longest frame gap and 104.7 ms main-loop lag max. With software-GL WebGL forced on, fps was 22.3 (FAIL), hence the DOM fallback on software renderers. Firehose profile (unthrottled output): fps 8.4, 16/20 echoes dropped, main lag p99 8.4 ms: no flow control yet (idea #16). WebGL on real hardware not measured: re-run on the macOS beta.
 
-- todo
+- done: all ACs verified on Linux/xvfb, see post_verification (AC2, AC10 real run: not yet)

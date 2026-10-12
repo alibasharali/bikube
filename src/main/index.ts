@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { registerTerminals } from './terminals'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -24,6 +25,11 @@ function createWindow(): void {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
+
+const terminals = registerTerminals()
+
+// No PTY process outlives the app.
+app.on('before-quit', () => terminals.killAll())
 
 app.whenReady().then(() => {
   createWindow()

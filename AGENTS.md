@@ -10,6 +10,7 @@ Built with Software Factory's workflow: read `docs/agents/workflow.md` before st
 - `npm run dev` starts the app with hot reload; `npm start` previews the production build.
 - `.claude/check.sh` runs everything that must be green: typecheck, lint, Vitest, build, `node .factory/check-stack.mjs`. CI's `check` job runs it.
 - Individually: `npm run typecheck`, `npm run lint`, `npm test` (Vitest), `npm run build`, `npm run format`.
+- `npm run test:smoke` builds, then runs the Playwright-Electron smoke tests in `e2e/` (window, "1 terminal", typing, resize). Needs a display: `xvfb-run -a npm run test:smoke` on Linux. CI runs it after `check.sh`.
 - `npm run dist` builds the unsigned macOS .dmg (macOS only); `npm run pack` builds an unpacked app for the current OS.
 - Headless launch: `xvfb-run -a npx electron . --no-sandbox` (after `npm run build`).
 

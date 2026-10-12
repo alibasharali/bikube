@@ -16,4 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: .claude/check.sh
-      # later slices add here: xvfb Electron smoke test (xvfb-run), actionlint
+      - name: Electron smoke test
+        run: xvfb-run -a npm run test:smoke
+      # later slices add here: actionlint

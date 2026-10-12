@@ -2,7 +2,7 @@
 item: 2
 type: feature
 title: The Board and Workspaces
-status: draft
+status: approved
 branch: claude/2-board-workspaces
 ---
 

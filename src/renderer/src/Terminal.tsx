@@ -3,7 +3,22 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
+import { isSoftwareRenderer } from '../../core/webgl-support'
 import '@xterm/xterm/css/xterm.css'
+
+/** WebGL is worth using only when a real GPU backs it; software GL loses to the DOM renderer. */
+function hardwareWebgl(): boolean {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2')
+    if (!gl) return false
+    const info = gl.getExtension('WEBGL_debug_renderer_info')
+    const renderer = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER))
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+    return !isSoftwareRenderer(renderer)
+  } catch {
+    return false
+  }
+}
 
 /** One live terminal: an xterm.js view bound to a PTY session in the main process. */
 function Terminal(): React.JSX.Element {
@@ -17,9 +32,10 @@ function Terminal(): React.JSX.Element {
     term.open(host)
     fit.fit()
 
-    // WebGL where available; xterm's DOM renderer stays in place otherwise (D8).
+    // WebGL where a real GPU backs it; xterm's DOM renderer stays in place otherwise (D8).
     let webgl: WebglAddon | undefined
     try {
+      if (!hardwareWebgl()) throw new Error('no hardware WebGL')
       webgl = new WebglAddon()
       webgl.onContextLoss(() => {
         webgl?.dispose()

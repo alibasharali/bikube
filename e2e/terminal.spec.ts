@@ -62,7 +62,7 @@ async function resizeContainer(width: number, height: number): Promise<void> {
 
 test('AC3: opens a window with one terminal and the toolbar says "1 terminal"', async () => {
   expect(await page.title()).toBe('Drovr')
-  await expect(page.getByTestId('toolbar')).toHaveText('1 terminal')
+  await expect(page.getByTestId('terminal-count')).toHaveText('1 terminal')
   await expect(page.locator('[data-testid=terminal]')).toHaveCount(1)
   // The shell is up once it has printed a prompt.
   await expect.poll(bufferText, { timeout: 15_000 }).toMatch(/\S/)

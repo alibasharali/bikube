@@ -18,7 +18,8 @@
     "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build && electron-builder --mac",
     "pack": "npm run build && electron-builder --dir",
-    "test:smoke": "electron-vite build && playwright test"
+    "test:smoke": "electron-vite build && playwright test",
+    "benchmark": "electron-vite build && playwright test -c playwright.benchmark.config.ts"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.1",

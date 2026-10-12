@@ -19,4 +19,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS on the running app under xvfb (AC1-AC10; screenshot reviewed), `.claude/check.sh` green, `npm run test:smoke` 9/9. Browse picker not checked (needs macOS).

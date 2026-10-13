@@ -459,7 +459,7 @@ describe('cards: delete column with cards (AC11 logic)', () => {
     const api = card(s, w, 'api')
     expect(s.deleteColumn(w.id, backlog)).toEqual({
       ok: false,
-      error: { field: 'column', message: 'Delete its cards first' }
+      error: { field: 'column', message: 'Move or delete its cards first' }
     })
     expect(names(s.getState().workspaces[0])).toContain('Backlog')
     ok(s.deleteCard(w.id, api.id))
@@ -624,5 +624,134 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     expect(a.agentSessionId).toMatch(v4)
     expect(b.agentSessionId).toMatch(v4)
     expect(a.agentSessionId).not.toBe(b.agentSessionId)
+  })
+})
+
+describe('cards: move (#6 D3, D4)', () => {
+  function column(s: InMemoryWorkspaceStore, w: Workspace, columnIndex: number): string[] {
+    const ws = s.getState().workspaces.find((x) => x.id === w.id)!
+    return cardsInColumn(ws, ws.columns[columnIndex].id).map((c) => c.title)
+  }
+
+  it('reorders within a column up and down (AC2)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    card(s, w, 'a')
+    card(s, w, 'b')
+    const c = card(s, w, 'c')
+    ok(s.moveCard(w.id, c.id, backlog, 0))
+    expect(column(s, w, 0)).toEqual(['c', 'a', 'b'])
+    ok(s.moveCard(w.id, c.id, backlog, 2))
+    expect(column(s, w, 0)).toEqual(['a', 'b', 'c'])
+  })
+  it('moves to another column at top, middle and bottom (AC3)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const running = w.columns[1].id
+    card(s, w, 'x', 1)
+    const a = card(s, w, 'a')
+    card(s, w, 'y', 1)
+    const b = card(s, w, 'b')
+    const c = card(s, w, 'c')
+    ok(s.moveCard(w.id, a.id, running, 1))
+    expect(column(s, w, 1)).toEqual(['x', 'a', 'y'])
+    expect(column(s, w, 0)).toEqual(['b', 'c'])
+    ok(s.moveCard(w.id, b.id, running, 0))
+    expect(column(s, w, 1)).toEqual(['b', 'x', 'a', 'y'])
+    ok(s.moveCard(w.id, c.id, running, 4))
+    expect(column(s, w, 1)).toEqual(['b', 'x', 'a', 'y', 'c'])
+    expect(column(s, w, 0)).toEqual([])
+    expect(s.getState().workspaces[0].cards.find((x) => x.id === a.id)?.columnId).toBe(running)
+  })
+  it('puts an index past the end at the bottom and a negative one at the top', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    const done = w.columns[3].id
+    const a = card(s, w, 'a')
+    card(s, w, 'b')
+    const c = card(s, w, 'c', 1)
+    ok(s.moveCard(w.id, a.id, backlog, 99))
+    expect(column(s, w, 0)).toEqual(['b', 'a'])
+    ok(s.moveCard(w.id, a.id, backlog, -3))
+    expect(column(s, w, 0)).toEqual(['a', 'b'])
+    ok(s.moveCard(w.id, c.id, done, 5))
+    expect(column(s, w, 3)).toEqual(['c'])
+    expect(column(s, w, 1)).toEqual([])
+  })
+
+  it('moving to the same place succeeds and changes nothing', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    card(s, w, 'a')
+    const b = card(s, w, 'b')
+    card(s, w, 'c')
+    const before = s.getState()
+    const listener = vi.fn()
+    s.subscribe(listener)
+    expect(s.moveCard(w.id, b.id, backlog, 1)).toEqual({ ok: true, value: undefined })
+    expect(s.getState()).toBe(before)
+    expect(listener).not.toHaveBeenCalled()
+    expect(column(s, w, 0)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('reports an unknown workspace, card or column and changes nothing', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const a = card(s, w, 'a')
+    const before = s.getState()
+    expect(s.moveCard('nope', a.id, w.columns[1].id, 0)).toEqual({
+      ok: false,
+      error: { field: 'workspace', message: 'Workspace not found' }
+    })
+    expect(s.moveCard(w.id, 'nope', w.columns[1].id, 0)).toEqual({
+      ok: false,
+      error: { field: 'card', message: 'Card not found' }
+    })
+    expect(s.moveCard(w.id, a.id, 'nope', 0)).toEqual({
+      ok: false,
+      error: { field: 'column', message: 'Column not found' }
+    })
+    expect(s.getState()).toBe(before)
+  })
+
+  it("changes only the moved card's column and position (D4)", () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const other = create(s, 'beta')
+    const a = card(s, w, 'a')
+    const b = card(s, w, 'b')
+    ok(s.setCardStartup(w.id, a.id, { kind: 'claude' }))
+    ok(s.markClaudeStarted(w.id, a.id))
+    const beforeWs = s.getState().workspaces[0]
+    const beforeA = beforeWs.cards.find((c) => c.id === a.id)!
+    const beforeB = beforeWs.cards.find((c) => c.id === b.id)!
+    const beforeOther = s.getState().workspaces[1]
+    ok(s.moveCard(w.id, a.id, w.columns[2].id, 0))
+    const after = s.getState().workspaces[0]
+    expect(after.cards.find((c) => c.id === a.id)).toEqual({
+      ...beforeA,
+      columnId: w.columns[2].id
+    })
+    expect(after.cards.find((c) => c.id === b.id)).toBe(beforeB)
+    expect({ ...after, cards: [] }).toEqual({ ...beforeWs, cards: [] })
+    expect(s.getState().workspaces[1]).toBe(beforeOther)
+    expect(other.cards).toEqual([])
+  })
+  it('lets a column be deleted once its cards are moved out (AC10)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    const a = card(s, w, 'a')
+    expect(s.deleteColumn(w.id, backlog)).toEqual({
+      ok: false,
+      error: { field: 'column', message: 'Move or delete its cards first' }
+    })
+    ok(s.moveCard(w.id, a.id, w.columns[1].id, 0))
+    ok(s.deleteColumn(w.id, backlog))
+    expect(names(s.getState().workspaces[0])).toEqual(['Running', 'Needs me', 'Done'])
+    expect(column(s, w, 0)).toEqual(['a'])
   })
 })

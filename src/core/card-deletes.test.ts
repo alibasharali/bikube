@@ -20,14 +20,14 @@ function alpha(): { s: InMemoryWorkspaceStore; ws: () => Workspace } {
 }
 
 describe('column delete hint (AC11, D14)', () => {
-  it('blocks a column with cards with "Delete its cards first", and clears once they are gone', () => {
+  it('blocks a column with cards with "Move or delete its cards first", and clears once they are gone', () => {
     const { s, ws } = alpha()
     const backlog = ws().columns[0].id
     expect(columnDeleteHint(ws(), backlog)).toEqual({ canDelete: true, hint: null })
     const api = ok(s.createCard(ws().id, backlog, 'api'))
     expect(columnDeleteHint(ws(), backlog)).toEqual({
       canDelete: false,
-      hint: 'Delete its cards first'
+      hint: 'Move or delete its cards first'
     })
     expect(columnDeleteHint(ws(), ws().columns[1].id)).toEqual({ canDelete: true, hint: null })
     ok(s.deleteCard(ws().id, api.id))
@@ -41,6 +41,18 @@ describe('column delete hint (AC11, D14)', () => {
     expect(columnDeleteHint(ws(), first.id)).toEqual({ canDelete: false, hint: null })
     ok(s.createCard(ws().id, first.id, 'api'))
     expect(columnDeleteHint(ws(), first.id)).toEqual({ canDelete: false, hint: null })
+  })
+
+  it('clears once the cards are moved to another column (#6 AC10)', () => {
+    const { s, ws } = alpha()
+    const [backlog, running] = ws().columns
+    const api = ok(s.createCard(ws().id, backlog.id, 'api'))
+    ok(s.moveCard(ws().id, api.id, running.id, 0))
+    expect(columnDeleteHint(ws(), backlog.id)).toEqual({ canDelete: true, hint: null })
+    expect(columnDeleteHint(ws(), running.id)).toEqual({
+      canDelete: false,
+      hint: 'Move or delete its cards first'
+    })
   })
 })
 

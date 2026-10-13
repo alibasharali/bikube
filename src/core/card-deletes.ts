@@ -12,7 +12,7 @@ export function columnDeleteHint(
 ): { canDelete: boolean; hint: string | null } {
   if (workspace.columns.length <= 1) return { canDelete: false, hint: null }
   if (cardsInColumn(workspace, columnId).length > 0)
-    return { canDelete: false, hint: 'Delete its cards first' }
+    return { canDelete: false, hint: 'Move or delete its cards first' }
   return { canDelete: true, hint: null }
 }
 

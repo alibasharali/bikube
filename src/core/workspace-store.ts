@@ -37,7 +37,10 @@ export interface Workspace {
   directory: string
   /** Each workspace owns exactly one board; this is its ordered columns. */
   columns: Column[]
-  /** All cards of the board, in creation order; filter by `columnId` for a column. */
+  /**
+   * All cards of the board. Within a column they are in board order, top to bottom: new
+   * cards go to the bottom and only moves change it (#6 D2). Filter by `columnId`.
+   */
   cards: Card[]
   /** N for the next default `Terminal N` title; starts at 1, never reused (#4 D5). */
   nextCardNumber: number
@@ -102,6 +105,12 @@ export interface WorkspaceStore {
   ): Result<Card>
   renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
   deleteCard(workspaceId: string, cardId: string): Result<void>
+  /**
+   * Moves the card to `toColumnId` at `toIndex` (0 = top, counted among that column's cards
+   * without this one); past the end means the bottom. Only the card's column and position
+   * change (#6 D3, D4).
+   */
+  moveCard(workspaceId: string, cardId: string, toColumnId: string, toIndex: number): Result<void>
   /** Changes only the setting, used at the card's next start (#5 D11). */
   setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card>
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
@@ -124,7 +133,7 @@ export function basename(path: string): string {
   return /^[A-Za-z]:$/.test(last) ? '' : last
 }
 
-/** The column's cards, top to bottom (creation order, #4 D1). */
+/** The column's cards, top to bottom (#6 D2). */
 export function cardsInColumn(workspace: Workspace, columnId: string): Card[] {
   return workspace.cards.filter((c) => c.columnId === columnId)
 }
@@ -269,7 +278,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
     if (ws.columns.length === 1) return fail('column', 'A board must keep at least one column')
     if (ws.cards.some((c) => c.columnId === columnId))
-      return fail('column', 'Delete its cards first')
+      return fail('column', 'Move or delete its cards first')
     this.replace({ ...ws, columns: ws.columns.filter((c) => c.id !== columnId) })
     return { ok: true, value: undefined }
   }
@@ -320,6 +329,27 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!ws) return unknownWorkspace()
     if (!ws.cards.some((c) => c.id === cardId)) return unknownCard()
     this.replace({ ...ws, cards: ws.cards.filter((c) => c.id !== cardId) })
+    return { ok: true, value: undefined }
+  }
+
+  moveCard(workspaceId: string, cardId: string, toColumnId: string, toIndex: number): Result<void> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    const current = ws.cards.find((c) => c.id === cardId)
+    if (!current) return unknownCard()
+    if (!ws.columns.some((c) => c.id === toColumnId)) return unknownColumn()
+    const others = ws.cards.filter((c) => c.id !== cardId)
+    const target = others.filter((c) => c.columnId === toColumnId)
+    const index = Math.max(0, toIndex)
+    let at: number
+    if (index < target.length) at = others.indexOf(target[index])
+    else if (target.length > 0) at = others.indexOf(target[target.length - 1]) + 1
+    else at = others.length
+    const moved: Card =
+      current.columnId === toColumnId ? current : { ...current, columnId: toColumnId }
+    const cards = [...others.slice(0, at), moved, ...others.slice(at)]
+    if (cards.every((c, i) => c === ws.cards[i])) return { ok: true, value: undefined }
+    this.replace({ ...ws, cards })
     return { ok: true, value: undefined }
   }
 

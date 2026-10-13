@@ -467,7 +467,7 @@ test('AC11: a column with cards cannot be deleted until its cards are gone', asy
   await columnMenu('Backlog')
   await expect(column('Backlog').getByTestId('menu-delete')).toBeDisabled()
   await expect(column('Backlog').getByTestId('menu-delete-hint')).toHaveText(
-    'Delete its cards first'
+    'Move or delete its cards first'
   )
   await page.keyboard.press('Escape')
 

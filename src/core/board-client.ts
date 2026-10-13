@@ -5,10 +5,10 @@
 import { createConnection } from 'node:net'
 import { parseBoardArgs } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
-import { parseReplyLine, serializeRequest, type BoardReply } from './board-protocol'
+import { NO_ANSWER, parseReplyLine, serializeRequest, type BoardReply } from './board-protocol'
 
+export { NO_ANSWER }
 export const NOT_RUNNING = 'board: Drovr is not running'
-export const NO_ANSWER = 'board: no answer from Drovr'
 /** How long `board` waits for main's reply (#9 D9). */
 export const ANSWER_TIMEOUT_MS = 5000
 

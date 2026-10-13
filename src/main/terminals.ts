@@ -23,6 +23,8 @@ export interface Terminals {
   ownerOfCard(cardId: string): WebContents | null | undefined
   /** Called with each window once it is gone, after its sessions were killed. */
   onWindowGone(listener: (owner: WebContents) => void): void
+  /** Called with each window whose page reloaded or crashed, after its sessions were killed. */
+  onPageGone(listener: (owner: WebContents) => void): void
 }
 
 /**
@@ -35,6 +37,7 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
   const pages = new PageGenerations<WebContents>()
   const cards = new SessionCards()
   const goneListeners: ((owner: WebContents) => void)[] = []
+  const pageGoneListeners: ((owner: WebContents) => void)[] = []
 
   manager.on('data', (id, data) => {
     const owner = owners.ownerOf(id)
@@ -57,7 +60,11 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
 
   // Hooked once per window, on its first spawn request: a window's shells end with its page.
   const watch = (owner: WebContents): void => {
-    const killAll = (): void => owners.sessionsOf(owner).forEach((id) => manager.kill(id))
+    const pageGone = (): void => {
+      pages.bump(owner)
+      owners.sessionsOf(owner).forEach((id) => manager.kill(id))
+      pageGoneListeners.forEach((listener) => listener(owner))
+    }
     owner.once('destroyed', () => {
       pages.release(owner)
       owners.release(owner).forEach((id) => manager.kill(id))
@@ -66,14 +73,8 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
     // A reload or crash leaves the old page's shells with no UI to drive them; a spawn still
     // checking its directory for the old page must not start one either. Only a committed
     // main-frame navigation counts: one the navigation lock cancels starts but never commits.
-    owner.on('did-navigate', () => {
-      pages.bump(owner)
-      killAll()
-    })
-    owner.on('render-process-gone', () => {
-      pages.bump(owner)
-      killAll()
-    })
+    owner.on('did-navigate', pageGone)
+    owner.on('render-process-gone', pageGone)
   }
 
   ipcMain.handle(
@@ -123,6 +124,7 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
       const owner = owners.ownerOf(session)
       return owner && !owner.isDestroyed() ? owner : null
     },
-    onWindowGone: (listener) => goneListeners.push(listener)
+    onWindowGone: (listener) => goneListeners.push(listener),
+    onPageGone: (listener) => pageGoneListeners.push(listener)
   }
 }

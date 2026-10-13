@@ -94,8 +94,20 @@ export class BoardRelay<Owner> {
 
   /** The window is gone: its outstanding requests get `NO_WINDOW` at once. */
   release(owner: Owner): void {
+    this.settleAll(owner, NO_WINDOW)
+  }
+
+  /**
+   * The window's page reloaded or crashed (#9 D9): its outstanding requests get `NO_ANSWER` at
+   * once, so the new page can't answer what was sent to the old one.
+   */
+  releasePage(owner: Owner): void {
+    this.settleAll(owner, NO_ANSWER)
+  }
+
+  private settleAll(owner: Owner, error: string): void {
     for (const [requestId, pending] of this.pending) {
-      if (pending.owner === owner) this.settle(requestId, { ok: false, error: NO_WINDOW })
+      if (pending.owner === owner) this.settle(requestId, { ok: false, error })
     }
   }
 

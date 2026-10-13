@@ -11,6 +11,8 @@ export const MAX_REQUEST_LINE_BYTES = 8192
 
 export const INVALID_REQUEST = 'board: invalid request'
 export const REQUEST_TOO_LONG = 'board: request too long'
+/** The board did not answer: timed out, failed, or its page reloaded or crashed (#9 D9). */
+export const NO_ANSWER = 'board: no answer from Drovr'
 
 /** A request as sent: the calling card's id plus one command. */
 export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand

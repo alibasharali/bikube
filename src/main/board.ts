@@ -1,15 +1,17 @@
 import { app, ipcMain, type WebContents } from 'electron'
-import { mkdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { boardShellEnv } from '../core/board-env'
 import { BoardRelay } from '../core/board-relay'
 import { startBoardServer, type BoardServer } from '../core/board-server'
 import { IPC } from '../shared/api'
 import type { Terminals } from './terminals'
 
-/** `<userData>/board.sock` (#9 D5); `DROVR_USER_DATA_DIR` gives each test its own. */
+/**
+ * `<userData>/board/board.sock` (#9 D5), in a private directory the server creates;
+ * `DROVR_USER_DATA_DIR` gives each test its own.
+ */
 export function boardSocketPath(): string {
-  return join(app.getPath('userData'), 'board.sock')
+  return join(app.getPath('userData'), 'board', 'board.sock')
 }
 
 /**
@@ -55,6 +57,8 @@ export function registerBoard(socketPath: string, terminals: Terminals): () => v
     }
   )
   terminals.onWindowGone((owner) => relay.release(owner))
+  // A reload or crash releases the old page's requests at once (#9 D9).
+  terminals.onPageGone((owner) => relay.releasePage(owner))
 
   // Only a window's own top-level page answers, and only for a request sent to that window.
   ipcMain.on(IPC.boardAnswer, (event, requestId: unknown, reply: unknown) => {
@@ -64,11 +68,6 @@ export function registerBoard(socketPath: string, terminals: Terminals): () => v
 
   let server: BoardServer | null = null
   let closed = false
-  try {
-    mkdirSync(dirname(socketPath), { recursive: true })
-  } catch {
-    // Listening below fails and says why.
-  }
   startBoardServer(socketPath, (request) => relay.handle(request)).then(
     (started) => {
       if (closed) void started.close()

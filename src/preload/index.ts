@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BoardCommand } from '../core/board-args'
-import type { BoardReply } from '../core/board-protocol'
+import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import { IPC, type DrovrApi, type TerminalExit } from '../shared/api'
 
 const api: DrovrApi = {
@@ -47,7 +47,7 @@ const api: DrovrApi = {
           ipcRenderer.send(IPC.boardAnswer, requestId, reply)
         Promise.resolve()
           .then(() => listener(cardId, command))
-          .then(answer, () => answer({ ok: false, error: 'board: the board could not answer' }))
+          .then(answer, () => answer({ ok: false, error: NO_ANSWER }))
       }
       ipcRenderer.on(IPC.boardRequest, handler)
       return () => ipcRenderer.removeListener(IPC.boardRequest, handler)

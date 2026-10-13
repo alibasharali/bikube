@@ -100,6 +100,19 @@ describe('BoardRelay', () => {
     await expect(reply).resolves.toEqual({ ok: false, error: NO_WINDOW })
   })
 
+  it("answers no answer at once for a page's pending requests when it reloads or crashes (#9 D9)", async () => {
+    const mine = relay.handle(request)
+    owners.set('c2', other)
+    const theirs = relay.handle({ ...request, cardId: 'c2' })
+    relay.releasePage(win)
+    await expect(mine).resolves.toEqual({ ok: false, error: NO_ANSWER })
+    // The window's new page can't answer a request sent to the old one.
+    expect(relay.answer(win, sent[0].requestId, { ok: true })).toBe(false)
+    // Another window's requests keep waiting.
+    expect(relay.answer(other, sent[1].requestId, { ok: true })).toBe(true)
+    await expect(theirs).resolves.toEqual({ ok: true })
+  })
+
   it('answers no open window when sending to the window throws', async () => {
     relay = new BoardRelay<Win>(
       () => win,

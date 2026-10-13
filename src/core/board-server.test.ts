@@ -1,19 +1,29 @@
-import { existsSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  statSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { createConnection } from 'node:net'
+import { createConnection, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { serializeRequest, type BoardReply, type BoardRequest } from './board-protocol'
-import { startBoardServer, type BoardServer } from './board-server'
+import { DRAIN_MS, MAX_CONNECTIONS, startBoardServer, type BoardServer } from './board-server'
 
 let dir: string
+let boardDir: string
 let socketPath: string
 const servers: BoardServer[] = []
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'drovr-sock-'))
-  socketPath = join(dir, 'board.sock')
+  boardDir = join(dir, 'board')
+  socketPath = join(boardDir, 'board.sock')
 })
 
 afterEach(async () => {
@@ -23,7 +33,7 @@ afterEach(async () => {
 
 async function serve(
   handler: (request: BoardRequest) => Promise<BoardReply> = async () => ({ ok: true }),
-  options?: { lineTimeoutMs?: number }
+  options?: { lineTimeoutMs?: number; drainMs?: number }
 ): Promise<BoardServer> {
   const server = await startBoardServer(socketPath, handler, options)
   servers.push(server)
@@ -63,20 +73,48 @@ describe('startBoardServer', () => {
     })
   })
 
-  it('creates the socket as mode 0600, only its user can connect (#9 D5, AC9)', async () => {
+  it('creates the socket as mode 0600 in a private 0700 directory (#9 D5, AC9)', async () => {
     await serve()
     const stat = statSync(socketPath)
     expect(stat.isSocket()).toBe(true)
     expect(stat.mode & 0o777).toBe(0o600)
+    const dirStat = lstatSync(boardDir)
+    expect(dirStat.isDirectory()).toBe(true)
+    expect(dirStat.mode & 0o777).toBe(0o700)
   })
 
-  it('leaves the process umask as it was', async () => {
-    const before = process.umask()
+  it('never changes the process umask (#9 D5)', async () => {
+    const umask = vi.spyOn(process, 'umask')
+    try {
+      await serve()
+      expect(umask.mock.calls.filter((args) => args.length > 0)).toEqual([])
+    } finally {
+      umask.mockRestore()
+    }
+  })
+
+  it('makes an existing directory of ours private again (#9 D5)', async () => {
+    mkdirSync(boardDir)
+    chmodSync(boardDir, 0o755)
     await serve()
-    expect(process.umask()).toBe(before)
+    expect(lstatSync(boardDir).mode & 0o777).toBe(0o700)
+  })
+
+  it('refuses to listen when the directory is a symlink (#9 D5)', async () => {
+    const elsewhere = join(dir, 'elsewhere')
+    mkdirSync(elsewhere, { mode: 0o700 })
+    symlinkSync(elsewhere, boardDir)
+    await expect(startBoardServer(socketPath, async () => ({ ok: true }))).rejects.toThrow()
+    expect(existsSync(join(elsewhere, 'board.sock'))).toBe(false)
+  })
+
+  it('refuses to listen when the directory is a file (#9 D5)', async () => {
+    writeFileSync(boardDir, 'not a directory')
+    await expect(startBoardServer(socketPath, async () => ({ ok: true }))).rejects.toThrow()
   })
 
   it('replaces a leftover file at its path (#9 D5)', async () => {
+    mkdirSync(boardDir, { mode: 0o700 })
     writeFileSync(socketPath, 'stale')
     await serve()
     expect(statSync(socketPath).isSocket()).toBe(true)
@@ -94,7 +132,7 @@ describe('startBoardServer', () => {
 
   it('rejects when it cannot listen', async () => {
     await expect(
-      startBoardServer(join(dir, 'missing', 'board.sock'), async () => ({ ok: true }))
+      startBoardServer(join(dir, 'missing', 'board', 'board.sock'), async () => ({ ok: true }))
     ).rejects.toThrow()
   })
 
@@ -140,5 +178,63 @@ describe('startBoardServer', () => {
       serializeRequest('c1', { command: 'move', card: '.', column: 'x' })
     )
     expect(reply).toBe('{"ok":false,"error":"board: no answer from Drovr"}\n')
+  })
+
+  it(`serves at most ${MAX_CONNECTIONS} connections at once (#9 D5)`, async () => {
+    expect(MAX_CONNECTIONS).toBe(32)
+    await serve(undefined, { lineTimeoutMs: 10_000 })
+    const idle: Socket[] = []
+    try {
+      for (let i = 0; i < MAX_CONNECTIONS; i++) {
+        const socket = createConnection(socketPath)
+        socket.on('error', () => {})
+        idle.push(socket)
+        await new Promise((resolve) => socket.once('connect', resolve))
+      }
+      // Let the server accept them all before the next one arrives.
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(
+        await exchange(serializeRequest('c1', { command: 'move', card: '.', column: 'x' }))
+      ).toBe('')
+      const freed = idle.pop() as Socket
+      await new Promise((resolve) => {
+        freed.once('close', resolve)
+        freed.destroy()
+      })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(
+        await exchange(serializeRequest('c1', { command: 'move', card: '.', column: 'x' }))
+      ).toBe('{"ok":true}\n')
+    } finally {
+      idle.forEach((socket) => socket.destroy())
+    }
+  })
+
+  it('closes a connection that keeps it open after the reply within the drain time (#9 D5)', async () => {
+    expect(DRAIN_MS).toBe(1000)
+    await serve(undefined, { drainMs: 100 })
+    const started = Date.now()
+    const received = await new Promise<string>((resolve) => {
+      // Half-open: the client never ends its side and keeps writing, so only the server's drain
+      // limit closes the connection; the next write then fails.
+      const socket = createConnection({ path: socketPath, allowHalfOpen: true })
+      let data = ''
+      let writer: ReturnType<typeof setInterval> | undefined
+      const done = (): void => {
+        clearInterval(writer)
+        socket.destroy()
+        resolve(data)
+      }
+      socket.setEncoding('utf8')
+      socket.on('data', (chunk: string) => (data += chunk))
+      socket.on('end', () => {
+        writer = setInterval(() => socket.write('more\n'), 20)
+      })
+      socket.on('error', done)
+      socket.on('close', done)
+      socket.write(serializeRequest('c1', { command: 'move', card: '.', column: 'x' }))
+    })
+    expect(received).toBe('{"ok":true}\n')
+    expect(Date.now() - started).toBeLessThan(1000)
   })
 })

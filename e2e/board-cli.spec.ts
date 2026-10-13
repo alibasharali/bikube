@@ -1,5 +1,13 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +15,7 @@ import { BOARD_USAGE } from '../src/core/board-args'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // The `board` command (#9): typed into a card's terminal, it reaches the app over
-// `<userData>/board.sock`. Each command's stdout and stderr go to files in the workspace
+// `<userData>/board/board.sock`. Each command's stdout and stderr go to files in the workspace
 // directory and its exit code is echoed, so the test reads all three exactly.
 
 let app: ElectronApplication | undefined
@@ -208,6 +216,32 @@ test('AC2: a card moves a sibling by title, then by id, and stays where it is', 
   await expect(titlesIn('Backlog')).toHaveText(['api'])
 })
 
+test('AC2: a card moves itself while another workspace is shown', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  const beta = makeDir('beta')
+  await createWorkspace(alpha, 'alpha')
+  await createWorkspace(beta, 'beta')
+  await selectWorkspace('beta')
+  await newCard('Backlog', 'later')
+  const marker = join(beta, 'later.rc')
+  await run('sleep 2; board move . Done; echo $? > later.rc')
+  await back()
+  await selectWorkspace('alpha')
+  // The user is on alpha before the move fires.
+  expect(existsSync(marker)).toBe(false)
+
+  await expect
+    .poll(() => (existsSync(marker) ? readFileSync(marker, 'utf8').trim() : ''), {
+      timeout: 10_000
+    })
+    .toBe('0')
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await selectWorkspace('beta')
+  await expect(titlesIn('Done')).toHaveText(['later'])
+  await expect(titlesIn('Backlog')).toHaveCount(0)
+})
+
 test('AC3: an unknown column, an unknown card and an ambiguous title are refused', async () => {
   await launch()
   const alpha = makeDir('alpha')
@@ -303,16 +337,24 @@ test('AC8: outside a live card, or with no app listening, board is refused', asy
 })
 
 test('AC9: the socket is user-only, replaces a stale file, and is gone after quit', async () => {
-  const socketPath = join(dataDir, 'board.sock')
+  const boardDir = join(dataDir, 'board')
+  const socketPath = join(boardDir, 'board.sock')
+  mkdirSync(boardDir, { recursive: true, mode: 0o700 })
   writeFileSync(socketPath, 'stale')
   await launch()
   await expect.poll(() => statSync(socketPath).isSocket()).toBe(true)
+  expect(lstatSync(boardDir).isDirectory()).toBe(true)
+  expect(lstatSync(boardDir).mode & 0o777).toBe(0o700)
   expect(statSync(socketPath).mode & 0o777).toBe(0o600)
 
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('Backlog', 'api')
   expect(await board(alpha, 'test "$DROVR_SOCKET" = ' + socketPath)).toEqual(ok)
+  expect(await board(alpha, 'ls -ld "$(dirname "$DROVR_SOCKET")"')).toMatchObject({
+    code: 0,
+    stdout: expect.stringMatching(/^drwx------ /)
+  })
   expect(await board(alpha, 'ls -l "$DROVR_SOCKET"')).toMatchObject({
     code: 0,
     stdout: expect.stringMatching(/^srw------- /)
@@ -327,7 +369,7 @@ test('AC9: the socket is user-only, replaces a stale file, and is gone after qui
 /** Writes `data` to the app's socket; resolves with what it answers before closing. */
 function rawExchange(data: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const socket = createConnection(join(dataDir, 'board.sock'))
+    const socket = createConnection(join(dataDir, 'board', 'board.sock'))
     let received = ''
     socket.setEncoding('utf8')
     socket.on('data', (chunk: string) => (received += chunk))
@@ -344,7 +386,7 @@ test('AC10: bad requests get an error and a closed connection; board keeps worki
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('Backlog', 'api')
-  await expect.poll(() => existsSync(join(dataDir, 'board.sock'))).toBe(true)
+  await expect.poll(() => existsSync(join(dataDir, 'board', 'board.sock'))).toBe(true)
 
   for (const line of ['hello\n', '{"v":2}\n', `${'x'.repeat(9 * 1024)}\n`]) {
     const reply = await rawExchange(line)

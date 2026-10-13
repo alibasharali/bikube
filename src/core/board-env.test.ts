@@ -25,6 +25,10 @@ describe('boardShellEnv', () => {
     expect(env).not.toHaveProperty('ELECTRON_RUN_AS_NODE')
   })
 
+  it('names the bin directory in DROVR_BIN, for calling board whatever PATH says (#9 D3)', () => {
+    expect(boardShellEnv({ ...paths, cardId: 'c1', path: '/bin' }).DROVR_BIN).toBe('/app/bin')
+  })
+
   it('makes the bin directory the whole PATH when there was none', () => {
     expect(boardShellEnv({ ...paths, cardId: 'c1', path: undefined }).PATH).toBe('/app/bin')
     expect(boardShellEnv({ ...paths, cardId: 'c1', path: '' }).PATH).toBe('/app/bin')

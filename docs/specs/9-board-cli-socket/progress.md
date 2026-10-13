@@ -19,4 +19,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- todo
+- done (ALL PASS)

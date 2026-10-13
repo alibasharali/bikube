@@ -106,3 +106,12 @@ test('a blocked navigation leaves the shells running', async () => {
   // The page is still the same load: a new spawn is accepted.
   expect(alive(await spawnShell())).toBe(true)
 })
+
+test('a crashed renderer kills its shells', async () => {
+  const pid = await spawnShell()
+  expect(alive(pid)).toBe(true)
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
+  )
+  await expect.poll(() => alive(pid)).toBe(false)
+})

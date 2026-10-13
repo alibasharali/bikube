@@ -18,4 +18,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- running
+- done: ALL PASS (AC1–AC11), 2026-10-13

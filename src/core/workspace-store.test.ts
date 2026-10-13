@@ -479,3 +479,146 @@ describe('cards: workspace delete', () => {
     expect(s.getState().workspaces.map((w) => w.cards.map((c) => c.title))).toEqual([['two']])
   })
 })
+
+describe('startup commands (#5 D2, D4, D10)', () => {
+  function makeWithIds(): InMemoryWorkspaceStore {
+    let n = 0
+    return new InMemoryWorkspaceStore({ generateSessionId: () => `uuid-${++n}` })
+  }
+
+  it('gives a new workspace the Shell default and keeps a chosen one', () => {
+    const s = makeWithIds()
+    expect(create(s, 'alpha').defaultStartup).toEqual({ kind: 'shell' })
+    const b = ok(
+      s.createWorkspace({ name: 'beta', directory: '/tmp/beta', defaultStartup: { kind: 'claude' } })
+    )
+    expect(b.defaultStartup).toEqual({ kind: 'claude' })
+  })
+
+  it('validates and trims a Custom workspace default', () => {
+    const s = makeWithIds()
+    expect(
+      s.createWorkspace({
+        name: 'a',
+        directory: '/tmp/a',
+        defaultStartup: { kind: 'custom', command: ' ' }
+      })
+    ).toEqual({ ok: false, error: { field: 'command', message: 'Command is required' } })
+    expect(s.getState().workspaces).toEqual([])
+    const w = create(s, 'alpha')
+    expect(
+      ok(s.updateWorkspace(w.id, { defaultStartup: { kind: 'custom', command: ' codex ' } }))
+        .defaultStartup
+    ).toEqual({ kind: 'custom', command: 'codex' })
+    expect(
+      s.updateWorkspace(w.id, { defaultStartup: { kind: 'custom', command: '' } })
+    ).toMatchObject({ ok: false, error: { field: 'command' } })
+  })
+
+  it('gives each card its own agent session id, not started, with the workspace default', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const one = card(s, w, 'one')
+    const two = card(s, w, 'two')
+    expect(one).toMatchObject({ startup: { kind: 'shell' }, claudeStarted: false })
+    expect(one.agentSessionId).toBe('uuid-1')
+    expect(two.agentSessionId).toBe('uuid-2')
+  })
+
+  it('creates a card with a chosen startup command, validating Custom (AC7)', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const col = w.columns[0].id
+    expect(ok(s.createCard(w.id, col, 'agent', { kind: 'claude' })).startup).toEqual({
+      kind: 'claude'
+    })
+    expect(
+      ok(s.createCard(w.id, col, 'c', { kind: 'custom', command: ' echo drovr-custom ' })).startup
+    ).toEqual({ kind: 'custom', command: 'echo drovr-custom' })
+    expect(s.createCard(w.id, col, 'bad', { kind: 'custom', command: '' })).toEqual({
+      ok: false,
+      error: { field: 'command', message: 'Command is required' }
+    })
+    expect(titles(s, w)).toEqual(['agent', 'c'])
+  })
+
+  it('a failed create with a default title does not use up its number', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const col = w.columns[0].id
+    expect(s.createCard(w.id, col, '', { kind: 'custom', command: '' }).ok).toBe(false)
+    card(s, w, '')
+    expect(titles(s, w)).toEqual(['Terminal 1'])
+  })
+
+  it('changing the workspace default never changes existing cards (AC8)', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const sh = card(s, w, 'sh')
+    ok(s.updateWorkspace(w.id, { defaultStartup: { kind: 'claude' } }))
+    const after = card(s, w, 'agent')
+    const cards = s.getState().workspaces[0].cards
+    expect(cards[0]).toEqual(sh)
+    expect(after.startup).toEqual({ kind: 'claude' })
+  })
+
+  it('updating name or directory keeps the default', () => {
+    const s = makeWithIds()
+    const w = ok(
+      s.createWorkspace({ name: 'alpha', directory: '/tmp/a', defaultStartup: { kind: 'claude' } })
+    )
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).defaultStartup).toEqual({ kind: 'claude' })
+  })
+
+  it("sets a card's startup command, keeping its agent session id and started flag (AC9)", () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const sh = card(s, w, 'sh')
+    const claude = ok(s.setCardStartup(w.id, sh.id, { kind: 'claude' }))
+    expect(claude).toEqual({ ...sh, startup: { kind: 'claude' } })
+    ok(s.markClaudeStarted(w.id, sh.id))
+    ok(s.setCardStartup(w.id, sh.id, { kind: 'shell' }))
+    const back = ok(s.setCardStartup(w.id, sh.id, { kind: 'claude' }))
+    expect(back).toMatchObject({ agentSessionId: sh.agentSessionId, claudeStarted: true })
+    expect(s.getState().workspaces[0].cards[0]).toEqual(back)
+  })
+
+  it('rejects an empty Custom command or unknown card when setting, changing nothing', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const sh = card(s, w, 'sh')
+    expect(s.setCardStartup(w.id, sh.id, { kind: 'custom', command: '  ' })).toEqual({
+      ok: false,
+      error: { field: 'command', message: 'Command is required' }
+    })
+    expect(s.setCardStartup(w.id, 'nope', { kind: 'claude' })).toMatchObject({
+      ok: false,
+      error: { field: 'card' }
+    })
+    expect(s.markClaudeStarted(w.id, 'nope')).toMatchObject({ ok: false, error: { field: 'card' } })
+    expect(s.setCardStartup('nope', sh.id, { kind: 'claude' })).toMatchObject({
+      ok: false,
+      error: { field: 'workspace' }
+    })
+    expect(s.getState().workspaces[0].cards[0]).toEqual(sh)
+  })
+
+  it('marks Claude started on a card', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const agent = ok(s.createCard(w.id, w.columns[0].id, 'agent', { kind: 'claude' }))
+    expect(ok(s.markClaudeStarted(w.id, agent.id))).toEqual({ ...agent, claudeStarted: true })
+    expect(s.getState().workspaces[0].cards[0].claudeStarted).toBe(true)
+  })
+
+  it('defaults to random UUIDs v4 for agent session ids', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const a = card(s, w, 'a')
+    const b = card(s, w, 'b')
+    const v4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    expect(a.agentSessionId).toMatch(v4)
+    expect(b.agentSessionId).toMatch(v4)
+    expect(a.agentSessionId).not.toBe(b.agentSessionId)
+  })
+})

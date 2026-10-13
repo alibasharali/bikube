@@ -5,6 +5,8 @@
  * `validateDirectory` that returns an error message or null.
  */
 
+import { SHELL_STARTUP, checkStartup, type StartupCommand } from './startup-command'
+
 export const DEFAULT_COLUMN_NAMES = ['Backlog', 'Running', 'Needs me', 'Done'] as const
 
 export interface Column {
@@ -20,6 +22,12 @@ export interface Card {
   title: string
   /** Absolute path, copied from the workspace at creation and never changed (#4 D2). */
   directory: string
+  /** What is typed into the shell on every start (#5 D2); changed only per card (#5 D11). */
+  startup: StartupCommand
+  /** UUID v4 given at creation, kept whatever the startup command (#5 D4). */
+  agentSessionId: string
+  /** Whether Claude Code was started with `agentSessionId`; false at creation (#5 D4, D5). */
+  claudeStarted: boolean
 }
 
 export interface Workspace {
@@ -33,6 +41,8 @@ export interface Workspace {
   cards: Card[]
   /** N for the next default `Terminal N` title; starts at 1, never reused (#4 D5). */
   nextCardNumber: number
+  /** Preset for new cards only; `shell` for a new workspace (#5 D10). */
+  defaultStartup: StartupCommand
 }
 
 export interface WorkspaceState {
@@ -42,7 +52,14 @@ export interface WorkspaceState {
 }
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
-export type ErrorField = 'name' | 'directory' | 'column' | 'workspace' | 'title' | 'card'
+export type ErrorField =
+  | 'name'
+  | 'directory'
+  | 'column'
+  | 'workspace'
+  | 'title'
+  | 'card'
+  | 'command'
 
 export interface FieldError {
   field: ErrorField
@@ -55,11 +72,15 @@ export interface WorkspaceInput {
   /** Empty or whitespace defaults to the directory's basename (D6). */
   name: string
   directory: string
+  /** Defaults to Shell (#5 D10). */
+  defaultStartup?: StartupCommand
 }
 
 export interface WorkspacePatch {
   name?: string
   directory?: string
+  /** Changes the preset for new cards only; existing cards keep theirs (#5 D10). */
+  defaultStartup?: StartupCommand
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -75,10 +96,22 @@ export interface WorkspaceStore {
   renameColumn(workspaceId: string, columnId: string, name: string): Result<Column>
   moveColumn(workspaceId: string, columnId: string, direction: MoveDirection): Result<void>
   deleteColumn(workspaceId: string, columnId: string): Result<void>
-  /** Adds a card at the bottom of the column; an empty title becomes `Terminal N`. */
-  createCard(workspaceId: string, columnId: string, title: string): Result<Card>
+  /**
+   * Adds a card at the bottom of the column; an empty title becomes `Terminal N`. `startup`
+   * defaults to the workspace's default startup command (#5 D9, D10).
+   */
+  createCard(
+    workspaceId: string,
+    columnId: string,
+    title: string,
+    startup?: StartupCommand
+  ): Result<Card>
   renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
   deleteCard(workspaceId: string, cardId: string): Result<void>
+  /** Changes only the setting, used at the card's next start (#5 D11). */
+  setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card>
+  /** Records that `claude --session-id` was typed for this card (#5 D5). */
+  markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
 }
 
 export interface StoreOptions {
@@ -86,6 +119,8 @@ export interface StoreOptions {
   validateDirectory?: (directory: string) => string | null
   /** Id generator; defaults to a counter. */
   generateId?: () => string
+  /** Agent session id generator (#5 D4); defaults to `crypto.randomUUID`. */
+  generateSessionId?: () => string
 }
 
 /** Last path segment, ignoring trailing separators (POSIX and Windows). */
@@ -114,11 +149,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   private readonly listeners = new Set<() => void>()
   private readonly validateDirectory: (directory: string) => string | null
   private readonly generateId: () => string
+  private readonly generateSessionId: () => string
   private counter = 0
 
   constructor(options: StoreOptions = {}) {
     this.validateDirectory = options.validateDirectory ?? (() => null)
     this.generateId = options.generateId ?? (() => `id-${++this.counter}`)
+    this.generateSessionId = options.generateSessionId ?? (() => globalThis.crypto.randomUUID())
   }
 
   getState(): WorkspaceState {
@@ -138,13 +175,16 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (dir) return dir
     const name = this.checkName(input.name.trim() || basename(directory), null)
     if (!name.ok) return name
+    const startup = checkStartup(input.defaultStartup ?? SHELL_STARTUP)
+    if (!startup.ok) return startup
     const workspace: Workspace = {
       id: this.generateId(),
       name: name.value,
       directory,
       columns: DEFAULT_COLUMN_NAMES.map((n) => ({ id: this.generateId(), name: n })),
       cards: [],
-      nextCardNumber: 1
+      nextCardNumber: 1,
+      defaultStartup: startup.value
     }
     this.set({
       workspaces: [...this.state.workspaces, workspace],
@@ -168,7 +208,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       name = checked.value
     }
-    const updated: Workspace = { ...current, name, directory }
+    let defaultStartup = current.defaultStartup
+    if (patch.defaultStartup !== undefined) {
+      const checked = checkStartup(patch.defaultStartup)
+      if (!checked.ok) return checked
+      defaultStartup = checked.value
+    }
+    const updated: Workspace = { ...current, name, directory, defaultStartup }
     this.replace(updated)
     return { ok: true, value: updated }
   }
@@ -234,16 +280,26 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return { ok: true, value: undefined }
   }
 
-  createCard(workspaceId: string, columnId: string, title: string): Result<Card> {
+  createCard(
+    workspaceId: string,
+    columnId: string,
+    title: string,
+    startup?: StartupCommand
+  ): Result<Card> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
+    const checked = checkStartup(startup ?? ws.defaultStartup)
+    if (!checked.ok) return checked
     const trimmed = title.trim()
     const created: Card = {
       id: this.generateId(),
       columnId,
       title: trimmed || `Terminal ${ws.nextCardNumber}`,
-      directory: ws.directory
+      directory: ws.directory,
+      startup: checked.value,
+      agentSessionId: this.generateSessionId(),
+      claudeStarted: false
     }
     this.replace({
       ...ws,
@@ -271,6 +327,35 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!ws.cards.some((c) => c.id === cardId)) return unknownCard()
     this.replace({ ...ws, cards: ws.cards.filter((c) => c.id !== cardId) })
     return { ok: true, value: undefined }
+  }
+
+  setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card> {
+    const checked = checkStartup(startup)
+    return this.updateCard(workspaceId, cardId, (card) =>
+      checked.ok ? { ok: true, value: { ...card, startup: checked.value } } : checked
+    )
+  }
+
+  markClaudeStarted(workspaceId: string, cardId: string): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => ({
+      ok: true,
+      value: { ...card, claudeStarted: true }
+    }))
+  }
+
+  private updateCard(
+    workspaceId: string,
+    cardId: string,
+    change: (card: Card) => Result<Card>
+  ): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    const current = ws.cards.find((c) => c.id === cardId)
+    if (!current) return unknownCard()
+    const changed = change(current)
+    if (!changed.ok) return changed
+    this.replace({ ...ws, cards: ws.cards.map((c) => (c.id === cardId ? changed.value : c)) })
+    return changed
   }
 
   private find(id: string): Workspace | undefined {

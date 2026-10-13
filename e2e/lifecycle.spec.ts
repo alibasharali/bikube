@@ -110,8 +110,11 @@ test('a blocked navigation leaves the shells running', async () => {
 test('a crashed renderer kills its shells', async () => {
   const pid = await spawnShell()
   expect(alive(pid)).toBe(true)
-  await app.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
+  // Kill the renderer process outright: on Linux forcefullyCrashRenderer() only asks the renderer
+  // to crash itself over IPC, which can leave it hung instead of gone.
+  const renderer = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.getOSProcessId()
   )
+  process.kill(renderer, 'SIGKILL')
   await expect.poll(() => alive(pid)).toBe(false)
 })

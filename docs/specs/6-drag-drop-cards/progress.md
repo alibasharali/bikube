@@ -7,8 +7,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `3e94c1e..47fac01` | fixed r1 | `WorkspaceStore.moveCard(workspaceId, cardId, toColumnId, toIndex): Result<void>`; index among target cards without the moved one, floored, <0 → top, past end/NaN → bottom; same place is a no-op (no notify). Hint `Move or delete its cards first`. |
-| S2 | running | | | |
-| S3 | todo | | | |
+| S2 | done | `9e02926..16dc44e` | CLEAN | `core/card-moves.ts`: `cardMoveKey`, `keyMoveTarget`; `card-actions.ts`: `moveCardByKey`, `takeFocusAfterMove`; `CardItem` prop `columns`; e2e helpers in `e2e/moves.spec.ts`: `titles(column)`, `focusedCard()`, `menuMove(title,to)` |
+| S3 | running | | | |
 
 ## Rulings
 

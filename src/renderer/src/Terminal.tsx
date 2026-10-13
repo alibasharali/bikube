@@ -20,8 +20,8 @@ function hardwareWebgl(): boolean {
   }
 }
 
-/** One live terminal: an xterm.js view bound to a PTY session in the main process. */
-function Terminal(): React.JSX.Element {
+/** One live terminal: an xterm.js view bound to a PTY session in the main process, started in `cwd`. */
+function Terminal({ cwd }: { cwd: string }): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -79,7 +79,12 @@ function Terminal(): React.JSX.Element {
       if (sessionId) api.resize(sessionId, cols, rows)
     })
 
-    void api.spawn(term.cols, term.rows).then((id) => {
+    void api.spawn(term.cols, term.rows, cwd).then((result) => {
+      if (!result.ok) {
+        if (!disposed) term.write(`Couldn't start: ${result.reason}\r\n`)
+        return
+      }
+      const { id } = result
       if (disposed) {
         api.kill(id)
         return
@@ -103,7 +108,7 @@ function Terminal(): React.JSX.Element {
       webgl?.dispose()
       term.dispose()
     }
-  }, [])
+  }, [cwd])
 
   return <div className="terminal" data-testid="terminal" ref={hostRef} />
 }

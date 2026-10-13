@@ -18,10 +18,16 @@ export interface TerminalExit {
   signal?: number
 }
 
+/**
+ * Outcome of `terminal:spawn`. A refusal (bad arguments, missing directory) or a failed spawn
+ * resolves with a `reason` to show after "Couldn't start: ", e.g. `working directory not found`.
+ */
+export type SpawnResult = { ok: true; id: string; pid: number } | { ok: false; reason: string }
+
 /** Terminal operations the renderer may use; main owns the PTYs (D6). */
 export interface TerminalApi {
-  /** Starts the login shell in the home directory; resolves to the session id. */
-  spawn(cols: number, rows: number): Promise<string>
+  /** Starts the login shell in `cwd`, which main checks is an absolute path to an existing directory. */
+  spawn(cols: number, rows: number, cwd: string): Promise<SpawnResult>
   write(id: string, data: string): void
   resize(id: string, cols: number, rows: number): void
   kill(id: string): void

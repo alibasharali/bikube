@@ -46,11 +46,16 @@ const alive = (pid: number): boolean => {
 
 /** Spawns a shell through the bridge and returns its pid, read back from a file it writes. */
 async function spawnShell(): Promise<number> {
-  const file = join(mkdtempSync(join(tmpdir(), 'drovr-pid-')), 'pid')
-  await page.evaluate(async (path) => {
-    const id = await window.drovr.terminal.spawn(80, 24)
-    window.drovr.terminal.write(id, `echo $$ > '${path}'\r`)
-  }, file)
+  const dir = mkdtempSync(join(tmpdir(), 'drovr-pid-'))
+  const file = join(dir, 'pid')
+  await page.evaluate(
+    async ({ dir, path }) => {
+      const result = await window.drovr.terminal.spawn(80, 24, dir)
+      if (!result.ok) throw new Error(result.reason)
+      window.drovr.terminal.write(result.id, `echo $$ > '${path}'\r`)
+    },
+    { dir, path: file }
+  )
   await expect.poll(() => existsSync(file) && readFileSync(file, 'utf8').trim() !== '').toBe(true)
   return Number(readFileSync(file, 'utf8').trim())
 }
@@ -77,12 +82,12 @@ test('reloading the page kills its shells', async () => {
 })
 
 test('many shells in one window add no listener per session', async () => {
-  await page.evaluate(async () => {
-    const ids = await Promise.all(
-      Array.from({ length: 12 }, () => window.drovr.terminal.spawn(80, 24))
+  await page.evaluate(async (cwd) => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => window.drovr.terminal.spawn(80, 24, cwd))
     )
-    ids.forEach((id) => window.drovr.terminal.kill(id))
-  })
+    results.forEach((result) => result.ok && window.drovr.terminal.kill(result.id))
+  }, tmpdir())
   await page.waitForTimeout(500)
   expect(stderr).not.toContain('MaxListenersExceededWarning')
 })

@@ -19,3 +19,8 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - done: ALL PASS (AC1–AC7), 2026-10-13
+
+## Ship review
+
+- Fresh-context review: the full-size Close dialog could outlive a failed start (guard added in CardView), the board guard from 6551b20 had no test (e2e added), close-while-starting wasn't in the spec (D2 clarified). check.sh green, smoke 65 passed.
+- Retro: no new lessons. The blocked Electron headers in `npm ci` are already covered by `docs/agents/stack.md` (read it first next time); `react-hooks/set-state-in-effect` is enforced by lint.

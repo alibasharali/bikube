@@ -26,6 +26,8 @@ Everything on the board lives in the renderer's memory (`InMemoryWorkspaceStore`
 - **D10 – Launch view:** the app opens on the board of the saved active workspace, never on a card's full-size view, and starts no processes. *Why:* round 1 Q5; starting an agent should be the user's choice.
 - **D11 – Test data directory:** when the environment variable `DROVR_USER_DATA_DIR` is set, main uses it as `userData` (set before the app is ready). The smoke tests give every test its own temp directory this way, so tests never share or touch a real board. *Why:* each smoke test needs a fresh, isolated board; a restart test needs the same directory across two launches.
 
+- **D12 – One instance:** only one Drovr instance runs per data directory. A second launch (same `userData`, after D11 applies) hands over to the running one, which restores and focuses its window, and then exits without loading or saving anything. *Why:* round 3 Q1 (ship review): with one state file, a second instance would silently overwrite the first's edits on its next save.
+
 ## Acceptance criteria
 
 Workspace `alpha` has working directory `/tmp/drovr-alpha` (an existing directory), unless stated otherwise. Each scenario launches the app with `DROVR_USER_DATA_DIR` set to a fresh temp directory and "restarts" by closing the app and launching it again with the same directory.
@@ -38,6 +40,7 @@ Workspace `alpha` has working directory `/tmp/drovr-alpha` (an existing director
 - **AC6 – Saved without a clean quit:** Given a card `api` created in `alpha`, when the app's main process is killed (SIGKILL) at least 1 s later and the app is launched again, then `api` is on the board.
 - **AC7 – Unreadable file:** Given `drovr-state.json` in the data directory contains `{not json`, when the app launches, then it shows the empty state, the data directory holds a file matching `drovr-state.corrupt-*.json` with content `{not json`, and creating a workspace then saves a new valid `drovr-state.json`. The same holds for `{"version": 2, "state": {}}`.
 - **AC8 – Launch view:** Given card `api` open at full size when the app quits, when it restarts, then the board of `alpha` is shown, not the full-size view, and `api` reads `Stopped`.
+- **AC10 – One instance:** Given the app running with data directory `X` and workspace `alpha`, when a second instance is launched with the same `X`, then the second process exits within a few seconds, the first keeps running with `alpha`, and `drovr-state.json` still lists `alpha`.
 - **AC9 – Checks:** `.claude/check.sh` and `xvfb-run -a npm run test:smoke` pass; existing smoke tests run each in their own data directory.
 
 ## Slices
@@ -60,6 +63,7 @@ Build in this order. Each slice is vertical and ends with green checks.
 | AC6 | unit (S2 coalescing) + e2e | Create a card, wait 1 s, SIGKILL the main process, relaunch |
 | AC7 | unit (S2 load cases) + e2e | Write the bad file, launch, list the data dir, create a workspace, read the new file |
 | AC8 | e2e | Quit with a card open at full size; relaunch; board visible |
+| AC10 | e2e | Launch a second instance with the same data dir; it exits; the first is unchanged |
 | AC9 | `.claude/check.sh`, `xvfb-run -a npm run test:smoke` | CI green |
 
 The developer checks on macOS that the board survives Cmd+Q and relaunch of the packaged app, and that a Claude Code card resumes its conversation after the restart.

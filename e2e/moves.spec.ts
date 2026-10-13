@@ -202,6 +202,7 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
     'Needs me',
     'Done',
     'Startup command…',
+    'Close',
     'Delete'
   ])
   await expect(page.getByTestId('card-menu-rename')).toBeFocused()
@@ -231,6 +232,7 @@ test('D8: with one column the card menu has no Move to group', async () => {
   await expect(page.getByRole('menu', { name: 'a actions' }).getByRole('menuitem')).toHaveText([
     'Rename',
     'Startup command…',
+    'Close',
     'Delete'
   ])
   await expect(page.getByTestId('card-menu-move-to')).toHaveCount(0)

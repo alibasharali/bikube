@@ -4,15 +4,18 @@ interface ConfirmDialogProps {
   title: string
   message: string
   confirmLabel: string
+  /** The confirm button's test id; deletes keep the default. */
+  confirmTestId?: string
   onConfirm: () => void
   onCancel: () => void
 }
 
-/** Destructive confirmation. Focus starts on Cancel so a stray Enter cannot delete. */
+/** Destructive confirmation. Focus starts on Cancel so a stray Enter cannot delete or close. */
 function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  confirmTestId = 'confirm-delete',
   onConfirm,
   onCancel
 }: ConfirmDialogProps): React.JSX.Element {
@@ -31,7 +34,7 @@ function ConfirmDialog({
         <button
           type="button"
           className="btn btn-danger"
-          data-testid="confirm-delete"
+          data-testid={confirmTestId}
           onClick={onConfirm}
         >
           {confirmLabel}

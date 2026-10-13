@@ -18,6 +18,14 @@ export function startCard(workspaceId: string, cardId: string): void {
   })
 }
 
+/**
+ * Closes a running card (#7 D1, D2): stops its process and keeps the card where it is; it turns
+ * Stopped when its shell has exited. Anything else is left as it is.
+ */
+export function closeCard(cardId: string): void {
+  cardTerminals().close(cardId)
+}
+
 /** Deletes a card and stops its process, freeing its terminal (#4 D13). */
 export function removeCard(workspaceId: string, cardId: string): void {
   cardTerminals().dispose(cardId)

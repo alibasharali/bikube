@@ -6,17 +6,10 @@ import {
   type Locator,
   type Page
 } from '@playwright/test'
-import {
-  appendFileSync,
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync
-} from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
 // Startup commands (#5): choosing one at creation, the workspace default, changing a card's,
 // and the Claude Code resume. Electron runs with SHELL=/bin/bash and HOME set to a temp
@@ -28,14 +21,6 @@ let root: string
 let home: string
 let log: string
 
-const FAKE_CLAUDE = `#!/bin/bash
-echo "$*" >> "$DROVR_CLAUDE_LOG"
-echo "fake-claude $*"
-if [ "$1" = "--resume" ] && [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ]; then exit 1; fi
-read -r _
-exit 0
-`
-
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 function makeDir(name: string): string {
@@ -46,16 +31,10 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-startup-'))
-  home = makeDir('home')
-  log = join(root, 'claude.log')
-  mkdirSync(join(home, 'bin'))
-  writeFileSync(join(home, 'bin', 'claude'), FAKE_CLAUDE)
-  chmodSync(join(home, 'bin', 'claude'), 0o755)
-  writeFileSync(join(home, '.bash_profile'), 'export PATH="$HOME/bin:$PATH"\n')
-  app = await electron.launch({
-    args: ['.', '--no-sandbox'],
-    env: { ...process.env, SHELL: '/bin/bash', HOME: home, DROVR_CLAUDE_LOG: log }
-  })
+  const fake = fakeClaudeHome(root)
+  home = fake.home
+  log = fake.log
+  app = await electron.launch({ args: ['.', '--no-sandbox'], env: fake.env })
   page = await app.firstWindow()
   await page.waitForSelector('[data-testid=app]')
 })
@@ -65,13 +44,7 @@ test.afterEach(async () => {
 })
 
 /** The fake claude's log, one line per run. */
-function logLines(): string[] {
-  return existsSync(log)
-    ? readFileSync(log, 'utf8')
-        .split('\n')
-        .filter((l) => l !== '')
-    : []
-}
+const logLines = (): string[] => claudeLogLines(log)
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()

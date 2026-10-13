@@ -4,13 +4,14 @@ import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
 import type { Card, Column } from '../../core/workspace-store'
 import CardStatusLine from './CardStatusLine'
+import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
 import { moveCardByKey, moveCardToColumn, removeCard, takeFocusAfterMove } from './card-actions'
 import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
-import { cardTerminals, useCardStatus } from './card-terminals'
+import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
 
 /**
@@ -47,15 +48,17 @@ interface CardItemProps {
 /**
  * A card on the board (#4 D5, D7, D9, D12, D13): its title and status; click or Enter opens
  * it. Its ⋯ menu renames it inline (as does double-clicking the title), changes its startup
- * command (#5 D11), moves it to the bottom of another column (#6 D8), or deletes it, asking
- * first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
+ * command (#5 D11), moves it to the bottom of another column (#6 D8), closes it while it runs
+ * (#7 D3, D4), or deletes it, asking first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
  * on the board, dimmed meanwhile (#6 D5).
  */
 function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
+  const running = useCardRunState(card.id)?.kind === 'running'
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [editingStartup, setEditingStartup] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [dragging, setDragging] = useState(false)
   const dragActive = useRef(false)
   const titleRef = useRef<HTMLSpanElement>(null)
@@ -221,6 +224,20 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             >
               Startup command…
             </button>
+            {running && (
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                data-testid="card-menu-close"
+                onClick={run(() => {
+                  cancelPendingOpen()
+                  setClosing(true)
+                })}
+              >
+                Close
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
@@ -239,6 +256,9 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           card={card}
           onClose={() => setEditingStartup(false)}
         />
+      )}
+      {closing && (
+        <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
       )}
       {confirm && (
         <ConfirmDialog

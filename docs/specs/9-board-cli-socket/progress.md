@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | todo | | | |
+| S1 | done | `b5546a7..70492ce` | CLEAN | `src/core/board-args.ts`: `BOARD_USAGE`, `BoardCommand`, `BoardArgs`, `parseBoardArgs(argv)`; `src/core/board-protocol.ts`: `BOARD_PROTOCOL_VERSION`, `MAX_REQUEST_LINE_BYTES`, `INVALID_REQUEST`, `REQUEST_TOO_LONG`, `BoardRequest`, `BoardReply`, `serializeRequest(cardId, command)`, `parseRequestLine(line)`, `isOverLineLimit(line)`, `serializeReply(reply)`, `parseReplyLine(line)`; `src/core/board-commands.ts`: `BoardResult<T>`, `NOT_IN_A_CARD`, `CALLING_CARD`, `MAX_AGENT_STATUS_LENGTH`, `findCallingWorkspace(state, id)`, `resolveCard(ws, callingId, ref)` (call after findCallingWorkspace), `resolveColumn(ws, ref)`, `boardMoveTarget(ws, card, columnId)` (null = same column no-op), `cleanAgentStatus(text)`, `notRunningError(card)` |
 | S2 | todo | | | |
 | S3 | todo | | | |
 | S4 | todo | | | |

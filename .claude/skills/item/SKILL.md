@@ -60,6 +60,8 @@ Approval comes in exactly two forms: the developer's own words in this session, 
 
 ## 6. Implement
 
+**Builds on.** If `get_item`'s `links.buildsOn` lists an item that isn't `merged`, don't build: tell the developer which items it waits on and stop (the factory refuses the move to *In progress* as well). Once they're merged, bring their code into the item branch first: `git fetch origin <base> && git merge origin/<base>`, then push.
+
 Invoke `implement-spec`. Done when every acceptance criterion is verified.
 
 ## 7. Ship

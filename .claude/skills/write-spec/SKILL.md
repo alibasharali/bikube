@@ -11,6 +11,10 @@ A spec is written for agents: precise and complete. It is the **single source of
 
 Finding facts is your job, never the developer's. Read the item (`get_item`), `CLAUDE.md`, `CONTEXT.md`, the ADRs in `docs/adr/`, and the code the item touches (an Explore subagent when it spans several areas). Note the existing seams, modules, routes and data you will build on.
 
+**Other specs.** `get_item` also returns `parent`, `links` (`buildsOn`, `neededBy`, `related`) and `openSpecs`: specs not merged yet, so not in your checkout. Read the spec of every linked item and of any open spec touching the same area; an unmerged one lives on its branch: `git fetch origin <branch> && git show origin/<branch>:<specPath>`. Build on their decisions (data model, routes, names) rather than inventing parallel ones; if this item needs one of them changed, that is a question for the developer, not a silent override.
+
+When this item needs another's code or decisions, link it with `link_items(N, other, "builds_on")` and say so in the spec's Problem section ("Builds on #4: …"). Building then waits until #4 is merged; the board shows it. Use `"related"` for a pointer that doesn't order anything.
+
 Done when you can name every module the item will change.
 
 ## 2. Grill (features only)

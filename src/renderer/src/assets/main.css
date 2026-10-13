@@ -548,9 +548,10 @@ button {
 
 .card-list {
   list-style: none;
-  /* Room for the drop line above the first card and below the last (#6 D5). */
-  margin: var(--space-2) 0 0;
-  padding: var(--space-1) 0;
+  /* Room for the drop line above the first card and below the last (#6 D5). The gap
+     under the header is padding, not margin, so drops there reach the nearest card (D6). */
+  margin: 0;
+  padding: var(--space-3) 0 var(--space-1);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

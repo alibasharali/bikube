@@ -393,6 +393,11 @@ test('D6: dropping in the gap between cards or just above the first uses the nea
   await dragToPoint('b', first.x + first.width / 2, first.y - 2)
   await expect(titles('Backlog')).toHaveText(['b', 'a', 'c'])
   await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  const top = await card('b').boundingBox()
+  if (!top) throw new Error('no card')
+  await dragToPoint('c', top.x + top.width / 2, top.y - 8)
+  await expect(titles('Backlog')).toHaveText(['c', 'b', 'a'])
 })
 
 test('AC1/AC6: a running card dragged to another column keeps its terminal and still opens', async () => {

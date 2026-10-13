@@ -24,7 +24,7 @@ export function answerBoardCommand(
   callingCardId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
-  setAgentStatus: (cardId: string, text: string) => void = () => {}
+  setAgentStatus: (cardId: string, text: string) => void
 ): BoardReply {
   const workspace = findCallingWorkspace(store.getState(), callingCardId)
   if (!workspace.ok) return workspace

@@ -65,7 +65,8 @@ describe('answerBoardCommand', () => {
       store,
       'c-api',
       { command: 'move', card: '.', column: ' done ' },
-      running
+      running,
+      () => {}
     )
     expect(reply).toEqual({ ok: true })
     expect(columnOf(store, 'c-api')).toBe('done')
@@ -82,7 +83,8 @@ describe('answerBoardCommand', () => {
         store,
         'c-api',
         { command: 'move', card: 'web', column: 'Needs me' },
-        running
+        running,
+        () => {}
       )
     ).toEqual({ ok: true })
     expect(columnOf(store, 'c-web')).toBe('needs')
@@ -92,7 +94,8 @@ describe('answerBoardCommand', () => {
         store,
         'c-api',
         { command: 'move', card: 'c-web', column: 'Running' },
-        running
+        running,
+        () => {}
       )
     ).toEqual({ ok: true })
     expect(columnOf(store, 'c-web')).toBe('running')
@@ -106,7 +109,8 @@ describe('answerBoardCommand', () => {
         store,
         'c-api',
         { command: 'move', card: 'web', column: 'Backlog' },
-        running
+        running,
+        () => {}
       )
     ).toEqual({ ok: true })
     expect(store.getState()).toBe(before)
@@ -116,7 +120,13 @@ describe('answerBoardCommand', () => {
     const store = setup()
     const before = store.getState()
     expect(
-      answerBoardCommand(store, 'c-api', { command: 'move', card: '.', column: 'Review' }, running)
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'move', card: '.', column: 'Review' },
+        running,
+        () => {}
+      )
     ).toEqual({
       ok: false,
       error: 'board: no column "Review"; columns are: Backlog, Running, Needs me, Done'
@@ -126,7 +136,8 @@ describe('answerBoardCommand', () => {
         store,
         'c-api',
         { command: 'move', card: 'other', column: 'Done' },
-        running
+        running,
+        () => {}
       )
     ).toEqual({ ok: false, error: 'board: no card "other" in this workspace' })
     expect(store.getState()).toBe(before)
@@ -135,7 +146,13 @@ describe('answerBoardCommand', () => {
   it('refuses a calling card the board does not have (#9 D3)', () => {
     const store = setup()
     expect(
-      answerBoardCommand(store, 'ghost', { command: 'move', card: '.', column: 'Done' }, running)
+      answerBoardCommand(
+        store,
+        'ghost',
+        { command: 'move', card: '.', column: 'Done' },
+        running,
+        () => {}
+      )
     ).toEqual({ ok: false, error: NOT_IN_A_CARD })
   })
 
@@ -143,10 +160,22 @@ describe('answerBoardCommand', () => {
     const store = setup()
     const before = store.getState()
     expect(
-      answerBoardCommand(store, 'c-api', { command: 'status', card: '.', text: 'hi' }, running)
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'status', card: '.', text: 'hi' },
+        running,
+        () => {}
+      )
     ).toEqual({ ok: true })
     expect(
-      answerBoardCommand(store, 'c-api', { command: 'status', card: 'old', text: 'hi' }, running)
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'status', card: 'old', text: 'hi' },
+        running,
+        () => {}
+      )
     ).toEqual({ ok: false, error: 'board: "old" is not running' })
     expect(store.getState()).toBe(before)
   })

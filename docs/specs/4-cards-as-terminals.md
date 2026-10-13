@@ -2,7 +2,7 @@
 item: 4
 type: feature
 title: Cards as terminals
-status: draft
+status: approved
 branch: claude/4-cards-as-terminals
 ---
 

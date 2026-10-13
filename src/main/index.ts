@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { boardShellEnvFor, boardSocketPath, registerBoard } from './board'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerState } from './state'
@@ -43,7 +44,8 @@ if (!app.requestSingleInstanceLock()) {
 
 function startApp(): void {
   const state = registerState()
-  const terminals = registerTerminals()
+  const socketPath = boardSocketPath()
+  const terminals = registerTerminals(boardShellEnvFor(socketPath))
   registerClipboard()
   registerDirectories()
 
@@ -73,6 +75,9 @@ function startApp(): void {
   })
 
   app.whenReady().then(() => {
+    // `board` requests from cards (#9 D5): the socket is gone again once the app quits.
+    const closeBoard = registerBoard(socketPath, terminals)
+    app.on('will-quit', closeBoard)
     createWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

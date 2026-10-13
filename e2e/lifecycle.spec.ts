@@ -43,7 +43,7 @@ async function spawnShell(): Promise<number> {
   const file = join(dir, 'pid')
   await page.evaluate(
     async ({ dir, path }) => {
-      const result = await window.drovr.terminal.spawn(80, 24, dir)
+      const result = await window.drovr.terminal.spawn(80, 24, dir, 'lifecycle-card')
       if (!result.ok) throw new Error(result.reason)
       window.drovr.terminal.write(result.id, `echo $$ > '${path}'\r`)
     },
@@ -77,7 +77,7 @@ test('reloading the page kills its shells', async () => {
 test('many shells in one window add no listener per session', async () => {
   await page.evaluate(async (cwd) => {
     const results = await Promise.all(
-      Array.from({ length: 12 }, () => window.drovr.terminal.spawn(80, 24, cwd))
+      Array.from({ length: 12 }, () => window.drovr.terminal.spawn(80, 24, cwd, 'lifecycle-card'))
     )
     results.forEach((result) => result.ok && window.drovr.terminal.kill(result.id))
   }, tmpdir())

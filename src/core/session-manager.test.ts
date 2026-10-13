@@ -49,6 +49,14 @@ describe('SessionManager', () => {
     await until(() => /hello\r?\n/.test(output.get(id) ?? ''), 'echo output')
   })
 
+  it('adds the given environment variables to the shell (#9 D3)', async () => {
+    const m = create()
+    const { output } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24, env: { DROVR_X: 'card-7' } })
+    m.write(id, 'echo "x=$DROVR_X"\n')
+    await until(() => /x=card-7\r?\n/.test(output.get(id) ?? ''), 'env output')
+  })
+
   it('starts in the given cwd', async () => {
     const m = create()
     const { output } = collect(m)

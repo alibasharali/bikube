@@ -9,6 +9,8 @@ export interface SpawnOptions {
   shell?: string
   /** Defaults to the user's home directory. */
   cwd?: string
+  /** Variables added to the inherited environment, e.g. the card's `board` variables (#9 D3). */
+  env?: Record<string, string>
 }
 
 export interface SessionExit {
@@ -65,10 +67,12 @@ export class SessionManager {
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd ?? homedir(),
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' } as Record<
-        string,
-        string
-      >
+      env: {
+        ...process.env,
+        ...options.env,
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor'
+      } as Record<string, string>
     })
     this.sessions.set(id, proc)
     proc.onData((data) => this.emitter.emit('data', id, data))

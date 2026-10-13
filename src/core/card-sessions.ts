@@ -124,7 +124,7 @@ export class CardSessions<S extends CardScreen> {
     this.setState(entry, state)
     this.starting++
     void this.api
-      .spawn(cols, rows, card.directory)
+      .spawn(cols, rows, card.directory, card.id)
       .then(
         (result) => {
           if (!result.ok) return failed(result.reason)

@@ -7,6 +7,13 @@ files:
   - package.json
 asarUnpack:
   - '**/node_modules/node-pty/**'
+  # The `board` CLI runs as plain Node from real files (#9 D4).
+  - out/main/board-cli.js
+  - out/main/chunks/**
+# The `board` wrapper, put first on PATH in every card's shell (#9 D3, D4).
+extraResources:
+  - from: resources/bin
+    to: bin
 mac:
   category: public.app-category.developer-tools
   target:

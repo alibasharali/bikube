@@ -43,14 +43,20 @@ class FakeScreen implements CardScreen {
 }
 
 class FakeApi implements TerminalApi {
-  spawns: { cols: number; rows: number; cwd: string; resolve: (r: SpawnResult) => void }[] = []
+  spawns: {
+    cols: number
+    rows: number
+    cwd: string
+    cardId?: string
+    resolve: (r: SpawnResult) => void
+  }[] = []
   writes: [string, string][] = []
   resizes: [string, number, number][] = []
   kills: string[] = []
   dataListeners = new Set<(id: string, data: string) => void>()
   exitListeners = new Set<(exit: TerminalExit) => void>()
-  spawn(cols: number, rows: number, cwd: string): Promise<SpawnResult> {
-    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, resolve }))
+  spawn(cols: number, rows: number, cwd: string, cardId?: string): Promise<SpawnResult> {
+    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, cardId, resolve }))
   }
   write(id: string, data: string): void {
     this.writes.push([id, data])
@@ -122,6 +128,11 @@ describe('CardSessions', () => {
     expect(api.spawns[0]).toMatchObject({ cols: 80, rows: 24, cwd: '/tmp/alpha' })
     expect(sessions.screen('c1')).toBe(screens.get('c1'))
     expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+  })
+
+  it("sends the card's id with the spawn, so its shell knows its card (#9 D3)", () => {
+    sessions.start(card('c1', '/tmp/alpha'))
+    expect(api.spawns[0].cardId).toBe('c1')
   })
 
   it('routes output by session to its own card and keeps it while no view is open', async () => {

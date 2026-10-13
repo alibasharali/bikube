@@ -16,6 +16,14 @@ export function isSessionId(id: unknown): id is string {
   return typeof id === 'string' && id.length > 0
 }
 
+/** Longest card id a spawn request may carry (#9 D3). */
+export const MAX_CARD_ID_LENGTH = 100
+
+/** A card id as the renderer sends it with a spawn request: a non-empty string of at most 100 chars. */
+export function isCardId(id: unknown): id is string {
+  return typeof id === 'string' && id.length > 0 && id.length <= MAX_CARD_ID_LENGTH
+}
+
 export function isWriteData(data: unknown): data is string {
   // Every UTF-16 code unit is at most 3 UTF-8 bytes, so length bounds the cost of measuring.
   return (
@@ -55,7 +63,8 @@ export const isClipboardText = isWriteData
 export const SPAWN_REFUSAL = {
   invalidSize: 'invalid terminal size',
   invalidDirectory: 'invalid working directory',
-  directoryNotFound: 'working directory not found'
+  directoryNotFound: 'working directory not found',
+  invalidCard: 'invalid card id'
 } as const
 
 /** Null when `cwd` is an absolute path to an existing directory, else the refusal reason. */

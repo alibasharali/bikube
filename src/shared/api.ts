@@ -1,3 +1,5 @@
+import type { BoardCommand } from '../core/board-args'
+import type { BoardReply } from '../core/board-protocol'
 import type { WorkspaceState } from '../core/workspace-store'
 
 /** IPC channel names shared by main and preload. */
@@ -13,7 +15,9 @@ export const IPC = {
   fsIsDirectory: 'fs:isDirectory',
   dialogPickDirectory: 'dialog:pickDirectory',
   stateLoad: 'state:load',
-  stateSave: 'state:save'
+  stateSave: 'state:save',
+  boardRequest: 'board:request',
+  boardAnswer: 'board:answer'
 } as const
 
 export interface TerminalExit {
@@ -31,8 +35,12 @@ export type SpawnResult = { ok: true; id: string } | { ok: false; reason: string
 
 /** Terminal operations the renderer may use; main owns the PTYs (D6). */
 export interface TerminalApi {
-  /** Starts the login shell in `cwd`, which main checks is an absolute path to an existing directory. */
-  spawn(cols: number, rows: number, cwd: string): Promise<SpawnResult>
+  /**
+   * Starts the login shell in `cwd`, which main checks is an absolute path to an existing
+   * directory, for the card `cardId` (a non-empty string of at most 100 chars): the shell gets
+   * the card's `board` variables (#9 D3).
+   */
+  spawn(cols: number, rows: number, cwd: string, cardId: string): Promise<SpawnResult>
   write(id: string, data: string): void
   resize(id: string, cols: number, rows: number): void
   kill(id: string): void
@@ -67,6 +75,17 @@ export interface StateApi {
   save(state: WorkspaceState): void
 }
 
+/**
+ * `board` requests main forwards from a card's shell (#9 D10). The renderer resolves and applies
+ * each one against its store and returns the reply the CLI prints; preload sends it back.
+ */
+export interface BoardApi {
+  /** `listener` answers one command run by the card `cardId`. Returns an unsubscribe function. */
+  onRequest(
+    listener: (cardId: string, command: BoardCommand) => BoardReply | Promise<BoardReply>
+  ): () => void
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
@@ -75,4 +94,5 @@ export interface DrovrApi {
   fs: FsApi
   dialog: DialogApi
   state: StateApi
+  board: BoardApi
 }

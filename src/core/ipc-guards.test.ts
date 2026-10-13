@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   MAX_WRITE_BYTES,
   SPAWN_REFUSAL,
+  isCardId,
   isClipboardText,
   isCurrentMainFrame,
   isSessionId,
@@ -133,5 +134,19 @@ describe('isCurrentMainFrame', () => {
     expect(isCurrentMainFrame({ ...main, detached: true }, main)).toBe(false)
     expect(isCurrentMainFrame({ processId: 5, routingId: 1, detached: false }, main)).toBe(false)
     expect(isCurrentMainFrame({ processId: 4, routingId: 2, detached: false }, main)).toBe(false)
+  })
+})
+
+describe('isCardId', () => {
+  it('accepts a non-empty string of at most 100 chars (#9 D3)', () => {
+    expect(isCardId('c1')).toBe(true)
+    expect(isCardId('x'.repeat(100))).toBe(true)
+  })
+
+  it('rejects empty, too long and non-string ids', () => {
+    expect(isCardId('')).toBe(false)
+    expect(isCardId('x'.repeat(101))).toBe(false)
+    expect(isCardId(undefined)).toBe(false)
+    expect(isCardId(42)).toBe(false)
   })
 })

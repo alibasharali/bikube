@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cardCloseConfirmation,
   cardDeleteConfirmation,
   columnDeleteHint,
   runningCount,
@@ -64,6 +65,14 @@ describe('card delete confirmation (AC10, D13)', () => {
     expect(cardDeleteConfirmation('old', { kind: 'stopped' })).toBeNull()
     expect(cardDeleteConfirmation('x', { kind: 'failed', reason: 'nope' })).toBeNull()
     expect(cardDeleteConfirmation('gone', undefined)).toBeNull()
+  })
+})
+
+describe('card close confirmation (#7 D4)', () => {
+  it('names the card and says how to start it again', () => {
+    expect(cardCloseConfirmation('api')).toBe(
+      'Close "api"? Its terminal will be stopped. Open the card again to start it with its startup command.'
+    )
   })
 })
 

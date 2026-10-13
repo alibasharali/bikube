@@ -1,4 +1,7 @@
-/** Delete rules for cards, columns and workspaces with cards (#4 D13, D14, D15). Plain TS. */
+/**
+ * Delete rules for cards, columns and workspaces with cards (#4 D13, D14, D15), and the close
+ * confirmation for a running card (#7 D4). Plain TS.
+ */
 import type { CardRunState } from './card-status'
 import { cardsInColumn, type Workspace } from './workspace-store'
 
@@ -23,6 +26,11 @@ export function cardDeleteConfirmation(
 ): string | null {
   if (state?.kind !== 'running') return null
   return `Delete "${title}"? Its terminal is still running and will be stopped.`
+}
+
+/** The confirmation for closing a running card (#7 D4); Close is only offered while running. */
+export function cardCloseConfirmation(title: string): string {
+  return `Close "${title}"? Its terminal will be stopped. Open the card again to start it with its startup command.`
 }
 
 /** How many of `cards` have a running process. */

@@ -46,6 +46,8 @@ interface Entry<S> {
   timer: ReturnType<typeof setTimeout> | null
   dirty: boolean
   disposed: boolean
+  /** Closed while its shell was starting: killed as soon as the session arrives (#7 D2). */
+  closing: boolean
 }
 
 export class CardSessions<S extends CardScreen> {
@@ -92,7 +94,8 @@ export class CardSessions<S extends CardScreen> {
       listeners: new Set(),
       timer: null,
       dirty: false,
-      disposed: false
+      disposed: false,
+      closing: false
     }
     if (existing) {
       // The old screen is gone already when Stopped; a failed one still shows its reason.
@@ -117,6 +120,7 @@ export class CardSessions<S extends CardScreen> {
       screen.write(`Couldn't start: ${reason}\r\n`)
       this.setState(entry, { kind: 'failed', reason })
     }
+    entry.closing = false
     this.setState(entry, state)
     this.starting++
     void this.api
@@ -132,7 +136,8 @@ export class CardSessions<S extends CardScreen> {
             this.api.resize(result.id, screen.cols, screen.rows)
           }
           const early = this.early.get(result.id)
-          if (line !== null && !early?.exit) {
+          if (entry.closing) this.api.kill(result.id)
+          else if (line !== null && !early?.exit) {
             this.api.write(result.id, `${line}\r`)
             if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
           }
@@ -167,6 +172,20 @@ export class CardSessions<S extends CardScreen> {
     if (!entry) return () => {}
     entry.listeners.add(listener)
     return () => entry.listeners.delete(listener)
+  }
+
+  /**
+   * Closes a running card (#7 D1, D2): kills its shell session and keeps the card, which stays
+   * Running until main reports the exit and then turns Stopped like a shell that exits by
+   * itself. While its shell is starting, the kill is sent once the session arrives, and its
+   * start line isn't typed. A Stopped card, one that couldn't start, or an unknown one is left
+   * as it is.
+   */
+  close(cardId: string): void {
+    const entry = this.entries.get(cardId)
+    if (entry?.state.kind !== 'running') return
+    if (entry.sessionId) this.api.kill(entry.sessionId)
+    else entry.closing = true
   }
 
   /** Stops the card's process if it runs, frees its screen and forgets the card. */

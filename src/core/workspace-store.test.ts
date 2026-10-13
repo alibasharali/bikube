@@ -681,6 +681,21 @@ describe('cards: move (#6 D3, D4)', () => {
     expect(column(s, w, 1)).toEqual([])
   })
 
+  it('rounds a fractional index down and puts NaN at the bottom', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    card(s, w, 'a')
+    card(s, w, 'b')
+    const c = card(s, w, 'c')
+    card(s, w, 'x', 1)
+    ok(s.moveCard(w.id, c.id, backlog, 0.5))
+    expect(column(s, w, 0)).toEqual(['c', 'a', 'b'])
+    expect(column(s, w, 1)).toEqual(['x'])
+    ok(s.moveCard(w.id, c.id, backlog, NaN))
+    expect(column(s, w, 0)).toEqual(['a', 'b', 'c'])
+  })
+
   it('moving to the same place succeeds and changes nothing', () => {
     const s = make()
     const w = create(s, 'alpha')
@@ -720,7 +735,7 @@ describe('cards: move (#6 D3, D4)', () => {
   it("changes only the moved card's column and position (D4)", () => {
     const s = make()
     const w = create(s, 'alpha')
-    const other = create(s, 'beta')
+    create(s, 'beta')
     const a = card(s, w, 'a')
     const b = card(s, w, 'b')
     ok(s.setCardStartup(w.id, a.id, { kind: 'claude' }))
@@ -738,7 +753,6 @@ describe('cards: move (#6 D3, D4)', () => {
     expect(after.cards.find((c) => c.id === b.id)).toBe(beforeB)
     expect({ ...after, cards: [] }).toEqual({ ...beforeWs, cards: [] })
     expect(s.getState().workspaces[1]).toBe(beforeOther)
-    expect(other.cards).toEqual([])
   })
   it('lets a column be deleted once its cards are moved out (AC10)', () => {
     const s = make()

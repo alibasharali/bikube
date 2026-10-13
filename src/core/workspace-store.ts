@@ -107,8 +107,8 @@ export interface WorkspaceStore {
   deleteCard(workspaceId: string, cardId: string): Result<void>
   /**
    * Moves the card to `toColumnId` at `toIndex` (0 = top, counted among that column's cards
-   * without this one); past the end means the bottom. Only the card's column and position
-   * change (#6 D3, D4).
+   * without this one, fractions rounded down); past the end or NaN means the bottom. Only
+   * the card's column and position change (#6 D3, D4).
    */
   moveCard(workspaceId: string, cardId: string, toColumnId: string, toIndex: number): Result<void>
   /** Changes only the setting, used at the card's next start (#5 D11). */
@@ -340,7 +340,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!ws.columns.some((c) => c.id === toColumnId)) return unknownColumn()
     const others = ws.cards.filter((c) => c.id !== cardId)
     const target = others.filter((c) => c.columnId === toColumnId)
-    const index = Math.max(0, toIndex)
+    // Fractions round down; NaN fails every comparison below and lands at the bottom.
+    const index = Math.max(0, Math.floor(toIndex))
     let at: number
     if (index < target.length) at = others.indexOf(target[index])
     else if (target.length > 0) at = others.indexOf(target[target.length - 1]) + 1

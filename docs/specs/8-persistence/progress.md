@@ -7,8 +7,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `0a5e98e..a7eca5e` | CLEAN | `src/core/saved-state.ts`: `STATE_FILE_NAME`, `SAVED_STATE_VERSION`, `SavedStateResult`, `serializeSavedState(state)`, `parseSavedState(text)`, `validateWorkspaceState(value: unknown)`, `corruptFileName(now)`; `StoreOptions.initialState` |
-| S2 | running | | | |
-| S3 | todo | | | |
+| S2 | done | `303bf76..723824e` | ruling r2 Q1, fixed r1, CLEAN | `IPC.stateLoad`/`IPC.stateSave`; `window.drovr.state` (`StateApi { load(): Promise<WorkspaceState>; save(state): void }`); core `StateFile` (`load`, `save(value: unknown): boolean`, `flush`, `SAVE_INTERVAL_MS`); main `registerState()` → `{ flush }`; `DROVR_USER_DATA_DIR` sets `userData` |
+| S3 | running | | | |
 
 ## Rulings
 

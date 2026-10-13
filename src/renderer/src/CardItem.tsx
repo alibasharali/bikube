@@ -59,6 +59,8 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
   const [confirm, setConfirm] = useState<string | null>(null)
   const [editingStartup, setEditingStartup] = useState(false)
   const [closing, setClosing] = useState(false)
+  // A card that stops by itself while its Close dialog is open has nothing left to close.
+  if (closing && !running) setClosing(false)
   const [dragging, setDragging] = useState(false)
   const dragActive = useRef(false)
   const titleRef = useRef<HTMLSpanElement>(null)

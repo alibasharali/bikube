@@ -6,9 +6,7 @@ import type { FieldError, Result } from './workspace-store'
 
 /** Shell types nothing; Claude Code runs `claude` with the card's agent session id. */
 export type StartupCommand =
-  | { kind: 'shell' }
-  | { kind: 'claude' }
-  | { kind: 'custom'; command: string }
+  { kind: 'shell' } | { kind: 'claude' } | { kind: 'custom'; command: string }
 
 export const SHELL_STARTUP: StartupCommand = { kind: 'shell' }
 

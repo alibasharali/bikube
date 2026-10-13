@@ -53,13 +53,7 @@ export interface WorkspaceState {
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
 export type ErrorField =
-  | 'name'
-  | 'directory'
-  | 'column'
-  | 'workspace'
-  | 'title'
-  | 'card'
-  | 'command'
+  'name' | 'directory' | 'column' | 'workspace' | 'title' | 'card' | 'command'
 
 export interface FieldError {
   field: ErrorField

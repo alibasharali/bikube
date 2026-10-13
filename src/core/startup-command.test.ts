@@ -11,9 +11,9 @@ describe('startLine (D2, D5)', () => {
   })
 
   it('starts Claude Code with the session id the first time (AC2)', () => {
-    expect(startLine({ startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: false })).toBe(
-      `claude --session-id ${U}`
-    )
+    expect(
+      startLine({ startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: false })
+    ).toBe(`claude --session-id ${U}`)
   })
 
   it('resumes, falling back to the same session id, once Claude was started (AC4, AC9)', () => {

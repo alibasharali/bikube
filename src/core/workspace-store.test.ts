@@ -490,7 +490,11 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     const s = makeWithIds()
     expect(create(s, 'alpha').defaultStartup).toEqual({ kind: 'shell' })
     const b = ok(
-      s.createWorkspace({ name: 'beta', directory: '/tmp/beta', defaultStartup: { kind: 'claude' } })
+      s.createWorkspace({
+        name: 'beta',
+        directory: '/tmp/beta',
+        defaultStartup: { kind: 'claude' }
+      })
     )
     expect(b.defaultStartup).toEqual({ kind: 'claude' })
   })

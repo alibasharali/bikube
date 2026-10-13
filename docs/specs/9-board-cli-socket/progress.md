@@ -15,7 +15,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 Decisions the developer made during implementation, with the date. A ruling that changes the spec also got its own `docs(spec):` commit.
 
-- None yet.
+- 2026-10-13 ship review (full auto, round 2): Q1 private `board/` dir 0700 + chmod 0600, no umask switch (D5, AC9); Q2 maxConnections 32, ≤1 s drain (D5); Q3 export `DROVR_BIN`, macOS manual check `command -v board` (D3); Q4 release pending requests on page reload/crash, renderer throw → `board: no answer from Drovr` (D9), e2e for a move in a non-active workspace (AC2). Spec updated.
 
 ## Verification
 

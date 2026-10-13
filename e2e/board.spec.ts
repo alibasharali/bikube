@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 
 // Board and workspaces smoke tests. The native folder picker can't be driven
 // headlessly, so the dialog is filled by typing the path (spec: test seams).
@@ -25,6 +25,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 async function openCreateDialog(): Promise<void> {

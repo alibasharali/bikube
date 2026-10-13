@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
 // Startup commands (#5): choosing one at creation, the workspace default, changing a card's,
@@ -33,6 +33,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 /** The fake claude's log, one line per run. */

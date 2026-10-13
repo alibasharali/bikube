@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 
 // D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
 // command, one open at full size. Not part of the default smoke run (see playwright.config.ts);
@@ -298,5 +298,6 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
     expect(lagP99).toBeLessThanOrEqual(BUDGET.mainLagMs)
   } finally {
     await app.close()
+    removeDataDirs()
   }
 })

@@ -1,4 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { spawn } from 'node:child_process'
 import {
   chmodSync,
   existsSync,
@@ -8,10 +9,11 @@ import {
   readdirSync,
   writeFileSync
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
-import { launchApp, newDataDir } from './launch'
+import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Persistence (#8): the board survives a restart. Each test launches with its own data directory
 // and "restarts" by closing the app and launching it again with the same one (spec: AC intro).
@@ -52,6 +54,7 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await app?.close().catch(() => {})
   app = undefined
+  removeDataDirs()
 })
 
 async function launch(): Promise<void> {
@@ -452,4 +455,52 @@ test('AC8: the app opens on the board, not the card that was open', async () => 
   await expect(page.getByTestId('card-view')).toHaveCount(0)
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
   await expect(status('api')).toHaveText('Stopped')
+})
+
+/** The Electron binary (`require('electron')` gives its path outside Electron). */
+const electronBinary = createRequire(__filename)('electron') as string
+
+/** Launches the app outside Playwright on this test's data directory; resolves when it exits. */
+function launchSecond(timeoutMs: number): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(electronBinary, ['.', '--no-sandbox'], {
+      env: { ...env, DROVR_USER_DATA_DIR: dataDir },
+      stdio: 'ignore'
+    })
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error(`second instance still running after ${timeoutMs} ms`))
+    }, timeoutMs)
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      resolve(code)
+    })
+  })
+}
+
+const savedWorkspaceNames = (): string[] => {
+  try {
+    const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+    return saved.state.workspaces.map((w: { name: string }) => w.name)
+  } catch {
+    return []
+  }
+}
+
+test('AC10: a second instance on the same data directory exits; the first keeps its board', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await expect.poll(savedWorkspaceNames).toEqual(['alpha'])
+
+  await launchSecond(10_000)
+
+  expect(app!.process().exitCode).toBeNull()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  expect(savedWorkspaceNames()).toEqual(['alpha'])
+  await createWorkspace(makeDir('beta'), 'beta')
+  await expect.poll(savedWorkspaceNames).toEqual(['alpha', 'beta'])
 })

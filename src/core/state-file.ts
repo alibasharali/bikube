@@ -17,7 +17,10 @@ export const SAVE_INTERVAL_MS = 200
 /** The synchronous fs calls the state file needs (a subset of `node:fs`). */
 export interface StateFileFs {
   readFileSync(path: string, encoding: 'utf8'): string
-  writeFileSync(path: string, data: string, encoding: 'utf8'): void
+  openSync(path: string, flags: 'w'): number
+  writeFileSync(fd: number, data: string, encoding: 'utf8'): void
+  fsyncSync(fd: number): void
+  closeSync(fd: number): void
   renameSync(from: string, to: string): void
 }
 
@@ -83,12 +86,22 @@ export class StateFile {
     this.write()
   }
 
-  /** Writes `latest` atomically: the temp file first, then a rename over the state file. */
+  /**
+   * Writes `latest` atomically: the temp file first, flushed to disk, then a rename over the
+   * state file, so a crash or power loss leaves either the old file or the whole new one.
+   */
   private write(): void {
     if (!this.writable || !this.pending || this.latest === null) return
+    const fs = this.options.fs
     try {
-      this.options.fs.writeFileSync(this.tmpPath, serializeSavedState(this.latest), 'utf8')
-      this.options.fs.renameSync(this.tmpPath, this.path)
+      const fd = fs.openSync(this.tmpPath, 'w')
+      try {
+        fs.writeFileSync(fd, serializeSavedState(this.latest), 'utf8')
+        fs.fsyncSync(fd)
+      } finally {
+        fs.closeSync(fd)
+      }
+      fs.renameSync(this.tmpPath, this.path)
       this.pending = false
     } catch (err) {
       // Keep the state pending: the next save or flush tries again.

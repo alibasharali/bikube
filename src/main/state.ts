@@ -1,5 +1,13 @@
 import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeFileSync
+} from 'node:fs'
 import { StateFile } from '../core/state-file'
 import { IPC } from '../shared/api'
 
@@ -14,7 +22,10 @@ export function registerState(): { flush(): void } {
   } catch (err) {
     console.error(`state directory not created: ${String(err)}`)
   }
-  const file = new StateFile({ dir, fs: { readFileSync, writeFileSync, renameSync } })
+  const file = new StateFile({
+    dir,
+    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync }
+  })
 
   const fromMainFrame = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame

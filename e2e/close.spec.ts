@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
 // Close card (#7): from the card menu and the full-size header, with a confirmation; the card
@@ -29,6 +29,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 const logLines = (): string[] => claudeLogLines(log)

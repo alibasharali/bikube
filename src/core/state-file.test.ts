@@ -25,16 +25,42 @@ class FakeFs implements StateFileFs {
     }
     return text
   }
-  writeFileSync(path: string, data: string): void {
+  /** Every call that changes the directory, fsyncs and closes included, in order. */
+  events: string[] = []
+  open = new Map<number, string>()
+  private nextFd = 3
+  openSync(path: string): number {
+    const fd = this.nextFd++
+    this.open.set(fd, path)
+    this.files.set(path, '')
+    this.events.push(`open ${path}`)
+    return fd
+  }
+  writeFileSync(fd: number, data: string): void {
     if (this.failWrites) throw new Error('EIO')
+    const path = this.pathOf(fd)
     this.ops.push(`write ${path}`)
+    this.events.push(`write ${path}`)
     this.files.set(path, data)
+  }
+  fsyncSync(fd: number): void {
+    this.events.push(`fsync ${this.pathOf(fd)}`)
+  }
+  closeSync(fd: number): void {
+    this.events.push(`close ${this.pathOf(fd)}`)
+    this.open.delete(fd)
+  }
+  private pathOf(fd: number): string {
+    const path = this.open.get(fd)
+    if (path === undefined) throw new Error(`EBADF: ${fd}`)
+    return path
   }
   renameSync(from: string, to: string): void {
     if (from === this.failRenamesOf) throw new Error(`EBUSY: ${from}`)
     const text = this.files.get(from)
     if (text === undefined) throw new Error(`ENOENT: ${from}`)
     this.ops.push(`rename ${from} -> ${to}`)
+    this.events.push(`rename ${from} -> ${to}`)
     this.files.delete(from)
     this.files.set(to, text)
   }
@@ -103,6 +129,30 @@ describe('StateFile.save (#8 D2, D6, AC6)', () => {
     expect(fs.files.get(FILE)).toBe(serializeSavedState(stateNamed('a', 'b', 'c')))
     vi.advanceTimersByTime(1000)
     expect(fs.ops).toHaveLength(2)
+  })
+})
+
+describe('StateFile durable write (#8 D6)', () => {
+  it('fsyncs and closes the temp file before renaming it over the state file', () => {
+    const file = open()
+    file.save(stateNamed('a'))
+    file.flush()
+    expect(fs.events).toEqual([
+      `open ${TMP}`,
+      `write ${TMP}`,
+      `fsync ${TMP}`,
+      `close ${TMP}`,
+      `rename ${TMP} -> ${FILE}`
+    ])
+  })
+
+  it('closes the temp file when the write fails', () => {
+    const file = open()
+    fs.failWrites = true
+    file.save(stateNamed('a'))
+    file.flush()
+    expect(fs.open.size).toBe(0)
+    expect(fs.events).not.toContain(`rename ${TMP} -> ${FILE}`)
   })
 })
 

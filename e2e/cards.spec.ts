@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 
 // Cards as terminals (#4): creation, full-size view, status, lifetime. Linux runs drive
 // Ctrl+Shift+B; Cmd+Shift+B on macOS is checked by hand (spec: test seams).
@@ -24,6 +24,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 async function createWorkspace(dir: string, name: string): Promise<void> {

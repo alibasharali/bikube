@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 import type { DrovrApi } from '../src/shared/api'
 
 declare global {
@@ -25,6 +25,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 const alive = (pid: number): boolean => {

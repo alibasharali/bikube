@@ -1,11 +1,20 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-/** A fresh, empty data directory for one test's saved board (#8 D11). */
+const dataDirs: string[] = []
+
+/** A fresh, empty data directory for one test's saved board (#8 D11); see `removeDataDirs`. */
 export function newDataDir(): string {
-  return mkdtempSync(join(tmpdir(), 'drovr-data-'))
+  const dir = mkdtempSync(join(tmpdir(), 'drovr-data-'))
+  dataDirs.push(dir)
+  return dir
+}
+
+/** Deletes every data directory `newDataDir` made; call after the test's apps are closed. */
+export function removeDataDirs(): void {
+  for (const dir of dataDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 }
 
 export interface LaunchOptions {

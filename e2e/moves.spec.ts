@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, removeDataDirs } from './launch'
 
 // Moving cards with the keyboard, the card menu and drag and drop (#6 D4, D5, D6, D7, D8,
 // D10).
@@ -24,6 +24,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await app?.close()
+  removeDataDirs()
 })
 
 async function createWorkspace(dir: string, name: string): Promise<void> {

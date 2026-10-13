@@ -1,0 +1,51 @@
+import { useEffect, useRef } from 'react'
+import { isBackShortcut } from '../../core/card-shortcuts'
+import type { Card } from '../../core/workspace-store'
+import CardStatusLine from './CardStatusLine'
+import { cardTerminals, useCardStatus } from './card-terminals'
+
+/**
+ * A card at full size (#4 D7): header with title, status and Back; the card's own terminal
+ * fitted below. Leaving only detaches the screen; the process keeps running (D8, D10).
+ */
+function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.JSX.Element {
+  const status = useCardStatus(card.id)
+  const hostRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const screen = cardTerminals().screen(card.id)
+    if (!screen) return
+    const detach = screen.attach(hostRef.current!)
+    screen.focus()
+    return detach
+  }, [card.id])
+
+  // Capture phase: works wherever focus is, including the terminal, which swallows the key.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!isBackShortcut(event, window.drovr.platform)) return
+      event.preventDefault()
+      event.stopPropagation()
+      onBack()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onBack])
+
+  return (
+    <section className="card-view" data-testid="card-view" aria-label={card.title}>
+      <header className="card-view-header">
+        <h1 className="card-view-title" data-testid="card-view-title" title={card.title}>
+          {card.title}
+        </h1>
+        <CardStatusLine status={status} className="card-view-status" />
+        <button type="button" className="btn btn-small" data-testid="card-back" onClick={onBack}>
+          Back
+        </button>
+      </header>
+      <div className="card-view-terminal" data-testid="card-terminal" ref={hostRef} />
+    </section>
+  )
+}
+
+export default CardView

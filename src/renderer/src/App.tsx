@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
+import CardView from './CardView'
 import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
 import Board from './Board'
@@ -10,6 +11,10 @@ function App(): React.JSX.Element {
   const { workspaces, activeId } = useWorkspaceState()
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
+  // One card open at full size at a time, always one of the active workspace's (#4 D7).
+  const [openCardId, setOpenCardId] = useState<string | null>(null)
+  const openCard = active?.cards.find((c) => c.id === openCardId) ?? null
+  const closeCard = useCallback(() => setOpenCardId(null), [setOpenCardId])
   const darwin = window.drovr?.platform === 'darwin'
 
   const [dialog, setDialog] = useState<
@@ -26,14 +31,20 @@ function App(): React.JSX.Element {
         activeId={activeId}
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
-        onSelect={(id) => workspaceStore.selectWorkspace(id)}
+        onSelect={(id) => {
+          // Selecting a workspace shows its board, leaving any open card (#4 D8).
+          setOpenCardId(null)
+          workspaceStore.selectWorkspace(id)
+        }}
         onAdd={onCreateWorkspace}
         onEdit={(id) => setDialog({ kind: 'edit', id })}
         onDelete={(id) => setDialog({ kind: 'delete', id })}
       />
       <main className="main">
-        {active ? (
-          <Board key={active.id} workspace={active} />
+        {active && openCard ? (
+          <CardView key={openCard.id} card={openCard} onBack={closeCard} />
+        ) : active ? (
+          <Board key={active.id} workspace={active} onOpenCard={setOpenCardId} />
         ) : (
           <EmptyState onCreateWorkspace={onCreateWorkspace} />
         )}

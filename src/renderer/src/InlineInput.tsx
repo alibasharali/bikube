@@ -13,9 +13,11 @@ interface InlineInputProps {
   /** Optional trailing controls (e.g. an explicit submit button). */
   children?: React.ReactNode
   className?: string
+  /** Whether leaving the input cancels it, given what is typed; defaults to always. */
+  cancelOnBlur?: (value: string) => boolean
 }
 
-/** Text input with inline error: Enter submits, Esc cancels (AC9). Blur cancels too. */
+/** Text input with inline error: Enter submits, Esc cancels (AC9). Blur cancels too, unless `cancelOnBlur` says otherwise. */
 function InlineInput({
   initial,
   label,
@@ -24,7 +26,8 @@ function InlineInput({
   onCommit,
   onDone,
   children,
-  className
+  className,
+  cancelOnBlur
 }: InlineInputProps): React.JSX.Element {
   const [edit, setEdit] = useState(() => startEdit(initial))
   const ref = useRef<HTMLInputElement>(null)
@@ -45,7 +48,8 @@ function InlineInput({
     <div
       className={className ? `inline-edit ${className}` : 'inline-edit'}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) onDone()
+        if (e.currentTarget.contains(e.relatedTarget)) return
+        if (!cancelOnBlur || cancelOnBlur(edit.value)) onDone()
       }}
     >
       <div className="inline-edit-row">

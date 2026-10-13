@@ -1,18 +1,29 @@
 import { useState } from 'react'
-import type { Column } from '../../core/workspace-store'
+import { cardsInColumn, type Column, type Workspace } from '../../core/workspace-store'
+import CardItem from './CardItem'
 import ColumnMenu from './ColumnMenu'
 import InlineInput from './InlineInput'
+import NewCard from './NewCard'
 import { workspaceStore } from './store'
 
 interface BoardColumnProps {
-  workspaceId: string
+  workspace: Workspace
   column: Column
   index: number
   total: number
+  onOpenCard: (cardId: string) => void
 }
 
-function BoardColumn({ workspaceId, column, index, total }: BoardColumnProps): React.JSX.Element {
+function BoardColumn({
+  workspace,
+  column,
+  index,
+  total,
+  onOpenCard
+}: BoardColumnProps): React.JSX.Element {
   const [renaming, setRenaming] = useState(false)
+  const workspaceId = workspace.id
+  const cards = cardsInColumn(workspace, column.id)
   return (
     <li className="board-column" data-testid="column">
       <div className="column-header">
@@ -36,8 +47,12 @@ function BoardColumn({ workspaceId, column, index, total }: BoardColumnProps): R
             >
               {column.name}
             </h2>
-            <span className="count" data-testid="column-count" aria-label="0 cards">
-              0
+            <span
+              className="count"
+              data-testid="column-count"
+              aria-label={cards.length === 1 ? '1 card' : `${cards.length} cards`}
+            >
+              {cards.length}
             </span>
             <ColumnMenu
               columnName={column.name}
@@ -51,7 +66,16 @@ function BoardColumn({ workspaceId, column, index, total }: BoardColumnProps): R
           </>
         )}
       </div>
-      <p className="column-empty">No cards yet</p>
+      {cards.length === 0 ? (
+        <p className="column-empty">No cards yet</p>
+      ) : (
+        <ul className="card-list">
+          {cards.map((card) => (
+            <CardItem key={card.id} card={card} onOpen={() => onOpenCard(card.id)} />
+          ))}
+        </ul>
+      )}
+      <NewCard workspaceId={workspaceId} columnId={column.id} onCreated={onOpenCard} />
     </li>
   )
 }

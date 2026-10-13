@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
+import { registerState } from './state'
 import { registerTerminals } from './terminals'
 
 function createWindow(): void {
@@ -28,6 +29,11 @@ function createWindow(): void {
   }
 }
 
+// Smoke tests give each launch its own data directory (#8 D11); must be set before ready.
+const userDataDir = process.env['DROVR_USER_DATA_DIR']
+if (userDataDir) app.setPath('userData', userDataDir)
+
+const state = registerState()
 const terminals = registerTerminals()
 registerClipboard()
 registerDirectories()
@@ -38,8 +44,11 @@ app.on('web-contents-created', (_, contents) => {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }))
 })
 
-// No PTY process outlives the app.
-app.on('before-quit', () => terminals.killAll())
+// Pending board changes reach the disk, then no PTY process outlives the app.
+app.on('before-quit', () => {
+  state.flush()
+  terminals.killAll()
+})
 
 app.whenReady().then(() => {
   createWindow()

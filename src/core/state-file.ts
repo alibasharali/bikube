@@ -1,0 +1,125 @@
+/**
+ * The saved-state file owned by main (#8 D2, D4, D6). Plain TS with an injected fs, so Vitest
+ * can drive it with a fake directory and fake timers.
+ */
+import { join } from 'node:path'
+import type { WorkspaceState } from './workspace-store'
+import {
+  STATE_FILE_NAME,
+  corruptFileName,
+  parseSavedState,
+  serializeSavedState,
+  validateWorkspaceState
+} from './saved-state'
+
+export const SAVE_INTERVAL_MS = 200
+
+/** The synchronous fs calls the state file needs (a subset of `node:fs`). */
+export interface StateFileFs {
+  readFileSync(path: string, encoding: 'utf8'): string
+  writeFileSync(path: string, data: string, encoding: 'utf8'): void
+  renameSync(from: string, to: string): void
+}
+
+export interface StateFileOptions {
+  /** The directory holding `drovr-state.json` (Electron's `userData`). */
+  dir: string
+  fs: StateFileFs
+  now?: () => Date
+  log?: (message: string) => void
+}
+
+const emptyState = (): WorkspaceState => ({ workspaces: [], activeId: null })
+
+export class StateFile {
+  private readonly path: string
+  private readonly tmpPath: string
+  private latest: WorkspaceState | null = null
+  /** Whether `latest` has changes not yet written to the file. */
+  private pending = false
+  private timer: ReturnType<typeof setTimeout> | null = null
+
+  constructor(private readonly options: StateFileOptions) {
+    this.path = join(options.dir, STATE_FILE_NAME)
+    this.tmpPath = `${this.path}.tmp`
+  }
+
+  load(): WorkspaceState {
+    if (this.latest === null) this.latest = this.readFile()
+    return this.latest
+  }
+
+  /**
+   * Keeps `value` as the latest state when it passes D3 and writes it within 200 ms; saves in
+   * between replace it (the last wins). Returns false, and changes nothing, for an invalid value.
+   */
+  save(value: unknown): boolean {
+    const checked = validateWorkspaceState(value)
+    if (!checked.ok) return false
+    this.load()
+    this.latest = checked.value
+    this.pending = true
+    if (this.timer === null) {
+      this.timer = setTimeout(() => {
+        this.timer = null
+        this.write()
+      }, SAVE_INTERVAL_MS)
+    }
+    return true
+  }
+
+  /** Writes any pending state now, synchronously (before quit). */
+  flush(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    this.write()
+  }
+
+  /** Writes `latest` atomically: the temp file first, then a rename over the state file. */
+  private write(): void {
+    if (!this.pending || this.latest === null) return
+    try {
+      this.options.fs.writeFileSync(this.tmpPath, serializeSavedState(this.latest), 'utf8')
+      this.options.fs.renameSync(this.tmpPath, this.path)
+      this.pending = false
+    } catch (err) {
+      // Keep the state pending: the next save or flush tries again.
+      this.log(`state file not written: ${String(err)}`)
+    }
+  }
+
+  private now(): Date {
+    return this.options.now ? this.options.now() : new Date()
+  }
+
+  private log(message: string): void {
+    const log = this.options.log ?? console.error
+    log(message)
+  }
+
+  private readFile(): WorkspaceState {
+    let text: string
+    try {
+      text = this.options.fs.readFileSync(this.path, 'utf8')
+    } catch (err) {
+      // Missing is a first launch; any other read error also starts empty, but is logged.
+      if (!isMissing(err)) this.log(`state file not readable: ${String(err)}`)
+      return emptyState()
+    }
+    const parsed = parseSavedState(text)
+    if (parsed.ok) return parsed.value
+    const aside = join(this.options.dir, corruptFileName(this.now()))
+    try {
+      this.options.fs.renameSync(this.path, aside)
+      this.log(`state file rejected (${parsed.reason}), moved to ${aside}`)
+    } catch (err) {
+      this.log(`state file rejected (${parsed.reason}), could not move it aside: ${String(err)}`)
+    }
+    return emptyState()
+  }
+}
+
+const isMissing = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ENOENT'

@@ -1,3 +1,5 @@
+import type { WorkspaceState } from '../core/workspace-store'
+
 /** IPC channel names shared by main and preload. */
 export const IPC = {
   spawn: 'terminal:spawn',
@@ -9,7 +11,9 @@ export const IPC = {
   clipboardRead: 'clipboard:read',
   clipboardWrite: 'clipboard:write',
   fsIsDirectory: 'fs:isDirectory',
-  dialogPickDirectory: 'dialog:pickDirectory'
+  dialogPickDirectory: 'dialog:pickDirectory',
+  stateLoad: 'state:load',
+  stateSave: 'state:save'
 } as const
 
 export interface TerminalExit {
@@ -55,6 +59,14 @@ export interface DialogApi {
   pickDirectory(): Promise<string | null>
 }
 
+/** The saved board, stored by main in `userData/drovr-state.json` (#8 D5, D6). */
+export interface StateApi {
+  /** Main's latest state: the last valid save, else the file's contents, else an empty board. */
+  load(): Promise<WorkspaceState>
+  /** Main validates `state`, ignores it when invalid, and writes it within 200 ms. */
+  save(state: WorkspaceState): void
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
@@ -62,4 +74,5 @@ export interface DrovrApi {
   clipboard: ClipboardApi
   fs: FsApi
   dialog: DialogApi
+  state: StateApi
 }

@@ -2,7 +2,7 @@
 item: 6
 type: feature
 title: Drag and drop cards
-status: draft
+status: approved
 branch: claude/6-drag-drop-cards
 ---
 

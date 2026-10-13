@@ -548,8 +548,9 @@ button {
 
 .card-list {
   list-style: none;
-  margin: var(--space-3) 0 0;
-  padding: 0;
+  /* Room for the drop line above the first card and below the last (#6 D5). */
+  margin: var(--space-2) 0 0;
+  padding: var(--space-1) 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -568,6 +569,39 @@ button {
 
 .card:hover {
   background: var(--surface-hover);
+}
+
+/* Dragging a card (#6 D5): its place dims, and a line shows where it would land. */
+.card {
+  position: relative;
+}
+
+.card-dragging {
+  opacity: 0.4;
+}
+
+.card[data-drop]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.card[data-drop='before']::before {
+  top: calc(-1 * var(--space-1) - 2px);
+}
+
+.card[data-drop='after']::before {
+  bottom: calc(-1 * var(--space-1) - 2px);
+}
+
+.column-empty[data-drop] {
+  border-color: var(--accent);
+  border-style: solid;
 }
 
 .card-body {

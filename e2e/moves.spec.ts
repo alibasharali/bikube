@@ -10,8 +10,8 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// Moving cards with the keyboard and the card menu (#6 D4, D7, D8, D10). Dragging is in
-// its own tests.
+// Moving cards with the keyboard, the card menu and drag and drop (#6 D4, D5, D6, D7, D8,
+// D10).
 
 let app: ElectronApplication
 let page: Page
@@ -318,4 +318,157 @@ test('AC10: a column can be deleted once its cards are moved out', async () => {
   await expect(column('Backlog')).toHaveCount(0)
   await expect(titles('Running')).toHaveText(['api'])
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+/**
+ * Starts a real pointer drag of a card's body and moves over `target` at `y` (a fraction of
+ * its height, 0.25 = top half), with intermediate moves so HTML5 drag and drop runs.
+ */
+async function dragOver(title: string, target: Locator, y = 0.5): Promise<void> {
+  const from = await card(title).getByTestId('card-open').boundingBox()
+  const to = await target.boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height * y, { steps: 10 })
+}
+
+/** Widens the window so every default column is on screen: a drag doesn't scroll the board. */
+async function showAllColumns(): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 800))
+  await expect
+    .poll(() => column('Done').evaluate((el) => el.getBoundingClientRect().right))
+    .toBeLessThan(1500)
+}
+
+/** Drags a card onto `target` at `y` (see `dragOver`) and releases it there. */
+async function drag(title: string, target: Locator, y = 0.5): Promise<void> {
+  await dragOver(title, target, y)
+  await page.mouse.up()
+}
+
+test('AC2: dragging onto the top or bottom half of a card reorders the column', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  for (const t of ['a', 'b', 'c']) {
+    await newCard('Backlog', t)
+    await back()
+  }
+
+  await drag('c', card('a'), 0.25)
+  await expect(titles('Backlog')).toHaveText(['c', 'a', 'b'])
+  await drag('c', card('b'), 0.75)
+  await expect(titles('Backlog')).toHaveText(['a', 'b', 'c'])
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test('AC1/AC6: a running card dragged to another column keeps its terminal and still opens', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await run("export DROVR_X=7; printf 'drovr-marker'; sleep 30")
+  await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
+  await back()
+
+  await drag('api', column('Running'))
+  await expect(titles('Running')).toHaveText(['api'])
+  await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
+  await expect(column('Running').getByTestId('column-count')).toHaveText('1')
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  // AC6: a click on the moved card opens it at full size.
+  await card('api').getByTestId('card-title').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  expect(await bufferLines()).toContain('drovr-marker')
+  await expect.poll(terminalFocused).toBe(true)
+  await page.keyboard.press('Control+C')
+  await run('echo $DROVR_X')
+  await expect.poll(bufferLines).toContain('7')
+})
+
+test('AC3: dragging onto the bottom half of a card in another column lands below it', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Running', 'x')
+  await back()
+  await newCard('Running', 'y')
+  await back()
+  await newCard('Backlog', 'a')
+  await back()
+
+  await drag('a', card('x'), 0.75)
+  await expect(titles('Running')).toHaveText(['x', 'a', 'y'])
+  await expect(column('Backlog').getByTestId('card')).toHaveCount(0)
+  await expect(column('Backlog').getByText('No cards yet')).toBeVisible()
+})
+
+test("AC4: dropping on an empty column's area or a header lands at the bottom", async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await showAllColumns()
+  await newCard('Backlog', 'a')
+  await back()
+  await newCard('Backlog', 'b')
+  await back()
+
+  await drag('a', column('Done').getByText('No cards yet'))
+  await expect(titles('Done')).toHaveText(['a'])
+
+  await drag('b', column('Done').getByTestId('column-name'))
+  await expect(titles('Done')).toHaveText(['a', 'b'])
+  await expect(column('Backlog').getByText('No cards yet')).toBeVisible()
+})
+
+test('D5/D6: while dragging, the card is dimmed and a line shows where it would land', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  for (const t of ['a', 'b']) {
+    await newCard('Backlog', t)
+    await back()
+  }
+
+  await dragOver('b', card('a'), 0.25)
+  await expect(card('b')).toHaveClass(/card-dragging/)
+  await expect(card('a')).toHaveAttribute('data-drop', 'before')
+  await page.mouse.move(0, 0, { steps: 1 })
+  const box = await card('a').boundingBox()
+  if (!box) throw new Error('no card')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.75, { steps: 5 })
+  // Below `a` is where `b` already is: the line shows after the last card.
+  await expect(card('a')).not.toHaveAttribute('data-drop')
+  await expect(card('b')).toHaveAttribute('data-drop', 'after')
+
+  const header = await column('Running').getByTestId('column-name').boundingBox()
+  if (!header) throw new Error('no header')
+  await page.mouse.move(header.x + 5, header.y + 5, { steps: 5 })
+  await expect(column('Running').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
+  await expect(page.locator('[data-drop]')).toHaveCount(1)
+
+  await page.mouse.up()
+  await expect(titles('Running')).toHaveText(['b'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(card('b')).not.toHaveClass(/card-dragging/)
+})
+
+test('AC5: releasing outside every column, or Esc, cancels the drag', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  for (const t of ['a', 'b']) {
+    await newCard('Backlog', t)
+    await back()
+  }
+
+  await drag('a', page.getByTestId('board-title'))
+  await expect(titles('Backlog')).toHaveText(['a', 'b'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(card('a')).not.toHaveClass(/card-dragging/)
+
+  await dragOver('a', column('Running'))
+  await expect(column('Running').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(titles('Backlog')).toHaveText(['a', 'b'])
+  await expect(column('Running').getByTestId('card')).toHaveCount(0)
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
 })

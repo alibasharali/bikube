@@ -16,7 +16,7 @@ export function registerDirectories(): void {
     const options = {
       properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
     }
-    const parent = BrowserWindow.getFocusedWindow()
+    const parent = BrowserWindow.fromWebContents(event.sender)
     const result = parent
       ? await dialog.showOpenDialog(parent, options)
       : await dialog.showOpenDialog(options)

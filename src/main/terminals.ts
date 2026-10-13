@@ -1,20 +1,21 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { isSessionId, isValidSize, isWriteData } from '../core/ipc-guards'
 import { SessionManager } from '../core/session-manager'
+import { SessionOwners } from '../core/session-owners'
 import { IPC, type TerminalExit } from '../shared/api'
 
 /** Wires the session manager to IPC. Sessions stream to the window that spawned them. */
 export function registerTerminals(): SessionManager {
   const manager = new SessionManager()
-  const owners = new Map<string, WebContents>()
+  const owners = new SessionOwners<WebContents>()
 
   manager.on('data', (id, data) => {
-    const owner = owners.get(id)
+    const owner = owners.ownerOf(id)
     if (owner && !owner.isDestroyed()) owner.send(IPC.data, id, data)
   })
   manager.on('exit', (id, { exitCode, signal }) => {
-    const owner = owners.get(id)
-    owners.delete(id)
+    const owner = owners.ownerOf(id)
+    owners.remove(id)
     const exit: TerminalExit = { id, exitCode, signal }
     if (owner && !owner.isDestroyed()) owner.send(IPC.exit, exit)
   })
@@ -24,15 +25,24 @@ export function registerTerminals(): SessionManager {
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
   // Calls on an existing session must come from the window that spawned it.
   const ownedBy = (event: IpcMainEvent, id: unknown): id is string =>
-    fromMainFrame(event) && isSessionId(id) && owners.get(id) === event.sender
+    fromMainFrame(event) && isSessionId(id) && owners.ownerOf(id) === event.sender
+
+  // Hooked once per window, not per session: a window's shells end with its page.
+  const watch = (owner: WebContents): void => {
+    const killAll = (): void => owners.sessionsOf(owner).forEach((id) => manager.kill(id))
+    owner.once('destroyed', () => owners.release(owner).forEach((id) => manager.kill(id)))
+    // A reload or crash leaves the old page's shells with no UI to drive them.
+    owner.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument) killAll()
+    })
+    owner.on('render-process-gone', killAll)
+  }
 
   ipcMain.handle(IPC.spawn, (event, cols: unknown, rows: unknown) => {
     if (!fromMainFrame(event)) throw new Error('terminal:spawn rejected: untrusted sender')
     if (!isValidSize(cols, rows)) throw new Error('terminal:spawn rejected: invalid size')
     const { id } = manager.spawn({ cols: cols as number, rows: rows as number })
-    owners.set(id, event.sender)
-    // A closed window must not leave its shells behind.
-    event.sender.once('destroyed', () => manager.kill(id))
+    if (owners.add(event.sender, id)) watch(event.sender)
     return id
   })
   ipcMain.on(IPC.write, (event, id: unknown, data: unknown) => {

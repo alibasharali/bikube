@@ -32,6 +32,12 @@ const terminals = registerTerminals()
 registerClipboard()
 registerDirectories()
 
+// The app is one local page: a dropped file or link must never replace it and inherit the bridge.
+app.on('web-contents-created', (_, contents) => {
+  contents.on('will-navigate', (event) => event.preventDefault())
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+})
+
 // No PTY process outlives the app.
 app.on('before-quit', () => terminals.killAll())
 

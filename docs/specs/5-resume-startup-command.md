@@ -2,7 +2,7 @@
 item: 5
 type: feature
 title: Resume and startup command
-status: draft
+status: approved
 branch: claude/5-resume-startup-command
 ---
 

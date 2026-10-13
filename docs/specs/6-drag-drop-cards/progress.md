@@ -19,3 +19,7 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - done: ALL PASS (AC1–AC11), 2026-10-13
+
+## Ship review
+
+- Fresh-context review: gap drops landed at the bottom (D6 clarified: nearest card decides), menu moves lost focus (D8 clarified), AC1 reworded to the busy-shell scenario the tests run. Spec fixed in `daba64d`, code in `ee0188d`. check.sh green, smoke 58 passed.

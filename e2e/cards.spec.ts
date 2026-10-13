@@ -520,3 +520,66 @@ test('D8/D15: the back shortcut does nothing while a dialog is over the card vie
   await expect(page.getByTestId('card-view')).toHaveCount(0)
   await expect(page.getByTestId('empty-state')).toBeVisible()
 })
+
+test('D8: an open card stays closed after a workspace switch outside the sidebar', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  // Creating a workspace selects it; deleting the active one selects alpha again.
+  await createWorkspace(makeDir('beta'), 'beta')
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  const row = page.locator('.workspace-row').filter({ hasText: 'beta' })
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('AC2: default titles count on per workspace; duplicate titles are allowed', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  const untitled = async (expected: string): Promise<void> => {
+    await column('Backlog').getByTestId('new-card').click()
+    await page.getByTestId('new-card-input').press('Enter')
+    await expect(page.getByTestId('card-view-title')).toHaveText(expected)
+    await back()
+  }
+  for (const expected of ['Terminal 1', 'Terminal 2', 'Terminal 3']) await untitled(expected)
+  await cardAction('Terminal 2', 'card-menu-delete')
+  await page.getByTestId('confirm-delete').click()
+  await expect(card('Terminal 2')).toHaveCount(0)
+  await untitled('Terminal 4')
+  await expect(page.getByTestId('card-title')).toHaveText([
+    'Terminal 1',
+    'Terminal 3',
+    'Terminal 4'
+  ])
+
+  await newCard('Running', 'api')
+  await back()
+  await newCard('Running', 'api')
+  await back()
+  await expect(column('Running').getByTestId('card-title')).toHaveText(['api', 'api'])
+})
+
+test('D15: the workspace delete dialog follows terminals that exit while it is open', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'one')
+  const one = await shellPid()
+  await back()
+  await newCard('Backlog', 'two')
+  const two = await shellPid()
+  await back()
+
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  const message = page.getByTestId('confirm-dialog').locator('.modal-message')
+  await expect(message).toContainText('2 terminals are still running and will be stopped.')
+  process.kill(one, 'SIGKILL')
+  await expect(message).toHaveText(
+    'Delete "alpha"? This removes its board. 1 terminal is still running and will be stopped.'
+  )
+  process.kill(two, 'SIGKILL')
+  await expect(message).toHaveText('Delete "alpha"? This removes its board.')
+})

@@ -91,3 +91,18 @@ test('many shells in one window add no listener per session', async () => {
   await page.waitForTimeout(500)
   expect(stderr).not.toContain('MaxListenersExceededWarning')
 })
+
+test('a blocked navigation leaves the shells running', async () => {
+  const pid = await spawnShell()
+  // Chromium starts these navigations (did-start-navigation) before the lock cancels them.
+  for (const url of ['file:///tmp/', 'https://example.com/']) {
+    await page.evaluate((url) => {
+      location.href = url
+    }, url)
+    await page.waitForTimeout(500)
+  }
+  expect(page.url()).toMatch(/index\.html$/)
+  expect(alive(pid)).toBe(true)
+  // The page is still the same load: a new spawn is accepted.
+  expect(alive(await spawnShell())).toBe(true)
+})

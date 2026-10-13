@@ -1,5 +1,5 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
-import { isSessionId, isValidSize, isWriteData } from '../core/ipc-guards'
+import { isCurrentMainFrame, isSessionId, isValidSize, isWriteData } from '../core/ipc-guards'
 import { PageGenerations } from '../core/page-generations'
 import { SessionManager } from '../core/session-manager'
 import { SessionOwners } from '../core/session-owners'
@@ -38,9 +38,9 @@ export function registerTerminals(): SessionManager {
       owners.release(owner).forEach((id) => manager.kill(id))
     })
     // A reload or crash leaves the old page's shells with no UI to drive them; a spawn still
-    // checking its directory for the old page must not start one either.
-    owner.on('did-start-navigation', (details) => {
-      if (!details.isMainFrame || details.isSameDocument) return
+    // checking its directory for the old page must not start one either. Only a committed
+    // main-frame navigation counts: one the navigation lock cancels starts but never commits.
+    owner.on('did-navigate', () => {
       pages.bump(owner)
       killAll()
     })
@@ -56,11 +56,15 @@ export function registerTerminals(): SessionManager {
     if (pages.track(owner)) watch(owner)
     const samePage = pages.snapshot(owner)
     // Re-checked after the directory check: no spawn for a page that reloaded or closed meanwhile.
+    // The frame check catches an old page's request that main only handled after the reload.
     const result = await spawnInDirectory(
       { cols, rows, cwd },
       (options) => manager.spawn(options),
       {
-        stillCurrent: () => samePage() && !owner.isDestroyed()
+        stillCurrent: () =>
+          samePage() &&
+          !owner.isDestroyed() &&
+          isCurrentMainFrame(event.senderFrame, owner.mainFrame)
       }
     )
     if (result.ok) owners.add(owner, result.id)

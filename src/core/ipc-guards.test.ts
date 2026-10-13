@@ -6,6 +6,7 @@ import {
   MAX_WRITE_BYTES,
   SPAWN_REFUSAL,
   isClipboardText,
+  isCurrentMainFrame,
   isSessionId,
   isValidSize,
   isWriteData,
@@ -116,5 +117,21 @@ describe('workingDirectoryProblem', () => {
     for (const cwd of [undefined, null, 42, '', 'relative/dir', '~', '/tmp/a\0b']) {
       expect(await workingDirectoryProblem(cwd)).toBe(SPAWN_REFUSAL.invalidDirectory)
     }
+  })
+})
+
+describe('isCurrentMainFrame', () => {
+  const main = { processId: 4, routingId: 1, detached: false }
+
+  it('accepts the live main frame, by identity or by process and routing id', () => {
+    expect(isCurrentMainFrame(main, main)).toBe(true)
+    expect(isCurrentMainFrame({ processId: 4, routingId: 1, detached: false }, main)).toBe(true)
+  })
+
+  it('refuses a missing, detached or other frame', () => {
+    expect(isCurrentMainFrame(null, main)).toBe(false)
+    expect(isCurrentMainFrame({ ...main, detached: true }, main)).toBe(false)
+    expect(isCurrentMainFrame({ processId: 5, routingId: 1, detached: false }, main)).toBe(false)
+    expect(isCurrentMainFrame({ processId: 4, routingId: 2, detached: false }, main)).toBe(false)
   })
 })

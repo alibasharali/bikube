@@ -1,7 +1,8 @@
-import { useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { runningCount } from '../../core/card-deletes'
 import { isBackShortcut } from '../../core/card-shortcuts'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
 import type { CardStatus } from '../../core/card-status'
@@ -158,5 +159,23 @@ export function useCardStatus(cardId: string): CardStatus | undefined {
   return useSyncExternalStore(
     (listener) => cardTerminals().subscribe(cardId, listener),
     () => cardTerminals().status(cardId)
+  )
+}
+
+/** How many of `cards` have a running process, kept current as their processes exit (D15). */
+export function useRunningCount(cards: readonly { id: string }[]): number {
+  const ids = cards.map((c) => c.id).join('\n')
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const unsubscribes = ids
+        .split('\n')
+        .filter(Boolean)
+        .map((id) => cardTerminals().subscribe(id, listener))
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe())
+    },
+    [ids]
+  )
+  return useSyncExternalStore(subscribe, () =>
+    runningCount(cards, (id) => cardTerminals().runState(id))
   )
 }

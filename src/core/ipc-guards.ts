@@ -25,6 +25,29 @@ export function isWriteData(data: unknown): data is string {
   )
 }
 
+/** The parts of an Electron frame that tell one frame from another. */
+export interface FrameIdentity {
+  readonly processId: number
+  readonly routingId: number
+  readonly detached: boolean
+}
+
+/**
+ * Whether `frame` (an IPC sender's frame) is still the window's live main frame. A request from
+ * a page that has been replaced must not act for the page that replaced it (#4 D16).
+ */
+export function isCurrentMainFrame(
+  frame: FrameIdentity | null | undefined,
+  mainFrame: FrameIdentity
+): boolean {
+  return (
+    frame != null &&
+    !frame.detached &&
+    frame.processId === mainFrame.processId &&
+    frame.routingId === mainFrame.routingId
+  )
+}
+
 /** Clipboard text shares the write cap: it ends up in a PTY when pasted. */
 export const isClipboardText = isWriteData
 

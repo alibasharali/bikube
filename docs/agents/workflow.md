@@ -31,7 +31,7 @@ Work items live on the project's board in **Software Factory**, not in GitHub Is
 | In review | PR into the base branch open; CI and Claude review running | factory, when the agent opens the PR |
 | delivery columns | see the preset | factory (GitHub webhooks) |
 
-Item types: **feature** runs the full flow. **bug** and **chore** get a short spec with no grilling and no approval gate, and start at *In progress*. **idea** stays in Backlog until the developer promotes it. **issue** came from a GitHub issue and stays in Backlog until the developer triages it; once it's a feature, bug or chore it keeps the link, the factory adds `Refs #N` to its PR and closes the issue when the work is delivered.
+Item types: **feature** runs the full flow. **bug** and **chore** get a short spec with no grilling and no approval gate, and start at *In progress*. **idea** stays in Backlog until the developer promotes it (or full auto does, below). **issue** came from a GitHub issue and stays in Backlog until the developer triages it; once it's a feature, bug or chore it keeps the link, the factory adds `Refs #N` to its PR and closes the issue when the work is delivered.
 
 ## Delivery
 
@@ -59,12 +59,22 @@ Deploys report through GitHub Actions jobs with `environment: dev` / `prod`; rel
 
 1. **Start.** The factory fires a session with the item. The `item` skill reads it (`get_item`), finds where it stands, and resumes.
 2. **Spec** (`write-spec`). Features: grill the developer on every open decision in rounds of questions on the item page (options, a recommendation, free text), then write and push the spec. Bugs/chores: a short spec, no grilling. A new project's first item uses `bootstrap`, which agrees with the developer where to start (a proof of concept of the riskiest part, or the smallest thing that runs end to end), scaffolds the picked stack when no tested recipe did, turns the rest of the description into ideas, and records what it learned about stacks the factory doesn't know yet. An imported repo's first item uses `onboard` first, which specs what the repo lacks compared with a new factory project (checks, PR CI, what its delivery preset needs, URLs, `CLAUDE.md`).
-3. **Gate** (features only). The developer reads the spec and approves it: by saying "approved" in the session, or with **Approve** on the item page, which records the spec's blob SHA and starts a fresh session. No production code before that.
+3. **Gate** (features only). The developer reads the spec and approves it: by saying "approved" in the session, or with **Approve** on the item page, which records the spec's blob SHA and starts a fresh session. No production code before that. Under full auto the session approves its own spec unless it changes the stack (below).
 4. **Implement** (`implement-spec`). The session orchestrates: a fresh `slice-implementer` builds each slice test-first, the orchestrator commits, a `slice-reviewer` checks it.
 5. **Verify.** All checks green (`.claude/check.sh`), then the `verifier` subagent checks every acceptance criterion against the running app and returns a summary. Nothing is written to the repo.
 6. **Ship** (`ship`). Review the branch in a fresh subagent and fix findings, run the retro (`lesson`), push, and open the PR through `open_pull_request`. The factory moves the item to *In review* and turns on auto-merge where the preset and GitHub allow it.
 7. **Review.** CI and the Claude review run on the PR. The review fixes unambiguous findings (`fix(review): …`) and leaves an unresolved thread for everything else. Reply `@claude <what you want>` in a thread to have Claude fix it. Then the PR merges into the base branch (squash) one of two ways: GitHub auto-merges it once CI and the review pass and every thread is resolved, where the preset allows it and the repo has rulesets (public repos, or GitHub Pro); otherwise the developer presses **Merge** on the item in the factory, which only merges with the required checks green. Agents never merge.
 8. **Deliver.** Per the preset: the developer tests on dev and merges the release PR, a deploy or a published release ships it, or the merge itself was the delivery.
+
+## Full auto
+
+The developer can run lights-out (the factory working through the board one item at a time, unattended) with **Full auto**. It then also takes features in *Spec* and items in *Backlog* (never issues, nor a project's first `bootstrap` or `onboard` item), and the session works without the developer:
+
+- an idea is promoted (`promote_item`) or declined (`decline_idea`) by the session;
+- grilling rounds are answered at once with the session's recommendations;
+- the session approves its own spec and builds it in the same session.
+
+Money, secrets and stack changes stay the developer's: such a round is asked `for_developer`, a spec with a stack change waits for their approval, and lights-out waits on the item meanwhile. Sessions act on full auto only when `get_item` returns `fullAuto: true`. Every decision it made is on the item's timeline and in the PR's *Decided by full auto* section.
 
 ## Guardrails
 

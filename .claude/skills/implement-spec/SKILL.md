@@ -31,7 +31,7 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
    - **Sources:** the spec path, the *Test seams* rows for these ACs, the ledger's *Interfaces* from earlier slices, rulings that touch this slice.
    - **Boundaries:** the spec's *Out of scope*, other slices' ACs ("not yours").
    - **Output:** the report shape from its definition. Tell it not to commit.
-3. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes; the answers come back here (`record_answers`) or in a new session that resumes from the ledger. Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
+3. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes (under full auto the round comes back answered with your recommendation unless it is `for_developer`: record the ruling and carry on); the answers come back here (`record_answers`) or in a new session that resumes from the ledger. Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
 4. **DONE:** compare `git status` with the reported *Changed files*: nothing outside the slice, no scratch files. Commit `feat(<area>): S<n> <slice name> (#<n>)`. Record `BASE..HEAD` and the *Interfaces* in the ledger. Brief a `slice-reviewer` with the spec path, slice, ACs, seams and range.
 5. **Route the review:**
    - `CLEAN` → step 6.

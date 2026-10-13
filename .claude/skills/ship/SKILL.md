@@ -36,7 +36,7 @@ Run the `lesson` skill on each one that doesn't already have a `chore(lesson)` c
 ## 5. Open the PR
 
 1. `git push -u origin HEAD`.
-2. Fill in [pr-template.md](pr-template.md) and call `open_pull_request(N, branch, title, body)` with title `<type>: <item title> (#<n>)`. The factory opens the PR into the base branch, turns on auto-merge where the preset and GitHub allow it, and moves the item to *In review*. Where the preset makes the merge ship (Straight to prod, Merge only), the developer merges; the tool's `next` says so.
+2. Fill in [pr-template.md](pr-template.md) and call `open_pull_request(N, branch, title, body)` with title `<type>: <item title> (#<n>)`. The factory opens the PR into the base branch, turns on auto-merge where the preset and GitHub allow it, and moves the item to *In review*. When full auto decided anything on the item (answered rounds, a promotion, its approval), the factory appends a *Decided by full auto* section to the body itself: don't write one. Where the preset makes the merge ship (Straight to prod, Merge only), the developer merges; the tool's `next` says so.
 3. If the tool fails, give the developer the branch and the PR body, and ask them to open it.
 
 ## 6. Hand over

@@ -2,7 +2,7 @@
 item: 9
 type: feature
 title: board CLI over a local socket
-status: draft
+status: approved
 branch: claude/9-board-cli-socket
 ---
 

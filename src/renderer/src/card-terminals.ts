@@ -5,7 +5,12 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { isBackShortcut } from '../../core/card-shortcuts'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
-import type { CardRunState, CardStatus } from '../../core/card-status'
+import {
+  knownRunState,
+  knownStatus,
+  type CardRunState,
+  type CardStatus
+} from '../../core/card-status'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import '@xterm/xterm/css/xterm.css'
@@ -154,19 +159,22 @@ export function cardTerminals(): CardSessions<XtermScreen> {
   return registry
 }
 
-/** The card's status (D9), re-rendering at most about 4 times a second while it prints. */
-export function useCardStatus(cardId: string): CardStatus | undefined {
+/**
+ * The card's status (D9), re-rendering at most about 4 times a second while it prints; `Stopped`
+ * for a card not started in this run, e.g. restored after a restart (#8 D9).
+ */
+export function useCardStatus(cardId: string): CardStatus {
   return useSyncExternalStore(
     (listener) => cardTerminals().subscribe(cardId, listener),
-    () => cardTerminals().status(cardId)
+    () => knownStatus(cardTerminals().status(cardId))
   )
 }
 
-/** The card's process state: running, Stopped or couldn't start (#5 D6). */
-export function useCardRunState(cardId: string): CardRunState | undefined {
+/** The card's process state: running, Stopped or couldn't start (#5 D6); see `useCardStatus`. */
+export function useCardRunState(cardId: string): CardRunState {
   return useSyncExternalStore(
     (listener) => cardTerminals().subscribe(cardId, listener),
-    () => cardTerminals().runState(cardId)
+    () => knownRunState(cardTerminals().runState(cardId))
   )
 }
 

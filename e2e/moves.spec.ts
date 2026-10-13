@@ -1,14 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Locator,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 
 // Moving cards with the keyboard, the card menu and drag and drop (#6 D4, D5, D6, D7, D8,
 // D10).
@@ -25,9 +19,7 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-moves-'))
-  app = await electron.launch({ args: ['.', '--no-sandbox'] })
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

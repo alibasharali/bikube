@@ -1,14 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Locator,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 
 // Cards as terminals (#4): creation, full-size view, status, lifetime. Linux runs drive
 // Ctrl+Shift+B; Cmd+Shift+B on macOS is checked by hand (spec: test seams).
@@ -25,9 +19,7 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-cards-'))
-  app = await electron.launch({ args: ['.', '--no-sandbox'] })
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

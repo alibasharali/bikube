@@ -1,14 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Locator,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
 // Startup commands (#5): choosing one at creation, the workspace default, changing a card's,
@@ -34,9 +28,7 @@ test.beforeEach(async () => {
   const fake = fakeClaudeHome(root)
   home = fake.home
   log = fake.log
-  app = await electron.launch({ args: ['.', '--no-sandbox'], env: fake.env })
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp({ env: fake.env }))
 })
 
 test.afterEach(async () => {

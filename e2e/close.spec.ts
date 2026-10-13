@@ -1,14 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Locator,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
 // Close card (#7): from the card menu and the full-size header, with a confirmation; the card
@@ -30,9 +24,7 @@ test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-close-'))
   const fake = fakeClaudeHome(root)
   log = fake.log
-  app = await electron.launch({ args: ['.', '--no-sandbox'], env: fake.env })
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp({ env: fake.env }))
 })
 
 test.afterEach(async () => {

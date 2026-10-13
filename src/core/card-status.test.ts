@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardStatus, lastOutputLine, statusLabel } from './card-status'
+import { cardStatus, knownRunState, knownStatus, lastOutputLine, statusLabel } from './card-status'
 
 describe('lastOutputLine (D9)', () => {
   it('returns the last non-blank line at or above the cursor, trimmed', () => {
@@ -49,5 +49,24 @@ describe('cardStatus (D9)', () => {
       label: "Couldn't start: boom",
       lastLine: ''
     })
+  })
+})
+
+describe('cards the registry does not know (#8 D9)', () => {
+  it('are Stopped, with no last line', () => {
+    expect(knownRunState(undefined)).toEqual({ kind: 'stopped' })
+    expect(knownStatus(undefined)).toEqual({ label: 'Stopped', lastLine: '' })
+  })
+
+  it('return the same objects every time, for useSyncExternalStore', () => {
+    expect(knownRunState(undefined)).toBe(knownRunState(undefined))
+    expect(knownStatus(undefined)).toBe(knownStatus(undefined))
+  })
+
+  it('leave a known card as it is', () => {
+    const running = { kind: 'running' } as const
+    const status = cardStatus(running, 'out')
+    expect(knownRunState(running)).toBe(running)
+    expect(knownStatus(status)).toBe(status)
   })
 })

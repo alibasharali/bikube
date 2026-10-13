@@ -1,13 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 
 // Board and workspaces smoke tests. The native folder picker can't be driven
 // headlessly, so the dialog is filled by typing the path (spec: test seams).
@@ -25,10 +20,7 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-e2e-'))
-  // --no-sandbox: CI and containers have no setuid chrome-sandbox.
-  app = await electron.launch({ args: ['.', '--no-sandbox'] })
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

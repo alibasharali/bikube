@@ -54,7 +54,7 @@ interface CardItemProps {
  */
 function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
-  const running = useCardRunState(card.id)?.kind === 'running'
+  const running = useCardRunState(card.id).kind === 'running'
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [editingStartup, setEditingStartup] = useState(false)

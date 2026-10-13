@@ -16,7 +16,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   const runState = useCardRunState(card.id)
   const [closing, setClosing] = useState(false)
   // A card that stops or fails while its Close dialog is open has nothing left to close.
-  if (closing && runState?.kind !== 'running') setClosing(false)
+  if (closing && runState.kind !== 'running') setClosing(false)
   const hostRef = useRef<HTMLDivElement>(null)
   // Each start gets a new screen (#5 D7); a Stopped card has none (#5 D6).
   const screen = cardTerminals().screen(card.id)
@@ -29,7 +29,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   }, [screen])
 
   // When the shell exits the card is Stopped and the view goes back to the board (#5 D6).
-  const stopped = runState?.kind === 'stopped'
+  const stopped = runState.kind === 'stopped'
   useEffect(() => {
     if (stopped) onBack()
   }, [stopped, onBack])
@@ -58,7 +58,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
         <button type="button" className="btn btn-small" data-testid="card-back" onClick={onBack}>
           Back
         </button>
-        {runState?.kind === 'running' && (
+        {runState.kind === 'running' && (
           <button
             type="button"
             className="btn btn-small"

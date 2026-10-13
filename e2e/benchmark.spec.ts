@@ -1,7 +1,8 @@
-import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 
 // D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
 // command, one open at full size. Not part of the default smoke run (see playwright.config.ts);
@@ -56,17 +57,10 @@ function openShellReady(page: Page): Promise<boolean> {
 
 test('AC13: 10 cards in one workspace stream output and the D8 budget holds', async () => {
   const root = mkdtempSync(join(os.tmpdir(), 'drovr-bench-'))
-  const app = await electron.launch({
-    args: [
-      '.',
-      '--no-sandbox',
-      ...(process.env.BENCH_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? [])
-    ]
+  const { app, page } = await launchApp({
+    args: process.env.BENCH_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? []
   })
   try {
-    const page = await app.firstWindow()
-    await page.waitForSelector('[data-testid=app]')
-
     // Per-session byte counters (renderer side), from before the first card exists.
     await page.evaluate(() => {
       const w = window as unknown as { __bytes: Record<string, number> }

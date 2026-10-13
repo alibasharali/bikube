@@ -1,0 +1,455 @@
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { claudeLogLines, fakeClaudeHome } from './fake-claude'
+import { launchApp, newDataDir } from './launch'
+
+// Persistence (#8): the board survives a restart. Each test launches with its own data directory
+// and "restarts" by closing the app and launching it again with the same one (spec: AC intro).
+// Electron runs with the fake `claude` home of #5, and a login shell that logs every start.
+
+let app: ElectronApplication | undefined
+let page: Page
+let root: string
+let dataDir: string
+let env: Record<string, string>
+let claudeLog: string
+let shellLog: string
+
+/** A login shell that appends a line to $DROVR_SHELL_LOG on every start, then runs bash. */
+const LOGGING_SHELL = `#!/bin/bash
+echo started >> "$DROVR_SHELL_LOG"
+exec /bin/bash "$@"
+`
+
+function makeDir(name: string): string {
+  const dir = join(root, name)
+  mkdirSync(dir)
+  return dir
+}
+
+test.beforeEach(async () => {
+  root = mkdtempSync(join(tmpdir(), 'drovr-persist-'))
+  const fake = fakeClaudeHome(root)
+  claudeLog = fake.log
+  shellLog = join(root, 'shells.log')
+  const shell = join(root, 'logging-shell')
+  writeFileSync(shell, LOGGING_SHELL)
+  chmodSync(shell, 0o755)
+  env = { ...fake.env, SHELL: shell, DROVR_SHELL_LOG: shellLog }
+  dataDir = newDataDir()
+})
+
+test.afterEach(async () => {
+  await app?.close().catch(() => {})
+  app = undefined
+})
+
+async function launch(): Promise<void> {
+  ;({ app, page } = await launchApp({ dataDir, env }))
+}
+
+/** Quits the app (Cmd+Q path: pending state is flushed) and launches it on the same data. */
+async function restart(): Promise<void> {
+  await app?.close()
+  await launch()
+}
+
+const shellStarts = (): number =>
+  existsSync(shellLog) ? readFileSync(shellLog, 'utf8').split('\n').filter(Boolean).length : 0
+
+async function createWorkspace(dir: string, name: string): Promise<void> {
+  await page.getByTestId('workspace-add').click()
+  await page.getByTestId('workspace-directory').fill(dir)
+  await page.getByTestId('workspace-name').fill(name)
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+}
+
+async function selectWorkspace(name: string): Promise<void> {
+  await page.getByTestId('workspace-item').filter({ hasText: name }).click()
+  await expect(page.getByTestId('board-title')).toHaveText(name)
+}
+
+/** Opens the edit dialog of the workspace row at `index`; row actions show on hover. */
+async function workspaceAction(
+  index: number,
+  action: 'workspace-edit' | 'workspace-delete'
+): Promise<void> {
+  const row = page.locator('.workspace-row').nth(index)
+  await row.hover()
+  await row.getByTestId(action).click()
+}
+
+function column(name: string): Locator {
+  return page
+    .getByTestId('column')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+}
+
+const columnNames = (): Promise<string[]> => page.getByTestId('column-name').allTextContents()
+
+async function columnAction(name: string, action: string): Promise<void> {
+  await column(name).getByTestId('column-menu').click()
+  await page.getByTestId(action).click()
+}
+
+async function renameColumn(from: string, to: string): Promise<void> {
+  await columnAction(from, 'menu-rename')
+  await page.getByTestId('column-rename-input').fill(to)
+  await page.getByTestId('column-rename-input').press('Enter')
+  await expect(column(to)).toHaveCount(1)
+}
+
+function card(title: string): Locator {
+  return page
+    .getByTestId('card')
+    .filter({ has: page.getByTestId('card-title').getByText(title, { exact: true }) })
+}
+
+const titles = (columnName: string): Locator => column(columnName).getByTestId('card-title')
+
+const status = (title: string): Locator => card(title).getByTestId('card-status-label')
+
+/** The selected option's label in a startup command select. */
+const selected = (select: Locator): Locator => select.locator('option:checked')
+
+/** Creates a card through `+ New card` (its view opens on it), then goes back to the board. */
+async function newCard(
+  columnName: string,
+  title: string,
+  startup?: { label: 'Shell' | 'Claude Code' | 'Custom…'; command?: string }
+): Promise<void> {
+  await column(columnName).getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill(title)
+  if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup.label })
+  if (startup?.command !== undefined) {
+    await page.getByTestId('new-card-command').fill(startup.command)
+    await page.getByTestId('new-card-command').press('Enter')
+  } else {
+    await page.getByTestId('new-card-input').press('Enter')
+  }
+  await expect(page.getByTestId('card-view')).toBeVisible()
+  if (title) await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await back()
+}
+
+async function openCard(title: string): Promise<void> {
+  await card(title).getByTestId('card-open').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+}
+
+async function back(): Promise<void> {
+  await page.getByTestId('card-back').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+}
+
+async function cardAction(title: string, action: string): Promise<void> {
+  await card(title).getByTestId('card-menu').click()
+  await page.getByTestId(action).click()
+}
+
+/** The open card's terminal buffer, one trimmed string per line, wrapped rows joined back. */
+function bufferLines(): Promise<string[]> {
+  return page.evaluate(() => {
+    type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const rows: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      const next = buffer.getLine(i + 1)
+      const text = line?.translateToString(!next?.isWrapped) ?? ''
+      if (line?.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+      else rows.push(text)
+    }
+    return rows.map((r) => r.trim())
+  })
+}
+
+const terminalFocused = (): Promise<boolean> =>
+  page.evaluate(
+    () => document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
+  )
+
+/** Types a command into the open card's terminal and presses Enter. */
+async function run(command: string): Promise<void> {
+  await expect.poll(terminalFocused).toBe(true)
+  await page.keyboard.type(command)
+  await page.keyboard.press('Enter')
+}
+
+test('AC1: workspaces, columns and card order survive a restart', async () => {
+  await launch()
+  await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 800))
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await renameColumn('Backlog', 'Todo')
+  await renameColumn('Running', 'Doing')
+  await columnAction('Done', 'menu-move-left')
+  await columnAction('Needs me', 'menu-delete')
+  await expect.poll(columnNames).toEqual(['Todo', 'Doing', 'Done'])
+  await newCard('Doing', 'api')
+  await newCard('Todo', 'web')
+  await newCard('Todo', 'db')
+  // Drop `web` on the bottom half of `api`: below it in Doing (#6 D5).
+  const from = await card('web').getByTestId('card-open').boundingBox()
+  const to = await card('api').boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height * 0.75, { steps: 10 })
+  await page.mouse.up()
+  await expect(titles('Doing')).toHaveText(['api', 'web'])
+  await createWorkspace(makeDir('beta'), 'beta')
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+
+  await restart()
+
+  const items = page.getByTestId('workspace-item')
+  await expect(items).toHaveCount(2)
+  await expect(items.nth(0)).toContainText('alpha')
+  await expect(items.nth(1)).toContainText('beta')
+  await expect(items.nth(1)).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  await selectWorkspace('alpha')
+  await expect.poll(columnNames).toEqual(['Todo', 'Doing', 'Done'])
+  await expect(titles('Todo')).toHaveText(['db'])
+  await expect(titles('Doing')).toHaveText(['api', 'web'])
+  await expect(titles('Done')).toHaveCount(0)
+})
+
+test('AC2: titles, directories and startup commands survive a restart', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  const beta = makeDir('beta')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'older')
+  await cardAction('older', 'card-menu-rename')
+  await page.getByTestId('card-rename-input').fill('server')
+  await page.getByTestId('card-rename-input').press('Enter')
+  await expect(card('server')).toHaveCount(1)
+  await newCard('Backlog', 'dev', { label: 'Custom…', command: 'npm run dev' })
+  await workspaceAction(0, 'workspace-edit')
+  await page.getByTestId('workspace-directory').fill(beta)
+  await page.getByTestId('workspace-startup').selectOption({ label: 'Claude Code' })
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+  await restart()
+
+  await expect(page.getByTestId('card-title')).toHaveText(['server', 'dev'])
+  await cardAction('dev', 'card-menu-startup')
+  const dialog = page.getByTestId('startup-dialog')
+  await expect(selected(dialog.getByTestId('startup-dialog-startup'))).toHaveText('Custom…')
+  await expect(dialog.getByTestId('startup-dialog-command')).toHaveValue('npm run dev')
+  await dialog.getByTestId('startup-dialog-cancel').click()
+  await expect(dialog).toHaveCount(0)
+
+  await workspaceAction(0, 'workspace-edit')
+  await expect(page.getByTestId('workspace-directory')).toHaveValue(beta)
+  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Claude Code')
+  await page.getByTestId('workspace-cancel').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+  await openCard('server')
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(alpha)
+})
+
+test('AC3: restored cards are Stopped, start nothing and get Stopped actions', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await newCard('Backlog', 'old')
+  await openCard('old')
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(status('old')).toHaveText('Stopped')
+  await expect(status('api')).toHaveText('Running')
+  const before = shellStarts()
+  expect(before).toBe(2)
+
+  await restart()
+
+  await expect(status('api')).toHaveText('Stopped')
+  await expect(status('old')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-status-line')).toHaveCount(0)
+  await page.waitForTimeout(500)
+  expect(shellStarts()).toBe(before)
+
+  for (const title of ['api', 'old']) {
+    await card(title).getByTestId('card-menu').click()
+    await expect(page.getByTestId('card-menu-delete')).toBeVisible()
+    await expect(page.getByTestId('card-menu-close')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('card-menu-delete')).toHaveCount(0)
+  }
+
+  await cardAction('api', 'card-menu-delete')
+  await expect(card('api')).toHaveCount(0)
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+
+  await workspaceAction(0, 'workspace-delete')
+  await expect(page.getByTestId('confirm-dialog').locator('.modal-message')).toHaveText(
+    'Delete "alpha"? This removes its board.'
+  )
+  expect(shellStarts()).toBe(before)
+})
+
+test('AC4: opening restored cards starts them; Claude Code resumes its session', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'sh')
+  await newCard('Backlog', 'agent', { label: 'Claude Code' })
+  await expect.poll(() => claudeLogLines(claudeLog)).toHaveLength(1)
+  const [first] = claudeLogLines(claudeLog)
+  expect(first).toMatch(/^--session-id /)
+  const u = first.slice('--session-id '.length)
+
+  await restart()
+
+  await openCard('sh')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(alpha)
+  await back()
+
+  await openCard('agent')
+  await expect
+    .poll(async () =>
+      (await bufferLines()).some((l) =>
+        l.endsWith(`claude --resume ${u} || claude --session-id ${u}`)
+      )
+    )
+    .toBe(true)
+  await expect.poll(() => claudeLogLines(claudeLog).at(-1)).toBe(`--resume ${u}`)
+})
+
+test('AC5: default titles continue and new items work alongside restored ones', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', '')
+  await newCard('Backlog', '')
+  await expect(titles('Backlog')).toHaveText(['Terminal 1', 'Terminal 2'])
+
+  await restart()
+
+  await newCard('Backlog', '')
+  await expect(titles('Backlog')).toHaveText(['Terminal 1', 'Terminal 2', 'Terminal 3'])
+
+  // New and restored cards rename, move and delete side by side.
+  await cardAction('Terminal 1', 'card-menu-rename')
+  await page.getByTestId('card-rename-input').fill('one')
+  await page.getByTestId('card-rename-input').press('Enter')
+  await cardAction('Terminal 3', 'card-menu-rename')
+  await page.getByTestId('card-rename-input').fill('three')
+  await page.getByTestId('card-rename-input').press('Enter')
+  await card('three').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await card('Terminal 2').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await expect(titles('Backlog')).toHaveText(['one'])
+  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await cardAction('one', 'card-menu-delete')
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect(titles('Backlog')).toHaveCount(0)
+
+  // A new column and a new workspace, each with cards, next to the restored board.
+  await page.getByTestId('add-column').click()
+  await page.getByTestId('add-column-input').fill('Later')
+  await page.getByTestId('add-column-input').press('Enter')
+  await newCard('Later', 'later')
+  await createWorkspace(makeDir('beta'), 'beta')
+  await newCard('Backlog', '')
+  await expect(titles('Backlog')).toHaveText(['Terminal 1'])
+  await selectWorkspace('alpha')
+  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await expect(titles('Later')).toHaveText(['later'])
+
+  await restart()
+
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done', 'Later'])
+  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await expect(titles('Later')).toHaveText(['later'])
+  await selectWorkspace('beta')
+  await expect(titles('Backlog')).toHaveText(['Terminal 1'])
+})
+
+test('AC6: the board is saved without a clean quit', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await page.waitForTimeout(1000)
+  app!.process().kill('SIGKILL')
+  await expect.poll(() => app!.process().exitCode !== null || app!.process().killed).toBe(true)
+  app = undefined
+
+  await launch()
+
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(card('api')).toHaveCount(1)
+  await expect(status('api')).toHaveText('Stopped')
+})
+
+for (const [name, contents] of [
+  ['not JSON', '{not json'],
+  ['another version', '{"version": 2, "state": {}}']
+] as const) {
+  test(`AC7: an unreadable file (${name}) is moved aside and the app starts empty`, async () => {
+    writeFileSync(join(dataDir, 'drovr-state.json'), contents)
+
+    await launch()
+
+    await expect(page.getByTestId('empty-state')).toBeVisible()
+    await expect(page.getByTestId('workspace-item')).toHaveCount(0)
+    const corrupt = readdirSync(dataDir).filter((f) => /^drovr-state\.corrupt-.*\.json$/.test(f))
+    expect(corrupt).toHaveLength(1)
+    expect(readFileSync(join(dataDir, corrupt[0]), 'utf8')).toBe(contents)
+
+    await createWorkspace(makeDir('alpha'), 'alpha')
+    await expect
+      .poll(() => {
+        try {
+          const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+          return saved.version === 1
+            ? saved.state.workspaces.map((w: { name: string }) => w.name)
+            : []
+        } catch {
+          return []
+        }
+      })
+      .toEqual(['alpha'])
+  })
+}
+
+test('AC8: the app opens on the board, not the card that was open', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await openCard('api')
+  await expect(page.getByTestId('card-view')).toBeVisible()
+
+  await restart()
+
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(status('api')).toHaveText('Stopped')
+})

@@ -1,13 +1,8 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Page
-} from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { launchApp } from './launch'
 import type { DrovrApi } from '../src/shared/api'
 
 declare global {
@@ -25,10 +20,7 @@ let stderr: string
 
 test.beforeEach(async () => {
   stderr = ''
-  app = await electron.launch({ args: ['.', '--no-sandbox'] })
-  app.process().stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
-  page = await app.firstWindow()
-  await page.waitForSelector('[data-testid=app]')
+  ;({ app, page } = await launchApp({ onStderr: (chunk) => (stderr += chunk) }))
 })
 
 test.afterEach(async () => {

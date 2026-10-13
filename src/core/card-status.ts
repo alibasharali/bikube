@@ -55,3 +55,19 @@ export interface CardStatus {
 export function cardStatus(state: CardRunState, lastLine: string): CardStatus {
   return { label: statusLabel(state), lastLine: state.kind === 'running' ? lastLine : '' }
 }
+
+const NOT_STARTED: CardRunState = { kind: 'stopped' }
+const NOT_STARTED_STATUS: CardStatus = cardStatus(NOT_STARTED, '')
+
+/**
+ * The card's run state, where a card the card registry doesn't know (never started in this run,
+ * e.g. restored after a restart) is Stopped (#8 D9). Always the same object for such a card.
+ */
+export function knownRunState(state: CardRunState | undefined): CardRunState {
+  return state ?? NOT_STARTED
+}
+
+/** The card's status; `Stopped` for a card the registry doesn't know (#8 D9). */
+export function knownStatus(status: CardStatus | undefined): CardStatus {
+  return status ?? NOT_STARTED_STATUS
+}

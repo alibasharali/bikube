@@ -1,8 +1,8 @@
 /**
- * One terminal per card for the card's whole life (#4 D3, D10, D11): its screen, its shell
- * session in main, and its status (D9). Plain TS: the renderer injects the terminal bridge and a
- * factory for screens (xterm in the app, fakes in tests), so views can come and go while the
- * screen keeps receiving output.
+ * Each card's terminal (#4 D3, D9; #5 D6, D7): every start gets a fresh screen and shell session
+ * in main, discarded once the shell exits (Stopped), plus the card's status. Plain TS: the
+ * renderer injects the terminal bridge and a factory for screens (xterm in the app, fakes in
+ * tests), so views can come and go while a running card's screen keeps receiving output.
  */
 import type { TerminalApi, TerminalExit } from '../shared/api'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
@@ -19,7 +19,7 @@ export interface CardScreen {
   onResize(listener: (size: { cols: number; rows: number }) => void): void
   /** The visible screen's lines (bottom of scrollback) and the cursor's row in them. */
   screen(): { lines: string[]; cursorRow: number }
-  /** Stops taking input: the process is gone (D11). */
+  /** Stops taking input: the shell couldn't start (#5 D8). */
   setReadOnly(): void
   dispose(): void
 }

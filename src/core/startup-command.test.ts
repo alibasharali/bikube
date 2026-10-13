@@ -22,6 +22,21 @@ describe('startLine (D2, D5)', () => {
     )
   })
 
+  it('types nothing for Claude Code when the session id is not a UUID', () => {
+    for (const agentSessionId of ['', 'x; rm -rf ~', `${U} && echo hi`, `${U}\n`]) {
+      for (const claudeStarted of [false, true]) {
+        expect(startLine({ startup: { kind: 'claude' }, agentSessionId, claudeStarted })).toBeNull()
+      }
+    }
+    expect(
+      startLine({
+        startup: { kind: 'claude' },
+        agentSessionId: U.toUpperCase(),
+        claudeStarted: false
+      })
+    ).toBe(`claude --session-id ${U.toUpperCase()}`)
+  })
+
   it('types a Custom command as written (AC7)', () => {
     expect(
       startLine({

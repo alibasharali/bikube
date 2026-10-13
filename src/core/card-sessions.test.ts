@@ -317,6 +317,17 @@ describe('CardSessions', () => {
     expect(screens.get('c1')!.text).toBe('early late')
   })
 
+  it('types nothing and marks nothing when the shell exits before the spawn reply', async () => {
+    const claudeStarted = vi.fn()
+    sessions.start(card('c1', '/tmp/a', { kind: 'claude' }), claudeStarted)
+    api.emitExit({ id: 's1', exitCode: 1 })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+    expect(claudeStarted).not.toHaveBeenCalled()
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
+  })
+
   it('dispose stops a running process, frees the screen and forgets the card', async () => {
     await started('c1', { ok: true, id: 's1' })
     sessions.dispose('c1')

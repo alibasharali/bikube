@@ -19,6 +19,9 @@ export interface StartupState {
   claudeStarted: boolean
 }
 
+/** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const fail = (message: string): { ok: false; error: FieldError } => ({
   ok: false,
   error: { field: 'command', message }
@@ -38,7 +41,8 @@ export function checkStartup(startup: StartupCommand): Result<StartupCommand> {
 
 /**
  * The line to type into a freshly started shell, without the trailing Enter (`\r`, #5 D3),
- * or null when nothing is typed (Shell). For Claude Code, writing the first-start line is
+ * or null when nothing is typed (Shell, or Claude Code with an agent session id that is not a
+ * UUID, since the id is typed unquoted). For Claude Code, writing the first-start line is
  * what the caller then records with `markClaudeStarted`.
  */
 export function startLine(card: StartupState): string | null {
@@ -47,6 +51,7 @@ export function startLine(card: StartupState): string | null {
       return null
     case 'claude': {
       const id = card.agentSessionId
+      if (!UUID.test(id)) return null
       return card.claudeStarted
         ? `claude --resume ${id} || claude --session-id ${id}`
         : `claude --session-id ${id}`

@@ -5,3 +5,4 @@ package-lock.json
 .factory
 .claude
 docs
+.github/workflows/claude-code-review.yml

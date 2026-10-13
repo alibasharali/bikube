@@ -334,14 +334,13 @@ test('AC4: opening restored cards starts them; Claude Code resumes its session',
   await back()
 
   await openCard('agent')
-  await expect
-    .poll(async () =>
-      (await bufferLines()).some((l) =>
-        l.endsWith(`claude --resume ${u} || claude --session-id ${u}`)
-      )
-    )
-    .toBe(true)
-  await expect.poll(() => claudeLogLines(claudeLog).at(-1)).toBe(`--resume ${u}`)
+  await expect.poll(bufferLines).toContain(`fake-claude --resume ${u}`)
+  expect(claudeLogLines(claudeLog).at(-1)).toBe(`--resume ${u}`)
+  // The typed line, from the shell's history: its echo on screen can be garbled when bash's
+  // readline wraps it at the width the PTY had before the view was fitted.
+  await page.keyboard.press('Enter')
+  await run('fc -ln -1')
+  await expect.poll(bufferLines).toContain(`claude --resume ${u} || claude --session-id ${u}`)
 })
 
 test('AC5: default titles continue and new items work alongside restored ones', async () => {

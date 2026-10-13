@@ -150,4 +150,24 @@ describe('answerBoardCommand', () => {
     ).toEqual({ ok: false, error: 'board: "old" is not running' })
     expect(store.getState()).toBe(before)
   })
+  it("sets the card's agent status to the cleaned text (#9 D8, AC5)", () => {
+    const store = setup()
+    const set: [string, string][] = []
+    const setAgentStatus = (id: string, text: string): void => {
+      set.push([id, text])
+    }
+    const status = (card: string, text: string): unknown =>
+      answerBoardCommand(store, 'c-api', { command: 'status', card, text }, running, setAgentStatus)
+    expect(status('.', '  running \n tests ')).toEqual({ ok: true })
+    expect(status('web', 'a\x1b[31mb')).toEqual({ ok: true })
+    expect(status('.', 'x'.repeat(300))).toEqual({ ok: true })
+    expect(status('.', '')).toEqual({ ok: true })
+    expect(status('old', 'hi')).toEqual({ ok: false, error: 'board: "old" is not running' })
+    expect(set).toEqual([
+      ['c-api', 'running tests'],
+      ['c-web', 'ab'],
+      ['c-api', 'x'.repeat(200)],
+      ['c-api', '']
+    ])
+  })
 })

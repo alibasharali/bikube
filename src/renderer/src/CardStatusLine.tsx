@@ -1,6 +1,6 @@
 import type { CardStatus } from '../../core/card-status'
 
-/** `Running · <last output line>`, on one line (#4 D9). */
+/** `Running · <last output line>` (or `Running · <agent status>`, #9 D8), on one line (#4 D9). */
 function CardStatusLine({
   status,
   className

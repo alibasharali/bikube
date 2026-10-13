@@ -5,6 +5,7 @@
 import type { BoardCommand } from './board-args'
 import {
   boardMoveTarget,
+  cleanAgentStatus,
   findCallingWorkspace,
   notRunningError,
   resolveCard,
@@ -15,14 +16,15 @@ import type { WorkspaceStore } from './workspace-store'
 
 /**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
- * column through the store, so it is saved like any board change (#8 D6). `status` is checked
- * here (the card must be running); showing it is the agent status's job (#9 S3).
+ * column through the store, so it is saved like any board change (#8 D6). `status` needs a
+ * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it.
  */
 export function answerBoardCommand(
   store: Pick<WorkspaceStore, 'getState' | 'moveCard'>,
   callingCardId: string,
   command: BoardCommand,
-  isRunning: (cardId: string) => boolean
+  isRunning: (cardId: string) => boolean,
+  setAgentStatus: (cardId: string, text: string) => void = () => {}
 ): BoardReply {
   const workspace = findCallingWorkspace(store.getState(), callingCardId)
   if (!workspace.ok) return workspace
@@ -30,9 +32,9 @@ export function answerBoardCommand(
   const card = resolveCard(ws, callingCardId, command.card)
   if (!card.ok) return card
   if (command.command === 'status') {
-    return isRunning(card.value.id)
-      ? { ok: true }
-      : { ok: false, error: notRunningError(card.value) }
+    if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
+    setAgentStatus(card.value.id, cleanAgentStatus(command.text))
+    return { ok: true }
   }
   const column = resolveColumn(ws, command.column)
   if (!column.ok) return column

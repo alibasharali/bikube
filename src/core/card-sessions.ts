@@ -40,6 +40,8 @@ interface Entry<S> {
   screen: S | null
   sessionId: string | null
   state: CardRunState
+  /** Set by `board status` (#9 D8); empty when none. Cleared whenever the state changes. */
+  agentStatus: string
   status: CardStatus
   listeners: Set<() => void>
   /** Pending throttle timer; `dirty` means output landed since the last status update. */
@@ -90,6 +92,7 @@ export class CardSessions<S extends CardScreen> {
       screen,
       sessionId: null,
       state,
+      agentStatus: '',
       status: cardStatus(state, ''),
       listeners: new Set(),
       timer: null,
@@ -164,6 +167,18 @@ export class CardSessions<S extends CardScreen> {
   /** The card's status; the same object until it changes, for `useSyncExternalStore`. */
   status(cardId: string): CardStatus | undefined {
     return this.entries.get(cardId)?.status
+  }
+
+  /**
+   * Sets the running card's agent status, already cleaned (`cleanAgentStatus`); empty clears it
+   * (#9 D8). Returns false, changing nothing, for a card that isn't running.
+   */
+  setAgentStatus(cardId: string, text: string): boolean {
+    const entry = this.entries.get(cardId)
+    if (entry?.state.kind !== 'running') return false
+    entry.agentStatus = text
+    this.refresh(entry)
+    return true
   }
 
   /** Called when the card's status changes. Returns an unsubscribe function. */
@@ -249,6 +264,8 @@ export class CardSessions<S extends CardScreen> {
   /** A process state change shows at once, outside the output throttle. */
   private setState(entry: Entry<S>, state: CardRunState): void {
     entry.state = state
+    // A start, a stop and a failed start all clear the agent status (#9 D8).
+    entry.agentStatus = ''
     if (state.kind === 'failed') entry.screen?.setReadOnly()
     this.refresh(entry)
   }
@@ -256,7 +273,7 @@ export class CardSessions<S extends CardScreen> {
   /** Recomputes the status from the screen and notifies when it changed. */
   private refresh(entry: Entry<S>): void {
     const { lines, cursorRow } = entry.screen?.screen() ?? { lines: [], cursorRow: 0 }
-    const next = cardStatus(entry.state, lastOutputLine(lines, cursorRow))
+    const next = cardStatus(entry.state, lastOutputLine(lines, cursorRow), entry.agentStatus)
     if (next.label === entry.status.label && next.lastLine === entry.status.lastLine) return
     entry.status = next
     entry.listeners.forEach((l) => l())

@@ -358,3 +358,65 @@ test('AC10: bad requests get an error and a closed connection; board keeps worki
   await back()
   await expect(titlesIn('Done')).toHaveText(['api'])
 })
+
+const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status')
+const viewStatusLine = (): Locator => page.getByTestId('card-view').getByTestId('card-status-line')
+
+test('AC5: board status shows on the status line, cleaned and cut, until cleared', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'api')
+
+  expect(await board(alpha, 'board status . "running tests"')).toEqual(ok)
+  await expect(viewStatus()).toHaveText('Running · running tests')
+
+  // More output doesn't replace it.
+  await run("printf 'more-output\\n'")
+  await expect.poll(async () => (await bufferLines()).includes('more-output')).toBe(true)
+  await page.waitForTimeout(600)
+  await expect(viewStatus()).toHaveText('Running · running tests')
+  await back()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Running · running tests')
+
+  await openCard('api')
+  expect(await board(alpha, `board status . "$(printf 'a\\033[31mb')"`)).toEqual(ok)
+  await expect(viewStatusLine()).toHaveText('ab')
+
+  const long = 'abcdefghij'.repeat(30)
+  expect(await board(alpha, `board status . ${long}`)).toEqual(ok)
+  await expect(viewStatusLine()).toHaveText(long.slice(0, 200))
+
+  await run(`board status . "" && printf 'drovr-marker'; sleep 30`)
+  await expect(viewStatusLine()).toHaveText('drovr-marker')
+  await back()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Running · drovr-marker')
+})
+
+test("AC6: stopping clears the status; a card that isn't running can't get one", async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'old')
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('old').getByTestId('card-status-label')).toHaveText('Stopped')
+
+  await newCard('Backlog', 'api')
+  expect(await board(alpha, 'board status . "running tests"')).toEqual(ok)
+  await expect(viewStatus()).toHaveText('Running · running tests')
+
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-status-line')).toHaveCount(0)
+
+  await openCard('api')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  expect(await board(alpha, 'board status old hi')).toEqual(refused('board: "old" is not running'))
+  await run("printf 'drovr-marker'; sleep 30")
+  await expect(viewStatus()).toHaveText('Running · drovr-marker')
+  await back()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Running · drovr-marker')
+  await expect(card('old').getByTestId('card-status')).toHaveText('Stopped')
+})

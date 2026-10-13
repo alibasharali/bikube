@@ -52,6 +52,33 @@ describe('cardStatus (D9)', () => {
   })
 })
 
+describe('cardStatus with an agent status (#9 D8)', () => {
+  it('shows the agent status in place of the last output line while running', () => {
+    expect(cardStatus({ kind: 'running' }, '$ make', 'running tests')).toEqual({
+      label: 'Running',
+      lastLine: 'running tests'
+    })
+  })
+
+  it('shows the last output line when the agent status is empty', () => {
+    expect(cardStatus({ kind: 'running' }, '$ make', '')).toEqual({
+      label: 'Running',
+      lastLine: '$ make'
+    })
+  })
+
+  it('shows no text when the card is not running', () => {
+    expect(cardStatus({ kind: 'stopped' }, '', 'running tests')).toEqual({
+      label: 'Stopped',
+      lastLine: ''
+    })
+    expect(cardStatus({ kind: 'failed', reason: 'boom' }, '', 'running tests')).toEqual({
+      label: "Couldn't start: boom",
+      lastLine: ''
+    })
+  })
+})
+
 describe('cards the registry does not know (#8 D9)', () => {
   it('are Stopped, with no last line', () => {
     expect(knownRunState(undefined)).toEqual({ kind: 'stopped' })

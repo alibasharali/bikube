@@ -418,3 +418,54 @@ describe('CardSessions', () => {
     expect(sessions.runState('c1')).toEqual({ kind: 'running' })
   })
 })
+
+describe('agent status (#9 D8)', () => {
+  it('shows in place of the last output line while running, even after more output', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitData('s1', 'first')
+    const listener = vi.fn()
+    sessions.subscribe('c1', listener)
+    expect(sessions.setAgentStatus('c1', 'running tests')).toBe(true)
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'running tests' })
+    expect(listener).toHaveBeenCalled()
+    api.emitData('s1', '\r\nmore')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'running tests' })
+  })
+  it('empty text clears it, and the last output line shows again', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitData('s1', 'first')
+    sessions.setAgentStatus('c1', 'running tests')
+    expect(sessions.setAgentStatus('c1', '')).toBe(true)
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'first' })
+  })
+
+  it('cannot be set on a Stopped, failed or unknown card', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitExit({ id: 's1', exitCode: 0 })
+    await started('c2', { ok: false, reason: 'no such directory' })
+    expect(sessions.setAgentStatus('c1', 'hi')).toBe(false)
+    expect(sessions.setAgentStatus('c2', 'hi')).toBe(false)
+    expect(sessions.setAgentStatus('ghost', 'hi')).toBe(false)
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+  })
+
+  it('is cleared when the process stops, and stays cleared when it starts again', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    sessions.setAgentStatus('c1', 'running tests')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    await started('c1', { ok: true, id: 's2' })
+    api.emitData('s2', '$ ')
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '$' })
+  })
+
+  it('is cleared when a start fails', async () => {
+    sessions.start(card('c1'))
+    sessions.setAgentStatus('c1', 'running tests')
+    api.spawns[0].resolve({ ok: false, reason: 'no such directory' })
+    await vi.advanceTimersByTimeAsync(0)
+    sessions.start(card('c1'))
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+  })
+})

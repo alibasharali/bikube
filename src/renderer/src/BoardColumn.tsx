@@ -78,6 +78,7 @@ function BoardColumn({
               key={card.id}
               workspaceId={workspaceId}
               card={card}
+              columns={workspace.columns}
               onOpen={() => onOpenCard(card.id)}
             />
           ))}

@@ -13,7 +13,12 @@ class FakeFs implements StateFileFs {
   files = new Map<string, string>()
   ops: string[] = []
   failWrites = false
+  failRenamesOf: string | null = null
+  readError: string | null = null
   readFileSync(path: string): string {
+    if (this.readError && this.files.has(path)) {
+      throw Object.assign(new Error(`${this.readError}: ${path}`), { code: this.readError })
+    }
     const text = this.files.get(path)
     if (text === undefined) {
       throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
@@ -26,6 +31,7 @@ class FakeFs implements StateFileFs {
     this.files.set(path, data)
   }
   renameSync(from: string, to: string): void {
+    if (from === this.failRenamesOf) throw new Error(`EBUSY: ${from}`)
     const text = this.files.get(from)
     if (text === undefined) throw new Error(`ENOENT: ${from}`)
     this.ops.push(`rename ${from} -> ${to}`)
@@ -159,5 +165,40 @@ describe('StateFile edge cases (#8 D3, D5, D6)', () => {
     fs.failWrites = false
     file.flush()
     expect(fs.files.get(FILE)).toBe(serializeSavedState(stateNamed('a')))
+  })
+})
+
+describe('StateFile with an unreadable file (#8 D4)', () => {
+  const ASIDE = '/data/drovr-state.corrupt-20261013T141500Z.json'
+
+  it('moves a file it cannot read aside, then saves normally', () => {
+    fs.files.set(FILE, 'secret')
+    fs.readError = 'EACCES'
+    const file = open()
+    expect(file.load()).toEqual(EMPTY)
+    expect(fs.ops).toEqual([`rename ${FILE} -> ${ASIDE}`])
+    expect(fs.files.get(ASIDE)).toBe('secret')
+    fs.readError = null
+    file.save(stateNamed('a'))
+    vi.advanceTimersByTime(SAVE_INTERVAL_MS)
+    expect(fs.files.get(FILE)).toBe(serializeSavedState(stateNamed('a')))
+  })
+
+  it.each([
+    ['unreadable', 'EACCES'],
+    ['rejected', null]
+  ])('never writes when a %s file cannot be moved aside', (_, readError) => {
+    fs.files.set(FILE, 'not json')
+    fs.readError = readError
+    fs.failRenamesOf = FILE
+    const file = open()
+    expect(file.load()).toEqual(EMPTY)
+    file.save(stateNamed('a'))
+    vi.advanceTimersByTime(1000)
+    file.save(stateNamed('a', 'b'))
+    file.flush()
+    expect(fs.ops).toEqual([])
+    expect(fs.files.get(FILE)).toBe('not json')
+    expect(fs.files.has(TMP)).toBe(false)
   })
 })

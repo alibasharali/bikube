@@ -38,6 +38,11 @@ export class StateFile {
   /** Whether `latest` has changes not yet written to the file. */
   private pending = false
   private timer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * False once a rejected or unreadable file could not be moved aside: nothing is written for
+   * the rest of the session, so that file is never overwritten (D4).
+   */
+  private writable = true
 
   constructor(private readonly options: StateFileOptions) {
     this.path = join(options.dir, STATE_FILE_NAME)
@@ -58,6 +63,7 @@ export class StateFile {
     if (!checked.ok) return false
     this.load()
     this.latest = checked.value
+    if (!this.writable) return true
     this.pending = true
     if (this.timer === null) {
       this.timer = setTimeout(() => {
@@ -79,7 +85,7 @@ export class StateFile {
 
   /** Writes `latest` atomically: the temp file first, then a rename over the state file. */
   private write(): void {
-    if (!this.pending || this.latest === null) return
+    if (!this.writable || !this.pending || this.latest === null) return
     try {
       this.options.fs.writeFileSync(this.tmpPath, serializeSavedState(this.latest), 'utf8')
       this.options.fs.renameSync(this.tmpPath, this.path)
@@ -104,20 +110,28 @@ export class StateFile {
     try {
       text = this.options.fs.readFileSync(this.path, 'utf8')
     } catch (err) {
-      // Missing is a first launch; any other read error also starts empty, but is logged.
-      if (!isMissing(err)) this.log(`state file not readable: ${String(err)}`)
+      // Missing is a first launch; a file that exists but can't be read is treated as rejected.
+      if (!isMissing(err)) this.setAside(`not readable: ${String(err)}`)
       return emptyState()
     }
     const parsed = parseSavedState(text)
     if (parsed.ok) return parsed.value
+    this.setAside(`rejected: ${parsed.reason}`)
+    return emptyState()
+  }
+
+  /** Renames the state file to its corrupt copy; if that fails, stops all writes (D4). */
+  private setAside(why: string): void {
     const aside = join(this.options.dir, corruptFileName(this.now()))
     try {
       this.options.fs.renameSync(this.path, aside)
-      this.log(`state file rejected (${parsed.reason}), moved to ${aside}`)
+      this.log(`state file ${why}; moved to ${aside}`)
     } catch (err) {
-      this.log(`state file rejected (${parsed.reason}), could not move it aside: ${String(err)}`)
+      this.writable = false
+      this.log(
+        `state file ${why}; could not move it aside (${String(err)}), so nothing will be saved this session`
+      )
     }
-    return emptyState()
   }
 }
 

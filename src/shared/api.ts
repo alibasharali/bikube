@@ -20,9 +20,10 @@ export interface TerminalExit {
 
 /**
  * Outcome of `terminal:spawn`. A refusal (bad arguments, missing directory) or a failed spawn
- * resolves with a `reason` to show after "Couldn't start: ", e.g. `working directory not found`.
+ * resolves with a `reason` to show after "Couldn't start: ", e.g. `working directory not found`,
+ * or `window reloaded` when the page that asked went away while main was checking.
  */
-export type SpawnResult = { ok: true; id: string; pid: number } | { ok: false; reason: string }
+export type SpawnResult = { ok: true; id: string } | { ok: false; reason: string }
 
 /** Terminal operations the renderer may use; main owns the PTYs (D6). */
 export interface TerminalApi {

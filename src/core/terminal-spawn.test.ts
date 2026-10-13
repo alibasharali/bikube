@@ -19,7 +19,7 @@ describe('spawnInDirectory', () => {
   it('starts the session in the checked directory', async () => {
     const spawn = vi.fn(() => ({ id: '7', pid: 1234 }))
     const result = await spawnInDirectory({ cols: 80, rows: 24, cwd: dir }, spawn)
-    expect(result).toEqual({ ok: true, id: '7', pid: 1234 })
+    expect(result).toEqual({ ok: true, id: '7' })
     expect(spawn).toHaveBeenCalledWith({ cols: 80, rows: 24, cwd: dir })
   })
 
@@ -44,6 +44,17 @@ describe('spawnInDirectory', () => {
       ok: false,
       reason: 'invalid terminal size'
     })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('does not start a process when the page went away during the check', async () => {
+    const spawn = vi.fn(() => ({ id: '1', pid: 1 }))
+    let current = true
+    const pending = spawnInDirectory({ cols: 80, rows: 24, cwd: dir }, spawn, {
+      stillCurrent: () => current
+    })
+    current = false
+    expect(await pending).toEqual({ ok: false, reason: 'window reloaded' })
     expect(spawn).not.toHaveBeenCalled()
   })
 

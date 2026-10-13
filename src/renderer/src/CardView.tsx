@@ -15,6 +15,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   const status = useCardStatus(card.id)
   const runState = useCardRunState(card.id)
   const [closing, setClosing] = useState(false)
+  // A card that stops or fails while its Close dialog is open has nothing left to close.
+  if (closing && runState?.kind !== 'running') setClosing(false)
   const hostRef = useRef<HTMLDivElement>(null)
   // Each start gets a new screen (#5 D7); a Stopped card has none (#5 D6).
   const screen = cardTerminals().screen(card.id)

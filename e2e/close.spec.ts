@@ -302,6 +302,18 @@ test("AC5: Close isn't offered for a Stopped card or one that couldn't start", a
   }
 })
 
+test('a card that stops by itself while its Close dialog is open drops the dialog', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await run('sleep 2; exit')
+  await back()
+  await menuClose('api')
+  await expect(status('api')).toHaveText('Running')
+
+  await expect(status('api')).toHaveText('Stopped', { timeout: 10_000 })
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+})
+
 test('AC6: a closed card is deleted without asking and not counted as running', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')

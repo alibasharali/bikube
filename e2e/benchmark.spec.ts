@@ -1,10 +1,11 @@
-import { _electron as electron, expect, test } from '@playwright/test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
+import { join } from 'node:path'
 
-// D8 benchmark: 10 terminals, each running a continuous-output command.
-// Not part of the default smoke run (see playwright.config.ts); run with `npm run benchmark`
-// (on Linux: `xvfb-run -a npm run benchmark`).
+// D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
+// command, one open at full size. Not part of the default smoke run (see playwright.config.ts);
+// run with `npm run benchmark` (on Linux: `xvfb-run -a npm run benchmark`).
 
 const TERMINALS = 10
 const MEASURE_MS = 8_000
@@ -26,7 +27,35 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]
 }
 
-test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
+/** The open card's terminal host, the one element with `__xterm` in the full-size view. */
+const OPEN_TERMINAL = '[data-testid=card-view] [data-testid=terminal]'
+
+/** True once the open card's shell has printed something (its prompt). */
+function openShellReady(page: Page): Promise<boolean> {
+  return page.evaluate((sel) => {
+    const host = document.querySelector(sel) as
+      | (HTMLElement & {
+          __xterm?: {
+            buffer: {
+              active: {
+                length: number
+                getLine(i: number): { translateToString(t: boolean): string } | undefined
+              }
+            }
+          }
+        })
+      | null
+    const buf = host?.__xterm?.buffer.active
+    if (!buf) return false
+    for (let y = 0; y < buf.length; y++) {
+      if ((buf.getLine(y)?.translateToString(true) ?? '').trim().length > 0) return true
+    }
+    return false
+  }, OPEN_TERMINAL)
+}
+
+test('AC13: 10 cards in one workspace stream output and the D8 budget holds', async () => {
+  const root = mkdtempSync(join(os.tmpdir(), 'drovr-bench-'))
   const app = await electron.launch({
     args: [
       '.',
@@ -36,37 +65,54 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
   })
   try {
     const page = await app.firstWindow()
-    await page.waitForSelector('[data-testid=terminal] .xterm')
+    await page.waitForSelector('[data-testid=app]')
 
-    for (let i = 1; i < TERMINALS; i++) await page.getByTestId('new-terminal').click()
-    await expect(page.getByTestId('terminal-count')).toHaveText(`${TERMINALS} terminals`)
-    await expect(page.locator('[data-testid=terminal] .xterm')).toHaveCount(TERMINALS)
+    // Per-session byte counters (renderer side), from before the first card exists.
+    await page.evaluate(() => {
+      const w = window as unknown as { __bytes: Record<string, number> }
+      w.__bytes = {}
+      ;(window as unknown as DrovrWindow).drovr.terminal.onData((id, data) => {
+        w.__bytes[id] = (w.__bytes[id] ?? 0) + data.length
+      })
+    })
 
-    // Wait for every shell to print a prompt, then start the flood in each.
-    await expect
-      .poll(
-        () =>
-          page.evaluate(() =>
-            [...document.querySelectorAll('[data-testid=terminal]')].every((h) => {
-              const buf = (
-                h as HTMLElement & {
-                  __xterm: {
-                    buffer: {
-                      active: {
-                        getLine(i: number): { translateToString(t: boolean): string } | undefined
-                      }
-                    }
-                  }
-                }
-              ).__xterm.buffer.active
-              return (buf.getLine(0)?.translateToString(true) ?? '').trim().length > 0
-            })
-          ),
-        { timeout: 30_000 }
-      )
-      .toBe(true)
+    // One workspace on a temp directory.
+    await page.getByTestId('workspace-add').click()
+    await page.getByTestId('workspace-directory').fill(root)
+    await page.getByTestId('workspace-name').fill('bench')
+    await page.getByTestId('workspace-submit').click()
+    await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
 
-    // Baseline: rAF rate with 10 idle shells, to calibrate the environment.
+    const backlog = page
+      .getByTestId('column')
+      .filter({ has: page.getByRole('heading', { name: 'Backlog', exact: true }) })
+    const title = (i: number): string => `bench ${i}`
+    const card = (i: number): Locator =>
+      page
+        .getByTestId('card')
+        .filter({ has: page.getByTestId('card-title').getByText(title(i), { exact: true }) })
+    const back = async (): Promise<void> => {
+      await page.getByTestId('card-back').click()
+      await expect(page.getByTestId('board')).toBeVisible()
+    }
+    const open = async (i: number): Promise<void> => {
+      await card(i).getByTestId('card-open').click()
+      await expect(page.getByTestId('card-view-title')).toHaveText(title(i))
+    }
+
+    // Create the cards; each opens at full size on creation (D6). Wait for every shell's prompt.
+    // The last card stays open: it is the one measured.
+    for (let i = 0; i < TERMINALS; i++) {
+      await backlog.getByTestId('new-card').click()
+      await page.getByTestId('new-card-input').fill(title(i))
+      await page.getByTestId('new-card-input').press('Enter')
+      await expect(page.getByTestId('card-view-title')).toHaveText(title(i))
+      await expect.poll(() => openShellReady(page), { timeout: 30_000 }).toBe(true)
+      if (i < TERMINALS - 1) await back()
+    }
+    const OPEN = TERMINALS - 1
+
+    // Baseline: rAF rate with 10 idle shells and one card open, to calibrate the environment.
     const idleFps = await page.evaluate(
       () =>
         new Promise<number>((resolve) => {
@@ -81,19 +127,21 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
         })
     )
 
-    // Per-session byte counters (renderer side) and the flood commands.
-    await page.evaluate(
-      (cmds) => {
-        const w = window as unknown as { __bytes: Record<string, number> }
-        w.__bytes = {}
-        ;(window as unknown as DrovrWindow).drovr.terminal.onData((id, data) => {
-          w.__bytes[id] = (w.__bytes[id] ?? 0) + data.length
-        })
-        const hosts = [...document.querySelectorAll('[data-testid=terminal]')] as XtermHost[]
-        hosts.forEach((h, i) => h.__xterm.input(cmds[i] + '\r', true))
-      },
-      Array.from({ length: TERMINALS }, (_, i) => flood(i))
-    )
+    // Start the flood in every card: open it, type the command, go back. The measured card last.
+    const startFlood = (cmd: string): Promise<void> =>
+      page.evaluate(
+        ([sel, c]) => (document.querySelector(sel) as XtermHost).__xterm.input(c + '\r', true),
+        [OPEN_TERMINAL, cmd] as const
+      )
+    await back()
+    for (let i = 0; i < TERMINALS; i++) {
+      if (i === OPEN) continue
+      await open(i)
+      await startFlood(flood(i))
+      await back()
+    }
+    await open(OPEN)
+    await startFlood(flood(OPEN))
 
     // Let the flood reach steady state.
     await page.waitForTimeout(2_000)
@@ -112,10 +160,10 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
 
     // Renderer fps (requestAnimationFrame) and input echo latency, over the same window.
     const renderer = await page.evaluate(
-      async ([durationMs, samples]) => {
+      async ([durationMs, samples, sel]) => {
         const w = window as unknown as { __bytes: Record<string, number> }
         const bytesBefore = { ...w.__bytes }
-        const host = document.querySelector('[data-testid=terminal]') as XtermHost
+        const host = document.querySelector(sel) as XtermHost
         const term = (host as unknown as { __xterm: { write(d: string, cb: () => void): void } })
           .__xterm
 
@@ -167,9 +215,6 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
         const bytesAfter = { ...w.__bytes }
         const bytes = Object.keys(bytesAfter).map((id) => bytesAfter[id] - (bytesBefore[id] ?? 0))
         const intervals = frames.slice(1).map((t, i) => t - frames[i])
-        const canvases = [
-          ...document.querySelectorAll('[data-testid=terminal] .xterm-screen canvas')
-        ]
         return {
           elapsed,
           frames: frames.length,
@@ -177,11 +222,10 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
           arrival,
           rendered,
           bytes,
-          terminalsWithCanvas: new Set(canvases.map((c) => c.closest('[data-testid=terminal]')))
-            .size
+          openCardCanvas: document.querySelector(`${sel} .xterm-screen canvas`) != null
         }
       },
-      [MEASURE_MS, ECHO_SAMPLES] as const
+      [MEASURE_MS, ECHO_SAMPLES, OPEN_TERMINAL] as const
     )
 
     const lag = await app.evaluate(() => {
@@ -190,27 +234,21 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
       return g.__lag
     })
 
-    // Every session must still be live: each terminal's buffer holds its own marker.
-    const live = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-testid=terminal]')].map((h, i) => {
-        const buf = (
-          h as unknown as {
-            __xterm: {
-              buffer: {
-                active: {
-                  length: number
-                  getLine(i: number): { translateToString(t: boolean): string } | undefined
-                }
-              }
-            }
-          }
-        ).__xterm.buffer.active
-        for (let y = buf.length - 1; y >= 0; y--) {
-          if ((buf.getLine(y)?.translateToString(true) ?? '').includes(`drovr-bench-${i}`))
-            return true
-        }
-        return false
-      })
+    // Every session must still be live: back on the board, each card's status line (read from
+    // its own screen, attached or not) shows its own marker.
+    await back()
+    const live = await Promise.all(
+      Array.from({ length: TERMINALS }, (_, i) =>
+        expect
+          .poll(async () => (await card(i).getByTestId('card-status-line').textContent()) ?? '', {
+            timeout: 10_000
+          })
+          .toContain(`drovr-bench-${i}`)
+          .then(
+            () => true,
+            () => false
+          )
+      )
     )
 
     const fps = renderer.frames / (renderer.elapsed / 1000)
@@ -228,7 +266,7 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
     const md = [
       '# Drovr D8 benchmark',
       '',
-      `${TERMINALS} terminals, each running \`${flood(0).replace('-0', '-N')}\` (profile: ${PROFILE}), measured over ${(renderer.elapsed / 1000).toFixed(1)} s after a 2 s warm-up.`,
+      `${TERMINALS} cards in one workspace, each running \`${flood(0).replace('-0', '-N')}\` (profile: ${PROFILE}), card ${OPEN} open at full size, measured over ${(renderer.elapsed / 1000).toFixed(1)} s after a 2 s warm-up.`,
       '',
       `Environment: ${os.type()} ${os.release()} ${os.arch()}, ${os.cpus().length} x ${os.cpus()[0]?.model ?? 'cpu'}, Electron ${process.versions.electron ?? '(see package.json)'}, ${process.env.DISPLAY ? 'X display ' + process.env.DISPLAY : 'no DISPLAY'}.`,
       '',
@@ -237,7 +275,7 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
       '| Metric | Value | Budget | Result |',
       '|---|---|---|---|',
       `| Renderer fps (rAF) | ${fmt(fps)} | >= ${BUDGET.fps} | ${verdict(fps >= BUDGET.fps)} |`,
-      `| Renderer fps, 10 idle shells (baseline) | ${fmt(idleFps)} | n/a | info |`,
+      `| Renderer fps, 10 idle shells, one card open (baseline) | ${fmt(idleFps)} | n/a | info |`,
       `| Longest frame gap | ${fmt(renderer.maxFrameGap)} ms | n/a | info |`,
       `| Input echo to buffer, p50 | ${fmt(percentile(rendered, 50))} ms | n/a | info |`,
       `| Input echo to buffer, p95 | ${fmt(percentile(rendered, 95))} ms | n/a | info |`,
@@ -247,9 +285,9 @@ test('AC8: 10 terminals stream output and the D8 budget holds', async () => {
       `| Main event-loop lag, p99 | ${fmt(lagP99)} ms | <= ${BUDGET.mainLagMs} ms | ${verdict(lagP99 <= BUDGET.mainLagMs)} |`,
       `| Main event-loop lag, max (${lag.length} ticks) | ${fmt(lagMax)} ms | n/a | info |`,
       `| Sessions producing output | ${renderer.bytes.filter((b) => b > 0).length} / ${TERMINALS} | ${TERMINALS} / ${TERMINALS} | ${verdict(renderer.bytes.length === TERMINALS && renderer.bytes.every((b) => b > 0))} |`,
-      `| Terminals whose buffer holds their own output | ${live.filter(Boolean).length} / ${TERMINALS} | ${TERMINALS} / ${TERMINALS} | ${verdict(live.every(Boolean))} |`,
+      `| Cards whose status line shows their own output | ${live.filter(Boolean).length} / ${TERMINALS} | ${TERMINALS} / ${TERMINALS} | ${verdict(live.every(Boolean))} |`,
       `| Output per session (KiB, min / max) | ${fmt(Math.min(...kb))} / ${fmt(Math.max(...kb))} | n/a | info |`,
-      `| Terminals with a canvas (WebGL active) | ${renderer.terminalsWithCanvas} / ${TERMINALS} | n/a | info |`,
+      `| Open card renders with WebGL (canvas) | ${renderer.openCardCanvas ? 'yes' : 'no (DOM renderer)'} | n/a | info |`,
       ''
     ].join('\n')
 

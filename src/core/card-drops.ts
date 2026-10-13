@@ -29,3 +29,34 @@ export function dropIndex(
 export function hoverHalf(pointerY: number, top: number, height: number): CardHover['half'] {
   return pointerY < top + height / 2 ? 'top' : 'bottom'
 }
+
+/** A card's vertical box on screen, for `nearestCardHover`. */
+export interface CardBox {
+  cardId: string
+  top: number
+  height: number
+}
+
+/**
+ * The hover for a pointer over the column's card list (#6 D6), given its cards' boxes in
+ * order: over a card or in the gap between two (or just above the first), the nearest card
+ * and the half of it the pointer is on. At or below the last card's bottom edge, or with no
+ * cards, `'bottom'`.
+ */
+export function nearestCardHover(
+  boxes: readonly CardBox[],
+  pointerY: number
+): CardHover | 'bottom' {
+  const last = boxes[boxes.length - 1]
+  if (!last || pointerY >= last.top + last.height) return 'bottom'
+  let nearest = last
+  let best = Number.POSITIVE_INFINITY
+  for (const box of boxes) {
+    const distance = Math.max(box.top - pointerY, pointerY - (box.top + box.height), 0)
+    if (distance < best) {
+      best = distance
+      nearest = box
+    }
+  }
+  return { cardId: nearest.cardId, half: hoverHalf(pointerY, nearest.top, nearest.height) }
+}

@@ -8,7 +8,7 @@ import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
-import { moveCardByKey, removeCard, takeFocusAfterMove } from './card-actions'
+import { moveCardByKey, moveCardToColumn, removeCard, takeFocusAfterMove } from './card-actions'
 import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
 import { cardTerminals, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
@@ -69,7 +69,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
     pendingOpen.current = null
   }
   useEffect(() => cancelPendingOpen, [])
-  // A keyboard move may remount or reorder this card; the moved card keeps focus (#6 D7).
+  // A keyboard or menu move may remount or reorder this card; it keeps focus (#6 D7, D8).
   useLayoutEffect(() => {
     if (takeFocusAfterMove(card.id)) openRef.current?.focus()
   })
@@ -202,9 +202,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
                     role="menuitem"
                     className="menu-item"
                     data-testid="card-menu-move-to"
-                    onClick={run(() =>
-                      workspaceStore.moveCard(workspaceId, card.id, c.id, Number.POSITIVE_INFINITY)
-                    )}
+                    onClick={run(() => moveCardToColumn(workspaceId, card.id, c.id))}
                   >
                     {c.name}
                   </button>

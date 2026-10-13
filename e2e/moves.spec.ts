@@ -212,6 +212,7 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
 
   await menuMove('a', 'Done')
   await expect(titles('Done')).toHaveText(['x', 'a'])
+  await expect.poll(focusedCard).toBe('a')
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
   await expect(column('Done').getByTestId('column-count')).toHaveText('2')
   await expect(page.getByTestId('card-view')).toHaveCount(0)
@@ -359,6 +360,38 @@ test('AC2: dragging onto the top or bottom half of a card reorders the column', 
   await expect(titles('Backlog')).toHaveText(['c', 'a', 'b'])
   await drag('c', card('b'), 0.75)
   await expect(titles('Backlog')).toHaveText(['a', 'b', 'c'])
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+/** Drags a card and releases it at a point on the page (not over any one element). */
+async function dragToPoint(title: string, x: number, y: number): Promise<void> {
+  const from = await card(title).getByTestId('card-open').boundingBox()
+  if (!from) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(x, y, { steps: 10 })
+  await page.mouse.up()
+}
+
+test('D6: dropping in the gap between cards or just above the first uses the nearest card', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  for (const t of ['a', 'b', 'c']) {
+    await newCard('Backlog', t)
+    await back()
+  }
+
+  const a = await card('a').boundingBox()
+  const b = await card('b').boundingBox()
+  if (!a || !b) throw new Error('no cards')
+  expect(b.y).toBeGreaterThan(a.y + a.height + 2)
+  await dragToPoint('c', a.x + a.width / 2, (a.y + a.height + b.y) / 2)
+  await expect(titles('Backlog')).toHaveText(['a', 'c', 'b'])
+
+  const first = await card('a').boundingBox()
+  if (!first) throw new Error('no card')
+  await dragToPoint('b', first.x + first.width / 2, first.y - 2)
+  await expect(titles('Backlog')).toHaveText(['b', 'a', 'c'])
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 })
 

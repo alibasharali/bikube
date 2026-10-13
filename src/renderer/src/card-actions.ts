@@ -30,7 +30,7 @@ export function removeWorkspace(workspace: Workspace): void {
   workspaceStore.deleteWorkspace(workspace.id)
 }
 
-/** The card whose open button takes focus at its next render, after a keyboard move. */
+/** The card whose open button takes focus at its next render, after a keyboard or menu move. */
 let focusAfterMove: string | null = null
 
 /**
@@ -51,7 +51,18 @@ export function moveCardByKey(
   return moved
 }
 
-/** True once for the card that was just moved by keyboard, so it can refocus itself. */
+/**
+ * Moves a card to the bottom of another column from its menu (#6 D8). The card remounts
+ * there and takes focus back (see `takeFocusAfterMove`).
+ */
+export function moveCardToColumn(workspaceId: string, cardId: string, columnId: string): boolean {
+  focusAfterMove = cardId
+  const moved = workspaceStore.moveCard(workspaceId, cardId, columnId, Number.POSITIVE_INFINITY).ok
+  if (!moved) focusAfterMove = null
+  return moved
+}
+
+/** True once for the card that was just moved by keyboard or menu, so it can refocus itself. */
 export function takeFocusAfterMove(cardId: string): boolean {
   if (focusAfterMove !== cardId) return false
   focusAfterMove = null

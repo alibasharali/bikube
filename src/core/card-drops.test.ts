@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dropIndex, hoverHalf } from './card-drops'
+import { dropIndex, hoverHalf, nearestCardHover } from './card-drops'
 
 describe('dropIndex', () => {
   const column = ['a', 'b', 'c']
@@ -40,5 +40,35 @@ describe('hoverHalf', () => {
     expect(hoverHalf(119, 100, 40)).toBe('top')
     expect(hoverHalf(120, 100, 40)).toBe('bottom')
     expect(hoverHalf(140, 100, 40)).toBe('bottom')
+  })
+})
+
+describe('nearestCardHover', () => {
+  // a: 10-50, gap 50-58, b: 58-98, gap 98-106, c: 106-146.
+  const boxes = [
+    { cardId: 'a', top: 10, height: 40 },
+    { cardId: 'b', top: 58, height: 40 },
+    { cardId: 'c', top: 106, height: 40 }
+  ]
+
+  it('in the gap between two cards, the nearer card decides by its half', () => {
+    expect(nearestCardHover(boxes, 52)).toEqual({ cardId: 'a', half: 'bottom' })
+    expect(nearestCardHover(boxes, 56)).toEqual({ cardId: 'b', half: 'top' })
+    expect(nearestCardHover(boxes, 104)).toEqual({ cardId: 'c', half: 'top' })
+  })
+
+  it('just above the first card goes above it', () => {
+    expect(nearestCardHover(boxes, 6)).toEqual({ cardId: 'a', half: 'top' })
+  })
+
+  it('over a card uses that card', () => {
+    expect(nearestCardHover(boxes, 70)).toEqual({ cardId: 'b', half: 'top' })
+    expect(nearestCardHover(boxes, 90)).toEqual({ cardId: 'b', half: 'bottom' })
+  })
+
+  it('below the last card, or with no cards, means the bottom', () => {
+    expect(nearestCardHover(boxes, 146)).toBe('bottom')
+    expect(nearestCardHover(boxes, 150)).toBe('bottom')
+    expect(nearestCardHover([], 10)).toBe('bottom')
   })
 })

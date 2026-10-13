@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { columnDeleteHint } from '../../core/card-deletes'
-import { dropIndex, hoverHalf, type CardHover } from '../../core/card-drops'
+import { dropIndex, hoverHalf, nearestCardHover, type CardHover } from '../../core/card-drops'
 import { cardsInColumn, type Column, type Workspace } from '../../core/workspace-store'
 import CardItem from './CardItem'
 import { draggedCard, endCardDrag } from './card-drag'
@@ -50,9 +50,17 @@ function BoardColumn({
     const el = (e.target as Element).closest<HTMLElement>('[data-card-id]')
     const hovered = el?.dataset.cardId
     let over: CardHover | 'bottom' = 'bottom'
+    const list = (e.target as Element).closest<HTMLElement>('.card-list')
     if (el && hovered && ids.includes(hovered)) {
       const box = el.getBoundingClientRect()
       over = { cardId: hovered, half: hoverHalf(e.clientY, box.top, box.height) }
+    } else if (list) {
+      // In a gap between cards or just above the first: the nearest card decides (D6).
+      const boxes = Array.from(list.querySelectorAll<HTMLElement>('[data-card-id]')).map((c) => {
+        const box = c.getBoundingClientRect()
+        return { cardId: c.dataset.cardId ?? '', top: box.top, height: box.height }
+      })
+      over = nearestCardHover(boxes, e.clientY)
     }
     return { cardId: drag.cardId, index: dropIndex(ids, drag.cardId, over) }
   }

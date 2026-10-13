@@ -24,6 +24,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!isBackShortcut(event, window.drovr.platform)) return
+      // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
+      if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
       event.stopPropagation()
       onBack()

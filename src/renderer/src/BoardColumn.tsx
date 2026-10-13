@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { columnDeleteHint } from '../../core/card-deletes'
 import { cardsInColumn, type Column, type Workspace } from '../../core/workspace-store'
 import CardItem from './CardItem'
 import ColumnMenu from './ColumnMenu'
@@ -24,6 +25,7 @@ function BoardColumn({
   const [renaming, setRenaming] = useState(false)
   const workspaceId = workspace.id
   const cards = cardsInColumn(workspace, column.id)
+  const deletable = columnDeleteHint(workspace, column.id)
   return (
     <li className="board-column" data-testid="column">
       <div className="column-header">
@@ -58,7 +60,8 @@ function BoardColumn({
               columnName={column.name}
               canMoveLeft={index > 0}
               canMoveRight={index < total - 1}
-              canDelete={total > 1}
+              canDelete={deletable.canDelete}
+              deleteHint={deletable.hint}
               onRename={() => setRenaming(true)}
               onMove={(d) => workspaceStore.moveColumn(workspaceId, column.id, d)}
               onDelete={() => workspaceStore.deleteColumn(workspaceId, column.id)}
@@ -71,7 +74,12 @@ function BoardColumn({
       ) : (
         <ul className="card-list">
           {cards.map((card) => (
-            <CardItem key={card.id} card={card} onOpen={() => onOpenCard(card.id)} />
+            <CardItem
+              key={card.id}
+              workspaceId={workspaceId}
+              card={card}
+              onOpen={() => onOpenCard(card.id)}
+            />
           ))}
         </ul>
       )}

@@ -1,4 +1,7 @@
 import { useCallback, useState } from 'react'
+import { runningCount, workspaceDeleteMessage } from '../../core/card-deletes'
+import { removeWorkspace } from './card-actions'
+import { cardTerminals } from './card-terminals'
 import CardView from './CardView'
 import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
@@ -62,11 +65,14 @@ function App(): React.JSX.Element {
       {dialog?.kind === 'delete' && target && (
         <ConfirmDialog
           title="Delete workspace"
-          message={`Delete "${target.name}"? This removes its board.`}
+          message={workspaceDeleteMessage(
+            target.name,
+            runningCount(target.cards, (id) => cardTerminals().runState(id))
+          )}
           confirmLabel="Delete"
           onCancel={() => setDialog(null)}
           onConfirm={() => {
-            workspaceStore.deleteWorkspace(target.id)
+            removeWorkspace(target)
             setDialog(null)
           }}
         />

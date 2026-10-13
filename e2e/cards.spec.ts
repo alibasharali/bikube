@@ -6,7 +6,7 @@ import {
   type Locator,
   type Page
 } from '@playwright/test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -327,4 +327,196 @@ test('D7: the terminal fills the view and follows the window size', async () => 
   await expect.poll(cols).toBeLessThan(wide)
   await run('tput cols')
   await expect.poll(bufferLines).toContain(String(await cols()))
+})
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The open card's shell pid, read back from a file the shell writes. */
+async function shellPid(): Promise<number> {
+  const file = join(root, `pid-${Math.random().toString(36).slice(2)}`)
+  await expect.poll(terminalFocused).toBe(true)
+  await run(`echo $$ > '${file}'`)
+  await expect.poll(() => existsSync(file) && readFileSync(file, 'utf8').trim() !== '').toBe(true)
+  return Number(readFileSync(file, 'utf8').trim())
+}
+
+async function cardAction(
+  title: string,
+  action: 'card-menu-rename' | 'card-menu-delete'
+): Promise<void> {
+  await card(title).getByTestId('card-menu').click()
+  await page.getByTestId(action).click()
+}
+
+async function columnMenu(name: string): Promise<void> {
+  await column(name).getByTestId('column-menu').click()
+}
+
+test('AC9: rename from the menu or by double-click; blank is rejected; Esc cancels', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await back()
+
+  await cardAction('api', 'card-menu-rename')
+  const input = page.getByTestId('card-rename-input')
+  await expect(input).toBeFocused()
+  await input.fill('api v2')
+  await input.press('Enter')
+  await expect(input).toHaveCount(0)
+  await expect(card('api v2')).toHaveCount(1)
+  await expect(card('api v2').getByTestId('card-title')).toHaveAttribute('title', 'api v2')
+
+  // Blank is rejected inline and keeps the title.
+  await cardAction('api v2', 'card-menu-rename')
+  await input.fill('   ')
+  await input.press('Enter')
+  await expect(page.getByTestId('card-rename-error')).toHaveText('Title is required')
+  await expect(input).toBeVisible()
+  // Esc cancels.
+  await input.press('Escape')
+  await expect(input).toHaveCount(0)
+  await expect(page.getByTestId('card-title')).toHaveText(['api v2'])
+
+  // Double-clicking the title renames inline too, without opening the card.
+  await card('api v2').getByTestId('card-title').dblclick()
+  await expect(input).toBeFocused()
+  await input.fill('discarded')
+  await input.press('Escape')
+  await page.waitForTimeout(400)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-title')).toHaveText(['api v2'])
+
+  // The full-size header follows the new title; a single click on the title still opens it.
+  await card('api v2').getByTestId('card-title').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText('api v2')
+})
+
+test('AC10: deleting a running card asks first and stops it; an exited card goes at once', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  const pid = await shellPid()
+  await back()
+  expect(alive(pid)).toBe(true)
+
+  await cardAction('api', 'card-menu-delete')
+  const dialog = page.getByTestId('confirm-dialog')
+  await expect(dialog).toContainText(
+    'Delete "api"? Its terminal is still running and will be stopped.'
+  )
+  await page.getByTestId('confirm-cancel').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  expect(alive(pid)).toBe(true)
+
+  await cardAction('api', 'card-menu-delete')
+  await page.getByTestId('confirm-delete').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(card('api')).toHaveCount(0)
+  await expect.poll(() => alive(pid)).toBe(false)
+
+  await newCard('Backlog', 'old')
+  await run('exit 0')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText(
+    'Exited (code 0)'
+  )
+  await back()
+  await cardAction('old', 'card-menu-delete')
+  await expect(card('old')).toHaveCount(0)
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('card')).toHaveCount(0)
+})
+
+test('AC11: a column with cards cannot be deleted until its cards are gone', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await run('exit 0')
+  await back()
+
+  await columnMenu('Backlog')
+  await expect(column('Backlog').getByTestId('menu-delete')).toBeDisabled()
+  await expect(column('Backlog').getByTestId('menu-delete-hint')).toHaveText(
+    'Delete its cards first'
+  )
+  await page.keyboard.press('Escape')
+
+  await cardAction('api', 'card-menu-delete')
+  await expect(card('api')).toHaveCount(0)
+  await columnMenu('Backlog')
+  await expect(column('Backlog').getByTestId('menu-delete-hint')).toHaveCount(0)
+  await column('Backlog').getByTestId('menu-delete').click()
+  await expect(column('Backlog')).toHaveCount(0)
+})
+
+test('AC12: deleting a workspace names its running terminals and stops them', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'one')
+  const one = await shellPid()
+  await back()
+  await newCard('Backlog', 'two')
+  const two = await shellPid()
+  await back()
+  await newCard('Running', 'old')
+  await run('exit 0')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText(
+    'Exited (code 0)'
+  )
+  await back()
+
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  const dialog = page.getByTestId('confirm-dialog')
+  await expect(dialog).toContainText('2 terminals are still running and will be stopped.')
+  await page.getByTestId('confirm-cancel').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('card')).toHaveCount(3)
+  await expect(card('one').getByTestId('card-status-label')).toHaveText('Running')
+  expect(alive(one)).toBe(true)
+  expect(alive(two)).toBe(true)
+
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('workspace-item')).toHaveCount(0)
+  await expect(page.getByTestId('empty-state')).toBeVisible()
+  await expect.poll(() => alive(one)).toBe(false)
+  await expect.poll(() => alive(two)).toBe(false)
+})
+
+test('D15: without running cards the workspace delete dialog is unchanged', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'old')
+  await run('exit 0')
+  await back()
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog').locator('.modal-message')).toHaveText(
+    'Delete "alpha"? This removes its board.'
+  )
+})
+
+test('D8/D15: the back shortcut does nothing while a dialog is over the card view', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText(
+    '1 terminal is still running and will be stopped.'
+  )
+  await page.keyboard.press('Control+Shift+B')
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toBeVisible()
+  // Confirming removes the open card's workspace, so the view closes.
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(page.getByTestId('empty-state')).toBeVisible()
 })

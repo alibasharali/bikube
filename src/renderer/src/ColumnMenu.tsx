@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useId } from 'react'
+import MenuButton from './MenuButton'
 
 interface ColumnMenuProps {
   columnName: string
   canMoveLeft: boolean
   canMoveRight: boolean
   canDelete: boolean
+  /** Why Delete is disabled, shown under it (#4 D14); none for the last column. */
+  deleteHint?: string | null
   onRename: () => void
   onMove: (direction: 'left' | 'right') => void
   onDelete: () => void
@@ -12,60 +15,16 @@ interface ColumnMenuProps {
 
 /** The ⋯ menu on a column header. Esc closes and returns focus; click outside closes. */
 function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
-  const button = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    root.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open])
-
-  const run = (action: () => void) => (): void => {
-    setOpen(false)
-    action()
-  }
-
-  const onKeyDown = (e: React.KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      e.stopPropagation()
-      setOpen(false)
-      button.current?.focus()
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      const items = Array.from(
-        root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []
-      )
-      if (items.length === 0) return
-      const at = items.indexOf(document.activeElement as HTMLElement)
-      const step = e.key === 'ArrowDown' ? 1 : -1
-      items[(at + step + items.length) % items.length].focus()
-    } else if (e.key === 'Tab') {
-      setOpen(false)
-    }
-  }
-
+  const hintId = useId()
+  const hint = !props.canDelete && props.deleteHint ? props.deleteHint : null
   return (
-    <div className="column-menu-wrap" ref={root} onKeyDown={onKeyDown}>
-      <button
-        ref={button}
-        type="button"
-        className="icon-btn"
-        data-testid="column-menu"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`Column menu for ${props.columnName}`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        ⋯
-      </button>
-      {open && (
-        <div className="menu" role="menu" aria-label={`${props.columnName} actions`}>
+    <MenuButton
+      label={`Column menu for ${props.columnName}`}
+      menuLabel={`${props.columnName} actions`}
+      testId="column-menu"
+    >
+      {(run) => (
+        <>
           <button
             type="button"
             role="menuitem"
@@ -101,13 +60,20 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             className="menu-item menu-item-danger"
             data-testid="menu-delete"
             disabled={!props.canDelete}
+            title={hint ?? undefined}
+            aria-describedby={hint ? hintId : undefined}
             onClick={run(props.onDelete)}
           >
             Delete
           </button>
-        </div>
+          {hint && (
+            <p className="menu-hint" id={hintId} data-testid="menu-delete-hint">
+              {hint}
+            </p>
+          )}
+        </>
       )}
-    </div>
+    </MenuButton>
   )
 }
 

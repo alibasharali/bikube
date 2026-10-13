@@ -2,7 +2,7 @@
 item: 8
 type: feature
 title: Persistence
-status: draft
+status: approved
 branch: claude/8-persistence
 ---
 

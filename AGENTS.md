@@ -6,7 +6,7 @@ Built with Software Factory's workflow: read `docs/agents/workflow.md` before st
 
 ## Commands
 
-- `npm ci` installs; `postinstall` rebuilds node-pty for Electron (needs python3, make and a C++ compiler on Linux).
+- `npm ci` installs; `postinstall` rebuilds node-pty for Electron (needs python3, make and a C++ compiler on Linux). Where the Electron headers download is blocked (cloud sessions: postinstall fails with a proxy 403), everything else is installed by then: run `npm rebuild node-pty`; the Node build works in Electron too (N-API, ADR 0001).
 - `npm run dev` starts the app with hot reload; `npm start` previews the production build.
 - `.claude/check.sh` runs everything that must be green: typecheck, lint, Vitest, build, `node .factory/check-stack.mjs`. CI's `check` job runs it.
 - Individually: `npm run typecheck`, `npm run lint`, `npm test` (Vitest), `npm run build`, `npm run format`.

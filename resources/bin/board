@@ -1,6 +1,6 @@
 #!/bin/sh
-# board: tells Drovr's board what this card is doing (`board help`). Drovr puts this directory
-# first on PATH in every card's shell and sets the variables below (#9 D3, D4); it runs Drovr's
+# board: tells Drovr's board what this card is doing (`board help`). Drovr prepends this directory
+# to PATH in every card's shell environment and sets the variables below (#9 D3, D4); it runs Drovr's
 # bundled CLI with Drovr's own executable as Node, so nothing needs installing.
 if [ -z "${DROVR_EXECUTABLE:-}" ] || [ -z "${DROVR_BOARD_CLI:-}" ]; then
   echo "board: not running inside a Drovr card" >&2

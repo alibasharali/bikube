@@ -1,0 +1,180 @@
+import { describe, expect, it } from 'vitest'
+import { InMemoryWorkspaceStore, type Result, type WorkspaceState } from './workspace-store'
+import {
+  STATE_FILE_NAME,
+  corruptFileName,
+  parseSavedState,
+  serializeSavedState,
+  validateWorkspaceState
+} from './saved-state'
+
+function ok<T>(r: Result<T>): T {
+  if (!r.ok) throw new Error(`expected ok, got ${r.error.message}`)
+  return r.value
+}
+
+/** Two workspaces, renamed/reordered/deleted columns, cards of every startup kind. */
+function fullState(): WorkspaceState {
+  let n = 0
+  const s = new InMemoryWorkspaceStore({
+    generateId: () => `id-${++n}`,
+    generateSessionId: () => `00000000-0000-4000-8000-00000000000${n}`
+  })
+  const alpha = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/drovr-alpha' }))
+  const beta = ok(
+    s.createWorkspace({
+      name: 'beta',
+      directory: '/tmp/drovr-beta',
+      defaultStartup: { kind: 'claude' }
+    })
+  )
+  const [backlog, running, needsMe] = alpha.columns
+  ok(s.renameColumn(alpha.id, backlog.id, 'Todo'))
+  ok(s.renameColumn(alpha.id, running.id, 'Doing'))
+  ok(s.deleteColumn(alpha.id, needsMe.id))
+  const api = ok(s.createCard(alpha.id, running.id, 'api'))
+  const web = ok(s.createCard(alpha.id, backlog.id, ''))
+  ok(s.createCard(alpha.id, backlog.id, 'db', { kind: 'custom', command: 'npm run dev' }))
+  ok(s.moveCard(alpha.id, web.id, running.id, 1))
+  ok(s.renameCard(alpha.id, api.id, 'server'))
+  ok(
+    s.updateWorkspace(alpha.id, {
+      directory: '/tmp/drovr-beta',
+      defaultStartup: { kind: 'claude' }
+    })
+  )
+  const agent = ok(s.createCard(beta.id, beta.columns[0].id, 'agent'))
+  ok(s.markClaudeStarted(beta.id, agent.id))
+  ok(s.selectWorkspace(beta.id))
+  return s.getState()
+}
+
+describe('saved-state round trip (#8 D1, D2)', () => {
+  it('serialises to version 1 and parses back to an equal state', () => {
+    const state = fullState()
+    const text = serializeSavedState(state)
+    expect(JSON.parse(text)).toEqual({ version: 1, state })
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+})
+
+/** The file contents for `fullState()` after `change` edits a parsed copy of its state. */
+// The edits deliberately break the types, so the copy is untyped JSON.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fileWith(change: (state: any) => void): string {
+  const state = JSON.parse(JSON.stringify(fullState()))
+  change(state)
+  return JSON.stringify({ version: 1, state })
+}
+
+function expectRejected(text: string): void {
+  const result = parseSavedState(text)
+  expect(result.ok).toBe(false)
+}
+
+describe('saved-state rejection (#8 D3)', () => {
+  it('rejects text that is not JSON', () => {
+    expectRejected('{not json')
+    expectRejected('')
+  })
+
+  it('rejects another version or a missing state', () => {
+    expectRejected('{"version": 2, "state": {}}')
+    expectRejected(JSON.stringify({ version: 2, state: fullState() }))
+    expectRejected(JSON.stringify({ state: fullState() }))
+    expectRejected('{"version": 1}')
+    expectRejected('[1]')
+    expectRejected('null')
+  })
+
+  it('rejects a missing or mistyped field', () => {
+    expectRejected(fileWith((s) => delete s.activeId))
+    expectRejected(fileWith((s) => delete s.workspaces))
+    expectRejected(fileWith((s) => delete s.workspaces[0].name))
+    expectRejected(fileWith((s) => delete s.workspaces[0].directory))
+    expectRejected(fileWith((s) => delete s.workspaces[0].nextCardNumber))
+    expectRejected(fileWith((s) => delete s.workspaces[0].defaultStartup))
+    expectRejected(fileWith((s) => (s.workspaces[0].columns = {})))
+    expectRejected(fileWith((s) => delete s.workspaces[0].columns[0].name))
+    expectRejected(fileWith((s) => delete s.workspaces[0].cards[0].title))
+    expectRejected(fileWith((s) => delete s.workspaces[0].cards[0].directory))
+    expectRejected(fileWith((s) => delete s.workspaces[0].cards[0].agentSessionId))
+    expectRejected(fileWith((s) => delete s.workspaces[0].cards[0].claudeStarted))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].claudeStarted = 'yes')))
+    expectRejected(fileWith((s) => (s.workspaces[0].nextCardNumber = '2')))
+    expectRejected(fileWith((s) => (s.workspaces[0].nextCardNumber = 0)))
+    expectRejected(fileWith((s) => (s.workspaces[0].nextCardNumber = 1.5)))
+    expectRejected(fileWith((s) => (s.workspaces[0].id = 7)))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0] = null)))
+  })
+
+  it('rejects a startup command that fails checkStartup', () => {
+    expectRejected(fileWith((s) => (s.workspaces[0].defaultStartup = { kind: 'bash' })))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].startup = { kind: 'custom' })))
+    expectRejected(
+      fileWith((s) => (s.workspaces[0].cards[0].startup = { kind: 'custom', command: '  ' }))
+    )
+    expectRejected(
+      fileWith((s) => (s.workspaces[0].cards[0].startup = { kind: 'custom', command: 'a\nb' }))
+    )
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].startup = 'shell')))
+  })
+
+  it('rejects a card in a column its workspace does not have', () => {
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].columnId = 'nope')))
+    // A column of the other workspace is still unknown to this one.
+    expectRejected(
+      fileWith((s) => (s.workspaces[0].cards[0].columnId = s.workspaces[1].columns[0].id))
+    )
+  })
+
+  it('rejects a duplicate id among workspaces, columns and cards together', () => {
+    expectRejected(fileWith((s) => (s.workspaces[1].id = s.workspaces[0].id)))
+    expectRejected(fileWith((s) => (s.workspaces[0].columns[1].id = s.workspaces[0].columns[0].id)))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[1].id = s.workspaces[0].cards[0].id)))
+    expectRejected(fileWith((s) => (s.workspaces[1].cards[0].id = s.workspaces[0].cards[0].id)))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].id = s.workspaces[1].id)))
+  })
+
+  it('rejects an activeId that names no workspace', () => {
+    expectRejected(fileWith((s) => (s.activeId = 'nope')))
+    // A column id is not a workspace id.
+    expectRejected(fileWith((s) => (s.activeId = s.workspaces[0].columns[0].id)))
+  })
+
+  it('rejects activeId null while there are workspaces', () => {
+    expectRejected(fileWith((s) => (s.activeId = null)))
+  })
+
+  it('rejects a non-null activeId with no workspaces, and accepts the empty state', () => {
+    expectRejected(JSON.stringify({ version: 1, state: { workspaces: [], activeId: 'x' } }))
+    const empty = { workspaces: [], activeId: null }
+    expect(parseSavedState(serializeSavedState(empty))).toEqual({ ok: true, value: empty })
+  })
+})
+
+describe('validateWorkspaceState (#8 D3, D6)', () => {
+  it('accepts a parsed state and keeps only the fields of D1', () => {
+    const state = fullState()
+    const extra = {
+      ...state,
+      workspaces: [{ ...state.workspaces[0], status: 'x' }, state.workspaces[1]]
+    }
+    expect(validateWorkspaceState(extra)).toEqual({ ok: true, value: state })
+  })
+
+  it('rejects anything that is not a state', () => {
+    expect(validateWorkspaceState(undefined).ok).toBe(false)
+    expect(validateWorkspaceState('{}').ok).toBe(false)
+    expect(validateWorkspaceState({ workspaces: [] }).ok).toBe(false)
+  })
+})
+
+describe('file names (#8 D2, D4)', () => {
+  it('names the state file and the corrupt copy by UTC timestamp', () => {
+    expect(STATE_FILE_NAME).toBe('drovr-state.json')
+    expect(corruptFileName(new Date(Date.UTC(2026, 9, 13, 14, 15, 0, 123)))).toBe(
+      'drovr-state.corrupt-20261013T141500Z.json'
+    )
+  })
+})

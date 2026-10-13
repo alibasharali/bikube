@@ -124,6 +124,8 @@ export interface StoreOptions {
   generateId?: () => string
   /** Agent session id generator (#5 D4); defaults to `crypto.randomUUID`. */
   generateSessionId?: () => string
+  /** State to start from, e.g. the saved state (#8 D5); defaults to no workspaces. */
+  initialState?: WorkspaceState
 }
 
 /** Last path segment, ignoring trailing separators (POSIX and Windows). */
@@ -148,7 +150,7 @@ const fail = (field: ErrorField, message: string): { ok: false; error: FieldErro
 const sameName = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
 
 export class InMemoryWorkspaceStore implements WorkspaceStore {
-  private state: WorkspaceState = { workspaces: [], activeId: null }
+  private state: WorkspaceState
   private readonly listeners = new Set<() => void>()
   private readonly validateDirectory: (directory: string) => string | null
   private readonly generateId: () => string
@@ -156,6 +158,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   private counter = 0
 
   constructor(options: StoreOptions = {}) {
+    this.state = options.initialState ?? { workspaces: [], activeId: null }
     this.validateDirectory = options.validateDirectory ?? (() => null)
     this.generateId = options.generateId ?? (() => `id-${++this.counter}`)
     this.generateSessionId = options.generateSessionId ?? (() => globalThis.crypto.randomUUID())

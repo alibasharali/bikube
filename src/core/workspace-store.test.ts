@@ -769,3 +769,24 @@ describe('cards: move (#6 D3, D4)', () => {
     expect(column(s, w, 0)).toEqual(['a'])
   })
 })
+
+describe('initial state (#8 D5, AC5)', () => {
+  it('starts from a seeded state and continues its default titles', () => {
+    const seed = new InMemoryWorkspaceStore()
+    const ws = create(seed, 'alpha')
+    ok(seed.createCard(ws.id, ws.columns[0].id, ''))
+    ok(seed.createCard(ws.id, ws.columns[0].id, ''))
+    const s = new InMemoryWorkspaceStore({
+      initialState: seed.getState(),
+      generateId: () => 'new-card'
+    })
+    expect(s.getState()).toEqual(seed.getState())
+    const card = ok(s.createCard(ws.id, ws.columns[1].id, ''))
+    expect(card.title).toBe('Terminal 3')
+    expect(s.getState().workspaces[0].cards.map((c) => c.title)).toEqual([
+      'Terminal 1',
+      'Terminal 2',
+      'Terminal 3'
+    ])
+  })
+})

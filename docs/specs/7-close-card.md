@@ -2,7 +2,7 @@
 item: 7
 type: feature
 title: Close card
-status: draft
+status: approved
 branch: claude/7-close-card
 ---
 

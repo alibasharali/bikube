@@ -83,7 +83,12 @@ function BoardColumn({
           ))}
         </ul>
       )}
-      <NewCard workspaceId={workspaceId} columnId={column.id} onCreated={onOpenCard} />
+      <NewCard
+        workspaceId={workspaceId}
+        columnId={column.id}
+        defaultStartup={workspace.defaultStartup}
+        onCreated={onOpenCard}
+      />
     </li>
   )
 }

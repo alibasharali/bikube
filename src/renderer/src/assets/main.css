@@ -656,3 +656,54 @@ button {
 .card-view-terminal .terminal {
   flex: 1;
 }
+
+/* Startup command (#5 D9, D10, D12) */
+.inline-select,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.inline-select {
+  flex: none;
+  max-width: 45%;
+  padding: var(--space-1);
+}
+
+.field select {
+  padding: var(--space-2) var(--space-3);
+}
+
+.new-card-command {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: var(--space-1);
+  font-family: Menlo, Consolas, monospace;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.card-tag {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.modal-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}

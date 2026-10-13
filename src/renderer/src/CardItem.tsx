@@ -1,13 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
+import type { StartupCommand } from '../../core/startup-command'
 import type { Card } from '../../core/workspace-store'
 import CardStatusLine from './CardStatusLine'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
 import MenuButton from './MenuButton'
+import StartupDialog from './StartupDialog'
 import { removeCard } from './card-actions'
 import { cardTerminals, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
+
+/**
+ * The card's startup command on the board (#5 D12): `Claude` for Claude Code, `Custom` with
+ * the command as its tooltip, nothing for Shell. It follows the setting, not what is running.
+ */
+function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
+  if (startup.kind === 'shell') return null
+  const custom = startup.kind === 'custom'
+  return (
+    <span
+      className="card-tag"
+      data-testid="card-tag"
+      title={custom ? startup.command : 'Claude Code'}
+    >
+      {custom ? 'Custom' : 'Claude'}
+    </span>
+  )
+}
 
 /** How long a click on the title waits for a second click (double-click renames, D12). */
 const DOUBLE_CLICK_MS = 250
@@ -20,13 +40,14 @@ interface CardItemProps {
 
 /**
  * A card on the board (#4 D5, D7, D9, D12, D13): its title and status; click or Enter opens
- * it. Its ⋯ menu renames it inline (as does double-clicking the title) or deletes it, asking
- * first while its process runs.
+ * it. Its ⋯ menu renames it inline (as does double-clicking the title), changes its startup
+ * command (#5 D11), or deletes it, asking first while its process runs.
  */
 function CardItem({ workspaceId, card, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [editingStartup, setEditingStartup] = useState(false)
   const titleRef = useRef<HTMLSpanElement>(null)
   const pendingOpen = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -85,14 +106,17 @@ function CardItem({ workspaceId, card, onOpen }: CardItemProps): React.JSX.Eleme
           aria-label={`Open ${card.title}`}
           onClick={onClick}
         >
-          <span
-            ref={titleRef}
-            className="card-title"
-            data-testid="card-title"
-            title={card.title}
-            onDoubleClick={startRename}
-          >
-            {card.title}
+          <span className="card-title-row">
+            <span
+              ref={titleRef}
+              className="card-title"
+              data-testid="card-title"
+              title={card.title}
+              onDoubleClick={startRename}
+            >
+              {card.title}
+            </span>
+            <StartupTag startup={card.startup} />
           </span>
           <CardStatusLine status={status} />
         </button>
@@ -118,6 +142,18 @@ function CardItem({ workspaceId, card, onOpen }: CardItemProps): React.JSX.Eleme
             <button
               type="button"
               role="menuitem"
+              className="menu-item"
+              data-testid="card-menu-startup"
+              onClick={run(() => {
+                cancelPendingOpen()
+                setEditingStartup(true)
+              })}
+            >
+              Startup command…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               className="menu-item menu-item-danger"
               data-testid="card-menu-delete"
               onClick={run(onDelete)}
@@ -127,6 +163,13 @@ function CardItem({ workspaceId, card, onOpen }: CardItemProps): React.JSX.Eleme
           </>
         )}
       </MenuButton>
+      {editingStartup && (
+        <StartupDialog
+          workspaceId={workspaceId}
+          card={card}
+          onClose={() => setEditingStartup(false)}
+        />
+      )}
       {confirm && (
         <ConfirmDialog
           title="Delete card"

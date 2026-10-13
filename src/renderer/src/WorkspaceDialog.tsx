@@ -6,8 +6,11 @@ import {
   type DraftErrors,
   type WorkspaceDraft
 } from '../../core/workspace-form'
+import { SHELL_STARTUP, checkStartup } from '../../core/startup-command'
+import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
 import type { Workspace } from '../../core/workspace-store'
 import Modal from './Modal'
+import StartupField from './StartupField'
 import { workspaceStore } from './store'
 
 interface WorkspaceDialogProps {
@@ -28,6 +31,11 @@ function WorkspaceDialog({
       : { name: '', directory: '', nameTouched: false }
   )
   const [errors, setErrors] = useState<DraftErrors>({})
+  // The default startup command for new cards (#5 D10); Shell for a new workspace.
+  const [startup, setStartup] = useState<StartupDraft>(() =>
+    startupDraft(workspace?.defaultStartup ?? SHELL_STARTUP)
+  )
+  const [commandError, setCommandError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
 
   const browse = async (): Promise<void> => {
@@ -47,14 +55,22 @@ function WorkspaceDialog({
         existingNames: workspaces.filter((w) => w.id !== workspace?.id).map((w) => w.name),
         isDirectory: (p) => window.drovr.fs.isDirectory(p)
       })
+      const command = checkStartup(draftStartup(startup))
+      setCommandError(command.ok ? undefined : command.error.message)
       if (!result.ok) {
         setErrors(result.errors)
         return
       }
+      if (!command.ok) return
+      const input = { ...result.value, defaultStartup: command.value }
       const stored = workspace
-        ? workspaceStore.updateWorkspace(workspace.id, result.value)
-        : workspaceStore.createWorkspace(result.value)
+        ? workspaceStore.updateWorkspace(workspace.id, input)
+        : workspaceStore.createWorkspace(input)
       if (!stored.ok) {
+        if (stored.error.field === 'command') {
+          setCommandError(stored.error.message)
+          return
+        }
         const field = stored.error.field === 'name' ? 'name' : 'directory'
         setErrors({ [field]: stored.error.message })
         return
@@ -136,6 +152,15 @@ function WorkspaceDialog({
             </p>
           )}
         </div>
+        <StartupField
+          draft={startup}
+          onChange={(next) => {
+            setStartup(next)
+            setCommandError(undefined)
+          }}
+          error={commandError}
+          testIdPrefix="workspace"
+        />
         <div className="modal-actions">
           <button type="button" className="btn" data-testid="workspace-cancel" onClick={onClose}>
             Cancel

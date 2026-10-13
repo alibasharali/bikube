@@ -14,7 +14,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 Decisions the developer made during implementation, with the date. A ruling that changes the spec also got its own `docs(spec):` commit.
 
-- None yet.
+- 2026-10-13 S2 (full auto, round 2 Q1): unreadable file, or a rejected file that can't be moved aside → try to move it aside like a rejected file; if that fails, start empty and save nothing for the session (logged). Spec D4 updated.
 
 ## Verification
 

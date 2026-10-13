@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `cd0c8c1..b81f170` | CLEAN | `CardSessions.close(cardId)` (kills a running card's session; no-op otherwise; closing while starting kills on spawn), `cardCloseConfirmation(title)` in core/card-deletes |
+| S2 | running | | | |
 
 ## Rulings
 

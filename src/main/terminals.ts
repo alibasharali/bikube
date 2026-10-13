@@ -44,7 +44,10 @@ export function registerTerminals(): SessionManager {
       pages.bump(owner)
       killAll()
     })
-    owner.on('render-process-gone', killAll)
+    owner.on('render-process-gone', () => {
+      pages.bump(owner)
+      killAll()
+    })
   }
 
   ipcMain.handle(IPC.spawn, async (event, cols: unknown, rows: unknown, cwd: unknown) => {

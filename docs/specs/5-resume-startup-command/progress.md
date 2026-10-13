@@ -16,4 +16,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- running
+- done: ALL PASS 12/12 on the running app (xvfb; AC7–AC9 via smoke e2e); real Claude Code on macOS not checked

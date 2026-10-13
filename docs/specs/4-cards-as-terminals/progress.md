@@ -10,7 +10,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | S2 Spawn in a directory | done | `cd8b711..c42585c` | HUMAN finding (reload race) resolved by orchestrator as technical, option (a); fixed r1, r2 | `SpawnResult = {ok:true,id} \| {ok:false,reason}`; `window.drovr.terminal.spawn(cols, rows, cwd): Promise<SpawnResult>`; reasons: 'invalid terminal size', 'invalid working directory', 'working directory not found', 'window reloaded', spawn error message or 'the shell could not be started'; show as `Couldn't start: <reason>`. Terminal.tsx unused (cwd prop), replace in S3 |
 | S3 Card terminals, creation, full-size view | done | `d7cd7ab..7181375` | CLEAN | core `CardSessions` (src/core/card-sessions.ts): `start({id,directory})`, `screen(id)`, `status(id)`, `runState(id): CardRunState`, `subscribe(id,fn)` (250 ms), `dispose(id)` (kills if running; safe while spawn pending). Renderer `cardTerminals()` singleton (src/renderer/src/card-terminals.ts), `useCardStatus(id)`, `XtermScreen.attach(el)`. Components CardItem, CardView, CardStatusLine, NewCard; BoardColumn takes `workspace`, `onOpenCard`; InlineInput `cancelOnBlur`. Testids: new-card, new-card-input, card (li, data-card-id), card-open, card-title, card-status(-label/-line), card-view, card-view-title, card-back, card-terminal, terminal. Card menu goes as a sibling of card-open in the li. e2e/cards.spec.ts. Note: Ctrl/Cmd+Shift+B capture listener also fires under an open Modal |
 | S4 Card menu, deletes, confirmations | done | `aed3fc8..d5fc6ed` | CLEAN | core card-deletes.ts: `columnDeleteHint`, `cardDeleteConfirmation`, `runningCount`, `workspaceDeleteMessage`; renderer card-actions.ts `removeCard(wsId,cardId)`, `removeWorkspace(ws)` (dispose processes); MenuButton.tsx shared ⋯ menu; testids card-menu(-rename/-delete), card-rename-input, card-rename-error, menu-delete-hint. Title single-click opens after 250 ms (double-click renames) |
-| S5 Benchmark on cards | running | | | |
+| S5 Benchmark on cards | done | `f62cfda..6681914` | CLEAN | Benchmark sustained: fps 56.6–60, echo max ~10 ms, main lag p99 ~5 ms, 10/10 streaming (xvfb, software GL). Firehose still fails as in #1 (no flow control, idea #16) |
 
 ## Rulings
 
@@ -18,4 +18,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- running

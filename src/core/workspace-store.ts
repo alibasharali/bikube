@@ -12,13 +12,27 @@ export interface Column {
   name: string
 }
 
+/** A terminal on the board (#4 D1). Its session and status are renderer runtime state. */
+export interface Card {
+  id: string
+  columnId: string
+  /** Trimmed, never empty (#4 D5). */
+  title: string
+  /** Absolute path, copied from the workspace at creation and never changed (#4 D2). */
+  directory: string
+}
+
 export interface Workspace {
   id: string
   name: string
-  /** Absolute path. Every terminal in this workspace starts here (later item). */
+  /** Absolute path. New cards start here; existing cards keep their own (#4 D2). */
   directory: string
   /** Each workspace owns exactly one board; this is its ordered columns. */
   columns: Column[]
+  /** All cards of the board, in creation order; filter by `columnId` for a column. */
+  cards: Card[]
+  /** N for the next default `Terminal N` title; starts at 1, never reused (#4 D5). */
+  nextCardNumber: number
 }
 
 export interface WorkspaceState {
@@ -28,7 +42,7 @@ export interface WorkspaceState {
 }
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
-export type ErrorField = 'name' | 'directory' | 'column' | 'workspace'
+export type ErrorField = 'name' | 'directory' | 'column' | 'workspace' | 'title' | 'card'
 
 export interface FieldError {
   field: ErrorField
@@ -61,6 +75,10 @@ export interface WorkspaceStore {
   renameColumn(workspaceId: string, columnId: string, name: string): Result<Column>
   moveColumn(workspaceId: string, columnId: string, direction: MoveDirection): Result<void>
   deleteColumn(workspaceId: string, columnId: string): Result<void>
+  /** Adds a card at the bottom of the column; an empty title becomes `Terminal N`. */
+  createCard(workspaceId: string, columnId: string, title: string): Result<Card>
+  renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
+  deleteCard(workspaceId: string, cardId: string): Result<void>
 }
 
 export interface StoreOptions {
@@ -75,6 +93,11 @@ export function basename(path: string): string {
   const parts = path.split(/[\\/]+/).filter((p) => p.length > 0)
   const last = parts[parts.length - 1] ?? ''
   return /^[A-Za-z]:$/.test(last) ? '' : last
+}
+
+/** The column's cards, top to bottom (creation order, #4 D1). */
+export function cardsInColumn(workspace: Workspace, columnId: string): Card[] {
+  return workspace.cards.filter((c) => c.columnId === columnId)
 }
 
 const isAbsolute = (p: string): boolean => /^([\\/]|[A-Za-z]:[\\/])/.test(p)
@@ -119,7 +142,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       id: this.generateId(),
       name: name.value,
       directory,
-      columns: DEFAULT_COLUMN_NAMES.map((n) => ({ id: this.generateId(), name: n }))
+      columns: DEFAULT_COLUMN_NAMES.map((n) => ({ id: this.generateId(), name: n })),
+      cards: [],
+      nextCardNumber: 1
     }
     this.set({
       workspaces: [...this.state.workspaces, workspace],
@@ -203,7 +228,48 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!ws) return unknownWorkspace()
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
     if (ws.columns.length === 1) return fail('column', 'A board must keep at least one column')
+    if (ws.cards.some((c) => c.columnId === columnId))
+      return fail('column', 'Delete its cards first')
     this.replace({ ...ws, columns: ws.columns.filter((c) => c.id !== columnId) })
+    return { ok: true, value: undefined }
+  }
+
+  createCard(workspaceId: string, columnId: string, title: string): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
+    const trimmed = title.trim()
+    const created: Card = {
+      id: this.generateId(),
+      columnId,
+      title: trimmed || `Terminal ${ws.nextCardNumber}`,
+      directory: ws.directory
+    }
+    this.replace({
+      ...ws,
+      cards: [...ws.cards, created],
+      nextCardNumber: trimmed ? ws.nextCardNumber : ws.nextCardNumber + 1
+    })
+    return { ok: true, value: created }
+  }
+
+  renameCard(workspaceId: string, cardId: string, title: string): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    const current = ws.cards.find((c) => c.id === cardId)
+    if (!current) return unknownCard()
+    const trimmed = title.trim()
+    if (!trimmed) return fail('title', 'Title is required')
+    const renamed: Card = { ...current, title: trimmed }
+    this.replace({ ...ws, cards: ws.cards.map((c) => (c.id === cardId ? renamed : c)) })
+    return { ok: true, value: renamed }
+  }
+
+  deleteCard(workspaceId: string, cardId: string): Result<void> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    if (!ws.cards.some((c) => c.id === cardId)) return unknownCard()
+    this.replace({ ...ws, cards: ws.cards.filter((c) => c.id !== cardId) })
     return { ok: true, value: undefined }
   }
 
@@ -253,3 +319,4 @@ function checkColumnName(ws: Workspace, raw: string, selfId: string | null): Res
 const unknownWorkspace = (): { ok: false; error: FieldError } =>
   fail('workspace', 'Workspace not found')
 const unknownColumn = (): { ok: false; error: FieldError } => fail('column', 'Column not found')
+const unknownCard = (): { ok: false; error: FieldError } => fail('card', 'Card not found')

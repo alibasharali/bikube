@@ -3,6 +3,8 @@ import {
   DEFAULT_COLUMN_NAMES,
   InMemoryWorkspaceStore,
   basename,
+  cardsInColumn,
+  type Card,
   type Column,
   type Result,
   type Workspace
@@ -330,5 +332,150 @@ describe('subscription and immutability', () => {
     ok(s.addColumn(w.id, 'Review'))
     expect(s.getState()).not.toBe(before)
     expect(before.workspaces[0].columns).toHaveLength(4)
+  })
+})
+
+function card(s: InMemoryWorkspaceStore, w: Workspace, title: string, columnIndex = 0): Card {
+  const ws = s.getState().workspaces.find((x) => x.id === w.id) ?? w
+  return ok(s.createCard(w.id, ws.columns[columnIndex].id, title))
+}
+
+function titles(s: InMemoryWorkspaceStore, w: Workspace): string[] {
+  const ws = s.getState().workspaces.find((x) => x.id === w.id)
+  return (ws?.cards ?? []).map((c) => c.title)
+}
+
+describe('cards: create and default titles (AC2)', () => {
+  it('numbers default titles per workspace and never reuses a number', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    card(s, w, '')
+    const two = card(s, w, '  ')
+    card(s, w, '')
+    ok(s.deleteCard(w.id, two.id))
+    card(s, w, '')
+    expect(titles(s, w)).toEqual(['Terminal 1', 'Terminal 3', 'Terminal 4'])
+  })
+  it('trims titles, allows duplicates and lists a column in creation order', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    card(s, w, '  api ')
+    card(s, w, 'other', 1)
+    card(s, w, 'api')
+    const ws = s.getState().workspaces[0]
+    expect(cardsInColumn(ws, backlog).map((c) => c.title)).toEqual(['api', 'api'])
+    expect(cardsInColumn(ws, ws.columns[1].id).map((c) => c.title)).toEqual(['other'])
+    expect(cardsInColumn(ws, ws.columns[2].id)).toEqual([])
+  })
+
+  it('counts default titles per workspace', () => {
+    const s = make()
+    const a = create(s, 'alpha')
+    const b = create(s, 'beta')
+    card(s, a, '')
+    card(s, a, 'named')
+    card(s, b, '')
+    card(s, a, '')
+    expect(titles(s, a)).toEqual(['Terminal 1', 'named', 'Terminal 2'])
+    expect(titles(s, b)).toEqual(['Terminal 1'])
+  })
+
+  it('reports an unknown workspace, column or card', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    expect(s.createCard('nope', w.columns[0].id, 'x')).toMatchObject({
+      ok: false,
+      error: { field: 'workspace' }
+    })
+    expect(s.createCard(w.id, 'nope', 'x')).toMatchObject({ ok: false, error: { field: 'column' } })
+    expect(s.deleteCard(w.id, 'nope')).toMatchObject({ ok: false, error: { field: 'card' } })
+    expect(titles(s, w)).toEqual([])
+  })
+})
+
+describe('cards: working directory (AC8)', () => {
+  it('copies the directory at creation; later workspace edits only affect new cards', () => {
+    const s = make()
+    const w = create(s, 'alpha', '/tmp/drovr-alpha')
+    const one = card(s, w, 'one')
+    ok(s.updateWorkspace(w.id, { directory: '/tmp/drovr-other' }))
+    const two = card(s, w, 'two')
+    expect(one.directory).toBe('/tmp/drovr-alpha')
+    expect(two.directory).toBe('/tmp/drovr-other')
+    expect(s.getState().workspaces[0].cards.map((c) => c.directory)).toEqual([
+      '/tmp/drovr-alpha',
+      '/tmp/drovr-other'
+    ])
+  })
+})
+
+describe('cards: rename (AC9)', () => {
+  it('renames with trimming and rejects a blank title, keeping the old one', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const api = card(s, w, 'api')
+    expect(ok(s.renameCard(w.id, api.id, '  api v2 '))).toMatchObject({
+      id: api.id,
+      title: 'api v2',
+      columnId: api.columnId,
+      directory: api.directory
+    })
+    for (const blank of ['', '   ']) {
+      expect(s.renameCard(w.id, api.id, blank)).toEqual({
+        ok: false,
+        error: { field: 'title', message: 'Title is required' }
+      })
+    }
+    expect(titles(s, w)).toEqual(['api v2'])
+  })
+
+  it('allows a duplicate title and does not use the default counter', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    card(s, w, 'api')
+    const other = card(s, w, 'other')
+    ok(s.renameCard(w.id, other.id, 'api'))
+    card(s, w, '')
+    expect(titles(s, w)).toEqual(['api', 'api', 'Terminal 1'])
+  })
+
+  it('reports an unknown workspace or card', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    expect(s.renameCard('nope', 'x', 'y')).toMatchObject({
+      ok: false,
+      error: { field: 'workspace' }
+    })
+    expect(s.renameCard(w.id, 'nope', 'y')).toMatchObject({ ok: false, error: { field: 'card' } })
+  })
+})
+
+describe('cards: delete column with cards (AC11 logic)', () => {
+  it('refuses while the column has cards and works again once they are deleted', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const backlog = w.columns[0].id
+    const api = card(s, w, 'api')
+    expect(s.deleteColumn(w.id, backlog)).toEqual({
+      ok: false,
+      error: { field: 'column', message: 'Delete its cards first' }
+    })
+    expect(names(s.getState().workspaces[0])).toContain('Backlog')
+    ok(s.deleteCard(w.id, api.id))
+    ok(s.deleteColumn(w.id, backlog))
+    expect(names(s.getState().workspaces[0])).toEqual(['Running', 'Needs me', 'Done'])
+  })
+})
+
+describe('cards: workspace delete', () => {
+  it('removes the workspace with its cards and leaves other boards alone', () => {
+    const s = make()
+    const a = create(s, 'alpha')
+    const b = create(s, 'beta')
+    card(s, a, 'one')
+    card(s, b, 'two')
+    ok(s.deleteWorkspace(a.id))
+    expect(s.getState().workspaces.map((w) => w.cards.map((c) => c.title))).toEqual([['two']])
   })
 })

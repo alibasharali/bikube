@@ -15,6 +15,8 @@ Why: one item in one context degrades toward the end. Fresh workers get a precis
 - The spec says `status: approved`. Otherwise stop and hand back to the gate in the `item` skill: approval is the developer's call.
 - Ledger `docs/specs/<n>-<slug>/progress.md`: if it exists, resume from the first slice not `done`. If not, create it from [ledger-template.md](ledger-template.md), one row per slice, `todo`.
 
+**Ready tree:** before the first slice, run the project's dependency install yourself, in the foreground (see `docs/agents/stack.md`; e.g. `npm ci`), and read its exit status and output. If a postinstall step failed (a blocked download, a native module), fix it (e.g. `npm rebuild <pkg>`) or ask the developer. Workers get a ready tree and must not reinstall. Never wait on a process with `pgrep -f` or `ps | grep` (it matches the waiting shell itself) and never background-then-wait; use exit statuses or result files.
+
 Call `update_item_status(N, "in_progress")` if the item isn't there yet.
 
 A slice that is only factory tool calls (`set_environment_urls`, `create_item`, `propose_stack_change`) needs no implementer or reviewer: make the calls yourself, record the result in the ledger, and commit the ledger.

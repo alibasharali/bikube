@@ -38,6 +38,20 @@
       ]
     },
     {
+      "id": "electron-desktop",
+      "label": "Electron desktop app",
+      "packages": [
+        "electron",
+        "electron-vite",
+        "electron-builder"
+      ],
+      "files": [
+        "electron-builder.yml",
+        "electron.vite.config.ts"
+      ],
+      "content": []
+    },
+    {
       "id": "resend",
       "label": "Resend",
       "packages": [

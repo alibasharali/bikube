@@ -15,6 +15,9 @@ You implement **one slice** of an item. The brief and the spec it names are the 
 - **Stay inside the brief.** Other slices' ACs, the spec's *Out of scope*, and refactors nobody asked for are out of bounds even when you see the chance. Note them under *Notes*.
 - **Never** change an existing test's expectation to make it pass; edit `docs/specs/`, `.github/workflows/`, `.claude/settings.json` or `.claude/hooks/`; or run git commands that write (`add`, `commit`, `switch`, `stash`, `push`). Read-only git is fine. The orchestrator commits.
 
+- **Never wait on a process with `pgrep -f` or `ps | grep`:** the pattern matches your own waiting shell, so the loop never ends. Run commands in the foreground and read their exit status, or poll for a result file. Never background a command and then wait for it.
+- **The orchestrator installed dependencies before dispatching you.** Don't reinstall; if the tree looks broken, report BLOCKED with the error.
+
 ## When you can't proceed
 
 You cannot ask the developer. If the brief or spec is ambiguous, contradicts the code, or a test can't be written at the given seam, **stop and report BLOCKED** with the exact question, the options you see and your recommendation. Guessing at a domain decision is the one failure that isn't accepted.

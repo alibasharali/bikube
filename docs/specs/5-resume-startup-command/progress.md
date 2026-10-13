@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `bbfae8f..4da41bf` | CLEAN | core startup-command.ts: `StartupCommand = {kind:'shell'}\|{kind:'claude'}\|{kind:'custom';command}`, `SHELL_STARTUP`, `StartupState {startup,agentSessionId,claudeStarted}` (Card satisfies), `checkStartup(s): Result<StartupCommand>` (field 'command': `Command is required` / `Command must be one line`), `startLine(card): string\|null` (no trailing `\r`; S2 appends). workspace-store: Card +startup/agentSessionId/claudeStarted; Workspace +defaultStartup; WorkspaceInput/Patch `defaultStartup?`; `createCard(ws,col,title,startup?)` (defaults to workspace's); `setCardStartup(ws,card,startup): Result<Card>`; `markClaudeStarted(ws,card): Result<Card>`; StoreOptions `generateSessionId?` |
+| S2 | running | | | |
 | S3 | todo | | | |
 
 ## Rulings

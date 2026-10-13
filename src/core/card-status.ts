@@ -27,21 +27,19 @@ export function lastOutputLine(lines: readonly string[], cursorRow: number): str
 }
 
 /**
- * A card's process state. `exited` mirrors node-pty's onExit payload: a `signal` of 0 or
- * undefined means the process exited on its own with `exitCode`.
+ * A card's process state. `stopped`: its shell exited, however it ended (#5 D6, which replaces
+ * #4's exit code and signal); its screen is gone.
  */
 export type CardRunState =
-  | { kind: 'running' }
-  | { kind: 'exited'; exitCode: number; signal?: number }
-  | { kind: 'failed'; reason: string }
+  { kind: 'running' } | { kind: 'stopped' } | { kind: 'failed'; reason: string }
 
-/** `Running`, `Exited (code N)`, `Exited (signal N)` or `Couldn't start: <reason>`. */
+/** `Running`, `Stopped` or `Couldn't start: <reason>`. */
 export function statusLabel(state: CardRunState): string {
   switch (state.kind) {
     case 'running':
       return 'Running'
-    case 'exited':
-      return state.signal ? `Exited (signal ${state.signal})` : `Exited (code ${state.exitCode})`
+    case 'stopped':
+      return 'Stopped'
     case 'failed':
       return `Couldn't start: ${state.reason}`
   }
@@ -50,10 +48,10 @@ export function statusLabel(state: CardRunState): string {
 export interface CardStatus {
   /** See `statusLabel`. */
   label: string
-  /** See `lastOutputLine`; always empty for a card that couldn't start. */
+  /** See `lastOutputLine`; only a running card has one. */
   lastLine: string
 }
 
 export function cardStatus(state: CardRunState, lastLine: string): CardStatus {
-  return { label: statusLabel(state), lastLine: state.kind === 'failed' ? '' : lastLine }
+  return { label: statusLabel(state), lastLine: state.kind === 'running' ? lastLine : '' }
 }

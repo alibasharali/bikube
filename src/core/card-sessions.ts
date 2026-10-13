@@ -6,6 +6,7 @@
  */
 import type { TerminalApi, TerminalExit } from '../shared/api'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
+import { startLine, type StartupState } from './startup-command'
 
 /** What the registry needs from a terminal emulator. */
 export interface CardScreen {
@@ -28,11 +29,15 @@ export interface CardRef {
   directory: string
 }
 
+/** A card as it is when it starts: its startup command is read then (#5 D7). */
+export interface StartingCard extends CardRef, StartupState {}
+
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
 
 interface Entry<S> {
-  screen: S
+  /** Null once the shell has exited: a Stopped card has no screen (#5 D6). */
+  screen: S | null
   sessionId: string | null
   state: CardRunState
   status: CardStatus
@@ -66,11 +71,20 @@ export class CardSessions<S extends CardScreen> {
     })
   }
 
-  /** Creates the card's screen and starts its shell in the card's directory. */
-  start(card: CardRef): void {
+  /**
+   * Starts the card's shell in its directory on a new, empty screen (#5 D7): a card with no
+   * terminal yet, a Stopped one, or one that couldn't start (a retry, #5 D8). A running card
+   * (or one whose shell is starting) is left as it is (#4 D10).
+   *
+   * Right after a successful spawn it types the card's start line and Enter, before any
+   * keystroke (#5 D3); `onClaudeStarted` runs when that was Claude Code's first start (#5 D5).
+   */
+  start(card: StartingCard, onClaudeStarted?: () => void): void {
+    const existing = this.entries.get(card.id)
+    if (existing?.state.kind === 'running') return
     const screen = this.createScreen(card.id)
     const state: CardRunState = { kind: 'running' }
-    const entry: Entry<S> = {
+    const entry: Entry<S> = existing ?? {
       screen,
       sessionId: null,
       state,
@@ -80,26 +94,37 @@ export class CardSessions<S extends CardScreen> {
       dirty: false,
       disposed: false
     }
-    this.entries.set(card.id, entry)
+    if (existing) {
+      // The old screen is gone already when Stopped; a failed one still shows its reason.
+      existing.screen?.dispose()
+      existing.screen = screen
+    } else {
+      this.entries.set(card.id, entry)
+    }
     screen.onInput((data) => {
-      if (entry.sessionId && entry.state.kind === 'running') this.api.write(entry.sessionId, data)
+      if (entry.screen === screen && entry.sessionId && entry.state.kind === 'running')
+        this.api.write(entry.sessionId, data)
     })
     screen.onResize(({ cols, rows }) => {
-      if (entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
+      if (entry.screen === screen && entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
     })
     const { cols, rows } = screen
+    const line = startLine(card)
+    // Each start owns its screen; a reply for an older start, or after dispose, is stale.
+    const current = (): boolean => !entry.disposed && entry.screen === screen
     const failed = (reason: string): void => {
-      if (entry.disposed) return
+      if (!current()) return
       screen.write(`Couldn't start: ${reason}\r\n`)
       this.setState(entry, { kind: 'failed', reason })
     }
+    this.setState(entry, state)
     this.starting++
     void this.api
       .spawn(cols, rows, card.directory)
       .then(
         (result) => {
           if (!result.ok) return failed(result.reason)
-          if (entry.disposed) return this.api.kill(result.id)
+          if (!current()) return this.api.kill(result.id)
           entry.sessionId = result.id
           this.bySession.set(result.id, entry)
           // The view may have fitted the screen while the shell was starting.
@@ -107,6 +132,10 @@ export class CardSessions<S extends CardScreen> {
             this.api.resize(result.id, screen.cols, screen.rows)
           }
           const early = this.early.get(result.id)
+          if (line !== null && !early?.exit) {
+            this.api.write(result.id, `${line}\r`)
+            if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
+          }
           early?.data.forEach((data) => this.output(entry, data))
           if (early?.exit) this.exited(entry, early.exit)
         },
@@ -117,13 +146,14 @@ export class CardSessions<S extends CardScreen> {
       })
   }
 
-  /** Running, exited or couldn't start; undefined for an unknown card. */
+  /** Running, Stopped or couldn't start; undefined for an unknown card. */
   runState(cardId: string): CardRunState | undefined {
     return this.entries.get(cardId)?.state
   }
 
+  /** The card's screen; undefined for an unknown or Stopped card. */
   screen(cardId: string): S | undefined {
-    return this.entries.get(cardId)?.screen
+    return this.entries.get(cardId)?.screen ?? undefined
   }
 
   /** The card's status; the same object until it changes, for `useSyncExternalStore`. */
@@ -151,7 +181,7 @@ export class CardSessions<S extends CardScreen> {
     }
     if (entry.timer) clearTimeout(entry.timer)
     entry.listeners.clear()
-    entry.screen.dispose()
+    entry.screen?.dispose()
   }
 
   private earlyFor(id: string): { data: string[]; exit?: TerminalExit } {
@@ -161,15 +191,21 @@ export class CardSessions<S extends CardScreen> {
   }
 
   private output(entry: Entry<S>, data: string): void {
-    entry.screen.write(data, () => {
+    entry.screen?.write(data, () => {
       if (!entry.disposed) this.outputLanded(entry)
     })
   }
 
-  private exited(entry: Entry<S>, { id, exitCode, signal }: TerminalExit): void {
+  /** Stopped: the old screen and its scrollback are discarded (#5 D6). */
+  private exited(entry: Entry<S>, { id }: TerminalExit): void {
     this.bySession.delete(id)
     entry.sessionId = null
-    this.setState(entry, { kind: 'exited', exitCode, signal })
+    entry.screen?.dispose()
+    entry.screen = null
+    if (entry.timer) clearTimeout(entry.timer)
+    entry.timer = null
+    entry.dirty = false
+    this.setState(entry, { kind: 'stopped' })
   }
 
   /** Leading-edge update, then at most one more per interval while output keeps coming. */
@@ -194,13 +230,13 @@ export class CardSessions<S extends CardScreen> {
   /** A process state change shows at once, outside the output throttle. */
   private setState(entry: Entry<S>, state: CardRunState): void {
     entry.state = state
-    if (state.kind !== 'running') entry.screen.setReadOnly()
+    if (state.kind === 'failed') entry.screen?.setReadOnly()
     this.refresh(entry)
   }
 
   /** Recomputes the status from the screen and notifies when it changed. */
   private refresh(entry: Entry<S>): void {
-    const { lines, cursorRow } = entry.screen.screen()
+    const { lines, cursorRow } = entry.screen?.screen() ?? { lines: [], cursorRow: 0 }
     const next = cardStatus(entry.state, lastOutputLine(lines, cursorRow))
     if (next.label === entry.status.label && next.lastLine === entry.status.lastLine) return
     entry.status = next

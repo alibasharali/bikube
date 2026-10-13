@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SpawnResult, TerminalApi, TerminalExit } from '../shared/api'
-import { CardSessions, type CardScreen } from './card-sessions'
+import { CardSessions, type CardScreen, type StartingCard } from './card-sessions'
+import type { StartupCommand } from './startup-command'
 
 /** A screen that keeps written text as lines; the cursor sits on the last line. */
 class FakeScreen implements CardScreen {
@@ -95,16 +96,28 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+const UUID = '0b6f2c1e-4a5d-4e8f-9a1b-2c3d4e5f6a7b'
+
+/** A Shell card unless `startup` says otherwise. */
+function card(
+  id: string,
+  directory = '/tmp/a',
+  startup: StartupCommand = { kind: 'shell' },
+  claudeStarted = false
+): StartingCard {
+  return { id, directory, startup, agentSessionId: UUID, claudeStarted }
+}
+
 /** Starts a card and resolves its spawn with `result`. */
 async function started(cardId: string, result: SpawnResult, directory = '/tmp/a'): Promise<void> {
-  sessions.start({ id: cardId, directory })
+  sessions.start(card(cardId, directory))
   api.spawns[api.spawns.length - 1].resolve(result)
   await vi.advanceTimersByTimeAsync(0)
 }
 
 describe('CardSessions', () => {
   it('starts the shell in the card directory at the screen size', () => {
-    sessions.start({ id: 'c1', directory: '/tmp/alpha' })
+    sessions.start(card('c1', '/tmp/alpha'))
     expect(api.spawns).toHaveLength(1)
     expect(api.spawns[0]).toMatchObject({ cols: 80, rows: 24, cwd: '/tmp/alpha' })
     expect(sessions.screen('c1')).toBe(screens.get('c1'))
@@ -148,30 +161,113 @@ describe('CardSessions', () => {
   })
 
   it('resizes the session to a size that changed while the shell was starting', async () => {
-    sessions.start({ id: 'c1', directory: '/tmp/a' })
+    sessions.start(card('c1', '/tmp/a'))
     screens.get('c1')!.resize(100, 30)
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
     expect(api.resizes).toEqual([['s1', 100, 30]])
   })
 
-  it('on exit shows the exited status at once and ignores typing', async () => {
+  it('on exit is Stopped at once with no last line, and its screen is gone (#5 D6)', async () => {
     await started('c1', { ok: true, id: 's1' })
     api.emitData('s1', 'bye')
     const listener = vi.fn()
     sessions.subscribe('c1', listener)
+    const screen = screens.get('c1')!
     api.emitExit({ id: 's1', exitCode: 3 })
-    expect(sessions.status('c1')).toEqual({ label: 'Exited (code 3)', lastLine: 'bye' })
-    expect(sessions.runState('c1')).toEqual({ kind: 'exited', exitCode: 3, signal: undefined })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
     expect(listener).toHaveBeenCalled()
-    expect(screens.get('c1')!.readOnly).toBe(true)
-    screens.get('c1')!.type('echo hi\r')
+    expect(screen.disposed).toBe(true)
+    expect(sessions.screen('c1')).toBeUndefined()
+    screen.type('echo hi\r')
+    api.emitData('s1', 'late')
     expect(api.writes).toEqual([])
+    expect(screen.text).toBe('bye')
+  })
+
+  it('starts a Stopped card again: a new, empty screen and a new shell (#5 D7)', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitData('s1', 'old output')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    const listener = vi.fn()
+    sessions.subscribe('c1', listener)
+    await started('c1', { ok: true, id: 's2' }, '/tmp/alpha')
+    const screen = sessions.screen('c1')!
+    expect(screen).toBe(screens.get('c1'))
+    expect(screen.disposed).toBe(false)
+    expect(screen.text).toBe('')
+    expect(api.spawns).toHaveLength(2)
+    expect(api.spawns[1].cwd).toBe('/tmp/alpha')
+    expect(sessions.runState('c1')).toEqual({ kind: 'running' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+    expect(listener).toHaveBeenCalled()
+    api.emitData('s2', 'new')
+    api.emitData('s1', 'stale')
+    screen.type('ls\r')
+    expect(screen.text).toBe('new')
+    expect(api.writes).toEqual([['s2', 'ls\r']])
+  })
+
+  it('leaves a running card as it is (#4 D10, #5 D7)', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitData('s1', 'kept')
+    sessions.start(card('c1', '/tmp/a'))
+    expect(api.spawns).toHaveLength(1)
+    expect(sessions.screen('c1')!.text).toBe('kept')
+  })
+
+  it('types claude --session-id right after the spawn, before any keystroke (#5 D3, D5)', async () => {
+    const claudeStarted = vi.fn()
+    sessions.start(card('c1', '/tmp/a', { kind: 'claude' }), claudeStarted)
+    screens.get('c1')!.type('x')
+    expect(api.writes).toEqual([])
+    expect(claudeStarted).not.toHaveBeenCalled()
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    screens.get('c1')!.type('y')
+    expect(api.writes).toEqual([
+      ['s1', `claude --session-id ${UUID}\r`],
+      ['s1', 'y']
+    ])
+    expect(claudeStarted).toHaveBeenCalledTimes(1)
+  })
+
+  it('types the resume line on later Claude Code starts without marking again (#5 D5)', async () => {
+    const claudeStarted = vi.fn()
+    sessions.start(card('c1', '/tmp/a', { kind: 'claude' }, true), claudeStarted)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', `claude --resume ${UUID} || claude --session-id ${UUID}\r`]])
+    expect(claudeStarted).not.toHaveBeenCalled()
+  })
+
+  it('types a Custom command as written, and nothing for Shell (#5 D2, D3)', async () => {
+    const claudeStarted = vi.fn()
+    sessions.start(
+      card('c1', '/tmp/a', { kind: 'custom', command: 'codex resume --last' }),
+      claudeStarted
+    )
+    sessions.start(card('c2'), claudeStarted)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', 'codex resume --last\r']])
+    expect(claudeStarted).not.toHaveBeenCalled()
+  })
+
+  it('types nothing and marks nothing when the start fails (#5 D8)', async () => {
+    const claudeStarted = vi.fn()
+    sessions.start(card('c1', '/gone', { kind: 'claude' }), claudeStarted)
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+    expect(claudeStarted).not.toHaveBeenCalled()
   })
 
   it("shows Couldn't start with the reason when main refuses the spawn", async () => {
     const listener = vi.fn()
-    sessions.start({ id: 'c1', directory: '/gone' })
+    sessions.start(card('c1', '/gone'))
     sessions.subscribe('c1', listener)
     api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
     await vi.advanceTimersByTimeAsync(0)
@@ -189,13 +285,31 @@ describe('CardSessions', () => {
 
   it("shows Couldn't start when the spawn call itself fails", async () => {
     api.spawn = () => Promise.reject(new Error('boom'))
-    sessions.start({ id: 'c1', directory: '/tmp/a' })
+    sessions.start(card('c1', '/tmp/a'))
     await vi.advanceTimersByTimeAsync(0)
     expect(sessions.status('c1')!.label).toBe("Couldn't start: boom")
   })
 
+  it("retries a card that couldn't start on a new screen, and only when started (#5 D8)", async () => {
+    await started('c1', { ok: false, reason: 'working directory not found' }, '/gone')
+    const failedScreen = screens.get('c1')!
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(api.spawns).toHaveLength(1)
+
+    await started('c1', { ok: false, reason: 'working directory not found' }, '/gone')
+    expect(failedScreen.disposed).toBe(true)
+    expect(sessions.screen('c1')!.text).toBe("Couldn't start: working directory not found\r\n")
+    expect(sessions.status('c1')!.label).toBe("Couldn't start: working directory not found")
+
+    await started('c1', { ok: true, id: 's1' }, '/gone')
+    expect(api.spawns).toHaveLength(3)
+    expect(sessions.runState('c1')).toEqual({ kind: 'running' })
+    expect(sessions.screen('c1')!.text).toBe('')
+    expect(sessions.screen('c1')!.readOnly).toBe(false)
+  })
+
   it('keeps output that arrives before the spawn reply for the card that gets that session', async () => {
-    sessions.start({ id: 'c1', directory: '/tmp/a' })
+    sessions.start(card('c1', '/tmp/a'))
     api.emitData('s1', 'early ')
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
@@ -214,7 +328,7 @@ describe('CardSessions', () => {
   })
 
   it('dispose while the shell is starting kills it once it has started', async () => {
-    sessions.start({ id: 'c1', directory: '/tmp/a' })
+    sessions.start(card('c1', '/tmp/a'))
     sessions.dispose('c1')
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)

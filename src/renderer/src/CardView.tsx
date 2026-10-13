@@ -2,23 +2,32 @@ import { useEffect, useRef } from 'react'
 import { isBackShortcut } from '../../core/card-shortcuts'
 import type { Card } from '../../core/workspace-store'
 import CardStatusLine from './CardStatusLine'
-import { cardTerminals, useCardStatus } from './card-terminals'
+import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 
 /**
  * A card at full size (#4 D7): header with title, status and Back; the card's own terminal
- * fitted below. Leaving only detaches the screen; the process keeps running (D8, D10).
+ * fitted below. Leaving only detaches the screen; the process keeps running (D8, D10). When the
+ * shell exits, the view goes back to the board (#5 D6).
  */
 function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.JSX.Element {
   const status = useCardStatus(card.id)
+  const runState = useCardRunState(card.id)
   const hostRef = useRef<HTMLDivElement>(null)
+  // Each start gets a new screen (#5 D7); a Stopped card has none (#5 D6).
+  const screen = cardTerminals().screen(card.id)
 
   useEffect(() => {
-    const screen = cardTerminals().screen(card.id)
     if (!screen) return
     const detach = screen.attach(hostRef.current!)
     screen.focus()
     return detach
-  }, [card.id])
+  }, [screen])
+
+  // When the shell exits the card is Stopped and the view goes back to the board (#5 D6).
+  const stopped = runState?.kind === 'stopped'
+  useEffect(() => {
+    if (stopped) onBack()
+  }, [stopped, onBack])
 
   // Capture phase: works wherever focus is, including the terminal, which swallows the key.
   useEffect(() => {

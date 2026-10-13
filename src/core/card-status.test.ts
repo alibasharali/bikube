@@ -26,11 +26,9 @@ describe('lastOutputLine (D9)', () => {
 })
 
 describe('statusLabel (D9)', () => {
-  it('labels running, exited by code or signal, and failed to start', () => {
+  it('labels running, stopped (#5 D6) and failed to start', () => {
     expect(statusLabel({ kind: 'running' })).toBe('Running')
-    expect(statusLabel({ kind: 'exited', exitCode: 3 })).toBe('Exited (code 3)')
-    expect(statusLabel({ kind: 'exited', exitCode: 0, signal: 0 })).toBe('Exited (code 0)')
-    expect(statusLabel({ kind: 'exited', exitCode: 0, signal: 15 })).toBe('Exited (signal 15)')
+    expect(statusLabel({ kind: 'stopped' })).toBe('Stopped')
     expect(statusLabel({ kind: 'failed', reason: 'working directory not found' })).toBe(
       "Couldn't start: working directory not found"
     )
@@ -38,14 +36,14 @@ describe('statusLabel (D9)', () => {
 })
 
 describe('cardStatus (D9)', () => {
-  it('pairs the label with the last output line, except when it could not start', () => {
+  it('pairs the label with the last output line, except when stopped or it could not start', () => {
     expect(cardStatus({ kind: 'running' }, 'drovr-marker')).toEqual({
       label: 'Running',
       lastLine: 'drovr-marker'
     })
-    expect(cardStatus({ kind: 'exited', exitCode: 3 }, '$ exit 3')).toEqual({
-      label: 'Exited (code 3)',
-      lastLine: '$ exit 3'
+    expect(cardStatus({ kind: 'stopped' }, '$ exit 3')).toEqual({
+      label: 'Stopped',
+      lastLine: ''
     })
     expect(cardStatus({ kind: 'failed', reason: 'boom' }, 'stale')).toEqual({
       label: "Couldn't start: boom",

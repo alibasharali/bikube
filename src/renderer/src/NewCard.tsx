@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import InlineInput from './InlineInput'
-import { cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
 
 /**
  * `+ New card` at the end of a column (#4 D4): an inline title; Enter creates the card at the
- * bottom, starts its shell and opens it (D3, D6). Esc, or blur with nothing typed, cancels.
+ * bottom and opens it, which starts its shell (D3, D6, #5 D7). Esc, or blur with nothing typed,
+ * cancels.
  */
 function NewCard({
   workspaceId,
@@ -39,10 +39,7 @@ function NewCard({
       cancelOnBlur={(value) => value.trim() === ''}
       onCommit={(title) => {
         const created = workspaceStore.createCard(workspaceId, columnId, title)
-        if (created.ok) {
-          cardTerminals().start(created.value)
-          onCreated(created.value.id)
-        }
+        if (created.ok) onCreated(created.value.id)
         return created
       }}
       onDone={() => setAdding(false)}

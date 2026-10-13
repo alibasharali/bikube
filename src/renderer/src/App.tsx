@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
 import type { Workspace } from '../../core/workspace-store'
-import { removeWorkspace } from './card-actions'
+import { removeWorkspace, startCard } from './card-actions'
 import { useRunningCount } from './card-terminals'
 import CardView from './CardView'
 import ConfirmDialog from './ConfirmDialog'
@@ -24,9 +24,12 @@ function App(): React.JSX.Element {
       ? (active?.cards.find((c) => c.id === opened.cardId) ?? null)
       : null
   const closeCard = useCallback(() => setOpened(null), [setOpened])
+  // Opening a card whose shell isn't running starts it first (#5 D7).
   const onOpenCard = useCallback(
     (cardId: string) => {
-      if (activeId) setOpened({ workspaceId: activeId, cardId })
+      if (!activeId) return
+      startCard(activeId, cardId)
+      setOpened({ workspaceId: activeId, cardId })
     },
     [activeId, setOpened]
   )

@@ -214,25 +214,51 @@ test('AC5/D8: selecting a workspace in the sidebar leaves the full-size view', a
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
 
-test('AC6: an exited card keeps its final output, read-only', async () => {
+/** Waits for the board after the open card's shell exited: it is Stopped (#5 D6). */
+async function stoppedToBoard(title: string): Promise<void> {
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card(title).getByTestId('card-status-label')).toHaveText('Stopped')
+  await expect(card(title).getByTestId('card-status-line')).toHaveCount(0)
+}
+
+/** The open card's buffer once the shell is idle: its non-blank lines, nothing typed yet. */
+async function settledScreen(): Promise<string[]> {
+  await expect.poll(async () => (await bufferLines()).some((l) => l !== '')).toBe(true)
+  await page.waitForTimeout(500)
+  return (await bufferLines()).filter((l) => l !== '')
+}
+
+test('#5 AC3: when the shell exits the view goes back to the board and the card is Stopped', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Backlog', 'api')
+  await newCard('Backlog', 'sh')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('exit')
+  await stoppedToBoard('sh')
+})
+
+test('#5 AC6: a Stopped shell card starts a new shell in its directory when opened', async () => {
+  const dir = makeDir('alpha')
+  await createWorkspace(dir, 'alpha')
+  await newCard('Backlog', 'sh')
+  // A fresh login shell's screen here, whatever the machine's prompt or login banner.
+  const fresh = await settledScreen()
+  await expect.poll(terminalFocused).toBe(true)
   await run('echo last-words')
   await expect.poll(bufferLines).toContain('last-words')
   await run('exit 3')
-  const view = page.getByTestId('card-view')
-  await expect(view.getByTestId('card-status-label')).toHaveText('Exited (code 3)')
+  await stoppedToBoard('sh')
 
-  await back()
-  await expect(card('api').getByTestId('card-status-label')).toHaveText('Exited (code 3)')
-
-  await openCard('api')
-  await expect.poll(bufferLines).toContain('last-words')
-  const before = await bufferLines()
-  await page.getByTestId('card-terminal').click()
-  await run('echo typed-after-exit')
-  await page.waitForTimeout(500)
-  expect(await bufferLines()).toEqual(before)
+  await openCard('sh')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  // A new, empty screen like the first one: none of the earlier output, nothing typed.
+  const screen = await settledScreen()
+  expect(screen).toHaveLength(fresh.length)
+  expect(screen.join('\n')).not.toContain('last-words')
+  expect(screen.join('\n')).not.toContain('exit')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(dir)
 })
 
 test("AC7: a card whose directory is gone shows Couldn't start", async () => {
@@ -398,7 +424,7 @@ test('AC9: rename from the menu or by double-click; blank is rejected; Esc cance
   await expect(page.getByTestId('card-view-title')).toHaveText('api v2')
 })
 
-test('AC10: deleting a running card asks first and stops it; an exited card goes at once', async () => {
+test('AC10: deleting a running card asks first and stops it; a Stopped card goes at once', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
   const pid = await shellPid()
@@ -422,11 +448,9 @@ test('AC10: deleting a running card asks first and stops it; an exited card goes
   await expect.poll(() => alive(pid)).toBe(false)
 
   await newCard('Backlog', 'old')
+  await expect.poll(terminalFocused).toBe(true)
   await run('exit 0')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText(
-    'Exited (code 0)'
-  )
-  await back()
+  await stoppedToBoard('old')
   await cardAction('old', 'card-menu-delete')
   await expect(card('old')).toHaveCount(0)
   await expect(dialog).toHaveCount(0)
@@ -436,8 +460,9 @@ test('AC10: deleting a running card asks first and stops it; an exited card goes
 test('AC11: a column with cards cannot be deleted until its cards are gone', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
+  await expect.poll(terminalFocused).toBe(true)
   await run('exit 0')
-  await back()
+  await stoppedToBoard('api')
 
   await columnMenu('Backlog')
   await expect(column('Backlog').getByTestId('menu-delete')).toBeDisabled()
@@ -463,11 +488,9 @@ test('AC12: deleting a workspace names its running terminals and stops them', as
   const two = await shellPid()
   await back()
   await newCard('Running', 'old')
+  await expect.poll(terminalFocused).toBe(true)
   await run('exit 0')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText(
-    'Exited (code 0)'
-  )
-  await back()
+  await stoppedToBoard('old')
 
   const row = page.locator('.workspace-row').first()
   await row.hover()
@@ -493,8 +516,9 @@ test('AC12: deleting a workspace names its running terminals and stops them', as
 test('D15: without running cards the workspace delete dialog is unchanged', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'old')
+  await expect.poll(terminalFocused).toBe(true)
   await run('exit 0')
-  await back()
+  await stoppedToBoard('old')
   const row = page.locator('.workspace-row').first()
   await row.hover()
   await row.getByTestId('workspace-delete').click()
@@ -582,4 +606,55 @@ test('D15: the workspace delete dialog follows terminals that exit while it is o
   )
   process.kill(two, 'SIGKILL')
   await expect(message).toHaveText('Delete "alpha"? This removes its board.')
+})
+
+test("#5 AC10: a card that couldn't start tries again when opened", async () => {
+  const dir = makeDir('alpha')
+  await createWorkspace(dir, 'alpha')
+  rmSync(dir, { recursive: true })
+
+  await newCard('Backlog', 'x')
+  const reason = "Couldn't start: working directory not found"
+  const view = page.getByTestId('card-view')
+  await expect(view.getByTestId('card-status-label')).toHaveText(reason)
+  // No retry on its own while the view stays open.
+  mkdirSync(dir)
+  await page.waitForTimeout(500)
+  await expect(view.getByTestId('card-status-label')).toHaveText(reason)
+
+  await back()
+  await openCard('x')
+  await expect(view.getByTestId('card-status-label')).toHaveText('Running')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(dir)
+})
+
+test("#5 AC11: a Stopped card isn't counted as running and is deleted without asking", async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'agent')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('exit')
+  await stoppedToBoard('agent')
+  await newCard('Backlog', 'sh')
+  await back()
+
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog').locator('.modal-message')).toHaveText(
+    'Delete "alpha"? This removes its board. 1 terminal is still running and will be stopped.'
+  )
+  await page.getByTestId('confirm-cancel').click()
+
+  await cardAction('agent', 'card-menu-delete')
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect(card('agent')).toHaveCount(0)
+  await expect(card('sh')).toHaveCount(1)
+
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText(
+    '1 terminal is still running and will be stopped.'
+  )
 })

@@ -49,7 +49,7 @@ describe('card delete confirmation (AC10, D13)', () => {
     expect(cardDeleteConfirmation('api', { kind: 'running' })).toBe(
       'Delete "api"? Its terminal is still running and will be stopped.'
     )
-    expect(cardDeleteConfirmation('old', { kind: 'exited', exitCode: 0 })).toBeNull()
+    expect(cardDeleteConfirmation('old', { kind: 'stopped' })).toBeNull()
     expect(cardDeleteConfirmation('x', { kind: 'failed', reason: 'nope' })).toBeNull()
     expect(cardDeleteConfirmation('gone', undefined)).toBeNull()
   })
@@ -59,7 +59,7 @@ describe('workspace delete message (AC12, D15)', () => {
   const states: Record<string, CardRunState> = {
     a: { kind: 'running' },
     b: { kind: 'running' },
-    c: { kind: 'exited', exitCode: 0 },
+    c: { kind: 'stopped' },
     d: { kind: 'failed', reason: 'nope' }
   }
 

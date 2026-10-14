@@ -11,6 +11,7 @@ import { open, readFile, rename, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isDirectory } from '../core/directories'
 import { isSyncFolderPath } from '../core/settings'
+import { boundedWait } from '../core/bounded-wait'
 import { applySyncBoard } from '../core/sync-apply'
 import { SyncFolder } from '../core/sync-folder'
 import type { SyncStatus } from '../core/sync-status'
@@ -27,7 +28,21 @@ export interface MainSync {
    * sync folder's queue is empty (#26 D5).
    */
   flush(): Promise<void>
+  /** Whether a board is pending or a sync operation is queued or running (#26 D5's quit hold). */
+  busy(): boolean
+  /**
+   * Settles once the launch read has applied its board, or `SYNC_LAUNCH_WAIT_MS` after launch,
+   * whichever comes first (#26 D4); the window's first `state:load` waits for it.
+   */
+  launched: Promise<void>
 }
+
+/**
+ * The longest the window's first `state:load` waits for the launch read (#26 D4): a folder that
+ * answers within it opens the window on the synced board (#13 D11); a later read applies its board
+ * as any read does.
+ */
+export const SYNC_LAUNCH_WAIT_MS = 1000
 
 /** Folder events come in bursts (a temp file, then a rename): read once they settle. */
 const WATCH_SETTLE_MS = 100
@@ -40,10 +55,10 @@ const UNAVAILABLE_RETRY_MS = 2000
 
 /**
  * The sync folder (#13 D1, D4, D9, D10, D11, D13, D14): reads the folder from the settings at once
- * and applies its board to main's state once read (#26 S2 makes the window's first load wait for
- * it, bounded, so the window opens on the synced board), reads it again whenever the folder
- * changes or a window gains focus, writes the board from every save, and serves the `sync:*`
- * channels to a window's own top-level page only.
+ * and applies its board to main's state once read (the window's first load waits for it, at most
+ * `SYNC_LAUNCH_WAIT_MS`, #26 D4, so the window opens on the synced board), reads it again whenever
+ * the folder changes or a window gains focus, writes the board from every save, and serves the
+ * `sync:*` channels to a window's own top-level page only.
  */
 export function registerSync(state: MainState, settings: MainSettings): MainSync {
   // D15: a test can give each instance its own home, which D5 maps to `~`.
@@ -138,8 +153,8 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
     if (kind !== 'off' && watcher === null) watchFolder(sync.folderPath())
   }
 
-  const launched = sync.start(settings.syncFolder(), state.load())
-  void applyWhenRead(launched).then(() => {
+  // A launch read that finishes after `SYNC_LAUNCH_WAIT_MS` still applies its board (#26 D4).
+  const launchApplied = applyWhenRead(sync.start(settings.syncFolder(), state.load())).then(() => {
     if (watcher === null) watchFolder(sync.folderPath())
   })
   app.on('browser-window-focus', readNow)
@@ -198,6 +213,8 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
       stopRetry()
       unwatch()
       return sync.flush()
-    }
+    },
+    busy: () => sync.busy(),
+    launched: boundedWait(launchApplied, SYNC_LAUNCH_WAIT_MS)
   }
 }

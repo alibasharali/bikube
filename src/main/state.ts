@@ -21,6 +21,11 @@ export interface MainState {
    */
   set(state: WorkspaceState): void
   flush(): void
+  /**
+   * Holds every `state:load` until `ready` settles (the sync folder's bounded launch read, #13 D11,
+   * #26 D4), so the window's first board is the synced one when the folder answers in time.
+   */
+  holdLoad(ready: Promise<unknown>): void
 }
 
 /**
@@ -43,8 +48,11 @@ export function registerState(onSaved?: (state: WorkspaceState) => void): MainSt
   const fromMainFrame = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
 
+  let loadReady: Promise<unknown> = Promise.resolve()
   ipcMain.handle(IPC.stateLoad, async (event) => {
     if (!fromMainFrame(event)) throw new Error('state:load rejected: untrusted sender')
+    // A launch read that failed still answers, with the local board.
+    await loadReady.catch(() => {})
     return file.load()
   })
   ipcMain.on(IPC.stateSave, (event, state: unknown) => {
@@ -55,6 +63,9 @@ export function registerState(onSaved?: (state: WorkspaceState) => void): MainSt
     set: (next) => {
       file.save(next)
     },
-    flush: () => file.flush()
+    flush: () => file.flush(),
+    holdLoad: (ready) => {
+      loadReady = ready
+    }
   }
 }

@@ -1,5 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { boundedWait } from '../core/bounded-wait'
+import { killAtQuit, quitHold } from '../core/quit-hold'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerClipboard } from './clipboard'
@@ -9,7 +11,10 @@ import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
 
-/** The longest a quit waits for the shells to exit (#18 D2): the kill's grace period + 1 s. */
+/**
+ * The longest one quit hold waits for the shells to exit (#18 D2) and the sync folder's flush
+ * (#26 D5): the kill's grace period + 1 s.
+ */
 const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
 
 function createWindow(settings: MainSettings): void {
@@ -60,6 +65,8 @@ function startApp(): void {
   const settings = registerSettings()
   // The sync folder from the settings, read before the window asks for its status (#13 D13).
   const sync = registerSync(state, settings)
+  // The window's first board waits for the launch read, bounded (#13 D11, #26 D4).
+  state.holdLoad(sync.launched)
   const socketPath = boardSocketPath()
   // Each SSH session's own `board` socket (#25 D2), relaying once `registerBoard` runs.
   const sshBoard = sshBoardSockets(socketPath)
@@ -75,24 +82,39 @@ function startApp(): void {
   })
 
   // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives
-  // the app (#18 D2): the first quit with live shells is held until they have exited (SIGHUP, then
-  // SIGKILL, #18 D1) or `QUIT_WAIT_MS` passed; any later quit flushes again (the window stays live
-  // during the hold, so changes can still come in), SIGKILLs what is left and goes through.
-  let holding = false
+  // the app (#18 D2): the first quit with live shells or a busy sync folder is held until the
+  // shells have exited (SIGHUP, then SIGKILL, #18 D1) and the sync folder's flush is done, or
+  // `QUIT_WAIT_MS` passed (#26 D5). Any later quit flushes again (the window stays live during the
+  // hold, so changes can still come in) and SIGKILLs what is left; the second is held once more,
+  // at most `QUIT_WAIT_MS`, while the sync folder is still busy, and a third goes through.
+  let holds = 0
+  /** Whether the sync folder was busy when the quit that went through began (before its flush). */
+  let busyAtLastQuit = false
   app.on('before-quit', (event) => {
     state.flush()
     settings.flush()
-    // #26 D5: async now; the quit hold that waits for it comes with #26's S2.
-    void sync.flush()
-    if (holding) {
-      terminals.forceKillAll()
-      return
-    }
-    if (terminals.sessionCount === 0) return
-    holding = true
+    const syncBusy = sync.busy()
+    const synced = sync.flush()
+    if (holds > 0) terminals.forceKillAll()
+    const hold = quitHold({ holds, liveShells: terminals.sessionCount > 0, syncBusy })
+    busyAtLastQuit = syncBusy
+    if (!hold.hold) return
+    holds++
     event.preventDefault()
-    const waited = new Promise<void>((resolve) => setTimeout(resolve, QUIT_WAIT_MS))
-    void Promise.race([terminals.killAll(), waited]).then(() => app.quit())
+    const done = hold.shells ? Promise.all([terminals.killAll(), synced]) : synced
+    void boundedWait(done, QUIT_WAIT_MS).then(() => app.quit())
+  })
+
+  // Electron emits `quit` after `will-quit` (which closes the `board` sockets). A sync folder still
+  // busy here may have a libuv worker blocked in a stalled fs call, which would keep the process
+  // (and its single-instance lock) alive forever: main's state and settings are already flushed
+  // and every shell killed, so it ends itself (#26 D5). Busy counts only what was queued before
+  // that quit's own flush, which does no fs call when nothing was pending.
+  app.on('quit', () => {
+    const syncBusy = busyAtLastQuit && sync.busy()
+    if (!killAtQuit({ syncBusy, platform: process.platform })) return
+    console.error('sync folder still busy at quit; ending the process')
+    process.kill(process.pid, 'SIGKILL')
   })
 
   // Another launch on the same data directory: bring this one's window forward instead.

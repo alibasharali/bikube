@@ -22,9 +22,24 @@ mac:
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
+# Linux release: AppImage and .deb, x64 only (#14 D2, D4, D5). Chromium's
+# sandbox stays on: no sandbox-disabling flags here (#14 D6).
 linux:
   target:
-    - AppImage
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
   category: Development
+  executableName: drovr
+  maintainer: Drovr
+appImage:
+  artifactName: ${name}-${version}-x86_64.${ext}
+  # electron-builder otherwise puts --no-sandbox in the AppImage's desktop entry.
+  executableArgs: []
+deb:
+  artifactName: ${name}-${version}-amd64.${ext}
 npmRebuild: true
 publish: null

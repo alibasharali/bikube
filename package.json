@@ -4,6 +4,7 @@
   "description": "A kanban board where every card is a live terminal",
   "main": "./out/main/index.js",
   "author": "Drovr",
+  "homepage": "https://github.com/alibasharali/drovr",
   "private": true,
   "scripts": {
     "format": "prettier --write .",
@@ -16,7 +17,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "dist": "npm run build && electron-builder --mac",
+    "dist": "npm run build && electron-builder",
     "pack": "npm run build && electron-builder --dir",
     "test:smoke": "electron-vite build && playwright test",
     "benchmark": "electron-vite build && playwright test -c playwright.benchmark.config.ts"

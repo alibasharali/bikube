@@ -239,3 +239,41 @@ describe('CardPanes failures and the limit', () => {
     expect(panes.layout(API.id).focused).toBe(MAIN_PANE)
   })
 })
+
+describe('CardPanes.dispose', () => {
+  it("kills every extra pane's shell, discards the panes and resets the layout (D6)", async () => {
+    const first = panes.split(API, 'right')!
+    panes.split(API, 'down')
+    const starting = panes.split(API, 'right')!
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await flush()
+    const changes: number[] = []
+    panes.subscribe(API.id, () => changes.push(1))
+
+    panes.dispose(API.id)
+    expect(api.kills.sort()).toEqual(['s1', 's2'])
+    expect(screens.every((s) => s.disposed)).toBe(true)
+    expect(panes.layout(API.id)).toEqual({
+      tree: { kind: 'leaf', id: MAIN_PANE },
+      focused: MAIN_PANE
+    })
+    expect(panes.screen(API.id, first)).toBeUndefined()
+    expect(changes.length).toBeGreaterThan(0)
+    // A shell still starting is killed once its session arrives.
+    api.spawns[2].resolve({ ok: true, id: 's3' })
+    await flush()
+    expect(api.kills).toContain('s3')
+    expect(panes.screen(API.id, starting)).toBeUndefined()
+    // A later split starts from the main pane alone.
+    const next = panes.split(API, 'right')!
+    expect(paneIds(panes.layout(API.id).tree)).toEqual([MAIN_PANE, next])
+  })
+
+  it('leaves a card with no extra panes as it is', () => {
+    const layout = panes.layout(API.id)
+    panes.dispose(API.id)
+    expect(panes.layout(API.id)).toBe(layout)
+    expect(api.kills).toEqual([])
+  })
+})

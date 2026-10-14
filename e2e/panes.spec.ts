@@ -14,11 +14,12 @@ const ALPHA = '/tmp/drovr-alpha'
 let app: ElectronApplication
 let page: Page
 let root: string
+let dataDir: string
 
 test.beforeEach(async () => {
   mkdirSync(ALPHA, { recursive: true })
   root = mkdtempSync(join(tmpdir(), 'drovr-panes-'))
-  ;({ app, page } = await launchApp())
+  ;({ app, page, dataDir } = await launchApp())
 })
 
 test.afterEach(async () => {
@@ -353,4 +354,186 @@ test('AC11: font size reaches every pane, each refitted to its own columns', asy
     await run(index, 'echo cols-$(tput cols)')
     await expectLine(index, `cols-${cols}`)
   }
+})
+
+/** The shell pids of the first `count` panes, in tree order; clicks each pane to read it. */
+async function panePids(count: number): Promise<number[]> {
+  const pids: number[] = []
+  for (let index = 0; index < count; index++) {
+    await panes().nth(index).click()
+    pids.push(await shellPid(index))
+  }
+  return pids
+}
+
+/** `api` with `count` panes: main | (extra over extra), the newest focused. */
+async function apiWithPanes(count: 2 | 3): Promise<void> {
+  await openApi()
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  if (count === 3) {
+    await page.getByTestId('pane-split-down').click()
+    await expect(panes()).toHaveCount(3)
+  }
+}
+
+async function back(): Promise<void> {
+  await page.getByTestId('card-back').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+}
+
+async function openCard(title: string): Promise<void> {
+  await card(title).getByTestId('card-open').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+}
+
+test('AC6: Back keeps the panes, their output and focus; the board shows the main pane only', async () => {
+  await apiWithPanes(2)
+  const pids = await panePids(2)
+  await panes().nth(0).click()
+  await run(0, "printf 'main-line'; sleep 600")
+  await expectLine(0, 'main-line')
+  await panes().nth(1).click()
+  await run(1, "printf 'extra-line'; sleep 600")
+  await expectLine(1, 'extra-line')
+
+  await back()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('main-line')
+  // Output in the extra pane never reaches the board, however long it waits (D8).
+  await page.waitForTimeout(600)
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('main-line')
+
+  await openCard('api')
+  await expect(panes()).toHaveCount(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'false')
+  await expect.poll(focusedPaneIndex).toBe(1)
+  expect(await bufferLines(0)).toContain('main-line')
+  expect(await bufferLines(1)).toContain('extra-line')
+  expect(pids.map(alive)).toEqual([true, true])
+})
+
+test('AC7: the main shell exiting ends every pane; reopening shows only the main pane', async () => {
+  await apiWithPanes(3)
+  const [, ...extras] = await panePids(3)
+  await panes().nth(0).click()
+  await run(0, 'exit')
+
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  for (const pid of extras) await expect.poll(() => alive(pid)).toBe(false)
+
+  await openCard('api')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(panes()).toHaveCount(1)
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+})
+
+test('AC7: Close from the header ends every pane', async () => {
+  await apiWithPanes(2)
+  const pids = await panePids(2)
+  await page.getByTestId('card-close').click()
+  await page.getByTestId('confirm-close').click()
+
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  for (const pid of pids) await expect.poll(() => alive(pid)).toBe(false)
+})
+
+test('AC8: deleting the workspace counts the card once and ends all its panes', async () => {
+  await apiWithPanes(3)
+  const pids = await panePids(3)
+  await back()
+
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText(
+    'Delete "alpha"? This removes its board. 1 terminal is still running and will be stopped.'
+  )
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('empty-state')).toBeVisible()
+  for (const pid of pids) await expect.poll(() => alive(pid)).toBe(false)
+})
+
+test('AC8: deleting a running card with 2 panes from its menu ends both shells', async () => {
+  await apiWithPanes(2)
+  const pids = await panePids(2)
+  await back()
+
+  await card('api').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText(
+    'Delete "api"? Its terminal is still running and will be stopped.'
+  )
+  await page.getByTestId('confirm-delete').click()
+  await expect(card('api')).toHaveCount(0)
+  for (const pid of pids) await expect.poll(() => alive(pid)).toBe(false)
+})
+
+let boardRuns = 0
+
+/** Runs a `board` command in pane `index` and returns its exit code, read from the screen. */
+async function board(index: number, command: string): Promise<number> {
+  const tag = `b${++boardRuns}`
+  await run(index, `${command} >/dev/null 2>&1; echo "${tag} rc=$?"`)
+  const pattern = new RegExp(`^${tag} rc=(\\d+)$`)
+  let code = -1
+  // The first `board` of a run can be slow to start (see e2e/board-cli.spec.ts).
+  await expect
+    .poll(
+      async () => {
+        const line = (await bufferLines(index)).find((l) => pattern.test(l))
+        code = line ? Number(pattern.exec(line)![1]) : -1
+        return code
+      },
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThanOrEqual(0)
+  return code
+}
+
+test('AC9: board works from an extra pane, and from the main pane after the extra one closes', async () => {
+  await apiWithPanes(2)
+  expect(await board(1, 'board status . building')).toBe(0)
+  await back()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Running · building')
+
+  await openCard('api')
+  expect(await board(1, 'board move . Done')).toBe(0)
+  await back()
+  await expect(column('Done').getByTestId('card-title').last()).toHaveText('api')
+
+  await openCard('api')
+  await panes().nth(1).getByRole('button', { name: 'Close pane' }).click()
+  await expect(panes()).toHaveCount(1)
+  expect(await board(0, 'board status . again')).toBe(0)
+  await back()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Running · again')
+})
+
+/** Every key in a parsed JSON value, at any depth. */
+function keysOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(keysOf)
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, child]) => [key, ...keysOf(child)])
+  }
+  return []
+}
+
+test('AC10: panes are not kept across a restart', async () => {
+  await apiWithPanes(3)
+  await app.close()
+  ;({ app, page } = await launchApp({ dataDir }))
+
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  await openCard('api')
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(panes()).toHaveCount(1)
+
+  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  expect(saved.version).toBe(1)
+  expect(keysOf(saved).filter((key) => /pane|layout|split|focus/i.test(key))).toEqual([])
 })

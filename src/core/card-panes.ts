@@ -114,6 +114,18 @@ export class CardPanes<S extends CardScreen> {
     this.remove(cardId, paneId)
   }
 
+  /**
+   * Ends the card's extra panes (D6), when its main pane's shell stops or the card is deleted:
+   * kills every extra pane's shell (one still starting once its session arrives), discards the
+   * panes and resets the layout to the main pane alone.
+   */
+  dispose(cardId: string): void {
+    for (const paneId of [...(this.panes.get(cardId)?.keys() ?? [])]) this.close(cardId, paneId)
+    this.panes.delete(cardId)
+    if (!this.layouts.delete(cardId)) return
+    this.listeners.get(cardId)?.forEach((l) => l())
+  }
+
   /** Called when the card's layout changes. Returns an unsubscribe function. */
   subscribe(cardId: string, listener: () => void): () => void {
     let set = this.listeners.get(cardId)

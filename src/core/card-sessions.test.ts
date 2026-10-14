@@ -419,6 +419,33 @@ describe('CardSessions', () => {
   })
 })
 
+describe('onStopped (#11 D6)', () => {
+  it("tells the listener with the card's id when its shell stops, however it stopped", async () => {
+    const stopped: string[] = []
+    sessions.onStopped((cardId) => stopped.push(cardId))
+    await started('c1', { ok: true, id: 's1' })
+    await started('c2', { ok: true, id: 's2' })
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(stopped).toEqual(['c1'])
+    sessions.close('c2')
+    api.emitExit({ id: 's2', exitCode: 0 })
+    expect(stopped).toEqual(['c1', 'c2'])
+  })
+
+  it('tells it of a shell that exited before its spawn reply, not of a dispose', async () => {
+    const stopped: string[] = []
+    sessions.onStopped((cardId) => stopped.push(cardId))
+    sessions.start(card('c1'))
+    api.emitExit({ id: 's1', exitCode: 1 })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(stopped).toEqual(['c1'])
+    await started('c2', { ok: true, id: 's2' })
+    sessions.dispose('c2')
+    expect(stopped).toEqual(['c1'])
+  })
+})
+
 describe('agent status (#9 D8)', () => {
   it('shows in place of the last output line while running, even after more output', async () => {
     await started('c1', { ok: true, id: 's1' })

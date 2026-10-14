@@ -55,6 +55,7 @@ interface Entry<S> {
 
 export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
+  private readonly stoppedListeners: ((cardId: string) => void)[] = []
 
   /** `router` is shared with the cards' extra panes (#11), or a new one over `api`. */
   constructor(
@@ -119,7 +120,7 @@ export class CardSessions<S extends CardScreen> {
       entry.sessionId = result.id
       const early = this.router.adopt(result.id, {
         output: (data) => this.output(entry, data),
-        exited: (exit) => this.exited(entry, exit)
+        exited: (exit) => this.exited(card.id, entry, exit)
       })
       // The view may have fitted the screen while the shell was starting.
       if (screen.cols !== cols || screen.rows !== rows) {
@@ -131,7 +132,7 @@ export class CardSessions<S extends CardScreen> {
         if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
       }
       early.data.forEach((data) => this.output(entry, data))
-      if (early.exit) this.exited(entry, early.exit)
+      if (early.exit) this.exited(card.id, entry, early.exit)
     })
   }
 
@@ -160,6 +161,15 @@ export class CardSessions<S extends CardScreen> {
     entry.agentStatus = text
     this.refresh(entry)
     return true
+  }
+
+  /**
+   * Called with a card's id each time its shell stops for any reason (it exits, or is Closed),
+   * once the card is Stopped; not when the card is disposed. The card's extra panes end with it
+   * (#11 D6).
+   */
+  onStopped(listener: (cardId: string) => void): void {
+    this.stoppedListeners.push(listener)
   }
 
   /** Called when the card's status changes. Returns an unsubscribe function. */
@@ -206,7 +216,7 @@ export class CardSessions<S extends CardScreen> {
   }
 
   /** Stopped: the old screen and its scrollback are discarded (#5 D6). */
-  private exited(entry: Entry<S>, { id }: TerminalExit): void {
+  private exited(cardId: string, entry: Entry<S>, { id }: TerminalExit): void {
     this.router.release(id)
     entry.sessionId = null
     entry.screen?.dispose()
@@ -215,6 +225,7 @@ export class CardSessions<S extends CardScreen> {
     entry.timer = null
     entry.dirty = false
     this.setState(entry, { kind: 'stopped' })
+    this.stoppedListeners.forEach((listener) => listener(cardId))
   }
 
   /** Leading-edge update, then at most one more per interval while output keeps coming. */

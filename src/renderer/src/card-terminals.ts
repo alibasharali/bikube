@@ -228,7 +228,11 @@ function sessionRouter(): SessionRouter {
 
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
-  registry ??= new CardSessions(window.drovr.terminal, () => new XtermScreen(), sessionRouter())
+  if (!registry) {
+    registry = new CardSessions(window.drovr.terminal, () => new XtermScreen(), sessionRouter())
+    // When the main pane's shell stops, every extra pane ends with it (#11 D6).
+    registry.onStopped((cardId) => cardPanes().dispose(cardId))
+  }
   return registry
 }
 

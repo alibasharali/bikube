@@ -34,4 +34,14 @@ describe('SessionCards', () => {
     cards.remove('nope')
     expect(cards.sessionOf('c1')).toBe('s1')
   })
+
+  it('keeps a card live while any of its sessions is, e.g. its main pane after an extra one closes (#11 D8)', () => {
+    const cards = new SessionCards()
+    cards.add('main', 'c1')
+    cards.add('extra', 'c1')
+    cards.remove('extra')
+    expect(cards.sessionOf('c1')).toBe('main')
+    cards.remove('main')
+    expect(cards.sessionOf('c1')).toBeUndefined()
+  })
 })

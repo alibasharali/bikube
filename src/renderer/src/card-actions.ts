@@ -1,6 +1,6 @@
 import { keyMoveTarget, type CardMoveDirection } from '../../core/card-moves'
 import type { Workspace } from '../../core/workspace-store'
-import { cardTerminals } from './card-terminals'
+import { cardPanes, cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
 
 /**
@@ -26,15 +26,21 @@ export function closeCard(cardId: string): void {
   cardTerminals().close(cardId)
 }
 
-/** Deletes a card and stops its process, freeing its terminal (#4 D13). */
-export function removeCard(workspaceId: string, cardId: string): void {
+/** Stops every pane's process of a card being deleted and frees its screens (#11 D6). */
+function disposeCard(cardId: string): void {
+  cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
+}
+
+/** Deletes a card and stops its processes, freeing its terminals (#4 D13, #11 D6). */
+export function removeCard(workspaceId: string, cardId: string): void {
+  disposeCard(cardId)
   workspaceStore.deleteCard(workspaceId, cardId)
 }
 
-/** Deletes a workspace and stops every one of its cards' processes (#4 D15). */
+/** Deletes a workspace and stops every one of its cards' processes (#4 D15, #11 D6). */
 export function removeWorkspace(workspace: Workspace): void {
-  workspace.cards.forEach((card) => cardTerminals().dispose(card.id))
+  workspace.cards.forEach((card) => disposeCard(card.id))
   workspaceStore.deleteWorkspace(workspace.id)
 }
 

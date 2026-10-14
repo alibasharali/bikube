@@ -14,4 +14,4 @@ None (full auto).
 
 ## Verification
 
-- todo
+- done: AC1 20 passes in a row (settings AC3), check.sh green, smoke 174 passed

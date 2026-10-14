@@ -9,7 +9,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | S1 | done | `eb6b9bd..2072cf7` | CLEAN | `autoHideMenuBar` in createWindow |
 | S2 | done | `0ecd60e..13eac85` | HUMAN → rulings r3, r4; comment fix r1 | `npm run dist` = build + electron-builder (current OS); `dist/drovr-<v>-x86_64.AppImage`, `dist/drovr-<v>-amd64.deb`; .deb → `/opt/Drovr/drovr`, `/usr/bin/drovr`; packaged unpacked app `dist/linux-unpacked/drovr` |
 | S3 | done | `3f4ff72..16e633c` | CLEAN | `npm run test:packaged` = pack + `playwright.packaged.config.ts`; CI step "Packaged app check"; `launchApp({ executablePath })` |
-| S4 | todo | | | |
+| S4 | done | `fed34b6..5b52d53` | CLEAN | release.yml `linux` job |
 
 ## Rulings
 

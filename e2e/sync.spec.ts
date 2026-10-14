@@ -580,3 +580,61 @@ test('AC13: one change is written once and never echoed between the machines', a
     watcher.close()
   }
 })
+
+// Failures (S3, D12).
+
+/** A synced to `folder` with workspace `api`, Settings closed. */
+async function oneSynced(folder: string): Promise<Instance> {
+  const a = await launch(makeDir('ha'))
+  await createWorkspace(a.page, makeDir('ha', 'api'), 'api')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  await expect(a.page.getByTestId('sync-status')).toHaveText(SYNCED)
+  return a
+}
+
+const cardsInFile = (folder: string): string[] | undefined =>
+  readSyncFile(folder)?.board.workspaces[0]?.cards.map((c) => c.title)
+
+test('AC9: a removed folder shows unavailable, changes persist across a restart, and it is written again once back', async () => {
+  const folder = makeDir('F')
+  let a = await oneSynced(folder)
+
+  rmSync(folder, { recursive: true, force: true })
+  await expect(a.page.getByTestId('sync-status')).toHaveText('Sync folder unavailable', {
+    timeout: 5000
+  })
+  await newCard(a.page, 'offline')
+  await expect(a.page.getByTestId('sync-status')).toHaveText('Sync folder unavailable')
+
+  await quit(a)
+  a = await launch(a.home, a.dataDir)
+  await expect(card(a.page, 'offline')).toHaveCount(1)
+  await expect(a.page.getByTestId('sync-status')).toHaveText('Sync folder unavailable')
+
+  mkdirSync(folder)
+  await expect.poll(() => cardsInFile(folder), { timeout: 5000 }).toEqual(['offline'])
+  await expect(a.page.getByTestId('sync-status')).toHaveText(SYNCED)
+  // Watched again: a later change reaches the file.
+  await newCard(a.page, 'back')
+  await expect.poll(() => cardsInFile(folder), { timeout: 2000 }).toEqual(['offline', 'back'])
+})
+
+test('AC10: an unreadable file shows unreadable, the board stays, and the file is never overwritten', async () => {
+  const folder = makeDir('F')
+  const a = await oneSynced(folder)
+  await newCard(a.page, 'one')
+  await expect.poll(() => cardsInFile(folder), { timeout: 2000 }).toEqual(['one'])
+
+  writeFileSync(syncFilePath(folder), 'not json')
+  await expect(a.page.getByTestId('sync-status')).toHaveText('Sync file unreadable', {
+    timeout: 5000
+  })
+  expect(await cardTitles(a.page.getByTestId('board'))).toEqual(['one'])
+
+  await newCard(a.page, 'two')
+  expect(await cardTitles(a.page.getByTestId('board'))).toEqual(['one', 'two'])
+  await a.page.waitForTimeout(2000)
+  expect(readFileSync(syncFilePath(folder), 'utf8')).toBe('not json')
+  await expect(a.page.getByTestId('sync-status')).toHaveText('Sync file unreadable')
+})

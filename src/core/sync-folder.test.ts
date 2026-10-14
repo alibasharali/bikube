@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StateFileFs } from './state-file'
-import { SYNC_WRITE_DELAY_MS, SyncFolder } from './sync-folder'
+import { dirname } from 'node:path'
+import { SYNC_WRITE_DELAY_MS, SyncFolder, type SyncFolderFs } from './sync-folder'
 import type { SyncStatus } from './sync-status'
 import type { Workspace, WorkspaceState } from './workspace-store'
 
@@ -11,8 +11,10 @@ const TMP = '/sync/drovr-board.json.tmp'
 const NOW = new Date(Date.UTC(2026, 9, 14, 9, 5, 0))
 
 /** An in-memory directory that records every call that changes it, in order. */
-class FakeFs implements StateFileFs {
+class FakeFs implements SyncFolderFs {
   files = new Map<string, string>()
+  /** The directories that exist; removing F (and its files) is `removeFolder`. */
+  dirs = new Set([F])
   events: string[] = []
   failWrites = false
   readError: string | null = null
@@ -24,8 +26,18 @@ class FakeFs implements StateFileFs {
     if (text === undefined) throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
     return text
   }
+  statSync(path: string): { isDirectory(): boolean } {
+    if (this.dirs.has(path)) return { isDirectory: () => true }
+    if (this.files.has(path)) return { isDirectory: () => false }
+    throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT' })
+  }
+  removeFolder(): void {
+    this.dirs.delete(F)
+    for (const path of [...this.files.keys()]) if (dirname(path) === F) this.files.delete(path)
+  }
   openSync(path: string): number {
-    if (this.failWrites) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    if (this.failWrites || !this.dirs.has(dirname(path)))
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
     const fd = this.nextFd++
     this.open.set(fd, path)
     this.files.set(path, '')
@@ -368,5 +380,156 @@ describe('reading changes live (#13 D4, D7, D11, AC2, AC13)', () => {
     const sync = open()
     otherWrites(api)
     expect(sync.read()).toBeNull()
+  })
+})
+
+describe('the folder unavailable (#13 D12, AC9)', () => {
+  const api = workspace('api', 'api')
+  /** Another machine, with its own home, writing `workspaces` to the shared folder. */
+  const otherWrites = (...workspaces: Workspace[]): void => {
+    const other = new SyncFolder({ fs, home: '/home/other', now: () => NOW, log: () => {} })
+    other.start(F, state())
+    other.noteBoard(
+      state(
+        ...workspaces.map((w) => ({ ...w, directory: w.directory.replace(HOME, '/home/other') }))
+      )
+    )
+    other.flush()
+  }
+
+  it('reports unavailable when a live read finds the folder removed', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    expect(sync.read()).toBeNull()
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: F })
+  })
+
+  it("writes this machine's board to the folder once it is back with no file, and reports synced", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    sync.read()
+    fs.dirs.add(F)
+    expect(sync.read()).toBeNull()
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api'])
+    expect(sync.status()).toEqual({ kind: 'synced', folder: F, at: NOW.toISOString() })
+  })
+
+  it("writes this machine's board when a live read finds the folder there but no file", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'api2' }))
+    fs.files.delete(FILE)
+    expect(sync.read()).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('api2')
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it('reports unavailable when the folder is now a file', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    fs.files.set(F, 'a file')
+    sync.read()
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: F })
+  })
+
+  it("writes this machine's change made meanwhile over the file it finds when the folder is back", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    sync.read()
+    sync.noteBoard(state({ ...api, name: 'offline' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(sync.status().kind).toBe('unavailable')
+    fs.dirs.add(F)
+    otherWrites({ ...api, name: 'remote' })
+    expect(sync.read()).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('offline')
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it('applies the file it finds when the folder is back and nothing changed here meanwhile', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    sync.read()
+    fs.dirs.add(F)
+    otherWrites({ ...api, name: 'remote' })
+    const before = writes()
+    expect(sync.read()).toEqual([{ ...api, name: 'remote' }])
+    expect(writes()).toBe(before)
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it('at launch with the folder unavailable, applies the file once it is back (D11)', () => {
+    fs.removeFolder()
+    const sync = open()
+    expect(sync.start(F, state(api))).toBeNull()
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: F })
+    fs.dirs.add(F)
+    otherWrites({ ...api, name: 'remote' })
+    const before = writes()
+    expect(sync.read()).toEqual([{ ...api, name: 'remote' }])
+    expect(writes()).toBe(before)
+  })
+
+  it('retries on the next change, never overwriting an unreadable file found there', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    sync.read()
+    fs.dirs.add(F)
+    fs.files.set(FILE, 'not json')
+    sync.noteBoard(state({ ...api, name: 'offline' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    sync.flush()
+    expect(fs.files.get(FILE)).toBe('not json')
+    expect(sync.status()).toEqual({ kind: 'unreadable', folder: F })
+  })
+
+  it('retries on the next change, writing the board once the folder is back', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    fs.removeFolder()
+    sync.read()
+    fs.dirs.add(F)
+    sync.noteBoard(state({ ...api, name: 'offline' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(written().board.workspaces[0].name).toBe('offline')
+    expect(sync.status().kind).toBe('synced')
+  })
+})
+
+describe('the file unreadable (#13 D3, D12, AC10)', () => {
+  const api = workspace('api', 'api')
+
+  it('reports unreadable on a live read and never writes the file, even a pending change', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'pending' }))
+    fs.files.set(FILE, 'not json')
+    expect(sync.read()).toBeNull()
+    expect(sync.status()).toEqual({ kind: 'unreadable', folder: F })
+    sync.noteBoard(state({ ...api, name: 'later' }))
+    vi.advanceTimersByTime(5000)
+    sync.flush()
+    expect(sync.read()).toBeNull()
+    expect(fs.files.get(FILE)).toBe('not json')
+  })
+
+  it('applies the file once it is valid again, and writes later changes', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    const good = fs.files.get(FILE)!
+    fs.files.set(FILE, 'not json')
+    sync.read()
+    fs.files.set(FILE, good.replace('"name":"api"', '"name":"fixed"'))
+    expect(sync.read()).toEqual([{ ...api, name: 'fixed' }])
+    expect(sync.status().kind).toBe('synced')
+    sync.noteBoard(state({ ...api, name: 'after' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(written().board.workspaces[0].name).toBe('after')
   })
 })

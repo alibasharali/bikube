@@ -19,8 +19,13 @@ import type { Workspace, WorkspaceState } from './workspace-store'
 /** How long after a board change the file is written; D4 asks for within 1 second. */
 export const SYNC_WRITE_DELAY_MS = 200
 
+/** The state file's fs, plus `statSync` to tell a missing file from a missing folder (D12). */
+export interface SyncFolderFs extends StateFileFs {
+  statSync(path: string): { isDirectory(): boolean }
+}
+
 export interface SyncFolderOptions {
-  fs: StateFileFs
+  fs: SyncFolderFs
   /** This machine's home directory, which D5 maps to `~`. */
   home: string
   now?: () => Date
@@ -41,6 +46,11 @@ export class SyncFolder {
   private current: SyncStatus = { kind: 'off' }
   /** D3's `board` as last read from or written to the file, serialized (D4); null for none. */
   private last: string | null = null
+  /**
+   * This machine's board as last noted (launch, folder set, saves, or a board handed over to
+   * apply), serialized; what D12's recovery writes when it differs from `last`. Null for none.
+   */
+  private local: string | null = null
   /** The board to write when the timer fires, serialized. */
   private pending: string | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -67,6 +77,7 @@ export class SyncFolder {
     this.cancelPending()
     this.folder = folder
     this.last = null
+    this.local = this.boardText(local.workspaces)
     if (folder === null) {
       this.setStatus({ kind: 'off' })
       return null
@@ -74,12 +85,13 @@ export class SyncFolder {
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
-        this.write(this.boardText(local.workspaces))
+        this.write(this.local)
         return null
       case 'valid': {
         const joined = joinBoards(read.workspaces, local.workspaces)
         this.last = this.boardText(read.workspaces)
         const text = this.boardText(joined)
+        this.local = text
         if (text === this.last)
           this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         else this.write(text)
@@ -105,14 +117,16 @@ export class SyncFolder {
   start(folder: string | null, local: WorkspaceState): Workspace[] | null {
     this.folder = folder
     this.last = null
+    this.local = this.boardText(local.workspaces)
     if (folder === null) return null
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
-        this.write(this.boardText(local.workspaces))
+        this.write(this.local)
         return null
       case 'valid':
         this.last = this.boardText(read.workspaces)
+        this.local = this.last
         this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         return read.workspaces
       case 'unreadable':
@@ -120,6 +134,8 @@ export class SyncFolder {
         this.setStatus({ kind: 'unreadable', folder })
         return null
       case 'unavailable':
+        // Nothing has changed here since launch: once the folder is back its file applies (D11).
+        this.last = this.local
         this.log(`sync folder unavailable (${read.reason})`)
         this.setStatus({ kind: 'unavailable', folder })
         return null
@@ -130,34 +146,40 @@ export class SyncFolder {
    * Reads the file again (the folder changed, or a window gained focus, D11): returns its board
    * for this machine to apply when it differs from the last one read or written (D4, D7), dropping
    * a pending write of an older board (last writer wins); else null. Applying it saves a board
-   * equal to the file's, which is then not written back, so machines never echo (D4).
+   * equal to the file's, which is then not written back, so machines never echo (D4). A folder
+   * with no file gets this machine's board. While the folder is unavailable this is D12's retry.
    */
   read(): Workspace[] | null {
     const folder = this.folder
     if (folder === null) return null
+    const recovering = this.current.kind === 'unavailable'
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
+        this.cancelPending()
+        if (this.local !== null) this.write(this.local)
         return null
       case 'valid': {
-        this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         const text = this.boardText(read.workspaces)
+        // D12: back from unavailable with a change made meanwhile, this machine's board wins.
+        if (recovering && this.local !== null && this.local !== this.last && this.local !== text) {
+          this.cancelPending()
+          this.write(this.local)
+          return null
+        }
+        this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         if (text === this.last) return null
         this.cancelPending()
         this.last = text
+        this.local = text
         return read.workspaces
       }
       case 'unreadable':
-        if (this.current.kind !== 'unreadable') {
-          this.log(`sync file unreadable (${read.reason}); not writing`)
-          this.setStatus({ kind: 'unreadable', folder })
-        }
+        this.cancelPending()
+        this.reportUnreadable(read.reason)
         return null
       case 'unavailable':
-        if (this.current.kind !== 'unavailable') {
-          this.log(`sync folder unavailable (${read.reason})`)
-          this.setStatus({ kind: 'unavailable', folder })
-        }
+        this.reportUnavailable(read.reason)
         return null
     }
   }
@@ -168,8 +190,10 @@ export class SyncFolder {
    * unreadable (D12: it is never overwritten).
    */
   noteBoard(state: WorkspaceState): void {
-    if (this.folder === null || this.current.kind === 'unreadable') return
+    if (this.folder === null) return
     const text = this.boardText(state.workspaces)
+    this.local = text
+    if (this.current.kind === 'unreadable') return
     if (text === this.last) {
       this.cancelPending()
       return
@@ -180,7 +204,7 @@ export class SyncFolder {
         this.timer = null
         const next = this.pending
         this.pending = null
-        if (next !== null) this.write(next)
+        if (next !== null) this.writeChange(next)
       }, SYNC_WRITE_DELAY_MS)
     }
   }
@@ -189,7 +213,21 @@ export class SyncFolder {
   flush(): void {
     const next = this.pending
     this.cancelPending()
-    if (next !== null) this.write(next)
+    if (next !== null) this.writeChange(next)
+  }
+
+  /**
+   * Writes a board change. While the folder is unavailable this is D12's retry: the file is read
+   * first, so one that has become unreadable meanwhile is never overwritten.
+   */
+  private writeChange(boardText: string): void {
+    if (this.current.kind === 'unreadable') return
+    if (this.current.kind === 'unavailable' && this.folder !== null) {
+      const read = this.readFile(this.folder)
+      if (read.kind === 'unavailable') return this.reportUnavailable(read.reason)
+      if (read.kind === 'unreadable') return this.reportUnreadable(read.reason)
+    }
+    this.write(boardText)
   }
 
   private cancelPending(): void {
@@ -207,8 +245,14 @@ export class SyncFolder {
     try {
       text = this.options.fs.readFileSync(join(folder, SYNC_FILE_NAME), 'utf8')
     } catch (err) {
-      if (isMissing(err)) return { kind: 'missing' }
-      return { kind: 'unavailable', reason: String(err) }
+      if (!isMissing(err)) return { kind: 'unavailable', reason: String(err) }
+      // No file: only a folder that is still a directory is merely empty (D12).
+      try {
+        if (this.options.fs.statSync(folder).isDirectory()) return { kind: 'missing' }
+        return { kind: 'unavailable', reason: `${folder} is not a directory` }
+      } catch (statErr) {
+        return { kind: 'unavailable', reason: String(statErr) }
+      }
     }
     const parsed = parseSyncFile(text, this.options.home)
     if (!parsed.ok) return { kind: 'unreadable', reason: parsed.reason }
@@ -242,6 +286,22 @@ export class SyncFolder {
     }
     this.last = boardText
     this.setStatus({ kind: 'synced', folder, at: now.toISOString() })
+  }
+
+  /** D12: reports the file unreadable, logging only the change into it. */
+  private reportUnreadable(reason: string): void {
+    const folder = this.folder
+    if (folder === null || this.current.kind === 'unreadable') return
+    this.log(`sync file unreadable (${reason}); not writing`)
+    this.setStatus({ kind: 'unreadable', folder })
+  }
+
+  /** D12: reports the folder unavailable, logging only the change into it. */
+  private reportUnavailable(reason: string): void {
+    const folder = this.folder
+    if (folder === null || this.current.kind === 'unavailable') return
+    this.log(`sync folder unavailable (${reason})`)
+    this.setStatus({ kind: 'unavailable', folder })
   }
 
   private setStatus(status: SyncStatus): void {

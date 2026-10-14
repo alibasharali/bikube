@@ -12,6 +12,7 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  statSync,
   watch,
   writeFileSync,
   type FSWatcher
@@ -20,6 +21,7 @@ import { homedir } from 'node:os'
 import { isDirectory, isPathArg } from '../core/directories'
 import { applySyncBoard } from '../core/sync-apply'
 import { SyncFolder } from '../core/sync-folder'
+import type { SyncStatus } from '../core/sync-status'
 import { withBoard, type Workspace, type WorkspaceState } from '../core/workspace-store'
 import { IPC, type SyncFolderResult } from '../shared/api'
 import type { MainSettings } from './settings'
@@ -36,6 +38,12 @@ export interface MainSync {
 const WATCH_SETTLE_MS = 100
 
 /**
+ * While the folder is unavailable (#13 D12) it can't be watched, so main checks for it this often
+ * (one read of the file) to notice it coming back, and the watch is set up again then.
+ */
+const UNAVAILABLE_RETRY_MS = 2000
+
+/**
  * The sync folder (#13 D1, D4, D9, D10, D11, D13, D14): reads the folder from the settings at once
  * and applies its board to main's state before any window asks for it (so the window opens on the
  * synced board), reads it again whenever the folder changes or a window gains focus, writes the
@@ -45,9 +53,10 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   // D15: a test can give each instance its own home, which D5 maps to `~`.
   const home = process.env['DROVR_HOME_DIR'] || homedir()
   const sync = new SyncFolder({
-    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync },
+    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, statSync },
     home,
     onStatus: (status) => {
+      followStatus(status.kind)
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(IPC.syncStatusChanged, status)
       }
@@ -105,6 +114,25 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
     }
   }
 
+  /**
+   * D12: while the folder is unavailable its watch is dropped (a removed folder's watch is dead)
+   * and the folder is retried every `UNAVAILABLE_RETRY_MS`; once it is back it is watched again.
+   */
+  let retry: ReturnType<typeof setInterval> | null = null
+  const stopRetry = (): void => {
+    if (retry !== null) clearInterval(retry)
+    retry = null
+  }
+  const followStatus = (kind: SyncStatus['kind']): void => {
+    if (kind === 'unavailable') {
+      unwatch()
+      if (retry === null) retry = setInterval(readNow, UNAVAILABLE_RETRY_MS)
+      return
+    }
+    stopRetry()
+    if (kind !== 'off' && watcher === null) watchFolder(sync.folderPath())
+  }
+
   const launched = sync.start(settings.syncFolder(), state.load())
   if (launched !== null) apply(launched)
   watchFolder(sync.folderPath())
@@ -156,6 +184,7 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
     noteBoard: (next) => sync.noteBoard(next),
     flush: () => {
       sync.flush()
+      stopRetry()
       unwatch()
     }
   }

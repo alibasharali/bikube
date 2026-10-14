@@ -32,6 +32,11 @@ export interface SyncFolderOptions {
   log?: (message: string) => void
   /** Told every status change (D13). */
   onStatus?: (status: SyncStatus) => void
+  /**
+   * Handed a newer board found in the file when a pending write re-read it first (D7, D12), for
+   * this machine to apply as any read board.
+   */
+  onBoard?: (workspaces: Workspace[]) => void
 }
 
 /** What reading the file found. */
@@ -82,7 +87,9 @@ export class SyncFolder {
    */
   setFolder(folder: string | null, local: WorkspaceState): Workspace[] | null {
     if (folder === this.folder) return null
-    this.cancelPending()
+    // D10: a pending change goes to the old folder first when it is synced (read first, D12).
+    if (this.current.kind === 'synced') this.writePending()
+    else this.cancelPending()
     this.folder = folder
     this.last = null
     const localText = this.noteLocal(local.workspaces)
@@ -132,6 +139,8 @@ export class SyncFolder {
         this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         return read.workspaces
       case 'unreadable':
+        // Nothing has changed here since launch: once the file is valid it applies (D11).
+        this.last = localText
         this.log(`sync file unreadable (${read.reason}); not writing`)
         this.setStatus({ kind: 'unreadable', folder })
         return null
@@ -154,7 +163,7 @@ export class SyncFolder {
   read(): Workspace[] | null {
     const folder = this.folder
     if (folder === null) return null
-    const recovering = this.current.kind === 'unavailable'
+    const recovering = this.current.kind === 'unavailable' || this.current.kind === 'unreadable'
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
@@ -167,7 +176,8 @@ export class SyncFolder {
           return this.join(folder, read.workspaces)
         }
         const text = this.boardText(read.workspaces)
-        // D12: back from unavailable with a change made meanwhile, this machine's board wins.
+        // D12: back from unavailable or unreadable with a change made meanwhile, this machine's
+        // board wins.
         if (recovering && this.local !== null && this.local !== this.last && this.local !== text) {
           this.cancelPending()
           this.write(this.local)
@@ -209,32 +219,59 @@ export class SyncFolder {
         this.timer = null
         const next = this.pending
         this.pending = null
-        if (next !== null) this.writeChange(next)
+        const newer = next === null ? null : this.writeChange(next)
+        if (newer !== null) this.options.onBoard?.(newer)
       }, SYNC_WRITE_DELAY_MS)
     }
   }
 
   /** Writes a pending board now, synchronously (before quit). */
   flush(): void {
+    this.writePending()
+  }
+
+  /** Writes a pending board now, dropping a newer board the file holds (nothing will apply it). */
+  private writePending(): void {
     const next = this.pending
     this.cancelPending()
     if (next !== null) this.writeChange(next)
   }
 
   /**
-   * Writes a board change. While the folder is unavailable this is D12's retry: the file is read
-   * first, so one that has become unreadable meanwhile is never overwritten.
+   * Writes a board change, reading the file first (D12): one that has become unreadable is never
+   * written over, and a valid one holding a newer board than the last read or written (another
+   * machine's write, D7) wins: it is returned for this machine to apply instead. While the folder
+   * is unavailable this is D12's retry, where a change made meanwhile wins over the file.
    */
-  private writeChange(boardText: string): void {
-    if (this.current.kind === 'unreadable') return
-    if (this.current.kind === 'unavailable' && this.folder !== null) {
-      const read = this.readFile(this.folder)
-      if (read.kind === 'unavailable') return this.reportUnavailable(read.reason)
-      if (read.kind === 'unreadable') return this.reportUnreadable(read.reason)
-      // An owed join is the next read's (D9): this machine's board never replaces the file's.
-      if (read.kind === 'valid' && this.joinOwed) return
+  private writeChange(boardText: string): Workspace[] | null {
+    const folder = this.folder
+    if (folder === null) return null
+    const recovering = this.current.kind === 'unavailable' || this.current.kind === 'unreadable'
+    const read = this.readFile(folder)
+    switch (read.kind) {
+      case 'unavailable':
+        this.reportUnavailable(read.reason)
+        return null
+      case 'unreadable':
+        this.reportUnreadable(read.reason)
+        return null
+      case 'missing':
+        this.write(boardText)
+        return null
+      case 'valid': {
+        // An owed join is the next read's (D9): this machine's board never replaces the file's.
+        if (this.joinOwed) return null
+        const text = this.boardText(read.workspaces)
+        if (recovering || text === this.last) {
+          this.write(boardText)
+          return null
+        }
+        this.last = text
+        this.noteLocal(read.workspaces)
+        this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
+        return read.workspaces
+      }
     }
-    this.write(boardText)
   }
 
   /**

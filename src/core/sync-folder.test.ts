@@ -252,19 +252,45 @@ describe('turning sync on with a board in the folder (#13 D9, AC3)', () => {
 })
 
 describe('turning sync off (#13 D10, AC11)', () => {
-  it('reports off, drops a pending write and writes no later change', () => {
+  it('reports off, writes a pending change first and writes no later change', () => {
     const sync = open()
     const api = workspace('api', 'api')
     sync.setFolder(F, state(api))
     sync.noteBoard(state({ ...api, name: 'pending' }))
-    expect(sync.setFolder(null, state(api))).toBeNull()
+    expect(sync.setFolder(null, state({ ...api, name: 'pending' }))).toBeNull()
+    expect(writes()).toBe(2)
+    expect(written().board.workspaces[0].name).toBe('pending')
     expect(sync.status()).toEqual({ kind: 'off' })
     expect(statuses.at(-1)).toEqual({ kind: 'off' })
     sync.noteBoard(state({ ...api, name: 'later' }))
     vi.advanceTimersByTime(1000)
     sync.flush()
-    expect(writes()).toBe(1)
-    expect(written().board.workspaces[0].name).toBe('api')
+    expect(writes()).toBe(2)
+    expect(written().board.workspaces[0].name).toBe('pending')
+  })
+
+  it('switching folders writes a pending change to the old folder first', () => {
+    fs.dirs.add('/other')
+    const sync = open()
+    const api = workspace('api', 'api')
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'pending' }))
+    sync.setFolder('/other', state({ ...api, name: 'pending' }))
+    expect(written().board.workspaces[0].name).toBe('pending')
+    expect(JSON.parse(fs.files.get('/other/drovr-board.json')!).board.workspaces[0].name).toBe(
+      'pending'
+    )
+  })
+
+  it('does not write a pending change over an old file that became unreadable', () => {
+    const sync = open()
+    const api = workspace('api', 'api')
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'pending' }))
+    fs.files.set(FILE, 'not json')
+    sync.setFolder(null, state({ ...api, name: 'pending' }))
+    expect(fs.files.get(FILE)).toBe('not json')
+    expect(sync.status()).toEqual({ kind: 'off' })
   })
 })
 
@@ -531,6 +557,87 @@ describe('the file unreadable (#13 D3, D12, AC10)', () => {
     sync.noteBoard(state({ ...api, name: 'after' }))
     vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
     expect(written().board.workspaces[0].name).toBe('after')
+  })
+
+  it("writes this machine's change made meanwhile once the same file is back", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    const good = fs.files.get(FILE)!
+    fs.files.set(FILE, 'not json')
+    sync.read()
+    sync.noteBoard(state({ ...api, name: 'renamed' }))
+    vi.advanceTimersByTime(5000)
+    expect(fs.files.get(FILE)).toBe('not json')
+    fs.files.set(FILE, good)
+    expect(sync.read()).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('renamed')
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it("writes this machine's change made meanwhile over a different file once it is valid", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    const good = fs.files.get(FILE)!
+    fs.files.set(FILE, 'not json')
+    sync.read()
+    sync.noteBoard(state({ ...api, name: 'renamed' }))
+    fs.files.set(FILE, good.replace('"name":"api"', '"name":"fixed"'))
+    expect(sync.read()).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('renamed')
+  })
+
+  it('at launch with the file unreadable, applies the file once it is valid (D11)', () => {
+    const sync = open()
+    const good = JSON.stringify({
+      version: 1,
+      savedAt: NOW.toISOString(),
+      board: { workspaces: [{ ...api, name: 'remote', directory: '~/api' }] }
+    })
+    fs.files.set(FILE, 'not json')
+    expect(sync.start(F, state(api))).toBeNull()
+    fs.files.set(FILE, good)
+    expect(sync.read()).toEqual([{ ...api, name: 'remote' }])
+    expect(fs.files.get(FILE)).toBe(good)
+  })
+
+  it('re-reads the file before a pending write, never writing over one that became unreadable', () => {
+    for (const bad of [
+      'not json',
+      '{"version":2,"savedAt":"2026-10-14T09:05:00.000Z","board":{}}'
+    ]) {
+      fs = new FakeFs()
+      const sync = open()
+      sync.setFolder(F, state(api))
+      sync.noteBoard(state({ ...api, name: 'pending' }))
+      fs.files.set(FILE, bad)
+      vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+      expect(fs.files.get(FILE)).toBe(bad)
+      expect(sync.status()).toEqual({ kind: 'unreadable', folder: F })
+    }
+  })
+})
+
+describe('a pending write finding a newer file (#13 D7, D12)', () => {
+  const api = workspace('api', 'api')
+
+  it('applies the newer file instead of writing over it', () => {
+    const boards: Workspace[][] = []
+    const sync = new SyncFolder({
+      fs,
+      home: HOME,
+      now: () => NOW,
+      log,
+      onStatus: (s) => statuses.push(s),
+      onBoard: (b) => boards.push(b)
+    })
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'local' }))
+    const newer = fs.files.get(FILE)!.replace('"name":"api"', '"name":"remote"')
+    fs.files.set(FILE, newer)
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(fs.files.get(FILE)).toBe(newer)
+    expect(boards).toEqual([[{ ...api, name: 'remote' }]])
+    expect(sync.status().kind).toBe('synced')
   })
 })
 

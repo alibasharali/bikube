@@ -182,6 +182,7 @@ test("AC3: turning sync on joins the folder's board with this machine's, keeping
   await expect
     .poll(() => readSyncFile(folder)?.board.workspaces.map((w) => w.name), { timeout: 2000 })
     .toEqual(['api', 'web'])
+  await expect.poll(() => workspaceNames(a.page), { timeout: 5000 }).toEqual(['api', 'web'])
   // The joined board is B's saved board too.
   await quit(b)
   const saved = JSON.parse(readFileSync(join(b.dataDir, 'drovr-state.json'), 'utf8')) as {

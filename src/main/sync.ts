@@ -18,7 +18,8 @@ import {
   type FSWatcher
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { isDirectory, isPathArg } from '../core/directories'
+import { isDirectory } from '../core/directories'
+import { isSyncFolderPath } from '../core/settings'
 import { applySyncBoard } from '../core/sync-apply'
 import { SyncFolder } from '../core/sync-folder'
 import type { SyncStatus } from '../core/sync-status'
@@ -60,7 +61,9 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send(IPC.syncStatusChanged, status)
       }
-    }
+    },
+    // D7, D12: a pending write that found a newer board in the file applies it instead.
+    onBoard: (incoming) => apply(incoming)
   })
   /**
    * A board read from the folder (D7): main's state takes it at once with no card running (what a
@@ -154,7 +157,10 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
       applyFolder(null, sender)
       return { ok: true }
     }
-    if (!isPathArg(path) || !(await isDirectory(path))) return { ok: false, reason: 'not found' }
+    // The settings file's own check (D10), so a folder kept now is still accepted at next launch.
+    if (!isSyncFolderPath(path) || !(await isDirectory(path))) {
+      return { ok: false, reason: 'not found' }
+    }
     applyFolder(path, sender)
     return { ok: true }
   }

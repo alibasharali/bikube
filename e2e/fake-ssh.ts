@@ -27,7 +27,7 @@ import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 // FAKE_SSH_NO_FORWARD=1 prints ssh's refusal warning instead and creates nothing, as a host with
 // `AllowStreamLocalForwarding no` would. `-o <option>` is skipped.
 
-/** In every fake relay process's arguments, so a test can count the ones left running. */
+/** In every fake relay process's arguments, so a leftover relay can be found with `ps`. */
 export const RELAY_MARKER = 'drovr-fake-ssh-relay'
 
 const FAKE_SSH = `#!/bin/bash

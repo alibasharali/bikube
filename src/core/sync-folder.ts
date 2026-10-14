@@ -51,6 +51,14 @@ export class SyncFolder {
    * apply), serialized; what D12's recovery writes when it differs from `last`. Null for none.
    */
   private local: string | null = null
+  /** The workspaces `local` was made from, which an owed join (D9) joins with the file's. */
+  private localWorkspaces: Workspace[] = []
+  /**
+   * D9's join is owed: sync was turned on while the folder was unavailable or its file unreadable.
+   * The first read finding the folder ready joins (or writes this machine's board when it has no
+   * file) instead of D7's replace or D12's write.
+   */
+  private joinOwed = false
   /** The board to write when the timer fires, serialized. */
   private pending: string | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -77,7 +85,8 @@ export class SyncFolder {
     this.cancelPending()
     this.folder = folder
     this.last = null
-    this.local = this.boardText(local.workspaces)
+    const localText = this.noteLocal(local.workspaces)
+    this.joinOwed = folder !== null
     if (folder === null) {
       this.setStatus({ kind: 'off' })
       return null
@@ -85,18 +94,10 @@ export class SyncFolder {
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
-        this.write(this.local)
+        this.write(localText)
         return null
-      case 'valid': {
-        const joined = joinBoards(read.workspaces, local.workspaces)
-        this.last = this.boardText(read.workspaces)
-        const text = this.boardText(joined)
-        this.local = text
-        if (text === this.last)
-          this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
-        else this.write(text)
-        return joined
-      }
+      case 'valid':
+        return this.join(folder, read.workspaces)
       case 'unreadable':
         this.log(`sync file unreadable (${read.reason}); not joining or writing`)
         this.setStatus({ kind: 'unreadable', folder })
@@ -117,12 +118,13 @@ export class SyncFolder {
   start(folder: string | null, local: WorkspaceState): Workspace[] | null {
     this.folder = folder
     this.last = null
-    this.local = this.boardText(local.workspaces)
+    const localText = this.noteLocal(local.workspaces)
+    this.joinOwed = false
     if (folder === null) return null
     const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
-        this.write(this.local)
+        this.write(localText)
         return null
       case 'valid':
         this.last = this.boardText(read.workspaces)
@@ -135,7 +137,7 @@ export class SyncFolder {
         return null
       case 'unavailable':
         // Nothing has changed here since launch: once the folder is back its file applies (D11).
-        this.last = this.local
+        this.last = localText
         this.log(`sync folder unavailable (${read.reason})`)
         this.setStatus({ kind: 'unavailable', folder })
         return null
@@ -160,6 +162,10 @@ export class SyncFolder {
         if (this.local !== null) this.write(this.local)
         return null
       case 'valid': {
+        if (this.joinOwed) {
+          this.cancelPending()
+          return this.join(folder, read.workspaces)
+        }
         const text = this.boardText(read.workspaces)
         // D12: back from unavailable with a change made meanwhile, this machine's board wins.
         if (recovering && this.local !== null && this.local !== this.last && this.local !== text) {
@@ -171,7 +177,7 @@ export class SyncFolder {
         if (text === this.last) return null
         this.cancelPending()
         this.last = text
-        this.local = text
+        this.noteLocal(read.workspaces)
         return read.workspaces
       }
       case 'unreadable':
@@ -191,8 +197,7 @@ export class SyncFolder {
    */
   noteBoard(state: WorkspaceState): void {
     if (this.folder === null) return
-    const text = this.boardText(state.workspaces)
-    this.local = text
+    const text = this.noteLocal(state.workspaces)
     if (this.current.kind === 'unreadable') return
     if (text === this.last) {
       this.cancelPending()
@@ -226,8 +231,32 @@ export class SyncFolder {
       const read = this.readFile(this.folder)
       if (read.kind === 'unavailable') return this.reportUnavailable(read.reason)
       if (read.kind === 'unreadable') return this.reportUnreadable(read.reason)
+      // An owed join is the next read's (D9): this machine's board never replaces the file's.
+      if (read.kind === 'valid' && this.joinOwed) return
     }
     this.write(boardText)
+  }
+
+  /**
+   * D9's join of the file's board with this machine's: written when it differs from the file,
+   * and returned for this machine to apply.
+   */
+  private join(folder: string, file: Workspace[]): Workspace[] {
+    const joined = joinBoards(file, this.localWorkspaces)
+    this.last = this.boardText(file)
+    const text = this.noteLocal(joined)
+    if (text === this.last) {
+      this.joinOwed = false
+      this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
+    } else this.write(text)
+    return joined
+  }
+
+  /** Remembers `workspaces` as this machine's board; returns it serialized. */
+  private noteLocal(workspaces: Workspace[]): string {
+    this.localWorkspaces = workspaces
+    this.local = this.boardText(workspaces)
+    return this.local
   }
 
   private cancelPending(): void {
@@ -280,10 +309,10 @@ export class SyncFolder {
       }
       fs.renameSync(tmpPath, path)
     } catch (err) {
-      this.log(`sync file not written: ${String(err)}`)
-      this.setStatus({ kind: 'unavailable', folder })
+      this.reportUnavailable(`sync file not written: ${String(err)}`)
       return
     }
+    this.joinOwed = false
     this.last = boardText
     this.setStatus({ kind: 'synced', folder, at: now.toISOString() })
   }

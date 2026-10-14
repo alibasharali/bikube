@@ -533,3 +533,72 @@ describe('the file unreadable (#13 D3, D12, AC10)', () => {
     expect(written().board.workspaces[0].name).toBe('after')
   })
 })
+
+describe('a join owed when sync is turned on against a folder not ready (#13 D9, D12)', () => {
+  const api = workspace('api', 'api')
+  const web = workspace('web', 'web')
+  const otherWrites = (...workspaces: Workspace[]): void => {
+    const other = new SyncFolder({ fs, home: '/home/other', now: () => NOW, log: () => {} })
+    other.start(F, state())
+    other.noteBoard(
+      state(
+        ...workspaces.map((w) => ({ ...w, directory: w.directory.replace(HOME, '/home/other') }))
+      )
+    )
+    other.flush()
+  }
+
+  it('joins on the first valid read after the file was unreadable', () => {
+    fs.files.set(FILE, 'not json')
+    const sync = open()
+    expect(sync.setFolder(F, { workspaces: [web], activeId: 'web' })).toBeNull()
+    fs.files.delete(FILE)
+    otherWrites(api)
+    expect(sync.read()).toEqual([api, web])
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api', 'web'])
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it("joins once the folder is back with another machine's file, never writing over it", () => {
+    fs.failWrites = true
+    const sync = open()
+    expect(sync.setFolder(F, { workspaces: [web], activeId: 'web' })).toBeNull()
+    expect(sync.status().kind).toBe('unavailable')
+    fs.failWrites = false
+    otherWrites(api)
+    sync.noteBoard({ workspaces: [{ ...web, name: 'web2' }], activeId: 'web' })
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    sync.flush()
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api'])
+    expect(sync.read()).toEqual([api, { ...web, name: 'web2' }])
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api', 'web2'])
+  })
+
+  it('a later valid read after the join is a plain replace again', () => {
+    fs.files.set(FILE, 'not json')
+    const sync = open()
+    sync.setFolder(F, state(web))
+    fs.files.delete(FILE)
+    otherWrites(api)
+    sync.read()
+    otherWrites(api)
+    expect(sync.read()).toEqual([api])
+  })
+})
+
+describe('a write that keeps failing (#13 D12)', () => {
+  it('reports unavailable once, not on every retry', () => {
+    const sync = open()
+    const api = workspace('api', 'api')
+    sync.setFolder(F, state(api))
+    fs.failWrites = true
+    sync.noteBoard(state({ ...api, name: 'a1' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    sync.read()
+    sync.read()
+    sync.noteBoard(state({ ...api, name: 'a2' }))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(statuses.filter((s) => s.kind === 'unavailable')).toHaveLength(1)
+    expect(log).toHaveBeenCalledTimes(1)
+  })
+})

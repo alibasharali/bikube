@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SpawnResult, TerminalApi, TerminalExit } from '../shared/api'
-import { CardSessions, type CardScreen, type StartingCard } from './card-sessions'
+import {
+  CardSessions,
+  MAX_TYPEAHEAD_CHARS,
+  type CardScreen,
+  type StartingCard
+} from './card-sessions'
 import { READY_MARKER } from './ssh-command'
 import type { StartupCommand } from './startup-command'
 
@@ -255,6 +260,7 @@ describe('CardSessions', () => {
     screens.get('c1')!.type('y')
     expect(api.writes).toEqual([
       ['s1', `claude --session-id ${UUID}\r`],
+      ['s1', 'x'],
       ['s1', 'y']
     ])
     expect(claudeStarted).toHaveBeenCalledTimes(1)
@@ -813,5 +819,83 @@ describe('acknowledgements (#16 D4)', () => {
       ['s1', 1_000],
       ['s1', 10]
     ])
+  })
+})
+
+describe('typing while the shell is starting', () => {
+  it("writes it once the session arrives, after a local card's start line, in order", async () => {
+    sessions.start(card('c1', '/tmp/a', { kind: 'custom', command: 'make dev' }))
+    screens.get('c1')!.type('p')
+    screens.get('c1')!.type('wd\r')
+    expect(api.writes).toEqual([])
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    screens.get('c1')!.type('ls\r')
+    expect(api.writes).toEqual([
+      ['s1', 'make dev\r'],
+      ['s1', 'p'],
+      ['s1', 'wd\r'],
+      ['s1', 'ls\r']
+    ])
+  })
+})
+
+describe('typing while an SSH shell is starting', () => {
+  it('writes it once the session arrives, before the start line that waits for the marker', async () => {
+    sessions.start({
+      ...card('c1', '/srv/api', { kind: 'custom', command: 'make dev' }),
+      host: 'h'
+    })
+    screens.get('c1')!.type('yes\r')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', 'yes\r']])
+    api.emitData('s1', READY_MARKER)
+    expect(api.writes).toEqual([
+      ['s1', 'yes\r'],
+      ['s1', 'make dev\r']
+    ])
+  })
+
+  it('drops it when the spawn fails, the card is closed or deleted, or the shell already exited', async () => {
+    sessions.start(card('c1'))
+    sessions.start(card('c2'))
+    sessions.start(card('c3'))
+    sessions.start(card('c4'))
+    for (const id of ['c1', 'c2', 'c3', 'c4']) screens.get(id)!.type('ls\r')
+    sessions.close('c2')
+    sessions.dispose('c3')
+    api.emitExit({ id: 's4', exitCode: 1 })
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    api.spawns[2].resolve({ ok: true, id: 's3' })
+    api.spawns[3].resolve({ ok: true, id: 's4' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+  })
+
+  it('drops it on a screen replaced by a newer start', async () => {
+    sessions.start(card('c1'))
+    const old = screens.get('c1')!
+    old.type('old\r')
+    sessions.dispose('c1')
+    sessions.start(card('c1'))
+    old.type('older\r')
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+  })
+
+  it(`keeps at most ${MAX_TYPEAHEAD_CHARS} characters, dropping what comes after`, async () => {
+    sessions.start(card('c1'))
+    const screen = screens.get('c1')!
+    screen.type('a'.repeat(MAX_TYPEAHEAD_CHARS - 1))
+    screen.type('bb')
+    screen.type('c')
+    screen.type('d')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes.map(([, data]) => data)).toEqual(['a'.repeat(MAX_TYPEAHEAD_CHARS - 1), 'c'])
   })
 })

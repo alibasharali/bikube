@@ -7,7 +7,7 @@
  * output is never lost to a second listener. Plain TS, like `CardSessions`.
  */
 import type { TerminalApi, TerminalExit } from '../shared/api'
-import type { CardRef, CardScreen } from './card-sessions'
+import { MAX_TYPEAHEAD_CHARS, type CardRef, type CardScreen } from './card-sessions'
 import type { SessionRouter } from './session-router'
 import {
   focusPane,
@@ -69,8 +69,14 @@ export class CardPanes<S extends CardScreen> {
     let cardPanes = this.panes.get(card.id)
     if (!cardPanes) this.panes.set(card.id, (cardPanes = new Map()))
     cardPanes.set(id, pane)
+    // Typed while the shell is starting: written once its session arrives, null after that.
+    let typeahead: string[] | null = []
+    let typeaheadChars = 0
     screen.onInput((data) => {
-      if (pane.sessionId) this.api.write(pane.sessionId, data)
+      if (pane.sessionId) return this.api.write(pane.sessionId, data)
+      if (!typeahead || typeaheadChars + data.length > MAX_TYPEAHEAD_CHARS) return
+      typeahead.push(data)
+      typeaheadChars += data.length
     })
     screen.onResize(({ cols, rows }) => {
       if (pane.sessionId) this.api.resize(pane.sessionId, cols, rows)
@@ -83,6 +89,8 @@ export class CardPanes<S extends CardScreen> {
       card.directory,
       card.id,
       (result) => {
+        const typed = typeahead
+        typeahead = null
         if (pane.removed) return result.ok ? this.api.kill(result.id) : undefined
         if (!result.ok) {
           // Read-only, and it stays until closed (D5, #5 D8).
@@ -106,6 +114,7 @@ export class CardPanes<S extends CardScreen> {
         if (screen.cols !== cols || screen.rows !== rows) {
           this.api.resize(result.id, screen.cols, screen.rows)
         }
+        if (!early.exit) typed?.forEach((data) => this.api.write(result.id, data))
         early.data.forEach((data) => screen.write(data, this.router.ackWhenParsed(result.id, data)))
         // A shell that exits by itself takes its pane with it (D5).
         if (early.exit) exited(early.exit)

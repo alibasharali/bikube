@@ -39,6 +39,9 @@ export interface StartingCard extends CardRef, StartupState {}
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
 
+/** The most characters typed while a shell is starting that are kept for it; more are dropped. */
+export const MAX_TYPEAHEAD_CHARS = 64 * 1024
+
 interface Entry<S> {
   /** Null once the shell has exited: a Stopped card has no screen (#5 D6). */
   screen: S | null
@@ -117,9 +120,15 @@ export class CardSessions<S extends CardScreen> {
     } else {
       this.entries.set(card.id, entry)
     }
+    // Typed while the shell is starting: written once its session arrives, null after that.
+    let typeahead: string[] | null = []
+    let typeaheadChars = 0
     screen.onInput((data) => {
-      if (entry.screen === screen && entry.sessionId && entry.state.kind === 'running')
-        this.api.write(entry.sessionId, data)
+      if (entry.screen !== screen || entry.state.kind !== 'running') return
+      if (entry.sessionId) return this.api.write(entry.sessionId, data)
+      if (!typeahead || typeaheadChars + data.length > MAX_TYPEAHEAD_CHARS) return
+      typeahead.push(data)
+      typeaheadChars += data.length
     })
     screen.onResize(({ cols, rows }) => {
       if (entry.screen === screen && entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
@@ -166,9 +175,11 @@ export class CardSessions<S extends CardScreen> {
             this.api.resize(result.id, screen.cols, screen.rows)
           }
           if (entry.closing) this.api.kill(result.id)
-          else if (line !== null && !early.exit) {
-            if (card.host === undefined) sessionStarted(result.id)
-            else {
+          else if (!early.exit) {
+            // A local card's start line goes first; an SSH card's waits for the marker (#12 D6).
+            if (line !== null && card.host === undefined) sessionStarted(result.id)
+            typeahead?.forEach((data) => this.api.write(result.id, data))
+            if (line !== null && card.host !== undefined) {
               const seen = readyWatcher()
               entry.watch = (data) => {
                 if (!seen(data)) return
@@ -177,6 +188,7 @@ export class CardSessions<S extends CardScreen> {
               }
             }
           }
+          typeahead = null
           early.data.forEach((data) =>
             this.output(entry, data, this.router.ackWhenParsed(result.id, data))
           )

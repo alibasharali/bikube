@@ -412,3 +412,32 @@ describe('CardPanes acknowledgements (#16 D4)', () => {
     expect(api.acks).toEqual([['s1', 1_000]])
   })
 })
+
+describe('CardPanes typing while a pane is starting', () => {
+  it('writes it once the session arrives, in order', async () => {
+    panes.split(API, 'right')
+    screens[0].inputListener?.('p')
+    screens[0].inputListener?.('wd\r')
+    expect(api.writes).toEqual([])
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    screens[0].inputListener?.('ls\r')
+    expect(api.writes).toEqual([
+      ['s1', 'p'],
+      ['s1', 'wd\r'],
+      ['s1', 'ls\r']
+    ])
+  })
+
+  it('drops it when the spawn fails or the pane was closed meanwhile', async () => {
+    panes.split(API, 'right')
+    const closed = panes.split(API, 'down')!
+    screens[0].inputListener?.('ls\r')
+    screens[1].inputListener?.('ls\r')
+    panes.close(API.id, closed)
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await flush()
+    expect(api.writes).toEqual([])
+  })
+})

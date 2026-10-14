@@ -16,6 +16,9 @@ function createWindow(settings: MainSettings): void {
     title: 'Drovr',
     // The resolved theme's background (#10 D2), so a light launch doesn't flash dark.
     backgroundColor: settings.backgroundColor(),
+    // Off macOS the default menu bar stays hidden until Alt is pressed; its accelerators still
+    // work (#14 D9). macOS keeps its app menu.
+    autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

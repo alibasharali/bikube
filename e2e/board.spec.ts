@@ -294,3 +294,12 @@ test('AC9: Esc cancels and Enter submits dialogs and inline edits', async () => 
   await page.getByTestId('column-rename-input').press('Enter')
   await expect.poll(columnNames).toContain('Ideas')
 })
+
+test('#14 AC7: off macOS the menu bar is hidden and auto-hides', async () => {
+  test.skip(process.platform === 'darwin', 'macOS keeps its app menu (#14 D9)')
+  const menuBar = await app.evaluate(({ BrowserWindow }) => {
+    const [window] = BrowserWindow.getAllWindows()
+    return { visible: window.isMenuBarVisible(), autoHide: window.isMenuBarAutoHide() }
+  })
+  expect(menuBar).toEqual({ visible: false, autoHide: true })
+})

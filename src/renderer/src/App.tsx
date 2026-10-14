@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
+import { isSettingsShortcut } from '../../core/card-shortcuts'
 import type { Workspace } from '../../core/workspace-store'
 import { removeWorkspace, startCard } from './card-actions'
 import { useRunningCount } from './card-terminals'
@@ -8,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
 import Board from './Board'
 import EmptyState from './EmptyState'
+import SettingsDialog from './SettingsDialog'
 import Sidebar from './Sidebar'
 import { useWorkspaceState, workspaceStore } from './store'
 
@@ -43,6 +45,22 @@ function App(): React.JSX.Element {
   const target =
     dialog && dialog.kind !== 'create' ? workspaces.find((w) => w.id === dialog.id) : undefined
 
+  // Settings (#10 D5): from the sidebar, or Cmd+, / Ctrl+, anywhere. Capture phase, so it works
+  // wherever focus is, including a terminal (which swallows the key too).
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!isSettingsShortcut(event, window.drovr.platform)) return
+      // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
+      if (document.querySelector('[aria-modal="true"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      setSettingsOpen(true)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
   return (
     <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
       <Sidebar
@@ -58,6 +76,7 @@ function App(): React.JSX.Element {
         onAdd={onCreateWorkspace}
         onEdit={(id) => setDialog({ kind: 'edit', id })}
         onDelete={(id) => setDialog({ kind: 'delete', id })}
+        onSettings={() => setSettingsOpen(true)}
       />
       <main className="main">
         {active && openCard ? (
@@ -68,6 +87,7 @@ function App(): React.JSX.Element {
           <EmptyState onCreateWorkspace={onCreateWorkspace} />
         )}
       </main>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {dialog?.kind === 'create' && (
         <WorkspaceDialog workspace={null} workspaces={workspaces} onClose={() => setDialog(null)} />
       )}

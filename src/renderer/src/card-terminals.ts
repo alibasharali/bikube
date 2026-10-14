@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
-import { isBackShortcut } from '../../core/card-shortcuts'
+import { isBackShortcut, isSettingsShortcut } from '../../core/card-shortcuts'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
 import {
   knownRunState,
@@ -56,6 +56,8 @@ export class XtermScreen implements CardScreen {
     this.term.attachCustomKeyEventHandler((event) => {
       // Back to the board is handled by the view; the shell never sees it (D8).
       if (isBackShortcut(event, window.drovr.platform)) return false
+      // So is opening Settings, handled by the app (#10 D5).
+      if (isSettingsShortcut(event, window.drovr.platform)) return false
       const action = clipboardShortcut(event, window.drovr.platform)
       if (!action) return true
       // Stop the native paste event too, or xterm would paste twice.

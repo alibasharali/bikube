@@ -7,13 +7,22 @@ interface ModalProps {
   children: React.ReactNode
   /** Selector inside the dialog to focus on open; defaults to the first focusable element. */
   initialFocus?: string
+  /** Close on a click outside the dialog (on the backdrop); off by default. */
+  closeOnOutsideClick?: boolean
 }
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /** Accessible modal: role=dialog, labelled, Esc closes, Tab is trapped, focus is restored on close. */
-function Modal({ title, onClose, testId, children, initialFocus }: ModalProps): React.JSX.Element {
+function Modal({
+  title,
+  onClose,
+  testId,
+  children,
+  initialFocus,
+  closeOnOutsideClick = false
+}: ModalProps): React.JSX.Element {
   const titleId = useId()
   const ref = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
@@ -63,7 +72,16 @@ function Modal({ title, onClose, testId, children, initialFocus }: ModalProps): 
   }, [])
 
   return (
-    <div className="modal-backdrop">
+    <div
+      className="modal-backdrop"
+      onMouseDown={
+        closeOnOutsideClick
+          ? (e) => {
+              if (e.target === e.currentTarget) closeRef.current()
+            }
+          : undefined
+      }
+    >
       <div
         ref={ref}
         className="modal"

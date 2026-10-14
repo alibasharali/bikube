@@ -10,6 +10,8 @@ interface SidebarProps {
   onAdd: () => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  /** Opens the Settings dialog (#10 D5). */
+  onSettings: () => void
 }
 
 function Sidebar({
@@ -20,7 +22,8 @@ function Sidebar({
   onSelect,
   onAdd,
   onEdit,
-  onDelete
+  onDelete,
+  onSettings
 }: SidebarProps): React.JSX.Element {
   return (
     <nav
@@ -99,6 +102,21 @@ function Sidebar({
           )
         })}
       </ul>
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          className="sidebar-settings"
+          data-testid="settings-open"
+          aria-label={collapsed ? 'Settings' : undefined}
+          title={collapsed ? 'Settings' : undefined}
+          onClick={onSettings}
+        >
+          <span className="sidebar-settings-icon" aria-hidden="true">
+            ⚙
+          </span>
+          {!collapsed && <span>Settings</span>}
+        </button>
+      </div>
     </nav>
   )
 }

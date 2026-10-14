@@ -188,6 +188,70 @@ button {
   white-space: nowrap;
 }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-settings {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-collapsed .sidebar-settings {
+  justify-content: center;
+}
+
+.sidebar-settings:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.sidebar-settings-icon {
+  flex: none;
+  width: 22px;
+  text-align: center;
+  font-size: 16px;
+}
+
+.radio-group {
+  padding: 0;
+  border: 0;
+  margin: 0 0 var(--space-3);
+}
+
+.radio-group legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.radio-group .radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: var(--space-4);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.radio-group .radio input {
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
 .main {
   flex: 1;
   min-width: 0;

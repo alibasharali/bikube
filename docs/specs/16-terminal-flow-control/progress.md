@@ -18,6 +18,6 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- running
+- done (ALL PASS, firehose re-run by verifier: 0 dropped, peak 118,803)
 
 Benchmark, Linux under xvfb, DOM renderer (S3 run). Sustained: fps 60.0, echo max 4.9 ms, 0 dropped, main lag p99 4.4 ms, 10/10 live, peak unacked 7,170: all PASS. Firehose: fps 31.7 (was 8.4 in #1), echo p50/max 100.1/137.5 ms, 0 dropped echoes (was 16/20), main lag p99 3.3 ms, 10/10 live, peak unacked 119,262 (high watermark 100,000). Status-line poll in the benchmark samples every 100 ms (firehose shows a cut-off line most of the time).

@@ -432,10 +432,17 @@ async function output(command: string, tag: string): Promise<string> {
 const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status-label')
 const tileStatus = (title: string): Locator => card(title).getByTestId('card-status-label')
 
-/** Waits until the open card's remote shell is up: its `$HOME` is the fake remote's. */
+/**
+ * Waits until the open card's remote shell answers. An SSH card keeps no keystrokes typed before
+ * its session arrives (#25 D10), so the probe is typed again until one gets through.
+ */
 async function connected(): Promise<void> {
   await expect(viewStatus()).toHaveText('Running')
-  expect(await output('echo up', 'ready')).toBe('up')
+  await expect(async () => {
+    // No quotes or spaces: whatever part of a probe gets through ends at its Enter.
+    await run('echo ready:$((40+2))')
+    await expect.poll(bufferLines, { timeout: 2000 }).toContain('ready:42')
+  }).toPass({ timeout: 20_000 })
 }
 
 test('AC4: a card runs on its host, in the remote directory; the local ssh has no board variables', async () => {

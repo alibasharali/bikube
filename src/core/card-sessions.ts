@@ -120,8 +120,9 @@ export class CardSessions<S extends CardScreen> {
     } else {
       this.entries.set(card.id, entry)
     }
-    // Typed while the shell is starting: written once its session arrives, null after that.
-    let typeahead: string[] | null = []
+    // Typed while a local shell is starting: written once its session arrives, null after that
+    // (#25 D10). An SSH card keeps none: early input could answer ssh's own prompts (#12 D6).
+    let typeahead: string[] | null = card.host === undefined ? [] : null
     let typeaheadChars = 0
     screen.onInput((data) => {
       if (entry.screen !== screen || entry.state.kind !== 'running') return

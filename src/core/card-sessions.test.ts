@@ -841,7 +841,7 @@ describe('typing while the shell is starting', () => {
 })
 
 describe('typing while an SSH shell is starting', () => {
-  it('writes it once the session arrives, before the start line that waits for the marker', async () => {
+  it('keeps none of it, so it never answers ssh prompts (#25 D10)', async () => {
     sessions.start({
       ...card('c1', '/srv/api', { kind: 'custom', command: 'make dev' }),
       host: 'h'
@@ -849,12 +849,9 @@ describe('typing while an SSH shell is starting', () => {
     screens.get('c1')!.type('yes\r')
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(api.writes).toEqual([['s1', 'yes\r']])
+    expect(api.writes).toEqual([])
     api.emitData('s1', READY_MARKER)
-    expect(api.writes).toEqual([
-      ['s1', 'yes\r'],
-      ['s1', 'make dev\r']
-    ])
+    expect(api.writes).toEqual([['s1', 'make dev\r']])
   })
 
   it('drops it when the spawn fails, the card is closed or deleted, or the shell already exited', async () => {

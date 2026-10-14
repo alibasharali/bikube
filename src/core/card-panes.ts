@@ -69,8 +69,9 @@ export class CardPanes<S extends CardScreen> {
     let cardPanes = this.panes.get(card.id)
     if (!cardPanes) this.panes.set(card.id, (cardPanes = new Map()))
     cardPanes.set(id, pane)
-    // Typed while the shell is starting: written once its session arrives, null after that.
-    let typeahead: string[] | null = []
+    // Typed while a local shell is starting: written once its session arrives, null after that
+    // (#25 D10). An SSH card's pane keeps none: early input could answer ssh's own prompts.
+    let typeahead: string[] | null = card.host === undefined ? [] : null
     let typeaheadChars = 0
     screen.onInput((data) => {
       if (pane.sessionId) return this.api.write(pane.sessionId, data)

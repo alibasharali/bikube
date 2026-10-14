@@ -429,6 +429,14 @@ describe('CardPanes typing while a pane is starting', () => {
     ])
   })
 
+  it("keeps none for an SSH card's pane, so it never answers ssh prompts (#25 D10)", async () => {
+    panes.split({ id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }, 'right')
+    screens[0].inputListener?.('yes\r')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    expect(api.writes).toEqual([])
+  })
+
   it('drops it when the spawn fails or the pane was closed meanwhile', async () => {
     panes.split(API, 'right')
     const closed = panes.split(API, 'down')!

@@ -13,7 +13,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 Decisions the developer made during implementation, with the date. A ruling that changes the spec also got its own `docs(spec):` commit.
 
-- None yet.
+- 2026-10-14 ship review (full auto): a Drovr from before #21 reads a sync file or state file holding a new preset kind as unreadable (sync stops on that machine until it upgrades) → accepted as D6/D7 decided (no version bump); noted in the PR's trade-offs for the release notes.
 
 ## Verification
 

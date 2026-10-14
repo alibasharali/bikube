@@ -41,6 +41,7 @@ class FakeApi implements TerminalApi {
     rows: number
     cwd: string
     cardId: string
+    host: string | null
     resolve: (r: SpawnResult) => void
   }[] = []
   writes: [string, string][] = []
@@ -48,8 +49,14 @@ class FakeApi implements TerminalApi {
   kills: string[] = []
   dataListeners = new Set<(id: string, data: string) => void>()
   exitListeners = new Set<(exit: TerminalExit) => void>()
-  spawn(cols: number, rows: number, cwd: string, cardId: string): Promise<SpawnResult> {
-    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, cardId, resolve }))
+  spawn(
+    cols: number,
+    rows: number,
+    cwd: string,
+    cardId: string,
+    host: string | null
+  ): Promise<SpawnResult> {
+    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, cardId, host, resolve }))
   }
   write(id: string, data: string): void {
     this.writes.push([id, data])
@@ -260,6 +267,65 @@ describe('CardPanes failures and the limit', () => {
     panes.split(API, 'right')
     panes.focus(API.id, MAIN_PANE)
     expect(panes.layout(API.id).focused).toBe(MAIN_PANE)
+  })
+})
+
+describe('CardPanes in an SSH card (#12 D8)', () => {
+  const REMOTE = { id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }
+
+  it("connects each extra pane to the card's host and directory, with no startup line", async () => {
+    panes.split(REMOTE, 'right')
+    panes.split(API, 'right')
+    expect(api.spawns).toMatchObject([
+      { cwd: REMOTE.directory, cardId: REMOTE.id, host: 'me@devbox' },
+      { cwd: API.directory, cardId: API.id, host: null }
+    ])
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    expect(api.writes).toEqual([])
+  })
+
+  it('keeps a pane whose ssh exits with 255, showing SSH failed read-only below its screen', async () => {
+    const id = panes.split(REMOTE, 'right')!
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    api.emitData('s1', 'ssh: connect to host me@devbox port 22: Connection refused\r\n')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    expect(paneIds(panes.layout(REMOTE.id).tree)).toEqual([MAIN_PANE, id])
+    expect(screens[0].disposed).toBe(false)
+    expect(screens[0].text).toBe(
+      'ssh: connect to host me@devbox port 22: Connection refused\r\n\r\nSSH failed\r\n'
+    )
+    expect(screens[0].readOnly).toBe(true)
+    screens[0].inputListener?.('ls\r')
+    expect(api.writes).toEqual([])
+    panes.close(REMOTE.id, id)
+    expect(paneIds(panes.layout(REMOTE.id).tree)).toEqual([MAIN_PANE])
+    expect(api.kills).toEqual([])
+  })
+
+  it('keeps it too when ssh exited with 255 before the spawn reply arrived', async () => {
+    const id = panes.split(REMOTE, 'right')!
+    api.emitData('s1', 'refused\r\n')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    expect(paneIds(panes.layout(REMOTE.id).tree)).toEqual([MAIN_PANE, id])
+    expect(screens[0].text).toBe('refused\r\n\r\nSSH failed\r\n')
+    expect(screens[0].readOnly).toBe(true)
+  })
+
+  it('removes the pane on any other exit, and a local pane even on 255', async () => {
+    panes.split(REMOTE, 'right')
+    panes.split(API, 'right')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await flush()
+    api.emitExit({ id: 's1', exitCode: 0 })
+    api.emitExit({ id: 's2', exitCode: 255 })
+    expect(paneIds(panes.layout(REMOTE.id).tree)).toEqual([MAIN_PANE])
+    expect(paneIds(panes.layout(API.id).tree)).toEqual([MAIN_PANE])
+    expect(screens.every((s) => s.disposed)).toBe(true)
   })
 })
 

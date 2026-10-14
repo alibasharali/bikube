@@ -582,3 +582,70 @@ test('AC9: board is not found in an SSH card', async () => {
   await expect(tileStatus('api')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).not.toHaveText('hi')
 })
+
+const panes = (): Locator => page.getByTestId('card-view').getByTestId('pane')
+
+/** Pane `index`'s terminal buffer, one trimmed string per line (wrapped lines joined). */
+function paneLines(index: number): Promise<string[]> {
+  return panes()
+    .nth(index)
+    .evaluate((pane) => {
+      type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
+      const host = pane.querySelector('[data-testid=terminal]') as
+        | (HTMLElement & {
+            __xterm?: {
+              buffer: { active: { length: number; getLine(i: number): Line | undefined } }
+            }
+          })
+        | null
+      const buffer = host?.__xterm?.buffer.active
+      if (!buffer) return []
+      const rows: string[] = []
+      for (let i = 0; i < buffer.length; i++) {
+        const line = buffer.getLine(i)
+        const next = buffer.getLine(i + 1)
+        const text = line?.translateToString(!next?.isWrapped) ?? ''
+        if (line?.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+        else rows.push(text)
+      }
+      return rows.map((r) => r.trim())
+    })
+}
+
+test('AC8: a split pane of an SSH card connects to its host, with no startup command', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api', 'Claude Code')
+  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expect.poll(() => claudeLogLines(fake.log), { timeout: 15_000 }).toHaveLength(1)
+  expect(sshLog()).toHaveLength(1)
+
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  await expect.poll(sshLog).toHaveLength(2)
+  expect(sshLog()[1]).toMatch(/^-t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
+  await run('echo "pwd:$(pwd)"')
+  await expect.poll(() => paneLines(1)).toContain(`pwd:${REMOTE_DIR}`)
+  await page.waitForTimeout(500)
+  expect(claudeLogLines(fake.log)).toHaveLength(1)
+})
+
+test('AC8: a pane whose ssh fails keeps its error and SSH failed until Close pane', async () => {
+  await launch({ FAKE_SSH_FAIL_AFTER: '1' })
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+
+  await page.getByTestId('pane-split-right').click()
+  await expect.poll(sshLog).toHaveLength(2)
+  await expect.poll(() => paneLines(1)).toContain('SSH failed')
+  const lines = await paneLines(1)
+  expect(lines).toContain('ssh: connect to host me@devbox port 22: Connection refused')
+  await page.waitForTimeout(500)
+  await expect(panes()).toHaveCount(2)
+  await expect(viewStatus()).toHaveText('Running')
+
+  await panes().nth(1).getByRole('button', { name: 'Close pane' }).click()
+  await expect(panes()).toHaveCount(1)
+  await expect(viewStatus()).toHaveText('Running')
+})

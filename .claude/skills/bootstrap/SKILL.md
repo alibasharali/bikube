@@ -51,10 +51,11 @@ Grill with `ask_questions` as `write-spec` describes: about the first step itsel
 
 Then write the spec with `write-spec`. Without a recipe, its first slice is **"Scaffold and prove the stack"**, with acceptance criteria from the project standard: check.sh green, the `check` job, the deploy workflow with environment names, the URLs, the instructions, the formatter's ignore file when the stack has a formatter. The first step's behaviour follows in later slices.
 
-The spec adds two things for this item:
+The spec adds three things for this item:
 
 - **Later**: what the description wants that the first step doesn't build, one line each: a title and what it is, pointing to the description's part. Group by feature rather than by sentence, at most about ten; what is too vague to act on stays only in `docs/product.md`. The developer reviews this list with the spec, so cutting or adding to the plan happens here.
 - A slice **"Put the plan on the board"**, the first one after the scaffold (or the first, with a recipe): `create_item(title, description, "idea", N)` for each line of Later, the numbers recorded in the ledger so a resumed session doesn't create them twice. AC: every line of Later is an idea on the board. Ideas stay in Backlog until the developer promotes them.
+- A slice **"README"**, just before the registry slice: write `README.md` with the `readme` skill, from what the first step built (improving the recipe's README when there is one). AC: the root `README.md` starts with `<!-- software-factory:readme -->` and follows the skill's standard.
 
 Publish with `attach_spec(N, path, summary, branch, title)`, titling the item after the agreed first step (e.g. "PoC: terminal in Electron", "Scaffold and first page"): its "Start: …" title only stood in until now. The **last slice is always "Contribute to the stack registry"** (section 5), with the AC: `propose_stack_change` returned a pull request, linked in the item's PR, or the ledger says why there was nothing to propose. It goes in the spec because implementation runs in a later session that only has the spec.
 

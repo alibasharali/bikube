@@ -82,7 +82,8 @@ function startApp(): void {
   app.on('before-quit', (event) => {
     state.flush()
     settings.flush()
-    sync.flush()
+    // #26 D5: async now; the quit hold that waits for it comes with #26's S2.
+    void sync.flush()
     if (holding) {
       terminals.forceKillAll()
       return

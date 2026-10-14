@@ -6,17 +6,8 @@ import {
   type IpcMainInvokeEvent,
   type WebContents
 } from 'electron'
-import {
-  closeSync,
-  fsyncSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  watch,
-  writeFileSync,
-  type FSWatcher
-} from 'node:fs'
+import { watch, type FSWatcher } from 'node:fs'
+import { open, readFile, rename, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isDirectory } from '../core/directories'
 import { isSyncFolderPath } from '../core/settings'
@@ -31,8 +22,11 @@ import type { MainState } from './state'
 export interface MainSync {
   /** A valid `state:save`: written to the sync file when its board changed (#13 D4). */
   noteBoard(state: WorkspaceState): void
-  /** Writes a pending board now and stops watching the folder (before quit). */
-  flush(): void
+  /**
+   * Stops watching the folder and writes a pending board now (before quit), resolving once the
+   * sync folder's queue is empty (#26 D5).
+   */
+  flush(): Promise<void>
 }
 
 /** Folder events come in bursts (a temp file, then a rename): read once they settle. */
@@ -54,7 +48,8 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   // D15: a test can give each instance its own home, which D5 maps to `~`.
   const home = process.env['DROVR_HOME_DIR'] || homedir()
   const sync = new SyncFolder({
-    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, statSync },
+    // #26 D1: async fs, so a stalled folder never blocks main.
+    fs: { readFile, stat, open, rename },
     home,
     onStatus: (status) => {
       followStatus(status.kind)
@@ -86,9 +81,15 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   // D11: the folder's contents are watched (sync tools replace the file by renaming it).
   let watcher: FSWatcher | null = null
   let settle: ReturnType<typeof setTimeout> | null = null
+  /** Applies what a queued operation (#26 D2) hands over once it resolves; it never rejects. */
+  const applyWhenRead = (read: Promise<Workspace[] | null>): Promise<void> =>
+    read
+      .then((incoming) => {
+        if (incoming !== null) apply(incoming)
+      })
+      .catch((err: unknown) => console.error(`sync board not applied: ${String(err)}`))
   const readNow = (): void => {
-    const incoming = sync.read()
-    if (incoming !== null) apply(incoming)
+    void applyWhenRead(sync.read())
   }
   const unwatch = (): void => {
     watcher?.close()
@@ -137,31 +138,33 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   }
 
   const launched = sync.start(settings.syncFolder(), state.load())
-  if (launched !== null) apply(launched)
-  watchFolder(sync.folderPath())
+  void applyWhenRead(launched).then(() => {
+    if (watcher === null) watchFolder(sync.folderPath())
+  })
   app.on('browser-window-focus', readNow)
 
   const fromMainFrame = (event: IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
 
   /** Keeps `folder` in the settings and joins the boards, handing a joined board to `sender`. */
-  const applyFolder = (folder: string | null, sender: WebContents): void => {
+  /** Resolves once the queued set-folder operation has finished (#26 D6). */
+  const applyFolder = async (folder: string | null, sender: WebContents): Promise<void> => {
     settings.setSyncFolder(folder)
-    const joined = sync.setFolder(folder, state.load())
+    const joined = await sync.setFolder(folder, state.load())
     watchFolder(sync.folderPath())
-    if (joined !== null) sender.send(IPC.syncBoard, joined)
+    if (joined !== null && !sender.isDestroyed()) sender.send(IPC.syncBoard, joined)
   }
 
   const setFolder = async (path: unknown, sender: WebContents): Promise<SyncFolderResult> => {
     if (path === null) {
-      applyFolder(null, sender)
+      await applyFolder(null, sender)
       return { ok: true }
     }
     // The settings file's own check (D10), so a folder kept now is still accepted at next launch.
     if (!isSyncFolderPath(path) || !(await isDirectory(path))) {
       return { ok: false, reason: 'not found' }
     }
-    applyFolder(path, sender)
+    await applyFolder(path, sender)
     return { ok: true }
   }
 
@@ -189,9 +192,9 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   return {
     noteBoard: (next) => sync.noteBoard(next),
     flush: () => {
-      sync.flush()
       stopRetry()
       unwatch()
+      return sync.flush()
     }
   }
 }

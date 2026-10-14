@@ -14,4 +14,4 @@ None (full auto).
 
 ## Verification
 
-- pending
+- done: AC1 and AC2 each 20 passes in a row (AC9 and AC5), retry path checked with DROVR_E2E_WINDOW_TIMEOUT_MS=1 (logs the reason and stderr, fails with both), check.sh green, smoke 174 passed

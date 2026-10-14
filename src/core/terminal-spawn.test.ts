@@ -95,6 +95,19 @@ describe('spawnInDirectory', () => {
       expect(spawn).toHaveBeenCalledWith({ cols: 80, rows: 24, command: ssh.ok && ssh.line })
     })
 
+    it("builds the SSH line with the session's board forward (#25 D1)", async () => {
+      const spawn = vi.fn(() => ({ id: '3', pid: 1 }))
+      const board = {
+        cardId: 'card-1',
+        remoteSocket: '/tmp/drovr-r.sock',
+        localSocket: '/l/board/s-1.sock'
+      }
+      await spawnInDirectory({ cols: 80, rows: 24, cwd: '/srv', host: 'me@devbox', board }, spawn)
+      const ssh = sshShellLine('me@devbox', '/srv', board)
+      expect(ssh.ok && ssh.line).toContain('-R ')
+      expect(spawn).toHaveBeenCalledWith({ cols: 80, rows: 24, command: ssh.ok && ssh.line })
+    })
+
     it('refuses a bad host or remote directory without starting a process', async () => {
       const spawn = vi.fn(() => ({ id: '1', pid: 1 }))
       expect(

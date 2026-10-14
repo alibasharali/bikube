@@ -1,21 +1,40 @@
-import { appendFileSync, chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { join } from 'node:path'
 import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 
 // The fake `ssh` of #12's smoke tests. It logs its arguments to $DROVR_SSH_LOG; for host
 // `unreachable` it prints ssh's resolve error and exits 255; otherwise it runs the remote command
-// with `sh -c` under a cleared environment, like a fresh login on the remote machine (whose
+// with `sh -c` under a cleared environment, like a fresh login on the remote machine, whose
+// TMPDIR is `<home>/tmp` so each session's `board` directory goes with the test's root (and
 // `bash -l` reads this HOME's .bash_profile, so the fake `claude` is found there too).
+// Each connection's arguments are logged on one line, newlines as spaces.
 // FAKE_SSH_DELAY=<s>: first prints `Password:` and reads a hidden line for up to <s> seconds,
 // as a password prompt would (so a start line typed too early is swallowed, never run).
 // It also logs the local side's `board` variables to $DROVR_SSH_ENV_LOG (#12 D5: none).
 // FAKE_SSH_FAIL_AFTER=<n>: every connection after the first <n> fails with exit code 255.
+// `-R <remote>:<local>` (#25 D1): the forward is `<remote>` made a symlink to `<local>`, which the
+// remote command removes when it ends; FAKE_SSH_NO_FORWARD=1 prints ssh's refusal warning instead
+// and creates nothing, as a host with `AllowStreamLocalForwarding no` would.
 const FAKE_SSH = `#!/bin/bash
 [ -n "$DROVR_SSH_ENV_LOG" ] && echo "card=[$DROVR_CARD_ID] bin=[$DROVR_BIN]" >> "$DROVR_SSH_ENV_LOG"
 connections=0
 [ -f "$DROVR_SSH_LOG" ] && connections=$(wc -l < "$DROVR_SSH_LOG")
-echo "$*" >> "$DROVR_SSH_LOG"
-while [ $# -gt 0 ] && [ "$1" != "--" ]; do shift; done
+# One line per connection: the remote command's newlines (its board script) as spaces.
+args="$*"
+echo "\${args//$'\\n'/ }" >> "$DROVR_SSH_LOG"
+forward=
+while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+  [ "$1" = "-R" ] && forward=$2
+  shift
+done
 shift
 host=$1
 shift
@@ -32,7 +51,15 @@ if [ -n "$FAKE_SSH_DELAY" ]; then
   IFS= read -rs -t "$FAKE_SSH_DELAY" _
   printf '\\r\\n'
 fi
-exec env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/bash TERM="$TERM" sh -c "$*"
+if [ -n "$forward" ]; then
+  remote="\${forward%%:*}"
+  if [ "$FAKE_SSH_NO_FORWARD" = "1" ]; then
+    echo "Warning: remote port forwarding failed for listen path $remote" >&2
+  else
+    ln -s "\${forward#*:}" "$remote"
+  fi
+fi
+exec env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/bash TERM="$TERM" TMPDIR="$HOME/tmp" sh -c "$*"
 `
 
 export interface FakeSshHome extends FakeClaudeHome {
@@ -52,6 +79,7 @@ export function fakeSshHome(root: string): FakeSshHome {
   const sshLog = join(root, 'ssh.log')
   const sshEnvLog = join(root, 'ssh-env.log')
   const ssh = join(claude.home, 'bin', 'ssh')
+  mkdirSync(join(claude.home, 'tmp'), { recursive: true })
   writeFileSync(ssh, FAKE_SSH)
   chmodSync(ssh, 0o755)
   appendFileSync(
@@ -73,4 +101,16 @@ export function sshLogLines(log: string): string[] {
         .split('\n')
         .filter((l) => l !== '')
     : []
+}
+
+/**
+ * Removes the remote ends of the forwards in the log (`-R <remote>:<local>`): a fake session
+ * killed by its card's stop never gets the hangup a real `ssh` session gives its remote shell, so
+ * the remote command can't clean them up itself then.
+ */
+export function removeRemoteForwards(log: string): void {
+  for (const line of sshLogLines(log)) {
+    const remote = /^-R (\S+?):/.exec(line)?.[1]
+    if (remote?.startsWith('/tmp/drovr-')) rmSync(remote, { force: true })
+  }
 }

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
-import { fakeSshHome } from './fake-ssh'
+import { fakeSshHome, removeRemoteForwards } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Sync between machines (#13). Every instance has its own data directory and its own home
@@ -28,6 +28,8 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   for (const app of apps.splice(0)) await app.close().catch(() => {})
   removeDataDirs()
+  // The SSH tests' fake hosts `a` and `b` (#25): their sessions' remote socket paths in /tmp.
+  for (const host of ['a', 'b']) removeRemoteForwards(join(root, host, 'ssh.log'))
   rmSync(root, { recursive: true, force: true })
 })
 

@@ -175,6 +175,47 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     15000
   )
 
+  it.skipIf(!language.path || !PYTHON)(
+    "says can't reach, within the timeout, when connecting blocks",
+    async () => {
+      // A listener with a full backlog that never accepts: a blocking connect waits on it.
+      const holder = spawn(PYTHON!, [
+        '-c',
+        [
+          'import socket, sys, time',
+          's = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)',
+          's.bind(sys.argv[1])',
+          's.listen(0)',
+          'held = []',
+          'for _ in range(4):',
+          '    c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)',
+          '    c.setblocking(False)',
+          '    try:',
+          '        c.connect(sys.argv[1])',
+          '    except OSError:',
+          '        pass',
+          '    held.append(c)',
+          'print("ready", flush=True)',
+          'time.sleep(60)'
+        ].join('\n'),
+        socketPath
+      ])
+      try {
+        await new Promise<void>((done) => holder.stdout.once('data', () => done()))
+        const started = Date.now()
+        expect(await run(['status', '.', 'x'], env())).toEqual({
+          code: 1,
+          stdout: '',
+          stderr: `${CANT_REACH}\n`
+        })
+        expect(Date.now() - started).toBeLessThan(8000)
+      } finally {
+        holder.kill('SIGKILL')
+      }
+    },
+    15000
+  )
+
   it.skipIf(!language.path)('says no answer on an invalid reply', async () => {
     raw = createServer((socket) => {
       rawSockets.push(socket)

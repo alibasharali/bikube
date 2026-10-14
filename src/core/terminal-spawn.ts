@@ -2,7 +2,7 @@ import type { SpawnResult } from '../shared/api'
 import { SPAWN_REFUSAL, isValidSize, workingDirectoryProblem } from './ipc-guards'
 import type { StatFs } from './directories'
 import type { SessionInfo } from './session-manager'
-import { sshShellLine } from './ssh-command'
+import { sshShellLine, type BoardForward } from './ssh-command'
 
 export interface SpawnRequest {
   cols: unknown
@@ -10,6 +10,8 @@ export interface SpawnRequest {
   cwd: unknown
   /** The card's SSH host (#12 D12); null or absent for a local card. */
   host?: unknown
+  /** An SSH session's `board` forward, picked by main (#25 D1, D9); ignored for a local card. */
+  board?: BoardForward
 }
 
 /**
@@ -39,7 +41,7 @@ const PAGE_GONE = 'window reloaded'
  * The page is re-checked after the directory check, so a reloaded page never gets an orphan shell (D16).
  */
 export async function spawnInDirectory(
-  { cols, rows, cwd, host }: SpawnRequest,
+  { cols, rows, cwd, host, board }: SpawnRequest,
   start: StartSession,
   { stillCurrent = () => true, fs }: SpawnChecks = {}
 ): Promise<SpawnResult> {
@@ -50,7 +52,7 @@ export async function spawnInDirectory(
     if (problem !== null) return { ok: false, reason: problem }
     options = { cols: cols as number, rows: rows as number, cwd: cwd as string }
   } else {
-    const ssh = sshShellLine(host, cwd)
+    const ssh = sshShellLine(host, cwd, board)
     if (!ssh.ok) return { ok: false, reason: ssh.reason }
     options = { cols: cols as number, rows: rows as number, command: ssh.line }
   }

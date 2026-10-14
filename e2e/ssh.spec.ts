@@ -1,6 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,9 +11,10 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { BOARD_USAGE } from '../src/core/board-args'
 import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
-import { fakeSshHome, sshLogLines, type FakeSshHome } from './fake-ssh'
+import { fakeSshHome, removeRemoteForwards, sshLogLines, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // SSH workspaces (#12): the dialog's Location choice and Host field, the sidebar tooltip, the
@@ -45,6 +47,7 @@ test.afterEach(async () => {
   await app?.close().catch(() => {})
   app = undefined
   removeDataDirs()
+  removeRemoteForwards(fake.sshLog)
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -258,7 +261,7 @@ test('AC3: an SSH workspace and its cards keep their host across a restart', asy
   const before = sshLog().length
   await openCard('a')
   await expect.poll(sshLog).toHaveLength(before + 1)
-  expect(sshLog().at(-1)).toMatch(/^-t -- me@devbox /)
+  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- me@devbox /)
 })
 
 test('D1: switching an SSH workspace to This computer makes it local again', async () => {
@@ -334,6 +337,25 @@ test('AC3: a file whose card has host -x is moved aside and the app starts empty
   expect(corrupt).toHaveLength(1)
   expect(readFileSync(join(dataDir, corrupt[0]), 'utf8')).toBe(contents)
 })
+
+/** The saved id of the card titled `title` (saves are debounced). */
+async function cardId(title: string): Promise<string> {
+  let id = ''
+  await expect
+    .poll(() => {
+      try {
+        const { workspaces } = JSON.parse(readFileSync(stateFile(), 'utf8')).state as {
+          workspaces: { cards: { id: string; title: string }[] }[]
+        }
+        id = workspaces.flatMap((w) => w.cards).find((c) => c.title === title)?.id ?? ''
+      } catch {
+        id = ''
+      }
+      return id
+    })
+    .not.toBe('')
+  return id
+}
 
 function card(title: string): Locator {
   return page
@@ -416,7 +438,7 @@ async function connected(): Promise<void> {
   expect(await output('echo up', 'ready')).toBe('up')
 }
 
-test('AC4: a card runs on its host, in the remote directory, without board variables', async () => {
+test('AC4: a card runs on its host, in the remote directory; the local ssh has no board variables', async () => {
   await launch()
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('api')
@@ -424,10 +446,11 @@ test('AC4: a card runs on its host, in the remote directory, without board varia
   await expect(page.getByTestId('card-view-location')).toHaveText(`me@devbox:${REMOTE_DIR}`)
   await connected()
   await expect.poll(sshLog).toHaveLength(1)
-  expect(sshLog()[0]).toMatch(/^-t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
+  expect(sshLog()[0]).toMatch(/^-R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
   expect(await output('pwd', 'pwd')).toBe(REMOTE_DIR)
-  expect(await output('echo "[$DROVR_CARD_ID]"', 'card')).toBe('[]')
-  // The local shell that ran ssh had none of the `board` variables either (#12 D5).
+  // The remote shell has the card's id for `board` (#25 D4) ...
+  expect(await output('echo "[$DROVR_CARD_ID]"', 'card')).toBe(`[${await cardId('api')}]`)
+  // ... but the local shell that ran ssh had none of the `board` variables (#12 D5, #25 D2).
   expect(sshLogLines(fake.sshEnvLog)).toEqual(['card=[] bin=[]'])
   await back()
   await expect(tileStatus('api')).toHaveText('Running')
@@ -463,13 +486,13 @@ test('AC2: editing the host changes new cards only; This computer makes them loc
   await submit()
   await createCard('b')
   await connected()
-  expect(sshLog().at(-1)).toMatch(/^-t -- other /)
+  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- other /)
   await back()
 
   await openCard('a')
   await connected()
   expect(sshLog()).toHaveLength(3)
-  expect(sshLog().at(-1)).toMatch(/^-t -- me@devbox /)
+  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- me@devbox /)
   await back()
 
   await openEditDialog('remote')
@@ -609,22 +632,6 @@ test('AC7: main refuses a bad host or remote directory from the page', async () 
   expect(sshLog()).toEqual([])
 })
 
-test('AC9: board is not found in an SSH card', async () => {
-  await launch()
-  await createSsh('me@devbox', REMOTE_DIR, 'remote')
-  await createCard('api')
-  await connected()
-  await run('board status . hi')
-  // bash prints `board: command not found`; Ubuntu's command-not-found hook (CI runners)
-  // prints `Command 'board' not found, ...` instead.
-  await expect
-    .poll(async () => (await bufferLines()).some((l) => /\bboard\b.*not found/i.test(l)))
-    .toBe(true)
-  await back()
-  await expect(tileStatus('api')).toHaveText('Running')
-  await expect(card('api').getByTestId('card-status-line')).not.toHaveText('hi')
-})
-
 const panes = (): Locator => page.getByTestId('card-view').getByTestId('pane')
 
 /** Pane `index`'s terminal buffer, one trimmed string per line (wrapped lines joined). */
@@ -665,7 +672,7 @@ test('AC8: a split pane of an SSH card connects to its host, with no startup com
   await page.getByTestId('pane-split-right').click()
   await expect(panes()).toHaveCount(2)
   await expect.poll(sshLog).toHaveLength(2)
-  expect(sshLog()[1]).toMatch(/^-t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
+  expect(sshLog()[1]).toMatch(/^-R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
   await run('echo "pwd:$(pwd)"')
   await expect.poll(() => paneLines(1)).toContain(`pwd:${REMOTE_DIR}`)
   await page.waitForTimeout(500)
@@ -689,5 +696,209 @@ test('AC8: a pane whose ssh fails keeps its error and SSH failed until Close pan
 
   await panes().nth(1).getByRole('button', { name: 'Close pane' }).click()
   await expect(panes()).toHaveCount(1)
+  await expect(viewStatus()).toHaveText('Running')
+})
+
+// `board` inside SSH cards (#25): each SSH session's socket is forwarded with `ssh -R`, which the
+// fake ssh makes a symlink from the remote path to main's session socket. Each command's stdout
+// and stderr go to files in this test's temp root and its exit code is echoed on the screen.
+
+let boardCommands = 0
+
+/**
+ * Runs `command` in the open card's focused terminal and returns its exit code (read from the
+ * screen through `lines`, the main pane's by default), stdout and stderr.
+ */
+async function remoteRun(
+  command: string,
+  lines: () => Promise<string[]> = bufferLines
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const tag = `c${++boardCommands}`
+  const out = join(root, `${tag}.out`)
+  const err = join(root, `${tag}.err`)
+  await run(`${command} >${out} 2>${err}; echo "${tag} rc=$?"`)
+  const pattern = new RegExp(`^${tag} rc=(\\d+)`)
+  let code = -1
+  await expect
+    .poll(
+      async () => {
+        const line = (await lines()).find((l) => pattern.test(l))
+        code = line ? Number(pattern.exec(line)![1]) : -1
+        return code
+      },
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThanOrEqual(0)
+  return { code, stdout: readFileSync(out, 'utf8'), stderr: readFileSync(err, 'utf8') }
+}
+
+const ok = { code: 0, stdout: '', stderr: '' }
+const refused = (error: string): { code: number; stdout: string; stderr: string } => ({
+  code: 1,
+  stdout: '',
+  stderr: `${error}\n`
+})
+
+const tile = (title: string): Locator => card(title).getByTestId('card-status')
+const titlesIn = (name: string): Locator => column(name).getByTestId('card-title')
+
+/** The `-R <remote>:<local>` of a fake ssh log line, or null without one. */
+function forwardOf(line: string): { remote: string; local: string } | null {
+  const match = /^-R (\S+?):(\S+) -t -- /.exec(line)
+  return match ? { remote: match[1], local: match[2] } : null
+}
+
+/** Whether anything, a dangling symlink included, is at `path`. */
+function present(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const sessionSockets = (): string[] => {
+  try {
+    return readdirSync(join(dataDir, 'board')).filter((name) => /^s-.*\.sock$/.test(name))
+  } catch {
+    return []
+  }
+}
+
+const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+
+test('#25 AC1: board works in an SSH card through a forwarded socket', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  await expect.poll(sshLog).toHaveLength(1)
+  expect(sshLog()[0]).toMatch(
+    new RegExp(
+      `^-R /tmp/drovr-[0-9a-f]{32}\\.sock:${escaped(join(dataDir, 'board'))}/s-[0-9a-f]{16}\\.sock -t -- me@devbox `
+    )
+  )
+
+  expect(await remoteRun('board status . hi')).toEqual(ok)
+  await expect(viewStatus()).toHaveText('Running')
+  await expect(page.getByTestId('card-view').getByTestId('card-status')).toHaveText('Running · hi')
+  expect(await remoteRun('board move . Done')).toEqual(ok)
+  expect(await output('echo "$DROVR_CARD_ID"', 'id')).toBe(await cardId('api'))
+  expect(await remoteRun('"$DROVR_BIN/board" help')).toEqual({
+    code: 0,
+    stdout: BOARD_USAGE,
+    stderr: ''
+  })
+  await back()
+  await expect(titlesIn('Done')).toHaveText(['api'])
+  await expect(tile('api')).toHaveText('Running · hi')
+})
+
+test('#25 AC2, AC3: the same errors as a local card, and only its own card', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('web')
+  await connected()
+  await back()
+  await createCard('api')
+  await connected()
+
+  expect(await remoteRun('board move . Nope')).toEqual(
+    refused('board: no column "Nope"; columns are: Backlog, Running, Needs me, Done')
+  )
+  expect(await remoteRun('board move')).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+  expect(await remoteRun('board status web hey')).toEqual(ok)
+
+  const web = await cardId('web')
+  expect(await remoteRun(`DROVR_CARD_ID=${web} board status . x`)).toEqual(
+    refused('board: invalid request')
+  )
+  await back()
+  await expect(tile('web')).toHaveText('Running · hey')
+  await page.waitForTimeout(300)
+  await expect(tile('web')).toHaveText('Running · hey')
+  await expect(tileStatus('api')).toHaveText('Running')
+})
+
+test('#25 AC4: an extra pane of an SSH card has board through its own forward', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  await expect.poll(sshLog).toHaveLength(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await run('echo "up:$(echo pane)"')
+  await expect.poll(() => paneLines(1)).toContain('up:pane')
+
+  expect(await remoteRun('board status . pane', () => paneLines(1))).toEqual(ok)
+  await back()
+  await expect(tile('api')).toHaveText('Running · pane')
+  const [main, pane] = sshLog().map(forwardOf)
+  expect(main).not.toBeNull()
+  expect(pane).not.toBeNull()
+  expect(pane!.remote).not.toBe(main!.remote)
+  expect(pane!.local).not.toBe(main!.local)
+})
+
+test('#25 AC5: exit removes the remote socket, the remote directory and the local socket', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  await expect.poll(sshLog).toHaveLength(1)
+  const forward = forwardOf(sshLog()[0])!
+  const bin = await output('echo "$DROVR_BIN"', 'bin')
+  expect(bin).toMatch(new RegExp(`^${escaped(join(fake.home, 'tmp'))}/drovr\\.[A-Za-z0-9]{8}$`))
+  expect(present(forward.remote)).toBe(true)
+  expect(present(bin)).toBe(true)
+  expect(present(forward.local)).toBe(true)
+
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(tileStatus('api')).toHaveText('Stopped')
+  await expect.poll(() => present(forward.local)).toBe(false)
+  expect(present(forward.remote)).toBe(false)
+  expect(present(bin)).toBe(false)
+})
+
+test('#25 AC5: no session socket is left after quit, and a leftover is removed at launch', async () => {
+  const boardDir = join(dataDir, 'board')
+  mkdirSync(boardDir, { recursive: true, mode: 0o700 })
+  writeFileSync(join(boardDir, 's-old.sock'), '')
+  await launch()
+  await expect.poll(sessionSockets).toEqual([])
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  await back()
+  await createCard('web')
+  await connected()
+  expect(sessionSockets()).toHaveLength(2)
+
+  await app!.close()
+  app = undefined
+  expect(sessionSockets()).toEqual([])
+})
+
+test('#25 AC6: a host refusing the forward still runs the card; board cannot reach Drovr', async () => {
+  await launch({ FAKE_SSH_NO_FORWARD: '1' })
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  await expect
+    .poll(async () =>
+      (await bufferLines()).some((l) =>
+        /^Warning: remote port forwarding failed for listen path \/tmp\/drovr-[0-9a-f]{32}\.sock$/.test(
+          l
+        )
+      )
+    )
+    .toBe(true)
+  expect(await remoteRun('board status . hi')).toEqual(
+    refused("board: can't reach Drovr from this host")
+  )
   await expect(viewStatus()).toHaveText('Running')
 })

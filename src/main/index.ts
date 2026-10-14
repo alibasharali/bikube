@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { KILL_GRACE_MS } from '../core/session-manager'
-import { boardShellEnvFor, boardSocketPath, registerBoard } from './board'
+import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerSettings, type MainSettings } from './settings'
@@ -61,7 +61,9 @@ function startApp(): void {
   // The sync folder from the settings, read before the window asks for its status (#13 D13).
   const sync = registerSync(state, settings)
   const socketPath = boardSocketPath()
-  const terminals = registerTerminals(boardShellEnvFor(socketPath))
+  // Each SSH session's own `board` socket (#25 D2), relaying once `registerBoard` runs.
+  const sshBoard = sshBoardSockets(socketPath)
+  const terminals = registerTerminals(boardShellEnvFor(socketPath), sshBoard.sockets)
   registerClipboard()
   registerDirectories()
 
@@ -106,8 +108,8 @@ function startApp(): void {
   })
 
   app.whenReady().then(() => {
-    // `board` requests from cards (#9 D5): the socket is gone again once the app quits.
-    const closeBoard = registerBoard(socketPath, terminals)
+    // `board` requests from cards (#9 D5, #25 D2): the sockets are gone again once the app quits.
+    const closeBoard = registerBoard(socketPath, terminals, sshBoard)
     app.on('will-quit', closeBoard)
     settings.applyTheme()
     createWindow(settings)

@@ -13,6 +13,7 @@ import { PageGenerations } from '../core/page-generations'
 import { SessionCards } from '../core/session-cards'
 import { SessionManager } from '../core/session-manager'
 import { SessionOwners } from '../core/session-owners'
+import type { SessionSockets } from '../core/session-sockets'
 import { spawnInDirectory } from '../core/terminal-spawn'
 import { IPC, type TerminalExit } from '../shared/api'
 
@@ -37,9 +38,13 @@ export interface Terminals {
 /**
  * Wires the session manager to IPC. Sessions stream to the window that spawned them; each
  * local shell gets its card's `board` variables from `shellEnv` (#9 D3), an SSH card's none
- * (#12 D5).
+ * (#12 D5): each SSH session instead gets its own socket from `sessionSockets`, forwarded by
+ * `ssh -R` (#25 D1, D2), closed when the session exits.
  */
-export function registerTerminals(shellEnv: (cardId: string) => Record<string, string>): Terminals {
+export function registerTerminals(
+  shellEnv: (cardId: string) => Record<string, string>,
+  sessionSockets?: SessionSockets
+): Terminals {
   const manager = new SessionManager()
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
   const flow = new FlowControl(manager)
@@ -68,6 +73,7 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
     owners.remove(id)
     cards.remove(id)
     flow.forget(id)
+    sessionSockets?.sessionExited(id)
     const exit: TerminalExit = { id, exitCode, signal }
     if (owner && !owner.isDestroyed()) owner.send(IPC.exit, exit)
   })
@@ -106,16 +112,22 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
       const owner = event.sender
       if (pages.track(owner)) watch(owner)
       const samePage = pages.snapshot(owner)
+      // An SSH session's socket listens before `ssh` starts; with none, `ssh` gets no `-R` (#25 D7).
+      const remote = host !== null && host !== undefined
+      const board = remote && sessionSockets ? await sessionSockets.open(cardId) : null
       // Re-checked after the directory check: no spawn for a page that reloaded or closed meanwhile.
       // The frame check catches an old page's request that main only handled after the reload.
       const result = await spawnInDirectory(
-        { cols, rows, cwd, host },
-        // An SSH card's local shell gets none of the `board` variables (#12 D5, D9).
-        (options) =>
-          manager.spawn({
+        { cols, rows, cwd, host, board: board?.forward },
+        // An SSH card's local shell gets none of the `board` variables (#12 D5, #25 D2).
+        (options) => {
+          const info = manager.spawn({
             ...options,
             env: options.command === undefined ? shellEnv(cardId) : undefined
-          }),
+          })
+          board?.attach(info.id)
+          return info
+        },
         {
           stillCurrent: () =>
             samePage() &&
@@ -126,6 +138,8 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
       if (result.ok) {
         owners.add(owner, result.id)
         cards.add(result.id, cardId)
+      } else {
+        board?.discard()
       }
       return result
     }

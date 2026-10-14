@@ -71,17 +71,21 @@ my $req = "{" . join(",", js("v") . ":" . ${BOARD_PROTOCOL_VERSION}, js("cardId"
   js("command") . ":" . js($a[0]), js("card") . ":" . js($a[1]),
   js($a[0] eq "move" ? "column" : "text") . ":" . js($a[2])) . "}" . $NL;
 $SIG{PIPE} = "IGNORE";
-my $sock = IO::Socket::UNIX->new(Peer => $path) or fail(${perlString(CANT_REACH)});
 my $got = "";
+my $connected = 0;
 my $done = eval {
   local $SIG{ALRM} = sub { die "timeout" };
   alarm(${TIMEOUT_SECONDS});
+  my $sock = IO::Socket::UNIX->new(Peer => $path) or die "connect";
+  $connected = 1;
   my $buf;
   syswrite($sock, $req);
   while (index($got, $NL) < 0) { my $n = sysread($sock, $buf, 4096); last unless $n; $got .= $buf; }
   alarm(0);
   1;
 };
+alarm(0);
+fail(${perlString(CANT_REACH)}) unless $connected;
 my $NO = ${perlString(NO_ANSWER)};
 my $end = index($got, $NL);
 fail($NO) unless $done && $end >= 0;

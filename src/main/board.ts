@@ -1,8 +1,10 @@
 import { app, ipcMain, type WebContents } from 'electron'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { boardShellEnv } from '../core/board-env'
 import { BoardRelay } from '../core/board-relay'
-import { startBoardServer, type BoardServer } from '../core/board-server'
+import { NO_ANSWER } from '../core/board-protocol'
+import { startBoardServer, type BoardHandler, type BoardServer } from '../core/board-server'
+import { removeLeftoverSessionSockets, SessionSockets } from '../core/session-sockets'
 import { IPC } from '../shared/api'
 import type { Terminals } from './terminals'
 
@@ -30,6 +32,24 @@ function boardPaths(): { binDir: string; cliPath: string } {
   }
 }
 
+/**
+ * The SSH sessions' sockets (#25 D2), next to `board.sock` in its private directory. They serve
+ * once `registerBoard` hands them its relay; none exists before then.
+ */
+export function sshBoardSockets(socketPath: string): {
+  sockets: SessionSockets
+  relayTo(handler: BoardHandler): void
+} {
+  let relay: BoardHandler = async () => ({ ok: false, error: NO_ANSWER })
+  const sockets = new SessionSockets(dirname(socketPath), (request) => relay(request))
+  return {
+    sockets,
+    relayTo: (handler) => {
+      relay = handler
+    }
+  }
+}
+
 /** The variables each card's shell gets so `board` works in it (#9 D3). */
 export function boardShellEnvFor(socketPath: string): (cardId: string) => Record<string, string> {
   const { binDir, cliPath } = boardPaths()
@@ -47,9 +67,14 @@ export function boardShellEnvFor(socketPath: string): (cardId: string) => Record
 /**
  * Serves `board` on the socket (#9 D5, D6, D10): each request goes to the window owning the
  * calling card's session, whose answer is relayed back. When listening fails the app runs on
- * without it. Returns the function that closes the socket on quit.
+ * without it. The SSH sessions' sockets relay the same way (#25 D2); a previous run's leftovers
+ * are removed first. Returns the function that closes every socket on quit.
  */
-export function registerBoard(socketPath: string, terminals: Terminals): () => void {
+export function registerBoard(
+  socketPath: string,
+  terminals: Terminals,
+  ssh: ReturnType<typeof sshBoardSockets>
+): () => void {
   const relay = new BoardRelay<WebContents>(
     (cardId) => terminals.ownerOfCard(cardId),
     (owner, requestId, cardId, command) => {
@@ -66,6 +91,9 @@ export function registerBoard(socketPath: string, terminals: Terminals): () => v
     relay.answer(event.sender, requestId, reply)
   })
 
+  removeLeftoverSessionSockets(dirname(socketPath))
+  ssh.relayTo((request) => relay.handle(request))
+
   let server: BoardServer | null = null
   let closed = false
   startBoardServer(socketPath, (request) => relay.handle(request)).then(
@@ -80,6 +108,7 @@ export function registerBoard(socketPath: string, terminals: Terminals): () => v
   )
   return () => {
     closed = true
+    ssh.sockets.closeAll()
     void server?.close()
     server = null
   }

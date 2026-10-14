@@ -122,7 +122,8 @@ export class SessionRouter {
   release(id: string): void {
     this.routes.delete(id)
     const flight = this.inFlight.get(id)
-    if (flight && flight.chars > 0) this.acks.discarded(id, flight.chars)
+    // Also flushes what was parsed and is still batched; sends nothing when both are 0.
+    if (flight) this.acks.discarded(id, flight.chars)
     this.ended(id)
   }
 

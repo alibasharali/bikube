@@ -186,6 +186,7 @@ test('AC5: a paused card still stops when Closed, and still ends when deleted', 
 
 test('AC6: ordinary output is unchanged', async () => {
   await newCard('api')
+  // `sleep` keeps 200000 the last line: a prompt after it would become the board's last line.
   await run('seq 1 200000; sleep 30')
   await expect
     .poll(async () => (await bufferLines()).filter((l) => l !== '').at(-1), { timeout: 15_000 })

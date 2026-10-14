@@ -1,8 +1,8 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { acknowledgeRequest } from '../core/ack-request'
 import { FlowControl } from '../core/flow-control'
 import {
   SPAWN_REFUSAL,
-  isAckChars,
   isCardId,
   isCurrentMainFrame,
   isSessionId,
@@ -138,7 +138,7 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
   })
   // Fire-and-forget like `write`; anything but a positive safe integer is ignored (#16 D3).
   ipcMain.on(IPC.ack, (event, id: unknown, chars: unknown) => {
-    if (ownedBy(event, id) && isAckChars(chars)) flow.acknowledged(id, chars)
+    acknowledgeRequest((session): session is string => ownedBy(event, session), id, chars, flow)
   })
 
   return {

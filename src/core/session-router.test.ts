@@ -202,6 +202,16 @@ describe('SessionRouter acknowledgements (#16 D4)', () => {
     expect(api.acks).toEqual([['s1', 3_000]])
   })
 
+  it('acknowledges parsed characters still batched when a fully parsed session is released', async () => {
+    const r = slowRoute()
+    await adopted(r)
+    api.emitData('s1', chunk(3_000))
+    r.parse[0]()
+    expect(api.acks).toEqual([])
+    router.release('s1')
+    expect(api.acks).toEqual([['s1', 3_000]])
+  })
+
   it('drops what a session held back once it exits', async () => {
     const r = slowRoute()
     await adopted(r)

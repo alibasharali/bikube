@@ -2,7 +2,7 @@
 item: 13
 type: feature
 title: Sync between machines
-status: draft
+status: approved
 branch: claude/13-sync-between-machines
 ---
 

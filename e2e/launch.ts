@@ -1,4 +1,4 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -29,7 +29,7 @@ export interface LaunchOptions {
    * build; it loads its own bundled app, so no `.` is passed.
    */
   executablePath?: string
-  /** Called with the main process's stderr from the start. */
+  /** Called with the main process's stderr from the start (of the launch kept, after a retry). */
   onStderr?: (chunk: string) => void
 }
 
@@ -39,8 +39,14 @@ export interface Launched {
   dataDir: string
 }
 
-/** How long a launch may take to bring its window, then the app's root (#23 D2). */
-const WINDOW_TIMEOUT_MS = Number(process.env['DROVR_E2E_WINDOW_TIMEOUT_MS'] ?? 30_000)
+/**
+ * How long one launch may take to bring its window and the app's root (#23 D2): two attempts fit
+ * in the 60 s test timeout. `DROVR_E2E_WINDOW_TIMEOUT_MS` overrides it (a number above 0).
+ */
+const WINDOW_TIMEOUT_MS = ((): number => {
+  const ms = Number(process.env['DROVR_E2E_WINDOW_TIMEOUT_MS'])
+  return Number.isFinite(ms) && ms > 0 ? ms : 25_000
+})()
 
 /**
  * Launches the built app (or the packaged executable given as `executablePath`) with its own data
@@ -54,10 +60,14 @@ export async function launchApp(options: LaunchOptions = {}): Promise<Launched> 
     return await launchOnce(options, dataDir)
   } catch (first) {
     console.warn(`launchApp: no window, launching again: ${String(first)}`)
+    // The retry gets its own time on top of the test's.
+    test.info().setTimeout(test.info().timeout + WINDOW_TIMEOUT_MS)
     try {
       return await launchOnce(options, dataDir)
     } catch (second) {
-      throw new Error(`launchApp: no window twice:\n${String(first)}\n${String(second)}`)
+      throw new Error(`launchApp: no window twice:\n${String(first)}\n${String(second)}`, {
+        cause: second
+      })
     }
   }
 }
@@ -67,25 +77,32 @@ async function launchOnce(options: LaunchOptions, dataDir: string): Promise<Laun
   for (const [key, value] of Object.entries(options.env ?? process.env)) {
     if (value !== undefined) base[key] = value
   }
+  const deadline = Date.now() + WINDOW_TIMEOUT_MS
   const app = await electron.launch({
     ...(options.executablePath ? { executablePath: options.executablePath } : {}),
     args: [...(options.executablePath ? [] : ['.']), '--no-sandbox', ...(options.args ?? [])],
-    env: { ...base, DROVR_USER_DATA_DIR: dataDir }
+    env: { ...base, DROVR_USER_DATA_DIR: dataDir },
+    timeout: WINDOW_TIMEOUT_MS
   })
+  // `onStderr` hears only the launch that is kept: what came before the window is replayed then.
   let stderr = ''
+  let onStderr: ((chunk: string) => void) | undefined
   app.process().stderr?.on('data', (chunk: Buffer) => {
-    stderr += chunk.toString()
-    options.onStderr?.(chunk.toString())
+    if (onStderr) onStderr(chunk.toString())
+    else stderr += chunk.toString()
   })
   try {
-    const page = await app.firstWindow({ timeout: WINDOW_TIMEOUT_MS })
-    await page.waitForSelector('[data-testid=app]', { timeout: WINDOW_TIMEOUT_MS })
+    const page = await app.firstWindow({ timeout: Math.max(1, deadline - Date.now()) })
+    await page.waitForSelector('[data-testid=app]', { timeout: Math.max(1, deadline - Date.now()) })
+    if (options.onStderr) {
+      onStderr = options.onStderr
+      if (stderr) onStderr(stderr)
+    }
     return { app, page, dataDir }
   } catch (error) {
     app.process().kill('SIGKILL')
     await app.close().catch(() => {})
-    throw new Error(
-      `${error instanceof Error ? error.message : String(error)}\n--- stderr ---\n${stderr}`
-    )
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`${reason}\n--- stderr ---\n${stderr}`, { cause: error })
   }
 }

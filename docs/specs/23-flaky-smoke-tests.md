@@ -20,7 +20,7 @@ What the code shows:
 ## Decisions
 
 - **D1 – Match the start of the fake claude's line:** AC9 waits for a row that starts with `fake-claude --session-id <u>`, the line the fake claude prints on a fresh row after the shell ran it; a redraw can leave characters after it but never before. *Why:* that row proves the typed command ran with that id, and it can't be garbled by the typed row's redraw.
-- **D2 – A launch that brings no window is retried once, loudly:** `launchApp` gives the window and the app's root 30 s each; when either doesn't come, it prints the main process's stderr and the reason to the test's output, kills that app, and launches once more on the same data directory. A second failure fails the test with both reasons. *Why:* a launch hang is Electron's, not the app's behaviour under test; one retry with the evidence in the log keeps the suite green without hiding a launch that never works.
+- **D2 – A launch that brings no window is retried once, loudly:** `launchApp` gives each launch 25 s in all to bring its window and the app's root (`DROVR_E2E_WINDOW_TIMEOUT_MS` overrides it); when they don't come, it prints the reason and the main process's stderr to the test's output, kills that app, extends the test's timeout by as much and launches once more on the same data directory. A second failure fails the test with both reasons. A caller's `onStderr` hears only the launch that is kept. *Why:* a launch hang is Electron's, not the app's behaviour under test; one retry with the evidence in the log keeps the suite green without hiding a launch that never works.
 
 ## Acceptance criteria
 

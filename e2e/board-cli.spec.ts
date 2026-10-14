@@ -155,6 +155,11 @@ async function board(
       { timeout: 15_000 }
     )
     .toBeGreaterThanOrEqual(0)
+    .catch(async (error: Error) => {
+      // Show what the terminal holds, so a CI-only timeout can be diagnosed from the log.
+      const screen = (await bufferLines()).filter((l) => l.trim() !== '').join('\n')
+      throw new Error(`${error.message}\n--- terminal ---\n${screen}`)
+    })
   return {
     code,
     stdout: readFileSync(join(dir, `${tag}.out`), 'utf8'),

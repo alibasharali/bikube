@@ -66,6 +66,7 @@ function startApp(): void {
   registerDirectories()
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.
+  // `about:blank` never fires `will-navigate`; the preload cancels it (#20).
   app.on('web-contents-created', (_, contents) => {
     contents.on('will-navigate', (event) => event.preventDefault())
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))

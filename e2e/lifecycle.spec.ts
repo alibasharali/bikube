@@ -66,15 +66,23 @@ async function spawnShell({ ignoreHangup = false } = {}): Promise<{ id: string; 
   return { id, pid: Number(readFileSync(file, 'utf8').trim()) }
 }
 
+// Each reaches a navigation lock: `about:blank` the preload's (no `will-navigate` fires for it,
+// #20), the others main's. A `data:` URL wouldn't: Chromium blocks it before any navigation event.
+const blockedUrls = ['about:blank', 'file:///tmp/', 'https://example.com/']
+
 test('the page cannot navigate away or open windows', async () => {
   const url = page.url()
-  await page.evaluate(() => {
-    location.href = 'data:text/html,<h1>replaced</h1>'
-  })
+  for (const target of blockedUrls) {
+    await page.evaluate((target) => {
+      location.href = target
+    }, target)
+    await page.waitForTimeout(500)
+    expect(page.url()).toBe(url)
+  }
+  // Not a locator: it would wait for the cancelled navigations to finish.
+  expect(await page.evaluate(() => document.querySelector('[data-testid=app]') !== null)).toBe(true)
   const opened = await page.evaluate(() => window.open('https://example.com') === null)
   await page.waitForTimeout(500)
-  expect(page.url()).toBe(url)
-  await expect(page.getByTestId('app')).toBeVisible()
   expect(opened).toBe(true)
   expect(app.windows()).toHaveLength(1)
 })
@@ -100,8 +108,8 @@ test('many shells in one window add no listener per session', async () => {
 
 test('a blocked navigation leaves the shells running', async () => {
   const { pid } = await spawnShell()
-  // Chromium starts these navigations (did-start-navigation) before the lock cancels them.
-  for (const url of ['file:///tmp/', 'https://example.com/']) {
+  // Chromium starts some of these (did-start-navigation) before a lock cancels them.
+  for (const url of blockedUrls) {
     await page.evaluate((url) => {
       location.href = url
     }, url)

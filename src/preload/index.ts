@@ -79,3 +79,18 @@ const api: DrovrApi = {
 }
 
 contextBridge.exposeInMainWorld('drovr', api)
+
+/** The part of the Navigation API used below; TypeScript's DOM lib doesn't have it yet. */
+declare const navigation: {
+  addEventListener(
+    type: 'navigate',
+    listener: (event: Event & { readonly destination: { readonly url: string } }) => void
+  ): void
+}
+
+// The navigation lock in main never sees a page going to `about:blank`: no `will-navigate` fires
+// for it (#20). Cancelled here, in the isolated world the page's own scripts can't reach.
+navigation.addEventListener('navigate', (event) => {
+  if (event.cancelable && new URL(event.destination.url).protocol === 'about:')
+    event.preventDefault()
+})

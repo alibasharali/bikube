@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | review | `19c68c2..1722e46` | fix r1 | `KILL_GRACE_MS`; `SessionManager.killAll(): Promise<void>`, `forceKillAll()`; `Terminals.sessionCount`, `killAll(): Promise<void>`, `forceKillAll()` |
+| S1 | done | `19c68c2..1722e46` | fixed r1 | `KILL_GRACE_MS`; `SessionManager.killAll(): Promise<void>`, `forceKillAll()`; `Terminals.sessionCount`, `killAll(): Promise<void>`, `forceKillAll()` |
 
 ## Rulings
 

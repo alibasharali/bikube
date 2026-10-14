@@ -901,3 +901,71 @@ describe('flush and busy (#26 D5, AC6)', () => {
     expect(sync.busy()).toBe(false)
   })
 })
+
+describe('a board change while the launch read runs (#26 D2, #13 D11)', () => {
+  const api = workspace('api', 'api')
+  /** Starts with the launch read held, notes a change, then lets the read return. */
+  const changeDuringLaunch = async (beforeRelease: () => void): Promise<SyncFolder> => {
+    fs.holdReads = true
+    const sync = open()
+    const launched = sync.start(F, state(api))
+    await settle()
+    expect(fs.readsInFlight).toBe(1)
+    sync.noteBoard(state({ ...api, name: 'changed' }))
+    await tick(SYNC_WRITE_DELAY_MS)
+    beforeRelease()
+    fs.holdReads = false
+    fs.releaseRead()
+    expect(await launched).toBeNull()
+    await settle()
+    return sync
+  }
+
+  it('writes the change when the folder has no file', async () => {
+    const sync = await changeDuringLaunch(() => {})
+    expect(written().board.workspaces[0].name).toBe('changed')
+    expect(writes()).toBe(1)
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it("writes the change over another machine's file once the folder is back (D12)", async () => {
+    const sync = await changeDuringLaunch(() => fs.removeFolder())
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: F })
+    fs.dirs.add(F)
+    const other = new SyncFolder({ fs, home: '/home/other', now: () => NOW, log: () => {} })
+    await other.start(F, state({ ...api, name: 'remote', directory: '/home/other/api' }))
+    expect(written().board.workspaces[0].name).toBe('remote')
+    expect(await sync.read()).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('changed')
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it("returns the file's board and writes nothing when the file is valid", async () => {
+    await open().setFolder(F, state({ ...api, name: 'file' }))
+    fs.events = []
+    fs.holdReads = true
+    const sync = open()
+    const launched = sync.start(F, state(api))
+    await settle()
+    sync.noteBoard(state({ ...api, name: 'changed' }))
+    await tick(SYNC_WRITE_DELAY_MS)
+    fs.holdReads = false
+    fs.releaseRead()
+    expect(await launched).toEqual([{ ...api, name: 'file' }])
+    await tick(1000)
+    expect(fs.events).toEqual([])
+    expect(written().board.workspaces[0].name).toBe('file')
+    expect(sync.busy()).toBe(false)
+  })
+})
+
+describe('a board change while turning sync on is queued (#26 D2, #13 D9)', () => {
+  it('joins with the latest board saved, not the one sync was turned on with', async () => {
+    const api = workspace('api', 'api')
+    const sync = open()
+    const joined = sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'saved' }))
+    expect(await joined).toBeNull()
+    expect(written().board.workspaces[0].name).toBe('saved')
+  })
+})

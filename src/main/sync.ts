@@ -40,8 +40,8 @@ const UNAVAILABLE_RETRY_MS = 2000
 
 /**
  * The sync folder (#13 D1, D4, D9, D10, D11, D13, D14): reads the folder from the settings at once
- * and applies its board to main's state before any window asks for it (so the window opens on the
- * synced board), reads it again whenever the folder changes or a window gains focus, writes the
+ * and applies its board to main's state once read (#26 S2 makes the window's first load wait for
+ * it, bounded, so the window opens on the synced board), reads it again whenever the folder changes or a window gains focus, writes the
  * board from every save, and serves the `sync:*` channels to a window's own top-level page only.
  */
 export function registerSync(state: MainState, settings: MainSettings): MainSync {
@@ -146,8 +146,10 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   const fromMainFrame = (event: IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
 
-  /** Keeps `folder` in the settings and joins the boards, handing a joined board to `sender`. */
-  /** Resolves once the queued set-folder operation has finished (#26 D6). */
+  /**
+   * Keeps `folder` in the settings and joins the boards, handing a joined board to `sender`;
+   * resolves once the queued set-folder operation has finished (#26 D6).
+   */
   const applyFolder = async (folder: string | null, sender: WebContents): Promise<void> => {
     settings.setSyncFolder(folder)
     const joined = await sync.setFolder(folder, state.load())

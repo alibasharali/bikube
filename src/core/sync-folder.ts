@@ -111,20 +111,19 @@ export class SyncFolder {
    * (#26 D2); resolves once done.
    */
   setFolder(folder: string | null, local: WorkspaceState): Promise<Workspace[] | null> {
-    return this.enqueue(() => this.setFolderNow(folder, local), null)
+    // The join uses the latest board noted when it runs, so a save made meanwhile isn't lost.
+    this.noteLocal(local.workspaces)
+    return this.enqueue(() => this.setFolderNow(folder), null)
   }
 
-  private async setFolderNow(
-    folder: string | null,
-    local: WorkspaceState
-  ): Promise<Workspace[] | null> {
+  private async setFolderNow(folder: string | null): Promise<Workspace[] | null> {
     if (folder === this.folder) return null
     // D10: a pending change goes to the old folder first when it is synced (read first, D12).
     if (this.current.kind === 'synced') await this.writePending()
     else this.cancelPending()
     this.folder = folder
     this.last = null
-    const localText = this.noteLocal(local.workspaces)
+    const localText = this.noteLocal(this.localWorkspaces)
     this.joinOwed = folder !== null
     if (folder === null) {
       this.setStatus({ kind: 'off' })
@@ -152,40 +151,47 @@ export class SyncFolder {
    * At launch, with the folder kept in the settings (or null): reads the file to know the last
    * board and the status, and returns the file's board for this machine to apply (D7, D11): not a
    * join, and compared with nothing, so a valid file always applies. A missing file gets `local`'s
-   * board. Returns null when there is nothing to apply. Queued (#26 D2); resolves once done.
+   * board. Returns null when there is nothing to apply. Queued (#26 D2); resolves once done. The
+   * folder is in use at once, so a board change noted while the read runs is kept (its write is
+   * queued behind this read) and the read uses the latest board noted.
    */
   start(folder: string | null, local: WorkspaceState): Promise<Workspace[] | null> {
-    return this.enqueue(() => this.startNow(folder, local), null)
-  }
-
-  private async startNow(
-    folder: string | null,
-    local: WorkspaceState
-  ): Promise<Workspace[] | null> {
     this.folder = folder
     this.last = null
-    const localText = this.noteLocal(local.workspaces)
+    const launchText = this.noteLocal(local.workspaces)
     this.joinOwed = false
+    return this.enqueue(() => this.startNow(folder, launchText), null)
+  }
+
+  /** `launchText` is this machine's board as at launch, before any change noted during the read. */
+  private async startNow(folder: string | null, launchText: string): Promise<Workspace[] | null> {
     if (folder === null) return null
     const read = await this.readFile(folder)
+    const localText = this.noteLocal(this.localWorkspaces)
     switch (read.kind) {
       case 'missing':
+        // The latest board is written now; a pending write of it would only repeat it.
+        this.cancelPending()
         await this.write(localText)
         return null
       case 'valid':
+        // The file's board wins at launch (D11), over a change noted while it was read.
+        this.cancelPending()
         this.last = this.boardText(read.workspaces)
         this.local = this.last
         this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         return read.workspaces
       case 'unreadable':
-        // Nothing has changed here since launch: once the file is valid it applies (D11).
-        this.last = localText
+        // Once the file is valid it applies (D11), unless a change was noted here since launch,
+        // even during this read, which then wins (D12).
+        this.last = launchText
         this.log(`sync file unreadable (${read.reason}); not writing`)
         this.setStatus({ kind: 'unreadable', folder })
         return null
       case 'unavailable':
-        // Nothing has changed here since launch: once the folder is back its file applies (D11).
-        this.last = localText
+        // Once the folder is back its file applies (D11), unless a change was noted here since
+        // launch, even during this read, which then wins (D12).
+        this.last = launchText
         this.log(`sync folder unavailable (${read.reason})`)
         this.setStatus({ kind: 'unavailable', folder })
         return null
@@ -258,8 +264,9 @@ export class SyncFolder {
    * (#26 D2), which takes the pending board when it runs, so a read before it can still drop it.
    */
   noteBoard(state: WorkspaceState): void {
-    if (this.folder === null) return
+    // Noted even while sync is off, for a queued `setFolder`'s join.
     const text = this.noteLocal(state.workspaces)
+    if (this.folder === null) return
     if (this.current.kind === 'unreadable') return
     if (text === this.last) {
       this.cancelPending()

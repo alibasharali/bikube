@@ -8,7 +8,8 @@ export interface SettingsStore {
   /**
    * Applies `change` when the result is valid (D1; the family is trimmed, empty means default),
    * tells subscribers and sends the whole settings to `save`. Returns false, changing nothing,
-   * when it isn't valid.
+   * when it isn't valid; a valid change that leaves the settings as they are returns true without
+   * telling or saving (D7: nothing is written until a setting changes).
    */
   update(change: Partial<Settings>): boolean
   /** Returns an unsubscribe function. */
@@ -26,6 +27,13 @@ export function createSettingsStore(
     update(change) {
       const next = validateSettings({ ...current, ...change })
       if (next === null) return false
+      if (
+        next.theme === current.theme &&
+        next.fontSize === current.fontSize &&
+        next.fontFamily === current.fontFamily
+      ) {
+        return true
+      }
       current = next
       for (const listener of [...listeners]) listener()
       save(next)

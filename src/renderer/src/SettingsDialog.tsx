@@ -1,5 +1,10 @@
 import { useId, useState } from 'react'
-import { DEFAULT_FONT_FAMILY, THEMES, type Theme } from '../../core/settings'
+import {
+  DEFAULT_FONT_FAMILY,
+  MAX_FONT_FAMILY_LENGTH,
+  THEMES,
+  type Theme
+} from '../../core/settings'
 import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
 import Modal from './Modal'
 import { settingsStore, useSettings } from './settings'
@@ -8,7 +13,8 @@ const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', li
 
 /**
  * The Settings dialog (#10 D5): Theme, Font size and Font family. Every valid change applies and
- * saves at once; closing keeps what was applied and drops an invalid font size.
+ * saves at once; closing applies a typed family, keeps what was applied and drops an invalid
+ * font size.
  */
 function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const settings = useSettings()
@@ -31,13 +37,19 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
     }
   }
 
+  // Closing any way (Done, Escape, a click outside) applies a family typed but not yet applied.
+  const close = (): void => {
+    settingsStore.update({ fontFamily: family })
+    onClose()
+  }
+
   const sizeId = `${id}-size`
   const sizeErrorId = `${id}-size-error`
   const familyId = `${id}-family`
   return (
     <Modal
       title="Settings"
-      onClose={onClose}
+      onClose={close}
       testId="settings-dialog"
       initialFocus='input[type="radio"]:checked'
       closeOnOutsideClick
@@ -87,6 +99,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           id={familyId}
           data-testid="settings-font-family"
           value={family}
+          maxLength={MAX_FONT_FAMILY_LENGTH}
           placeholder={DEFAULT_FONT_FAMILY}
           spellCheck={false}
           autoComplete="off"
@@ -104,7 +117,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           type="button"
           className="btn btn-primary"
           data-testid="settings-done"
-          onClick={onClose}
+          onClick={close}
         >
           Done
         </button>

@@ -32,6 +32,21 @@ describe('createSettingsStore (#10 D6)', () => {
     expect(save).not.toHaveBeenCalled()
   })
 
+  it('changes nothing for an update that leaves the settings as they are: not told, not saved', () => {
+    const save = vi.fn()
+    const store = createSettingsStore({ ...DEFAULT_SETTINGS }, save)
+    const listener = vi.fn()
+    store.subscribe(listener)
+    const before = store.get()
+    expect(store.update({ theme: 'system', fontFamily: `  ${DEFAULT_SETTINGS.fontFamily} ` })).toBe(
+      true
+    )
+    expect(store.update({ fontFamily: '' })).toBe(true)
+    expect(store.get()).toBe(before)
+    expect(listener).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('stops telling a listener once it unsubscribes', () => {
     const store = createSettingsStore({ ...DEFAULT_SETTINGS }, vi.fn())
     const listener = vi.fn()

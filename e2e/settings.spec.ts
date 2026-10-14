@@ -155,6 +155,20 @@ test('AC1: with no settings file and a dark OS appearance the board looks as bef
   expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
 })
 
+test('AC1: opening Settings, leaving the family field and closing writes no settings file', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByLabel('Font family').focus()
+  await dialog(page).getByLabel('Font size').focus()
+  await dialog(page).getByRole('button', { name: 'Done' }).click()
+  await expect(dialog(page)).toHaveCount(0)
+  // Give a stray write the save interval (200 ms) and more to land before checking.
+  await page.waitForTimeout(500)
+  expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
+})
+
 test('the light palette applies under a light OS appearance with theme System', async () => {
   const launched = await launchApp()
   app = launched.app
@@ -456,6 +470,35 @@ test('AC6: the trimmed family applies to every terminal; clearing it restores th
   await page.keyboard.press('Escape')
   await openCard(page, 'api')
   expect((await openLook(page)).fontFamily).toBe('Menlo, Consolas, monospace')
+})
+
+test('AC6: a typed family applies when the dialog closes by Escape or a click outside; at most 200 characters', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await alphaWithApi(page)
+
+  await page.keyboard.press(SHORTCUT)
+  const family = dialog(page).getByLabel('Font family')
+  await expect(family).toHaveAttribute('maxlength', '200')
+  await family.fill('Courier New')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+  await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New')
+  await expectSettingsFile(
+    dataDir,
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New"}}'
+  )
+
+  await page.keyboard.press(SHORTCUT)
+  await family.fill('Courier New, monospace')
+  await page.mouse.click(5, 5)
+  await expect(dialog(page)).toHaveCount(0)
+  await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
+  await expectSettingsFile(
+    dataDir,
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace"}}'
+  )
 })
 
 test('font fields: an invalid size shows the error and is not applied; the family is trimmed; both save', async () => {

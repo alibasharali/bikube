@@ -143,12 +143,17 @@ async function board(
   await run(`${command} >${tag}.out 2>${tag}.err; echo "${tag} rc=$?"`)
   const pattern = new RegExp(`^${tag} rc=(\\d+)$`)
   let code = -1
+  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache, which
+  // can take over 5 s on a CI runner (the run's first test timed out there); later ones are fast.
   await expect
-    .poll(async () => {
-      const line = (await bufferLines()).find((l) => pattern.test(l))
-      code = line ? Number(pattern.exec(line)![1]) : -1
-      return code
-    })
+    .poll(
+      async () => {
+        const line = (await bufferLines()).find((l) => pattern.test(l))
+        code = line ? Number(pattern.exec(line)![1]) : -1
+        return code
+      },
+      { timeout: 15_000 }
+    )
     .toBeGreaterThanOrEqual(0)
   return {
     code,

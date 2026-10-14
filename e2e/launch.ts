@@ -60,8 +60,9 @@ export async function launchApp(options: LaunchOptions = {}): Promise<Launched> 
     return await launchOnce(options, dataDir)
   } catch (first) {
     console.warn(`launchApp: no window, launching again: ${String(first)}`)
-    // The retry gets its own time on top of the test's.
-    test.info().setTimeout(test.info().timeout + WINDOW_TIMEOUT_MS)
+    // The retry gets its own time on top of the test's; a test with no timeout (0) keeps none.
+    const timeout = test.info().timeout
+    if (timeout > 0) test.info().setTimeout(timeout + WINDOW_TIMEOUT_MS)
     try {
       return await launchOnce(options, dataDir)
     } catch (second) {

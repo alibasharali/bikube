@@ -14,6 +14,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-10-14: Idea promoted to feature by full auto; grilling round 1 answered by full auto; spec approved by full auto (no stack change).
 
+- 2026-10-14 S3 (full auto, round 2 Q1): sync turned on while the folder is unavailable or its file unreadable → the join is still owed and runs on the first valid read or recovery (D9 updated).
+
 ## Verification
 
 - todo

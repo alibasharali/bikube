@@ -12,7 +12,9 @@ import {
   type CardStatus
 } from '../../core/card-status'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
+import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
 import { isSoftwareRenderer } from '../../core/webgl-support'
+import { settingsStore } from './settings'
 import '@xterm/xterm/css/xterm.css'
 
 let webglWorthIt: boolean | undefined
@@ -32,6 +34,38 @@ function hardwareWebgl(): boolean {
   }
 }
 
+/** Every screen not yet disposed, so a settings or OS appearance change reaches them all. */
+const liveScreens = new Set<XtermScreen>()
+let darkQuery: MediaQueryList | undefined
+let following = false
+
+/** The OS appearance as the page sees it: main's native theme, which follows the OS under System. */
+function osPrefersDark(): boolean {
+  darkQuery ??= window.matchMedia('(prefers-color-scheme: dark)')
+  return darkQuery.matches
+}
+
+/** The terminal look for the current settings and OS appearance (#10 D3, D4). */
+function currentAppearance(): TerminalAppearance {
+  return terminalAppearance(settingsStore.get(), osPrefersDark())
+}
+
+/**
+ * Applies the current look to every screen whenever the settings or the OS appearance change,
+ * running or not (D3); set up once, with the first screen.
+ */
+function followAppearance(): void {
+  if (following) return
+  following = true
+  const apply = (): void => {
+    const appearance = currentAppearance()
+    for (const screen of liveScreens) screen.applyAppearance(appearance)
+  }
+  settingsStore.subscribe(apply)
+  osPrefersDark()
+  darkQuery?.addEventListener('change', apply)
+}
+
 /** The element the smoke tests read the buffer from. */
 export type TerminalHost = HTMLDivElement & { __xterm?: XTerm }
 
@@ -41,13 +75,19 @@ export type TerminalHost = HTMLDivElement & { __xterm?: XTerm }
  * a WebGL context, since Chromium caps them at about 16.
  */
 export class XtermScreen implements CardScreen {
-  readonly term = new XTerm({ fontFamily: 'Menlo, Consolas, monospace', fontSize: 13 })
+  readonly term: XTerm
+  private palette: TerminalAppearance['theme']
   private readonly host: TerminalHost = document.createElement('div')
   private readonly fit = new FitAddon()
   private opened = false
   private webgl: WebglAddon | undefined
 
   constructor() {
+    const { fontFamily, fontSize, theme } = currentAppearance()
+    this.palette = theme
+    this.term = new XTerm({ fontFamily, fontSize, theme: { ...theme } })
+    followAppearance()
+    liveScreens.add(this)
     this.host.className = 'terminal'
     this.host.dataset.testid = 'terminal'
     this.host.__xterm = this.term
@@ -124,7 +164,25 @@ export class XtermScreen implements CardScreen {
     this.term.focus()
   }
 
+  /**
+   * Takes on a new look without touching the process or the scrollback (D3, D4). An attached
+   * screen refits, so new columns and rows reach its PTY as a resize; a detached one refits when
+   * next attached.
+   */
+  applyAppearance({ fontFamily, fontSize, theme }: TerminalAppearance): void {
+    const options = this.term.options
+    if (this.palette !== theme) {
+      this.palette = theme
+      options.theme = { ...theme }
+    }
+    if (options.fontFamily === fontFamily && options.fontSize === fontSize) return
+    options.fontFamily = fontFamily
+    options.fontSize = fontSize
+    this.fitNow()
+  }
+
   dispose(): void {
+    liveScreens.delete(this)
     this.dropWebgl()
     this.host.remove()
     this.term.dispose()

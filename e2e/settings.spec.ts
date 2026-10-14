@@ -73,6 +73,50 @@ const color = (
     property
   ] as const)
 
+interface TerminalLook {
+  fontSize: number
+  fontFamily: string
+  background: string
+  foreground: string
+  cols: number
+}
+
+/** The open card's terminal look. */
+async function openLook(page: Page): Promise<TerminalLook> {
+  const look = await page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: {
+            cols: number
+            options: {
+              fontSize: number
+              fontFamily: string
+              theme: { background: string; foreground: string }
+            }
+          }
+        })
+      | null
+    const term = host?.__xterm
+    if (!term) return null
+    return {
+      fontSize: term.options.fontSize,
+      fontFamily: term.options.fontFamily,
+      background: term.options.theme.background,
+      foreground: term.options.theme.foreground,
+      cols: term.cols
+    }
+  })
+  if (!look) throw new Error('no open terminal')
+  return look
+}
+
+const terminalBackground = (page: Page): Promise<string> =>
+  color(
+    page,
+    '[data-testid=card-view] [data-testid=terminal] .xterm-scrollable-element',
+    'backgroundColor'
+  )
+
 /**
  * Playwright emulates `prefers-color-scheme: light` by default, which hides the native theme main
  * sets from the Theme setting; turn emulation off so the page follows `nativeTheme` as in the app.
@@ -97,6 +141,15 @@ test('AC1: with no settings file and a dark OS appearance the board looks as bef
   await expect
     .poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
     .toBe('rgb(20, 21, 26)')
+  await alphaWithApi(page)
+  await expect
+    .poll(() => openLook(page))
+    .toMatchObject({
+      fontSize: 13,
+      fontFamily: 'Menlo, Consolas, monospace',
+      background: '#14151a'
+    })
+  await expect.poll(() => terminalBackground(page)).toBe('rgb(20, 21, 26)')
   // Give a stray write the save interval (200 ms) and more to land before checking.
   await page.waitForTimeout(500)
   expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
@@ -247,6 +300,15 @@ const boardColours = async (page: Page): Promise<typeof DARK> => ({
   text: await color(page, 'body', 'color')
 })
 
+const DARK_TERMINAL = { background: '#14151a', foreground: '#e6e7eb', shown: 'rgb(20, 21, 26)' }
+const LIGHT_TERMINAL = { background: '#ffffff', foreground: '#1b1d24', shown: 'rgb(255, 255, 255)' }
+
+/** The open terminal's theme colours, and the background it actually shows. */
+const terminalColours = async (page: Page): Promise<typeof DARK_TERMINAL> => {
+  const { background, foreground } = await openLook(page)
+  return { background, foreground, shown: await terminalBackground(page) }
+}
+
 test('AC3: picking Light recolours the board at once, Dark restores it, and api keeps running', async () => {
   const launched = await launchApp()
   app = launched.app
@@ -257,23 +319,29 @@ test('AC3: picking Light recolours the board at once, Dark restores it, and api 
   await page.keyboard.type('echo marker-$((40+2))')
   await page.keyboard.press('Enter')
   await expect.poll(async () => (await bufferLines(page)).includes('marker-42')).toBe(true)
+  const scrollback = await bufferLines(page)
 
   await page.keyboard.press(SHORTCUT)
   await expect(dialog(page)).toBeVisible()
   // xvfb's OS appearance is light, so start from Dark, the look of AC1.
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expect.poll(() => boardColours(page)).toEqual(DARK)
+  await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
 
   await dialog(page).getByRole('radio', { name: 'Light' }).check()
   await expect(dialog(page)).toBeVisible()
   await expect.poll(() => boardColours(page)).toEqual(LIGHT)
+  await expect.poll(() => terminalColours(page)).toEqual(LIGHT_TERMINAL)
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  expect(await bufferLines(page)).toEqual(scrollback)
 
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expect.poll(() => boardColours(page)).toEqual(DARK)
+  await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
 
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
-  expect(await bufferLines(page)).toContain('marker-42')
+  expect(await bufferLines(page)).toEqual(scrollback)
 })
 
 test('AC4: with theme System the board follows the OS appearance live', async () => {
@@ -289,6 +357,105 @@ test('AC4: with theme System the board follows the OS appearance live', async ()
   await expect.poll(() => boardColours(page)).toEqual(DARK)
   await page.emulateMedia({ colorScheme: 'light' })
   await expect.poll(() => boardColours(page)).toEqual(LIGHT)
+})
+
+test('with theme System the terminals follow the OS appearance live, open or not', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await followNativeTheme(page)
+  await alphaWithApi(page)
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
+  await page.emulateMedia({ colorScheme: 'light' })
+  await expect.poll(() => terminalColours(page)).toEqual(LIGHT_TERMINAL)
+
+  // A card on the board, not shown, recolours too: switch while it is closed, then open it.
+  await page.getByTestId('card-back').click()
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-open').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('AC5: font size 18 applies at once, refits the open terminal and resizes its shell', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await alphaWithApi(page)
+  await expect.poll(async () => (await openLook(page)).fontSize).toBe(13)
+  const before = (await openLook(page)).cols
+
+  await page.keyboard.press(SHORTCUT)
+  const size = dialog(page).getByLabel('Font size')
+  await size.fill('18')
+  await expect.poll(async () => (await openLook(page)).fontSize).toBe(18)
+  await expect.poll(async () => (await openLook(page)).cols).toBeLessThan(before)
+  const after = (await openLook(page)).cols
+
+  for (const text of ['40', '7', '12.5', 'abc']) {
+    await size.fill(text)
+    await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveText(
+      'Font size must be a whole number from 8 to 32'
+    )
+    expect((await openLook(page)).fontSize).toBe(18)
+  }
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+  expect(await openLook(page)).toMatchObject({ fontSize: 18, cols: after })
+
+  // The shell sees the new width.
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await expect.poll(() => terminalFocused(page)).toBe(true)
+  await page.keyboard.type('echo cols-$(tput cols)')
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => (await bufferLines(page)).includes(`cols-${after}`)).toBe(true)
+
+  await page.keyboard.press(SHORTCUT)
+  await expect(dialog(page).getByLabel('Font size')).toHaveValue('18')
+})
+
+/** Goes back to the board and opens `title` at full size. */
+async function openCard(page: Page, title: string): Promise<void> {
+  await page.getByTestId('card-back').click()
+  await page.getByTestId('card').filter({ hasText: title }).getByTestId('card-open').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+}
+
+test('AC6: the trimmed family applies to every terminal; clearing it restores the default', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await alphaWithApi(page)
+  // A second card, web, left on the board while api is open.
+  await page.getByTestId('card-back').click()
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('web')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expect(page.getByTestId('card-view-title')).toHaveText('web')
+  await openCard(page, 'api')
+
+  await page.keyboard.press(SHORTCUT)
+  const family = dialog(page).getByLabel('Font family')
+  await family.fill('  Courier New, monospace  ')
+  await family.press('Enter')
+  await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
+  await page.keyboard.press('Escape')
+  await openCard(page, 'web')
+  expect((await openLook(page)).fontFamily).toBe('Courier New, monospace')
+
+  await page.keyboard.press(SHORTCUT)
+  await family.fill('')
+  await family.press('Enter')
+  await expect(family).toHaveValue('')
+  await expect(family).toHaveAttribute('placeholder', 'Menlo, Consolas, monospace')
+  await expect
+    .poll(async () => (await openLook(page)).fontFamily)
+    .toBe('Menlo, Consolas, monospace')
+  await page.keyboard.press('Escape')
+  await openCard(page, 'api')
+  expect((await openLook(page)).fontFamily).toBe('Menlo, Consolas, monospace')
 })
 
 test('font fields: an invalid size shows the error and is not applied; the family is trimmed; both save', async () => {
@@ -376,6 +543,22 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
   await expect(dialog(page).getByRole('radio', { name: 'Light' })).toBeChecked()
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('16')
   await expect(dialog(page).getByLabel('Font family')).toHaveValue('Courier New, monospace')
+  expect(readSettingsFile(dataDir)).toBe(expected)
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+
+  // api's terminal, started again on opening it, uses the kept look.
+  await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-open').click()
+  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expect
+    .poll(() => openLook(page))
+    .toMatchObject({
+      fontSize: 16,
+      fontFamily: 'Courier New, monospace',
+      background: '#ffffff',
+      foreground: '#1b1d24'
+    })
+  await expect.poll(() => terminalBackground(page)).toBe('rgb(255, 255, 255)')
   expect(readSettingsFile(dataDir)).toBe(expected)
   expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual(stateBefore)
 })

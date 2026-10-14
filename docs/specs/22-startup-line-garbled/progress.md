@@ -14,4 +14,4 @@ None.
 
 ## Verification
 
-- todo
+- done: unit AC1–AC2, e2e AC3 (red without the fix), smoke 174 passed, check.sh green

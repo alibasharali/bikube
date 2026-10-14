@@ -14,7 +14,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 Decisions the developer made during implementation, with the date. A ruling that changes the spec also got its own `docs(spec):` commit.
 
-- None yet.
+- 2026-10-14 S3 (full auto, round 2): light terminal palette's ANSI white/brightWhite → darken white (~#6e7781) and give brightWhite its own value, both ≥ ~3:1 on white; the test covers every colour. Within D3's wording; no spec change.
 
 ## Verification
 

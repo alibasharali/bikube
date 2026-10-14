@@ -41,8 +41,9 @@ const UNAVAILABLE_RETRY_MS = 2000
 /**
  * The sync folder (#13 D1, D4, D9, D10, D11, D13, D14): reads the folder from the settings at once
  * and applies its board to main's state once read (#26 S2 makes the window's first load wait for
- * it, bounded, so the window opens on the synced board), reads it again whenever the folder changes or a window gains focus, writes the
- * board from every save, and serves the `sync:*` channels to a window's own top-level page only.
+ * it, bounded, so the window opens on the synced board), reads it again whenever the folder
+ * changes or a window gains focus, writes the board from every save, and serves the `sync:*`
+ * channels to a window's own top-level page only.
  */
 export function registerSync(state: MainState, settings: MainSettings): MainSync {
   // D15: a test can give each instance its own home, which D5 maps to `~`.

@@ -123,7 +123,6 @@ export class SyncFolder {
     else this.cancelPending()
     this.folder = folder
     this.last = null
-    const localText = this.noteLocal(this.localWorkspaces)
     this.joinOwed = folder !== null
     if (folder === null) {
       this.setStatus({ kind: 'off' })
@@ -131,10 +130,17 @@ export class SyncFolder {
     }
     const read = await this.readFile(folder)
     switch (read.kind) {
-      case 'missing':
-        await this.write(localText)
+      case 'missing': {
+        // The latest board, with any change noted during the read; its pending write would only
+        // repeat it.
+        const latest = this.noteLocal(this.localWorkspaces)
+        this.cancelPending()
+        await this.write(latest)
         return null
+      }
       case 'valid':
+        // A change noted during the read is in the join; its pending write would undo the join.
+        this.cancelPending()
         return this.join(folder, read.workspaces)
       case 'unreadable':
         this.log(`sync file unreadable (${read.reason}); not joining or writing`)

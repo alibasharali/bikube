@@ -969,3 +969,42 @@ describe('a board change while turning sync on is queued (#26 D2, #13 D9)', () =
     expect(written().board.workspaces[0].name).toBe('saved')
   })
 })
+
+describe('a board change while turning sync on runs (#26 D2, #13 D9)', () => {
+  const api = workspace('api', 'api')
+  const web = workspace('web', 'web')
+
+  it('keeps the join in the file, written once with the change', async () => {
+    const other = new SyncFolder({ fs, home: '/home/other', now: () => NOW })
+    await other.setFolder(F, state({ ...api, directory: '/home/other/api' }))
+    fs.events = []
+    fs.holdReads = true
+    const sync = open()
+    const joined = sync.setFolder(F, state(web))
+    await settle()
+    expect(fs.readsInFlight).toBe(1)
+    sync.noteBoard(state({ ...web, name: 'changed' }))
+    await tick(SYNC_WRITE_DELAY_MS)
+    fs.holdReads = false
+    fs.releaseRead()
+    expect(await joined).toEqual([api, { ...web, name: 'changed' }])
+    await tick(1000)
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api', 'changed'])
+    expect(writes()).toBe(1)
+  })
+
+  it('writes the change once to a folder with no file', async () => {
+    fs.holdReads = true
+    const sync = open()
+    const turnedOn = sync.setFolder(F, state(web))
+    await settle()
+    sync.noteBoard(state({ ...web, name: 'changed' }))
+    await tick(SYNC_WRITE_DELAY_MS)
+    fs.holdReads = false
+    fs.releaseRead()
+    expect(await turnedOn).toBeNull()
+    await tick(1000)
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['changed'])
+    expect(writes()).toBe(1)
+  })
+})

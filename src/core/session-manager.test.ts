@@ -134,7 +134,8 @@ describe('SessionManager', () => {
     await new Promise((r) => setTimeout(r, 500))
     expect(alive(pid)).toBe(true)
     expect(exits.has(id)).toBe(false)
-    await until(() => exits.has(id), 'exit event', 4_000)
+    // Within 4 s of the kill.
+    await until(() => exits.has(id), 'exit event', 3_500)
     expect(exits.get(id)?.signal).toBe(9)
     await until(() => !alive(pid), 'process exit', 500)
   })

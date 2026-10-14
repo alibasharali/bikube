@@ -134,6 +134,26 @@ test('no shell survives quitting the app, even one ignoring the hangup (#18 D2)'
   await expect.poll(() => shells.some(({ pid }) => alive(pid)), { timeout: 2_000 }).toBe(false)
 })
 
+test('a second quit while the first waits SIGKILLs the shells and goes through (#18 D2)', async () => {
+  const { pid } = await spawnShell({ ignoreHangup: true })
+  const exited = new Promise<void>((resolve) => app.process().once('exit', () => resolve()))
+  closed = true
+  const start = Date.now()
+  // The app may be gone before the call returns.
+  await app
+    .evaluate(({ app }) => {
+      app.quit()
+      app.quit()
+    })
+    .catch(() => undefined)
+  await exited
+  // Well under the kill's 2 s grace: the second quit didn't wait for the escalation.
+  await expect
+    .poll(() => alive(pid), { timeout: Math.max(100, 1_500 - (Date.now() - start)) })
+    .toBe(false)
+  expect(Date.now() - start).toBeLessThan(1_500)
+})
+
 test('closing a card escalates to SIGKILL when its shell ignores the hangup (#18 D1)', async () => {
   await page.evaluate(() => {
     const exits: string[] = []

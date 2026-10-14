@@ -154,13 +154,17 @@ export class SessionManager {
     this.ending.add(id)
     this.stopExitCheck(id)
     proc.resume()
-    proc.kill('SIGHUP')
+    // node-pty's default signal on Unix is SIGHUP; Windows takes no signal argument.
+    proc.kill()
     if (!this.escalations.has(id)) {
+      // Accepted risk: the guard below only flips on node-pty's exit event, which can come up to
+      // 200 ms after the shell was reaped, so in theory the SIGKILL could reach a recycled pid in
+      // that window; practically impossible.
       this.escalations.set(
         id,
         setTimeout(() => {
           this.escalations.delete(id)
-          if (this.sessions.get(id) === proc) proc.kill('SIGKILL')
+          if (this.sessions.get(id) === proc) SessionManager.forceKill(proc)
         }, KILL_GRACE_MS)
       )
     }
@@ -185,7 +189,12 @@ export class SessionManager {
 
   /** SIGKILLs every session's shell at once: the last resort when the app quits (#18 D2). */
   forceKillAll(): void {
-    for (const proc of this.sessions.values()) proc.kill('SIGKILL')
+    for (const proc of this.sessions.values()) SessionManager.forceKill(proc)
+  }
+
+  /** SIGKILL on Unix; node-pty's Windows terminal throws on any signal argument. */
+  private static forceKill(proc: pty.IPty): void {
+    proc.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
   }
 
   private stopExitCheck(id: string): void {

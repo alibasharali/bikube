@@ -80,7 +80,7 @@ describe('spawnInDirectory', () => {
     if (!result.ok) return
     manager.write(result.id, 'pwd\r')
     await vi.waitFor(() => expect(output).toContain(dir), { timeout: 5000 })
-    manager.killAll()
+    await manager.killAll()
   })
 
   describe('with a host (#12 D5, D12)', () => {

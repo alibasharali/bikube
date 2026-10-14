@@ -2,7 +2,7 @@
 item: 16
 type: feature
 title: Terminal output flow control (backpressure)
-status: draft
+status: approved
 branch: claude/16-terminal-flow-control
 ---
 

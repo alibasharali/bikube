@@ -2,7 +2,7 @@
 item: 25
 type: feature
 title: "`board` command inside SSH cards"
-status: draft
+status: approved
 branch: claude/25-board-in-ssh-cards
 ---
 

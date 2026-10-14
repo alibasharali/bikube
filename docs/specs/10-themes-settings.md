@@ -2,7 +2,7 @@
 item: 10
 type: feature
 title: Themes and settings
-status: draft
+status: approved
 branch: claude/10-themes-settings
 ---
 

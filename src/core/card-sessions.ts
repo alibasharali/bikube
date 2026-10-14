@@ -147,7 +147,7 @@ export class CardSessions<S extends CardScreen> {
         if (!current()) return this.api.kill(result.id)
         entry.sessionId = result.id
         const early = this.router.adopt(result.id, {
-          output: (data) => this.output(entry, data),
+          output: (data, parsed) => this.output(entry, data, parsed),
           exited: (exit) => this.exited(card.id, entry, exit)
         })
         // The view may have fitted the screen while the shell was starting.
@@ -166,7 +166,9 @@ export class CardSessions<S extends CardScreen> {
             }
           }
         }
-        early.data.forEach((data) => this.output(entry, data))
+        early.data.forEach((data) =>
+          this.output(entry, data, this.router.ackWhenParsed(result.id, data))
+        )
         if (early.exit) this.exited(card.id, entry, early.exit)
       },
       card.host ?? null
@@ -248,9 +250,12 @@ export class CardSessions<S extends CardScreen> {
     entry.screen?.dispose()
   }
 
-  private output(entry: Entry<S>, data: string): void {
+  /** `parsed` acknowledges the chunk once the screen has it (#16 D4). */
+  private output(entry: Entry<S>, data: string, parsed: () => void): void {
     entry.watch?.(data)
-    entry.screen?.write(data, () => {
+    if (!entry.screen) return parsed()
+    entry.screen.write(data, () => {
+      parsed()
       if (!entry.disposed) this.outputLanded(entry)
     })
   }

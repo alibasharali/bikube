@@ -10,6 +10,7 @@ export const IPC = {
   write: 'terminal:write',
   resize: 'terminal:resize',
   kill: 'terminal:kill',
+  ack: 'terminal:ack',
   data: 'terminal:data',
   exit: 'terminal:exit',
   clipboardRead: 'clipboard:read',
@@ -62,6 +63,11 @@ export interface TerminalApi {
   write(id: string, data: string): void
   resize(id: string, cols: number, rows: number): void
   kill(id: string): void
+  /**
+   * Acknowledges `chars` characters of session `id`'s output (JavaScript string length) that its
+   * screen has parsed (#16 D1, D3); main pauses a session's PTY while too much is unacknowledged.
+   */
+  ack(id: string, chars: number): void
   /** Returns an unsubscribe function. */
   onData(listener: (id: string, data: string) => void): () => void
   onExit(listener: (exit: TerminalExit) => void): () => void

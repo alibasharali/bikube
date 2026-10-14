@@ -39,6 +39,8 @@ interface Events {
  */
 export class SessionManager {
   private readonly sessions = new Map<string, pty.IPty>()
+  /** Killed sessions not exited yet: never paused again (#16 D5). */
+  private readonly ending = new Set<string>()
   private readonly emitter = new EventEmitter()
   private nextId = 1
 
@@ -84,6 +86,7 @@ export class SessionManager {
     proc.onData((data) => this.emitter.emit('data', id, data))
     proc.onExit(({ exitCode, signal }) => {
       this.sessions.delete(id)
+      this.ending.delete(id)
       this.emitter.emit('exit', id, { exitCode, signal })
     })
     return { id, pid: proc.pid }
@@ -98,11 +101,28 @@ export class SessionManager {
     this.sessions.get(id)?.resize(cols, rows)
   }
 
+  /** Stops reading the session's output (#16 D1); the shell blocks once the PTY buffer fills. */
+  pause(id: string): void {
+    if (!this.ending.has(id)) this.sessions.get(id)?.pause()
+  }
+
+  resume(id: string): void {
+    this.sessions.get(id)?.resume()
+  }
+
+  /**
+   * Resumes the session first (#16 D5): a paused PTY would drop what the shell printed until
+   * its hangup, and node-pty only reports the exit once it read to the end.
+   */
   kill(id: string): void {
-    this.sessions.get(id)?.kill()
+    const proc = this.sessions.get(id)
+    if (!proc) return
+    this.ending.add(id)
+    proc.resume()
+    proc.kill()
   }
 
   killAll(): void {
-    for (const proc of this.sessions.values()) proc.kill()
+    for (const id of [...this.sessions.keys()]) this.kill(id)
   }
 }

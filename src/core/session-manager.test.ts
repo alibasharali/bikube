@@ -124,12 +124,62 @@ describe('SessionManager', () => {
     expect(m.size).toBe(0)
   })
 
+  it('holds back output while paused and delivers it on resume (#16 D1)', async () => {
+    const m = create()
+    const { output } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
+    m.write(id, 'echo ready\n')
+    await until(() => /ready\r?\n/.test(output.get(id) ?? ''), 'ready')
+    m.pause(id)
+    const before = output.get(id) ?? ''
+    m.write(id, 'echo held\n')
+    await new Promise((r) => setTimeout(r, 300))
+    expect(output.get(id)).toBe(before)
+    m.resume(id)
+    await until(() => /held\r?\n/.test(output.get(id) ?? ''), 'held output')
+  })
+
+  it('resumes a paused session before killing it, so its exit still arrives (#16 D5)', async () => {
+    const m = create()
+    const { output, exits } = collect(m)
+    const { id, pid } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
+    m.write(id, 'yes drovr-flow\n')
+    await new Promise((r) => setTimeout(r, 200))
+    m.pause(id)
+    // While paused, `yes` fills the PTY's buffer.
+    await new Promise((r) => setTimeout(r, 100))
+    const atKill = output.get(id)?.length ?? 0
+    m.kill(id)
+    // A pause after the kill must not hold the shell's last output back either.
+    m.pause(id)
+    await until(() => exits.has(id), 'exit event', 5_000)
+    // Resumed: what the shell printed until its hangup was read, not dropped.
+    expect(output.get(id)?.length ?? 0).toBeGreaterThan(atKill)
+    await until(() => !alive(pid), 'process exit')
+  })
+
+  it('resumes paused sessions before killAll (#16 D5)', async () => {
+    const m = create()
+    const { output, exits } = collect(m)
+    const sessions = [0, 1].map(() => m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 }))
+    sessions.forEach(({ id }) => m.write(id, 'yes drovr-flow\n'))
+    await new Promise((r) => setTimeout(r, 200))
+    sessions.forEach(({ id }) => m.pause(id))
+    await new Promise((r) => setTimeout(r, 100))
+    const atKill = sessions.map(({ id }) => output.get(id)?.length ?? 0)
+    m.killAll()
+    await until(() => exits.size === 2, 'all exits', 5_000)
+    sessions.forEach(({ id }, i) => expect(output.get(id)?.length ?? 0).toBeGreaterThan(atKill[i]))
+  })
+
   it('ignores operations on unknown sessions', () => {
     const m = create()
     expect(() => {
       m.write('nope', 'x')
       m.resize('nope', 10, 10)
       m.kill('nope')
+      m.pause('nope')
+      m.resume('nope')
     }).not.toThrow()
   })
 })

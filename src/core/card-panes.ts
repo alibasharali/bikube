@@ -98,14 +98,15 @@ export class CardPanes<S extends CardScreen> {
           screen.setReadOnly()
         }
         const early = this.router.adopt(result.id, {
-          output: (data) => screen.write(data),
+          // Acknowledged once the screen has parsed it (#16 D4).
+          output: (data, parsed) => screen.write(data, parsed),
           exited
         })
         // The view may have fitted the screen while the shell was starting.
         if (screen.cols !== cols || screen.rows !== rows) {
           this.api.resize(result.id, screen.cols, screen.rows)
         }
-        early.data.forEach((data) => screen.write(data))
+        early.data.forEach((data) => screen.write(data, this.router.ackWhenParsed(result.id, data)))
         // A shell that exits by itself takes its pane with it (D5).
         if (early.exit) exited(early.exit)
       },

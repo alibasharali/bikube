@@ -33,6 +33,11 @@ export function isWriteData(data: unknown): data is string {
   )
 }
 
+/** A `terminal:ack` count (#16 D3): a positive safe integer of characters parsed. */
+export function isAckChars(chars: unknown): chars is number {
+  return Number.isSafeInteger(chars) && (chars as number) > 0
+}
+
 /** The parts of an Electron frame that tell one frame from another. */
 export interface FrameIdentity {
   readonly processId: number

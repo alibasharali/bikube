@@ -13,9 +13,13 @@ class FakeScreen implements CardScreen {
   disposed = false
   inputListener: ((data: string) => void) | null = null
   resizeListener: ((size: { cols: number; rows: number }) => void) | null = null
+  /** Set: write callbacks wait in `parsing` until the test runs them, like a busy xterm. */
+  slow = false
+  parsing: (() => void)[] = []
   write(data: string, done?: () => void): void {
     this.text += data
-    done?.()
+    if (this.slow) this.parsing.push(done ?? (() => {}))
+    else done?.()
   }
   onInput(listener: (data: string) => void): void {
     this.inputListener = listener
@@ -66,6 +70,10 @@ class FakeApi implements TerminalApi {
   }
   kill(id: string): void {
     this.kills.push(id)
+  }
+  acks: [string, number][] = []
+  ack(id: string, chars: number): void {
+    this.acks.push([id, chars])
   }
   onData(listener: (id: string, data: string) => void): () => void {
     this.dataListeners.add(listener)
@@ -364,5 +372,43 @@ describe('CardPanes.dispose', () => {
     panes.dispose(API.id)
     expect(panes.layout(API.id)).toBe(layout)
     expect(api.kills).toEqual([])
+  })
+})
+
+describe('CardPanes acknowledgements (#16 D4)', () => {
+  const chunk = (n: number): string => 'x'.repeat(n)
+
+  it("acknowledges an extra pane's output once its screen has parsed it", async () => {
+    panes.split(API, 'right')
+    screens[0].slow = true
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    api.emitData('s1', chunk(5_000))
+    expect(api.acks).toEqual([])
+    screens[0].parsing.forEach((parsed) => parsed())
+    expect(api.acks).toEqual([['s1', 5_000]])
+  })
+
+  it('acknowledges output from before the spawn reply once replayed and parsed', async () => {
+    panes.split(API, 'right')
+    screens[0].slow = true
+    api.emitData('s1', chunk(4_000))
+    api.emitData('s1', chunk(1_000))
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    expect(screens[0].text).toBe(chunk(5_000))
+    expect(api.acks).toEqual([])
+    screens[0].parsing.forEach((parsed) => parsed())
+    expect(api.acks).toEqual([['s1', 5_000]])
+  })
+
+  it('acknowledges what a closed pane never parsed at once', async () => {
+    const id = panes.split(API, 'right')!
+    screens[0].slow = true
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    api.emitData('s1', chunk(1_000))
+    panes.close(API.id, id)
+    expect(api.acks).toEqual([['s1', 1_000]])
   })
 })

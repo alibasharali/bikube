@@ -13,9 +13,13 @@ class FakeScreen implements CardScreen {
   disposed = false
   inputListener: ((data: string) => void) | null = null
   resizeListener: ((size: { cols: number; rows: number }) => void) | null = null
+  /** Set: write callbacks wait in `parsing` until the test runs them, like a busy xterm. */
+  slow = false
+  parsing: (() => void)[] = []
   write(data: string, done?: () => void): void {
     this.text += data
-    done?.()
+    if (this.slow) this.parsing.push(done ?? (() => {}))
+    else done?.()
   }
   onInput(listener: (data: string) => void): void {
     this.inputListener = listener
@@ -74,6 +78,10 @@ class FakeApi implements TerminalApi {
   }
   kill(id: string): void {
     this.kills.push(id)
+  }
+  acks: [string, number][] = []
+  ack(id: string, chars: number): void {
+    this.acks.push([id, chars])
   }
   onData(listener: (id: string, data: string) => void): () => void {
     this.dataListeners.add(listener)
@@ -636,5 +644,47 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     api.emitExit({ id: 's1', exitCode: 255 })
     await vi.advanceTimersByTimeAsync(0)
     expect(ended).toHaveBeenCalledWith('c1')
+  })
+})
+
+describe('acknowledgements (#16 D4)', () => {
+  const chunk = (n: number): string => 'x'.repeat(n)
+
+  it("acknowledges the main pane's output once its screen has parsed it", async () => {
+    await started('c1', { ok: true, id: 's1' })
+    const screen = screens.get('c1')!
+    screen.slow = true
+    api.emitData('s1', chunk(5_000))
+    expect(api.acks).toEqual([])
+    screen.parsing.forEach((parsed) => parsed())
+    expect(api.acks).toEqual([['s1', 5_000]])
+  })
+
+  it('acknowledges output from before the spawn reply once replayed and parsed', async () => {
+    sessions.start(card('c1'))
+    const screen = screens.get('c1')!
+    screen.slow = true
+    api.emitData('s1', chunk(3_000))
+    api.emitData('s1', chunk(2_000))
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(screen.text).toBe(chunk(5_000))
+    expect(api.acks).toEqual([])
+    screen.parsing.forEach((parsed) => parsed())
+    expect(api.acks).toEqual([['s1', 5_000]])
+  })
+
+  it('acknowledges what a deleted card never parsed at once', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    screens.get('c1')!.slow = true
+    api.emitData('s1', chunk(1_000))
+    sessions.dispose('c1')
+    expect(api.acks).toEqual([['s1', 1_000]])
+    // Its shell is still ending: what it prints now is acknowledged at once.
+    api.emitData('s1', chunk(10))
+    expect(api.acks).toEqual([
+      ['s1', 1_000],
+      ['s1', 10]
+    ])
   })
 })

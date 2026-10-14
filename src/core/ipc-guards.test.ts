@@ -7,6 +7,7 @@ import {
   SPAWN_REFUSAL,
   isCardId,
   isClipboardText,
+  isAckChars,
   isCurrentMainFrame,
   isSessionId,
   isValidSize,
@@ -46,6 +47,20 @@ describe('isSessionId', () => {
     expect(isSessionId(1)).toBe(false)
     expect(isSessionId(null)).toBe(false)
     expect(isSessionId({})).toBe(false)
+  })
+})
+
+describe('isAckChars (#16 D3)', () => {
+  it('accepts positive safe integers', () => {
+    expect(isAckChars(1)).toBe(true)
+    expect(isAckChars(5_000)).toBe(true)
+    expect(isAckChars(Number.MAX_SAFE_INTEGER)).toBe(true)
+  })
+
+  it('rejects zero, negatives, fractions, non-finite numbers and non-numbers', () => {
+    for (const chars of [0, -5, 1.5, '100', NaN, Infinity, -Infinity, 2 ** 53, null, undefined]) {
+      expect(isAckChars(chars)).toBe(false)
+    }
   })
 })
 

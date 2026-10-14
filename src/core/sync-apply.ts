@@ -1,7 +1,8 @@
 /**
  * Applying a board read from the sync folder to this machine's (#13 D6, D7, D8). Plain TS: the
- * renderer passes which cards run here, main passes none at launch. The active workspace is the
- * store's business (`replaceBoard`).
+ * renderer passes which cards run here, main passes none (its own state copy; the renderer then
+ * applies the same board keeping its running cards). The active workspace is the store's business
+ * (`replaceBoard`).
  */
 import type { Card, Workspace } from './workspace-store'
 

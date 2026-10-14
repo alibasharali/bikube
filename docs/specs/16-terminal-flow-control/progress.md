@@ -7,8 +7,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `015287a..4d96961` | CLEAN | `src/core/flow-control.ts` (HIGH_WATERMARK, LOW_WATERMARK, ACK_BATCH_CHARS, FlowControl with sent/acknowledged/kill/forget/unacked(id)); main's FlowControl instance is local to registerTerminals (S3 must expose it for the benchmark); `src/core/ack-batcher.ts` AckBatcher; IPC.ack=`terminal:ack`, `window.drovr.terminal.ack(id, chars)`; `isAckChars`; SessionManager.pause/resume; SessionRoute.output(data, parsed) |
-| S2 | running | | | |
-| S3 | todo | | | |
+| S2 | done | `c982c1b..406ab7a` | CLEAN | `e2e/flow-control.spec.ts` (AC4–AC6); must be named in AGENTS.md smoke list (S3) |
+| S3 | running | | | |
 
 ## Rulings
 

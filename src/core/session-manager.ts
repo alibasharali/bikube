@@ -40,6 +40,11 @@ interface Events {
 const EXIT_CHECK_MS = 50
 
 /**
+ * How long a killed session's shell has to exit on its hangup before it gets SIGKILL (#18 D1).
+ */
+export const KILL_GRACE_MS = 2_000
+
+/**
  * Owns the PTY sessions. Plain Node: no Electron imports (D5). Emits `data` and `exit`
  * per session id; a session is removed before its `exit` event fires.
  */
@@ -49,6 +54,8 @@ export class SessionManager {
   private readonly ending = new Set<string>()
   /** Paused sessions' checks for a shell that exited by itself (#16 D1, D5). */
   private readonly exitChecks = new Map<string, NodeJS.Timeout>()
+  /** Killed sessions' SIGKILL timers, dropped when they exit (#18 D1). */
+  private readonly escalations = new Map<string, NodeJS.Timeout>()
   private readonly emitter = new EventEmitter()
   private nextId = 1
 
@@ -96,6 +103,8 @@ export class SessionManager {
       this.sessions.delete(id)
       this.ending.delete(id)
       this.stopExitCheck(id)
+      clearTimeout(this.escalations.get(id))
+      this.escalations.delete(id)
       this.emitter.emit('exit', id, { exitCode, signal })
     })
     return { id, pid: proc.pid }
@@ -135,7 +144,9 @@ export class SessionManager {
 
   /**
    * Resumes the session first (#16 D5): a paused PTY would drop what the shell printed until
-   * its hangup, and node-pty only reports the exit once it read to the end.
+   * its hangup, and node-pty only reports the exit once it read to the end. Sends SIGHUP, so a
+   * login shell passes the hangup on to its jobs, and SIGKILL to the shell if it hasn't exited
+   * `KILL_GRACE_MS` later (#18 D1, D3); killing it again doesn't restart that wait.
    */
   kill(id: string): void {
     const proc = this.sessions.get(id)
@@ -143,11 +154,38 @@ export class SessionManager {
     this.ending.add(id)
     this.stopExitCheck(id)
     proc.resume()
-    proc.kill()
+    proc.kill('SIGHUP')
+    if (!this.escalations.has(id)) {
+      this.escalations.set(
+        id,
+        setTimeout(() => {
+          this.escalations.delete(id)
+          if (this.sessions.get(id) === proc) proc.kill('SIGKILL')
+        }, KILL_GRACE_MS)
+      )
+    }
   }
 
-  killAll(): void {
-    for (const id of [...this.sessions.keys()]) this.kill(id)
+  /** Kills every session (#18 D1); resolves once all of them have exited. */
+  killAll(): Promise<void> {
+    const waiting = new Set(this.sessions.keys())
+    if (waiting.size === 0) return Promise.resolve()
+    const exited = new Promise<void>((resolve) => {
+      const onExit = (id: string): void => {
+        waiting.delete(id)
+        if (waiting.size > 0) return
+        this.off('exit', onExit)
+        resolve()
+      }
+      this.on('exit', onExit)
+    })
+    for (const id of waiting) this.kill(id)
+    return exited
+  }
+
+  /** SIGKILLs every session's shell at once: the last resort when the app quits (#18 D2). */
+  forceKillAll(): void {
+    for (const proc of this.sessions.values()) proc.kill('SIGKILL')
   }
 
   private stopExitCheck(id: string): void {

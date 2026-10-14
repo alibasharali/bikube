@@ -8,8 +8,8 @@ function create(): SessionManager {
   managers.push(m)
   return m
 }
-afterEach(() => {
-  managers.splice(0).forEach((m) => m.killAll())
+afterEach(async () => {
+  await Promise.all(managers.splice(0).map((m) => m.killAll()))
 })
 
 function collect(m: SessionManager): {
@@ -29,6 +29,18 @@ async function until(cond: () => boolean, what: string, timeoutMs = 10_000): Pro
     if (Date.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`)
     await new Promise((r) => setTimeout(r, 20))
   }
+}
+
+/** A `/bin/sh` session that ignores SIGHUP, once its trap is set (#18 D1). */
+async function spawnIgnoringHangup(
+  m: SessionManager,
+  output: Map<string, string>
+): Promise<{ id: string; pid: number }> {
+  const session = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
+  // Quoted so the echoed input line doesn't match.
+  m.write(session.id, `trap '' HUP; echo "hup"-ignored\n`)
+  await until(() => /hup-ignored\r?\n/.test(output.get(session.id) ?? ''), 'trap set')
+  return session
 }
 
 function alive(pid: number): boolean {
@@ -114,6 +126,28 @@ describe('SessionManager', () => {
     await until(() => !alive(pid), 'process exit')
   })
 
+  it('escalates to SIGKILL when the shell ignores the hangup (#18 D1)', async () => {
+    const m = create()
+    const { output, exits } = collect(m)
+    const { id, pid } = await spawnIgnoringHangup(m, output)
+    m.kill(id)
+    await new Promise((r) => setTimeout(r, 500))
+    expect(alive(pid)).toBe(true)
+    expect(exits.has(id)).toBe(false)
+    await until(() => exits.has(id), 'exit event', 4_000)
+    expect(exits.get(id)?.signal).toBe(9)
+    await until(() => !alive(pid), 'process exit', 500)
+  })
+
+  it('sends no SIGKILL to a shell that exits on its hangup (#18 D1)', async () => {
+    const m = create()
+    const { exits } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
+    m.kill(id)
+    await until(() => exits.has(id), 'exit event')
+    expect(exits.get(id)?.signal).not.toBe(9)
+  })
+
   it('leaves no PTY processes after killAll', async () => {
     const m = create()
     const { exits } = collect(m)
@@ -122,6 +156,39 @@ describe('SessionManager', () => {
     await until(() => exits.size === 3, 'all exits')
     await until(() => sessions.every((s) => !alive(s.pid)), 'no live processes')
     expect(m.size).toBe(0)
+  })
+
+  it('resolves killAll once every shell is gone, one ignoring the hangup (#18 D1)', async () => {
+    const m = create()
+    const { output } = collect(m)
+    const sessions = [
+      m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 }),
+      m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 }),
+      await spawnIgnoringHangup(m, output)
+    ]
+    const start = Date.now()
+    await m.killAll()
+    expect(Date.now() - start).toBeLessThan(4_000)
+    expect(m.size).toBe(0)
+    await until(() => sessions.every((s) => !alive(s.pid)), 'no live processes', 500)
+  })
+
+  it('resolves killAll at once with no sessions', async () => {
+    const m = create()
+    let resolved = false
+    void m.killAll().then(() => (resolved = true))
+    await Promise.resolve()
+    expect(resolved).toBe(true)
+  })
+
+  it('force-kills a shell that ignores the hangup at once (#18 D2)', async () => {
+    const m = create()
+    const { output, exits } = collect(m)
+    const { id, pid } = await spawnIgnoringHangup(m, output)
+    m.forceKillAll()
+    await until(() => exits.has(id), 'exit event', 1_000)
+    expect(exits.get(id)?.signal).toBe(9)
+    await until(() => !alive(pid), 'process exit', 500)
   })
 
   it('holds back output while paused and delivers it on resume (#16 D1)', async () => {

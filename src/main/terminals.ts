@@ -17,7 +17,12 @@ import { spawnInDirectory } from '../core/terminal-spawn'
 import { IPC, type TerminalExit } from '../shared/api'
 
 export interface Terminals {
-  killAll(): void
+  /** The number of live sessions. */
+  readonly sessionCount: number
+  /** Kills every session (#18 D1); resolves once all of them have exited. */
+  killAll(): Promise<void>
+  /** SIGKILLs every live session's shell, synchronously (#18 D2). */
+  forceKillAll(): void
   /**
    * The window whose page owns the card's live session (#9 D10): undefined when the card has
    * no live session in this run, null when that window is gone.
@@ -142,7 +147,11 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
   })
 
   return {
+    get sessionCount() {
+      return manager.size
+    },
     killAll: () => manager.killAll(),
+    forceKillAll: () => manager.forceKillAll(),
     ownerOfCard: (cardId) => {
       const session = cards.sessionOf(cardId)
       if (session === undefined || !manager.has(session)) return undefined

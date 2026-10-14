@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { KILL_GRACE_MS } from '../core/session-manager'
 import { boardShellEnvFor, boardSocketPath, registerBoard } from './board'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
@@ -7,6 +8,9 @@ import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
+
+/** The longest a quit waits for the shells to exit (#18 D2): the kill's grace period + 1 s. */
+const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
 
 function createWindow(settings: MainSettings): void {
   const mainWindow = new BrowserWindow({
@@ -67,12 +71,23 @@ function startApp(): void {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   })
 
-  // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives the app.
-  app.on('before-quit', () => {
+  // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives
+  // the app (#18 D2): the first quit with live shells is held until they have exited (SIGHUP, then
+  // SIGKILL, #18 D1) or `QUIT_WAIT_MS` passed; any later quit SIGKILLs what is left and goes through.
+  let holding = false
+  app.on('before-quit', (event) => {
+    if (holding) {
+      terminals.forceKillAll()
+      return
+    }
     state.flush()
     settings.flush()
     sync.flush()
-    terminals.killAll()
+    if (terminals.sessionCount === 0) return
+    holding = true
+    event.preventDefault()
+    const waited = new Promise<void>((resolve) => setTimeout(resolve, QUIT_WAIT_MS))
+    void Promise.race([terminals.killAll(), waited]).then(() => app.quit())
   })
 
   // Another launch on the same data directory: bring this one's window forward instead.

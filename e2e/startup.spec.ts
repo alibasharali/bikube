@@ -321,7 +321,8 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
   await newCard('long', 'Custom…', command)
   await expect.poll(bufferLines).toContain(word)
   const size = await viewSize()
-  expect(size?.cols).toBeGreaterThan(80)
+  // Wide enough for the prompt and the command on one row (more than 80 columns).
+  expect(size?.cols).toBeGreaterThan(`drovr> ${command}`.length)
   // The shell's PTY has the open view's columns, and had them from the start.
   const lines = await settledScreen()
   expect(lines[lines.indexOf(word) - 1]).toBe(String(size?.cols))

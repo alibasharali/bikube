@@ -2,7 +2,7 @@
 item: 11
 type: feature
 title: Split panes inside a card
-status: draft
+status: approved
 branch: claude/11-split-panes
 ---
 

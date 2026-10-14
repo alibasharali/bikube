@@ -522,6 +522,32 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
     .toEqual([`--session-id ${id('local')}`, `--resume ${id('ssh')}`])
 })
 
+/** The open card's terminal buffer on `page`, one trimmed string per line, wrapped lines joined. */
+function bufferLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const rows: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      const next = buffer.getLine(i + 1)
+      const text = line?.translateToString(!next?.isWrapped) ?? ''
+      if (line?.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+      else rows.push(text)
+    }
+    return rows.map((r) => r.trim())
+  })
+}
+
+const typed = async (page: Page, line: string): Promise<boolean> =>
+  (await bufferLines(page)).some((l) => l.endsWith(line))
+
 test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", async () => {
   const remote = '/tmp/drovr-remote'
   mkdirSync(remote, { recursive: true })
@@ -569,12 +595,15 @@ test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", asy
   await selectWorkspace(b.page, 'api')
   await card(b.page, 'local').getByTestId('card-open').click()
   await expect.poll(() => agentLogLines(logB), { timeout: 15_000 }).toEqual(['codex'])
+  await expect.poll(() => bufferLines(b.page)).toContain('fake-codex')
+  expect((await bufferLines(b.page)).join('\n')).not.toContain('resume')
   await b.page.getByTestId('card-back').click()
   await selectWorkspace(b.page, 'remote')
   await card(b.page, 'ssh').getByTestId('card-open').click()
   await expect
     .poll(() => agentLogLines(logB), { timeout: 15_000 })
     .toEqual(['codex', 'codex resume --last'])
+  await expect.poll(() => typed(b.page, 'codex resume --last || codex')).toBe(true)
   expect(agentLogLines(logA)).toEqual(['codex', 'codex'])
 })
 

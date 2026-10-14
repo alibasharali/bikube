@@ -602,3 +602,17 @@ describe('a write that keeps failing (#13 D12)', () => {
     expect(log).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('switching folders while unavailable (#13 D12, D13)', () => {
+  it('reports the new folder unavailable when its write fails', () => {
+    const sync = open()
+    fs.removeFolder()
+    sync.setFolder(F, state(workspace('api', 'api')))
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: F })
+    fs.dirs.add('/sync2')
+    fs.failWrites = true
+    sync.setFolder('/sync2', state(workspace('api', 'api')))
+    expect(sync.status()).toEqual({ kind: 'unavailable', folder: '/sync2' })
+    expect(statuses.at(-1)).toEqual({ kind: 'unavailable', folder: '/sync2' })
+  })
+})

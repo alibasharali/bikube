@@ -320,7 +320,8 @@ export class SyncFolder {
   /** D12: reports the file unreadable, logging only the change into it. */
   private reportUnreadable(reason: string): void {
     const folder = this.folder
-    if (folder === null || this.current.kind === 'unreadable') return
+    if (folder === null || (this.current.kind === 'unreadable' && this.current.folder === folder))
+      return
     this.log(`sync file unreadable (${reason}); not writing`)
     this.setStatus({ kind: 'unreadable', folder })
   }
@@ -328,7 +329,8 @@ export class SyncFolder {
   /** D12: reports the folder unavailable, logging only the change into it. */
   private reportUnavailable(reason: string): void {
     const folder = this.folder
-    if (folder === null || this.current.kind === 'unavailable') return
+    if (folder === null || (this.current.kind === 'unavailable' && this.current.folder === folder))
+      return
     this.log(`sync folder unavailable (${reason})`)
     this.setStatus({ kind: 'unavailable', folder })
   }

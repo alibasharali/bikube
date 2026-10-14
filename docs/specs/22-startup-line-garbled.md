@@ -21,7 +21,7 @@ Every card start is followed by opening it at full size (opening a card, creatin
 
 - **AC1 – Spawned at the fitted size:** Given a card registry whose spawns are deferred, when a card starts and its screen is resized before the deferred spawn runs, then the PTY is spawned at the resized columns and rows and no resize is sent after the spawn. (unit, `card-sessions`.)
 - **AC2 – Close and delete during the deferral:** Given a card whose spawn is still deferred, when it is closed, its shell is killed as soon as it arrives and the start line isn't typed; when it is deleted, the spawn's session is killed. (unit, `card-sessions`.)
-- **AC3 – The typed line is intact:** Given a Custom card whose command is a single `echo` longer than 80 columns plus the prompt, when it is opened at full size (wider than 80 columns), then the shell's PTY reports the open view's columns (`tput cols` equals the xterm's columns) and the typed command shows on one unwrapped row of the terminal, exactly as typed after the prompt. (e2e `e2e/startup.spec.ts`.)
+- **AC3 – The typed line is intact:** Given a Custom card whose command is a single `echo` longer than 80 columns plus the prompt, when it is opened at full size (wider than 80 columns), then the shell's PTY has the open view's size from the moment the shell starts (`stty size` run before bash starts, and `tput cols` in the command, equal the xterm's rows and columns) and the typed command shows on one unwrapped row of the terminal, exactly as typed after the prompt. (e2e `e2e/startup.spec.ts`.)
 - **AC4 – No regressions:** the existing startup, SSH, panes and persistence e2e tests stay green.
 
 ## Slices

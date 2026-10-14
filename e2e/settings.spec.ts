@@ -130,13 +130,35 @@ test('a saved Light theme gives a light window and board from the start', async 
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
+  // xvfb's OS appearance is light too, so check main took the theme from the file.
+  expect(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
   const background = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]!.getBackgroundColor()
   )
   expect(background.toLowerCase()).toBe('#f6f7f9')
-  expect(await launched.page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(
-    'rgb(246, 247, 249)'
+  await followNativeTheme(launched.page)
+  await expect
+    .poll(() => launched.page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe('rgb(246, 247, 249)')
+})
+
+test('a saved Dark theme gives a dark window and board from the start, whatever the OS appearance', async () => {
+  const dataDir = newDataDir()
+  writeFileSync(
+    join(dataDir, 'drovr-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace"}}'
   )
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  expect(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
+  const background = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]!.getBackgroundColor()
+  )
+  expect(background.toLowerCase()).toBe('#14151a')
+  await followNativeTheme(launched.page)
+  await expect
+    .poll(() => launched.page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe('rgb(20, 21, 26)')
 })
 
 test('AC2: Settings opens from the sidebar, expanded or collapsed, and closes each way', async () => {
@@ -342,6 +364,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
   launched = await launchApp({ dataDir })
   app = launched.app
   page = launched.page
+  expect(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('light')
   const background = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]!.getBackgroundColor()
   )

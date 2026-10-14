@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
+| S1 | done | `f5280c3..HEAD` | fixed r1 (e2e width precondition) | `CardSessions` 4th param `defer`; app passes `setTimeout(spawn, 0)` |
 
 ## Rulings
 

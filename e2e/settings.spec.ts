@@ -58,6 +58,25 @@ function bufferLines(page: Page): Promise<string[]> {
   })
 }
 
+/** The buffer once it holds `line` and two reads 300 ms apart are equal (the shell is idle). */
+async function settledBufferLines(page: Page, line: string): Promise<string[]> {
+  let previous: string[] | undefined
+  let current: string[] = []
+  await expect
+    .poll(
+      async () => {
+        current = await bufferLines(page)
+        const settled =
+          current.includes(line) && JSON.stringify(current) === JSON.stringify(previous)
+        previous = current
+        return settled
+      },
+      { intervals: [300] }
+    )
+    .toBe(true)
+  return current
+}
+
 const terminalFocused = (page: Page): Promise<boolean> =>
   page.evaluate(
     () => document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
@@ -332,8 +351,7 @@ test('AC3: picking Light recolours the board at once, Dark restores it, and api 
   await expect.poll(() => terminalFocused(page)).toBe(true)
   await page.keyboard.type('echo marker-$((40+2))')
   await page.keyboard.press('Enter')
-  await expect.poll(async () => (await bufferLines(page)).includes('marker-42')).toBe(true)
-  const scrollback = await bufferLines(page)
+  const scrollback = await settledBufferLines(page, 'marker-42')
 
   await page.keyboard.press(SHORTCUT)
   await expect(dialog(page)).toBeVisible()

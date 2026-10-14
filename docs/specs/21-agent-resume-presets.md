@@ -2,7 +2,7 @@
 item: 21
 type: feature
 title: Resume presets for other agents (Codex etc.)
-status: draft
+status: approved
 branch: claude/21-agent-resume-presets
 ---
 

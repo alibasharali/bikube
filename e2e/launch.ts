@@ -22,7 +22,7 @@ export interface LaunchOptions {
   dataDir?: string
   /** The environment to launch with; defaults to this process's. */
   env?: Record<string, string>
-  /** Extra Electron arguments after `. --no-sandbox`. */
+  /** Extra Electron arguments after `--no-sandbox` (and the dev build's `.` before it). */
   args?: string[]
   /**
    * A packaged app's executable (e.g. `dist/linux-unpacked/drovr`) to launch instead of the dev
@@ -40,9 +40,9 @@ export interface Launched {
 }
 
 /**
- * Launches the built app with its own data directory (`DROVR_USER_DATA_DIR`, #8 D11), so no test
- * shares or touches a real board, and waits for its window. `--no-sandbox`: CI and containers
- * have no setuid chrome-sandbox.
+ * Launches the built app (or the packaged executable given as `executablePath`) with its own data
+ * directory (`DROVR_USER_DATA_DIR`, #8 D11), so no test shares or touches a real board, and
+ * waits for its window. `--no-sandbox`: CI and containers have no setuid chrome-sandbox.
  */
 export async function launchApp(options: LaunchOptions = {}): Promise<Launched> {
   const dataDir = options.dataDir ?? newDataDir()

@@ -38,11 +38,17 @@ describe('terminal palettes (#10 D3)', () => {
   it('light ANSI colours are readable on white, yellow and bright white included', () => {
     const light = TERMINAL_PALETTES.light
     for (const name of ANSI_COLOUR_NAMES) {
-      if (name === 'white' || name === 'black') continue
       expect(contrast(light[name], light.background), name).toBeGreaterThanOrEqual(3)
     }
     expect(contrast(light.yellow, '#ffffff')).toBeGreaterThanOrEqual(3)
     expect(contrast(light.brightWhite, '#ffffff')).toBeGreaterThanOrEqual(3)
+  })
+
+  it('the 16 ANSI colours of each palette are all different', () => {
+    for (const palette of Object.values(TERMINAL_PALETTES)) {
+      const colours = ANSI_COLOUR_NAMES.map((name) => palette[name])
+      expect(new Set(colours).size).toBe(16)
+    }
   })
 
   it('the foreground reads on the background in both', () => {

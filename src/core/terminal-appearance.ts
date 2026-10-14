@@ -63,7 +63,7 @@ export const TERMINAL_PALETTES: Readonly<Record<ResolvedTheme, Readonly<Terminal
       brightCyan: '#6fd4e2',
       brightWhite: '#ffffff'
     }),
-    // Readable on white: yellow and bright white are darkened (D3).
+    // Readable on white (at least 3:1): yellow, white and bright white are darkened (D3).
     light: Object.freeze({
       background: '#ffffff',
       foreground: '#1b1d24',
@@ -77,7 +77,7 @@ export const TERMINAL_PALETTES: Readonly<Record<ResolvedTheme, Readonly<Terminal
       blue: '#2f55cc',
       magenta: '#9b3bb5',
       cyan: '#14798a',
-      white: '#d9dce3',
+      white: '#6e7781',
       brightBlack: '#5d6170',
       brightRed: '#d1343a',
       brightGreen: '#2f8a43',
@@ -85,7 +85,7 @@ export const TERMINAL_PALETTES: Readonly<Record<ResolvedTheme, Readonly<Terminal
       brightBlue: '#3d63dd',
       brightMagenta: '#a948c4',
       brightCyan: '#16869a',
-      brightWhite: '#5d6170'
+      brightWhite: '#868e98'
     })
   })
 

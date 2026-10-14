@@ -1,8 +1,20 @@
-import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BoardReply } from './board-protocol'
+import { startBoardServer, type BoardServer } from './board-server'
+import { shellQuote } from './remote-board'
 import { READY_MARKER, remoteCommand, sshShellLine } from './ssh-command'
 
 /** What `sh -c` makes of `script`'s words: each argument on its own line. */
@@ -11,6 +23,14 @@ function words(script: string): string[] {
     encoding: 'utf8'
   })
   return out.split('\n').slice(0, -1)
+}
+
+/** Like `words`, for arguments that may hold newlines: NUL-separated. */
+function argv(script: string): string[] {
+  const out = execFileSync('/bin/sh', ['-c', `set -- ${script}; printf '%s\\0' "$@"`], {
+    encoding: 'utf8'
+  })
+  return out.split('\0').slice(0, -1)
 }
 
 /** The directory the remote shell `cd`s to for `directory`, with `$HOME` set to `home`. */
@@ -122,5 +142,191 @@ describe('sshShellLine (#12 D5)', () => {
       ok: false,
       reason: 'invalid working directory'
     })
+  })
+})
+
+describe('the SSH line with board (#25 D1, D4, D7)', () => {
+  const board = { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock', localSocket: '/l/s-1.sock' }
+
+  it('forwards the remote socket to the local one before -t --', () => {
+    const result = sshShellLine('me@devbox', '/srv/api', board)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.line.startsWith('exec ssh -R ')).toBe(true)
+    expect(argv(result.line.replace(/^exec /, ''))).toEqual([
+      'ssh',
+      '-R',
+      '/tmp/drovr-r.sock:/l/s-1.sock',
+      '-t',
+      '--',
+      'me@devbox',
+      remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock' })
+    ])
+  })
+
+  it('has no forward without a local socket, or one ssh would split at a colon, but keeps the setup', () => {
+    for (const localSocket of [null, '/a:b/s.sock']) {
+      const result = sshShellLine('me@devbox', '/srv/api', { ...board, localSocket })
+      expect(result.ok && argv(result.line.replace(/^exec /, ''))).toEqual([
+        'ssh',
+        '-t',
+        '--',
+        'me@devbox',
+        remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock' })
+      ])
+    }
+  })
+
+  it('is fish-safe for any valid host and directory, and keeps the cd and 255 rules (AC8)', () => {
+    const hosts = ['me@devbox', 'ssh://me@[::1]:22', 'a.b-c_d%e']
+    const dirs = [
+      '/',
+      '~',
+      '~/x',
+      '/srv/api',
+      `/tmp/it's "x"`,
+      "/tmp/''",
+      '/tmp/$HOME `id`;x',
+      '/é/ü 🙂'
+    ]
+    for (const host of hosts) {
+      for (const dir of dirs) {
+        const result = sshShellLine(host, dir, { ...board, cardId: `it's "a" $x` })
+        expect(result.ok).toBe(true)
+        if (!result.ok) continue
+        expect(result.line).not.toMatch(/\\[\\']/)
+        expect(result.line.replace(/\\033|\\007/g, '')).not.toContain('\\')
+        const command = argv(result.line.replace(/^exec /, '')).at(-1)!
+        const quoted = dir === '~' ? '~' : dir === '~/x' ? `~/'x'` : shellQuote(dir)
+        expect(command.startsWith(`cd ${quoted} || exit 255; `)).toBe(true)
+        expect(command).toMatch(
+          /"\$\{SHELL:-\/bin\/sh\}" -l; s=\$\?; \[ \$s = 255 \] && s=254; exit \$s$/
+        )
+      }
+    }
+  })
+
+  it('ignores a card id with a backslash and a remote socket path it would have to quote', () => {
+    for (const odd of [{ cardId: 'a\\' }, { remoteSocket: '/tmp/a b.sock' }]) {
+      expect(sshShellLine('me@devbox', '/srv', { ...board, ...odd })).toEqual(
+        sshShellLine('me@devbox', '/srv')
+      )
+    }
+  })
+})
+
+describe('the remote command with board, run by sh (#25 D4)', () => {
+  let dir: string
+  let server: BoardServer | undefined
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'drovr-rc-'))
+  })
+
+  afterEach(async () => {
+    await server?.close()
+    server = undefined
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  /** A remote login shell running `body`; it writes what it saw into `<dir>/seen`. */
+  function shell(body: string): string {
+    const path = join(dir, 'shell')
+    writeFileSync(path, `#!/bin/sh\n${body}\n`)
+    chmodSync(path, 0o755)
+    return path
+  }
+
+  /** Runs the board remote command with `sh -c`, like the remote login shell would. */
+  function runRemote(
+    command: string,
+    env: Record<string, string>,
+    onSpawn?: (pid: number) => void
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    return new Promise((resolve) => {
+      const child = spawn('/bin/sh', ['-c', command], { env, detached: true })
+      let stdout = ''
+      let stderr = ''
+      child.stdout.setEncoding('utf8').on('data', (text: string) => (stdout += text))
+      child.stderr.setEncoding('utf8').on('data', (text: string) => (stderr += text))
+      child.on('close', (code) => resolve({ code, stdout, stderr }))
+      if (onSpawn && child.pid) onSpawn(child.pid)
+    })
+  }
+
+  const cardId = `it's "a" $x`
+
+  it('sets up board, runs the login shell, then removes its directory and the remote socket', async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    const local = join(dir, 'board', 's-1.sock')
+    server = await startBoardServer(local, handler)
+    const remote = join(dir, 'drovr-r.sock')
+    symlinkSync(local, remote)
+    const seen = join(dir, 'seen')
+    const login = shell(
+      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "$DROVR_BIN" "\${PATH%%:*}" > ${seen}\n` +
+        `board status . hi || exit 9\nexit 3`
+    )
+    const result = await runRemote(remoteCommand(dir, { cardId, remoteSocket: remote }), {
+      PATH: '/usr/bin:/bin',
+      HOME: dir,
+      SHELL: login
+    })
+    expect(result).toEqual({ code: 3, stdout: READY_MARKER, stderr: '' })
+    const [id, socket, bin, first] = readFileSync(seen, 'utf8').split('|')
+    expect([id, socket, first]).toEqual([cardId, remote, bin])
+    expect(bin).toMatch(/\/drovr\.[A-Za-z0-9]{8}$/)
+    expect(handler).toHaveBeenCalledWith({ v: 1, cardId, command: 'status', card: '.', text: 'hi' })
+    expect(existsSync(bin)).toBe(false)
+    expect(existsSync(remote)).toBe(false)
+  })
+
+  it("cds into a directory with quotes in its name and still reports the shell's 255 as 254", async () => {
+    const odd = join(dir, `it's "odd" $x`)
+    mkdirSync(odd)
+    const seen = join(dir, 'seen')
+    const result = await runRemote(
+      remoteCommand(odd, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      { PATH: '/usr/bin:/bin', HOME: dir, SHELL: shell(`pwd > ${seen}\nexit 255`) }
+    )
+    expect(result.code).toBe(254)
+    expect(readFileSync(seen, 'utf8')).toBe(`${odd}\n`)
+  })
+
+  it('starts the shell with the card variables but no board when mktemp fails', async () => {
+    const seen = join(dir, 'seen')
+    const login = shell(
+      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "\${DROVR_BIN-unset}" "$PATH" > ${seen}`
+    )
+    const result = await runRemote(
+      remoteCommand(dir, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login, TMPDIR: join(dir, 'missing') }
+    )
+    expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
+    expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/drovr-none.sock|unset|/usr/bin:/bin`)
+  })
+
+  it.each([
+    ['SIGHUP', 129],
+    ['SIGTERM', 143]
+  ] as const)('cleans up and exits %s → %i when the session ends', async (signal, code) => {
+    const remote = join(dir, 'drovr-r.sock')
+    writeFileSync(remote, '')
+    const seen = join(dir, 'seen')
+    const login = shell(`printf '%s' "$DROVR_BIN" > ${seen}\nsleep 30`)
+    const result = await runRemote(
+      remoteCommand(dir, { cardId, remoteSocket: remote }),
+      { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login },
+      (pid) => {
+        const poll = setInterval(() => {
+          if (!existsSync(seen) || !readFileSync(seen, 'utf8')) return
+          clearInterval(poll)
+          process.kill(-pid, signal)
+        }, 20)
+      }
+    )
+    expect(result.code).toBe(code)
+    expect(existsSync(readFileSync(seen, 'utf8'))).toBe(false)
+    expect(existsSync(remote)).toBe(false)
   })
 })

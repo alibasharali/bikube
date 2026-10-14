@@ -13,6 +13,8 @@ export const INVALID_REQUEST = 'board: invalid request'
 export const REQUEST_TOO_LONG = 'board: request too long'
 /** The board did not answer: timed out, failed, or its page reloaded or crashed (#9 D9). */
 export const NO_ANSWER = 'board: no answer from Drovr'
+/** How long `board` waits for main's reply (#9 D9), locally and in SSH cards (#25 D5). */
+export const ANSWER_TIMEOUT_MS = 5000
 
 /** A request as sent: the calling card's id plus one command. */
 export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand

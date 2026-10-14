@@ -2,6 +2,7 @@
  * The saved-state file format (#8 D2, D3, D4). Plain TS: no Electron or Node imports, so main
  * and the renderer can both use it. The file holds `{ "version": 1, "state": WorkspaceState }`.
  */
+import { isAgentKind, type AgentKind } from './agent-presets'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import type { Card, Column, Workspace, WorkspaceState } from './workspace-store'
@@ -110,7 +111,26 @@ function readCard(raw: unknown): Card | string {
   if (!isId(agentSessionId) || typeof claudeStarted !== 'boolean') return 'bad card session'
   const startup = readStartup(raw.startup)
   if (!startup) return 'bad startup command'
-  return { id, columnId, title, directory, ...host, startup, agentSessionId, claudeStarted }
+  const startedAgents = readStartedAgents(raw.startedAgents)
+  if (!startedAgents) return 'bad started agents'
+  return {
+    id,
+    columnId,
+    title,
+    directory,
+    ...host,
+    startup,
+    agentSessionId,
+    claudeStarted,
+    startedAgents
+  }
+}
+
+/** Distinct preset kinds (#21 D6); missing, as in files from before #21, is none. Null otherwise. */
+function readStartedAgents(raw: unknown): AgentKind[] | null {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || !raw.every(isAgentKind)) return null
+  return new Set(raw).size === raw.length ? [...raw] : null
 }
 
 /**
@@ -130,7 +150,8 @@ function readHost(raw: unknown, directory: string): { host?: string } | string {
 /** A startup command that passes `checkStartup`, normalized by it; null otherwise. */
 function readStartup(raw: unknown): StartupCommand | null {
   if (!isObject(raw)) return null
-  if (raw.kind === 'shell' || raw.kind === 'claude') return { kind: raw.kind }
+  if (raw.kind === 'shell' || raw.kind === 'claude' || isAgentKind(raw.kind))
+    return { kind: raw.kind }
   if (raw.kind !== 'custom' || typeof raw.command !== 'string') return null
   const checked = checkStartup({ kind: 'custom', command: raw.command })
   return checked.ok ? checked.value : null

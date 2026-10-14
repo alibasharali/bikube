@@ -5,6 +5,7 @@
  * `validateDirectory` that returns an error message or null.
  */
 
+import type { AgentKind } from './agent-presets'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { SHELL_STARTUP, checkStartup, type StartupCommand } from './startup-command'
 
@@ -34,6 +35,11 @@ export interface Card {
   agentSessionId: string
   /** Whether Claude Code was started with `agentSessionId`; false at creation (#5 D4, D5). */
   claudeStarted: boolean
+  /**
+   * The agent presets this card has started, distinct, empty at creation (#21 D3); kept whatever
+   * the startup command.
+   */
+  startedAgents: AgentKind[]
 }
 
 export interface Workspace {
@@ -130,6 +136,8 @@ export interface WorkspaceStore {
   setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card>
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
+  /** Records that the preset's first-start line was typed for this card (#21 D3). */
+  markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card>
   /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
@@ -353,7 +361,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       ...(ws.host !== undefined && { host: ws.host }),
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
-      claudeStarted: false
+      claudeStarted: false,
+      startedAgents: []
     }
     this.replace({
       ...ws,
@@ -416,6 +425,15 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return this.updateCard(workspaceId, cardId, (card) => ({
       ok: true,
       value: { ...card, claudeStarted: true }
+    }))
+  }
+
+  markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => ({
+      ok: true,
+      value: card.startedAgents.includes(kind)
+        ? card
+        : { ...card, startedAgents: [...card.startedAgents, kind] }
     }))
   }
 

@@ -20,6 +20,7 @@ function card(id: string, columnId: string, over: Partial<Card> = {}): Card {
     startup: { kind: 'claude' },
     agentSessionId: `session-${id}`,
     claudeStarted: true,
+    startedAgents: [],
     ...over
   }
 }
@@ -108,6 +109,7 @@ describe('the board written to the sync file (#13 D2, D3, D5, D6, AC1, AC5)', ()
       defaultStartup: api.defaultStartup,
       nextCardNumber: api.nextCardNumber,
       cards: api.cards.map((c) => ({
+        startedAgents: c.startedAgents,
         claudeStarted: c.claudeStarted,
         agentSessionId: c.agentSessionId,
         startup: c.startup,

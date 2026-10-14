@@ -1,11 +1,26 @@
 /**
- * Pure state behind the startup command field (#5 D9, D10, D11): a select with Shell, Claude
- * Code and Custom…, and a Command input shown for Custom. The typed command is kept while
- * another choice is selected, so switching back does not lose it.
+ * Pure state behind the startup command field (#5 D9, D10, D11; #21 D5): a select with Shell,
+ * Claude Code, the agent presets and Custom…, and a Command input shown for Custom. The typed
+ * command is kept while another choice is selected, so switching back does not lose it.
  */
+import { AGENT_KINDS, AGENT_PRESETS, isAgentKind } from './agent-presets'
 import type { StartupCommand } from './startup-command'
 
 export type StartupChoice = StartupCommand['kind']
+
+/** Every select's options, in order (#5 D9, #21 D5). */
+export const STARTUP_CHOICES: readonly { choice: StartupChoice; label: string }[] = [
+  { choice: 'shell', label: 'Shell' },
+  { choice: 'claude', label: 'Claude Code' },
+  ...AGENT_KINDS.map((kind) => ({ choice: kind, label: AGENT_PRESETS[kind].label })),
+  { choice: 'custom', label: 'Custom…' }
+]
+
+/** The hint under the field while a preset is chosen (#21 D4); null for any other choice. */
+export function presetHint(choice: StartupChoice): string | null {
+  if (!isAgentKind(choice)) return null
+  return `Resumes the latest ${AGENT_PRESETS[choice].label} session in the card's directory.`
+}
 
 export interface StartupDraft {
   choice: StartupChoice
@@ -31,5 +46,5 @@ export function sameDraft(a: StartupDraft, b: StartupDraft): boolean {
 
 /** A select's value as a choice; anything else reads as Shell. */
 export function parseChoice(value: string): StartupChoice {
-  return value === 'claude' || value === 'custom' ? value : 'shell'
+  return value === 'claude' || value === 'custom' || isAgentKind(value) ? value : 'shell'
 }

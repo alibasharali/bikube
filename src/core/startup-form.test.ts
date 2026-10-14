@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { draftStartup, parseChoice, sameDraft, startupDraft } from './startup-form'
+import {
+  STARTUP_CHOICES,
+  draftStartup,
+  parseChoice,
+  presetHint,
+  sameDraft,
+  startupDraft
+} from './startup-form'
 
 describe('startup command field (D9, D10, D11)', () => {
   it('shows a Shell or Claude Code command as its choice with an empty Command', () => {
@@ -36,6 +43,37 @@ describe('startup command field (D9, D10, D11)', () => {
     expect(parseChoice('claude')).toBe('claude')
     expect(parseChoice('custom')).toBe('custom')
     expect(parseChoice('shell')).toBe('shell')
-    expect(parseChoice('codex')).toBe('shell')
+    expect(parseChoice('cursor')).toBe('shell')
+  })
+})
+
+describe('agent presets in the field (#21 D4, D5)', () => {
+  it('lists every choice in select order with its label (AC1)', () => {
+    expect(STARTUP_CHOICES.map((c) => c.label)).toEqual([
+      'Shell',
+      'Claude Code',
+      'Codex',
+      'Gemini CLI',
+      'OpenCode',
+      'Custom…'
+    ])
+    for (const { choice } of STARTUP_CHOICES) expect(parseChoice(choice)).toBe(choice)
+  })
+
+  it('keeps a preset as its own choice, with no Command', () => {
+    expect(startupDraft({ kind: 'gemini' })).toEqual({ choice: 'gemini', command: '' })
+    expect(draftStartup({ choice: 'opencode', command: 'ignored' })).toEqual({ kind: 'opencode' })
+  })
+
+  it('hints that a preset resumes the latest session in the directory, nothing otherwise (AC5)', () => {
+    expect(presetHint('gemini')).toBe(
+      "Resumes the latest Gemini CLI session in the card's directory."
+    )
+    expect(presetHint('codex')).toBe("Resumes the latest Codex session in the card's directory.")
+    expect(presetHint('opencode')).toBe(
+      "Resumes the latest OpenCode session in the card's directory."
+    )
+    for (const choice of ['shell', 'claude', 'custom'] as const)
+      expect(presetHint(choice)).toBeNull()
   })
 })

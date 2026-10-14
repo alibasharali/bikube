@@ -13,8 +13,9 @@ export function startCard(workspaceId: string, cardId: string): void {
     .workspaces.find((w) => w.id === workspaceId)
     ?.cards.find((c) => c.id === cardId)
   if (!card) return
-  cardTerminals().start(card, () => {
-    workspaceStore.markClaudeStarted(workspaceId, cardId)
+  cardTerminals().start(card, (kind) => {
+    if (kind === 'claude') workspaceStore.markClaudeStarted(workspaceId, cardId)
+    else workspaceStore.markAgentStarted(workspaceId, cardId, kind)
   })
 }
 

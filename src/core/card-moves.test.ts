@@ -18,7 +18,8 @@ const ws = (cards: Record<string, string[]>): Workspace => {
         directory: '/tmp/alpha',
         startup: { kind: 'shell' as const },
         agentSessionId: 'x',
-        claudeStarted: false
+        claudeStarted: false,
+        startedAgents: []
       }))
     ),
     nextCardNumber: 1,

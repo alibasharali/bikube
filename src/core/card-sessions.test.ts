@@ -269,6 +269,27 @@ describe('CardSessions', () => {
     expect(claudeStarted).not.toHaveBeenCalled()
   })
 
+  it("types a preset's plain command and reports its first start with its kind (#21 D2, D3)", async () => {
+    const firstStart = vi.fn()
+    sessions.start(card('c1', '/tmp/a', { kind: 'codex' }), firstStart)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', 'codex\r']])
+    expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
+  })
+
+  it('resumes a started preset without reporting a first start again (#21 D2, D3)', async () => {
+    const firstStart = vi.fn()
+    sessions.start(
+      { ...card('c1', '/tmp/a', { kind: 'gemini' }), startedAgents: ['gemini'] },
+      firstStart
+    )
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', 'gemini --resume latest || gemini\r']])
+    expect(firstStart).not.toHaveBeenCalled()
+  })
+
   it('types a Custom command as written, and nothing for Shell (#5 D2, D3)', async () => {
     const claudeStarted = vi.fn()
     sessions.start(

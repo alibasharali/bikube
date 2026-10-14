@@ -8,7 +8,7 @@ import type { TerminalApi, TerminalExit } from '../shared/api'
 import { SessionRouter } from './session-router'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
 import { readyWatcher } from './ready-marker'
-import { startLine, type StartupState } from './startup-command'
+import { firstStart, startLine, type FirstStart, type StartupState } from './startup-command'
 
 /** What the registry needs from a terminal emulator. */
 export interface CardScreen {
@@ -79,11 +79,12 @@ export class CardSessions<S extends CardScreen> {
    * (or one whose shell is starting) is left as it is (#4 D10).
    *
    * Right after a successful spawn it types the card's start line and Enter, before any
-   * keystroke (#5 D3); `onClaudeStarted` runs when that was Claude Code's first start (#5 D5).
+   * keystroke (#5 D3); `onFirstStart` runs with Claude Code's or the preset's kind when that was
+   * its first start on this card (#5 D5, #21 D3).
    * An SSH card (#12 D5) spawns with its host, and its start line is typed once, when the ready
    * marker first appears in its output (#12 D6); never if its session ends before.
    */
-  start(card: StartingCard, onClaudeStarted?: () => void): void {
+  start(card: StartingCard, onFirstStart?: (kind: FirstStart) => void): void {
     const existing = this.entries.get(card.id)
     if (existing?.state.kind === 'running') return
     const screen = this.createScreen(card.id)
@@ -119,6 +120,7 @@ export class CardSessions<S extends CardScreen> {
     })
     const { cols, rows } = screen
     const line = startLine(card)
+    const first = firstStart(card)
     // Each start owns its screen; a reply for an older start, or after dispose, is stale.
     const current = (): boolean => !entry.disposed && entry.screen === screen
     const failed = (reason: string): void => {
@@ -135,7 +137,7 @@ export class CardSessions<S extends CardScreen> {
     const sessionStarted = (id: string): void => {
       if (line === null) return
       this.api.write(id, `${line}\r`)
-      if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
+      if (first !== null) onFirstStart?.(first)
     }
     this.router.spawn(
       cols,

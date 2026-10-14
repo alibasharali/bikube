@@ -1,13 +1,20 @@
 import { useId } from 'react'
-import { parseChoice, type StartupDraft } from '../../core/startup-form'
+import {
+  STARTUP_CHOICES,
+  parseChoice,
+  presetHint,
+  type StartupDraft
+} from '../../core/startup-form'
 
-/** The three startup commands, in the order every select shows them (#5 D9). */
+/** The startup commands, in the order every select shows them (#5 D9, #21 D5). */
 export function StartupOptions(): React.JSX.Element {
   return (
     <>
-      <option value="shell">Shell</option>
-      <option value="claude">Claude Code</option>
-      <option value="custom">Custom…</option>
+      {STARTUP_CHOICES.map(({ choice, label }) => (
+        <option key={choice} value={choice}>
+          {label}
+        </option>
+      ))}
     </>
   )
 }
@@ -22,8 +29,8 @@ interface StartupFieldProps {
 }
 
 /**
- * The `Startup command` field of a dialog (#5 D10, D11): a select with Shell, Claude Code and
- * Custom…, and a `Command` field below while Custom… is chosen.
+ * The `Startup command` field of a dialog (#5 D10, D11; #21 D4): a select with every startup
+ * command, a `Command` field below while Custom… is chosen, and a hint while a preset is.
  */
 function StartupField({
   draft,
@@ -35,6 +42,8 @@ function StartupField({
   const selectId = `${id}-startup`
   const commandId = `${id}-command`
   const errorId = `${id}-command-error`
+  const hintId = `${id}-hint`
+  const hint = presetHint(draft.choice)
   return (
     <>
       <div className="field">
@@ -43,10 +52,16 @@ function StartupField({
           id={selectId}
           data-testid={`${testIdPrefix}-startup`}
           value={draft.choice}
+          aria-describedby={hint ? hintId : undefined}
           onChange={(e) => onChange({ ...draft, choice: parseChoice(e.target.value) })}
         >
           <StartupOptions />
         </select>
+        {hint && (
+          <p className="field-hint" id={hintId} data-testid={`${testIdPrefix}-startup-hint`}>
+            {hint}
+          </p>
+        )}
       </div>
       {draft.choice === 'custom' && (
         <div className="field">
@@ -55,7 +70,7 @@ function StartupField({
             id={commandId}
             data-testid={`${testIdPrefix}-command`}
             value={draft.command}
-            placeholder="codex resume --last"
+            placeholder="npm run dev"
             spellCheck={false}
             autoComplete="off"
             aria-invalid={error ? true : undefined}

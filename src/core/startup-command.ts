@@ -2,11 +2,15 @@
  * Startup commands (#5 D2, D5): what Drovr types into a card's login shell right after it
  * starts. Plain TS: no Electron or Node imports.
  */
+import { AGENT_PRESETS, type AgentKind } from './agent-presets'
 import type { FieldError, Result } from './workspace-store'
 
-/** Shell types nothing; Claude Code runs `claude` with the card's agent session id. */
+/**
+ * Shell types nothing; Claude Code runs `claude` with the card's agent session id; an agent
+ * preset (#21 D1) runs its plain or resume command.
+ */
 export type StartupCommand =
-  { kind: 'shell' } | { kind: 'claude' } | { kind: 'custom'; command: string }
+  { kind: 'shell' } | { kind: 'claude' } | { kind: AgentKind } | { kind: 'custom'; command: string }
 
 export const SHELL_STARTUP: StartupCommand = { kind: 'shell' }
 
@@ -17,6 +21,8 @@ export interface StartupState {
   agentSessionId: string
   /** True once `claude --session-id` was typed for this card (#5 D5). */
   claudeStarted: boolean
+  /** The presets this card has started (#21 D3); missing means none. */
+  startedAgents?: readonly AgentKind[]
 }
 
 /** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */
@@ -42,8 +48,9 @@ export function checkStartup(startup: StartupCommand): Result<StartupCommand> {
 /**
  * The line to type into a freshly started shell, without the trailing Enter (`\r`, #5 D3),
  * or null when nothing is typed (Shell, or Claude Code with an agent session id that is not a
- * UUID, since the id is typed unquoted). For Claude Code, writing the first-start line is
- * what the caller then records with `markClaudeStarted`.
+ * UUID, since the id is typed unquoted). An agent preset types its plain command until the card
+ * has started it, then `<resume> || <plain>` (#21 D2). Writing a first-start line is what the
+ * caller then records (`firstStart`).
  */
 export function startLine(card: StartupState): string | null {
   switch (card.startup.kind) {
@@ -58,5 +65,29 @@ export function startLine(card: StartupState): string | null {
     }
     case 'custom':
       return card.startup.command
+    default: {
+      const kind = card.startup.kind
+      const { plain, resume } = AGENT_PRESETS[kind]
+      return card.startedAgents?.includes(kind) ? `${resume} || ${plain}` : plain
+    }
+  }
+}
+
+/** What a first start records: Claude Code's `claudeStarted` or a preset in `startedAgents`. */
+export type FirstStart = 'claude' | AgentKind
+
+/**
+ * What typing the card's start line records (#5 D5, #21 D3): Claude Code's or the preset's kind
+ * when the card has not started it yet, else null. Only meaningful when `startLine` is not null.
+ */
+export function firstStart(card: StartupState): FirstStart | null {
+  switch (card.startup.kind) {
+    case 'shell':
+    case 'custom':
+      return null
+    case 'claude':
+      return card.claudeStarted ? null : 'claude'
+    default:
+      return card.startedAgents?.includes(card.startup.kind) ? null : card.startup.kind
   }
 }

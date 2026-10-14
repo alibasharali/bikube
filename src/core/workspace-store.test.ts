@@ -627,6 +627,60 @@ describe('startup commands (#5 D2, D4, D10)', () => {
   })
 })
 
+describe('agent presets (#21 D3, D5)', () => {
+  it('creates a card with no preset started, whatever its startup command', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    expect(ok(s.createCard(w.id, w.columns[0].id, 'cx', { kind: 'codex' }))).toMatchObject({
+      startup: { kind: 'codex' },
+      startedAgents: []
+    })
+    expect(card(s, w, 'sh').startedAgents).toEqual([])
+  })
+
+  it('marks a preset started once, keeping the others (AC1)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const cx = ok(s.createCard(w.id, w.columns[0].id, 'cx', { kind: 'codex' }))
+    expect(ok(s.markAgentStarted(w.id, cx.id, 'codex'))).toEqual({
+      ...cx,
+      startedAgents: ['codex']
+    })
+    ok(s.markAgentStarted(w.id, cx.id, 'gemini'))
+    ok(s.markAgentStarted(w.id, cx.id, 'codex'))
+    expect(s.getState().workspaces[0].cards[0].startedAgents).toEqual(['codex', 'gemini'])
+    expect(s.markAgentStarted(w.id, 'nope', 'codex')).toMatchObject({
+      ok: false,
+      error: { field: 'card' }
+    })
+  })
+
+  it('keeps started presets when the startup command changes (AC4)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const sh = card(s, w, 'sh')
+    ok(s.setCardStartup(w.id, sh.id, { kind: 'codex' }))
+    ok(s.markAgentStarted(w.id, sh.id, 'codex'))
+    ok(s.setCardStartup(w.id, sh.id, { kind: 'shell' }))
+    expect(ok(s.setCardStartup(w.id, sh.id, { kind: 'codex' }))).toMatchObject({
+      startup: { kind: 'codex' },
+      startedAgents: ['codex'],
+      claudeStarted: false
+    })
+  })
+
+  it('takes a preset as the workspace default for new cards only (AC6)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const sh = card(s, w, 'sh')
+    expect(
+      ok(s.updateWorkspace(w.id, { defaultStartup: { kind: 'codex' } })).defaultStartup
+    ).toEqual({ kind: 'codex' })
+    expect(card(s, w, 'cx').startup).toEqual({ kind: 'codex' })
+    expect(s.getState().workspaces[0].cards[0]).toEqual(sh)
+  })
+})
+
 describe('cards: move (#6 D3, D4)', () => {
   function column(s: InMemoryWorkspaceStore, w: Workspace, columnIndex: number): string[] {
     const ws = s.getState().workspaces.find((x) => x.id === w.id)!

@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { AGENT_PRESETS } from '../../core/agent-presets'
 import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
@@ -15,19 +16,21 @@ import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
 
 /**
- * The card's startup command on the board (#5 D12): `Claude` for Claude Code, `Custom` with
- * the command as its tooltip, nothing for Shell. It follows the setting, not what is running.
+ * The card's startup command on the board (#5 D12, #21 D5): `Claude` for Claude Code, a preset's
+ * tag with its select label as tooltip, `Custom` with the command as its tooltip, nothing for
+ * Shell. It follows the setting, not what is running.
  */
 function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
   if (startup.kind === 'shell') return null
-  const custom = startup.kind === 'custom'
+  const [tag, title] =
+    startup.kind === 'custom'
+      ? ['Custom', startup.command]
+      : startup.kind === 'claude'
+        ? ['Claude', 'Claude Code']
+        : [AGENT_PRESETS[startup.kind].tag, AGENT_PRESETS[startup.kind].label]
   return (
-    <span
-      className="card-tag"
-      data-testid="card-tag"
-      title={custom ? startup.command : 'Claude Code'}
-    >
-      {custom ? 'Custom' : 'Claude'}
+    <span className="card-tag" data-testid="card-tag" title={title}>
+      {tag}
     </span>
   )
 }

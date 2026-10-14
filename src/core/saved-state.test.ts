@@ -245,3 +245,65 @@ describe('SSH hosts in the saved state (#12 D10)', () => {
     expectRejected(sshFileWith((s) => (s.workspaces[2].cards[0].directory = '~other')))
   })
 })
+
+describe('agent presets in the saved state (#21 D6)', () => {
+  /** `fullState()` plus workspace `presets` defaulting to Codex, with a started Codex card. */
+  function presetState(): WorkspaceState {
+    let n = 200
+    const s = new InMemoryWorkspaceStore({
+      initialState: fullState(),
+      generateId: () => `id-${++n}`,
+      generateSessionId: () => '00000000-0000-4000-8000-000000000200'
+    })
+    const w = ok(
+      s.createWorkspace({ name: 'presets', directory: '/tmp/p', defaultStartup: { kind: 'codex' } })
+    )
+    const cx = ok(s.createCard(w.id, w.columns[0].id, 'cx'))
+    ok(s.markAgentStarted(w.id, cx.id, 'codex'))
+    ok(s.createCard(w.id, w.columns[0].id, 'gm', { kind: 'gemini' }))
+    ok(s.createCard(w.id, w.columns[0].id, 'oc', { kind: 'opencode' }))
+    return s.getState()
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function presetFileWith(change: (state: any) => void): string {
+    const state = JSON.parse(JSON.stringify(presetState()))
+    change(state)
+    return JSON.stringify({ version: 1, state })
+  }
+
+  it('writes the preset kinds and startedAgents on every card, and reads them back (AC7)', () => {
+    const state = presetState()
+    const text = serializeSavedState(state)
+    const presets = JSON.parse(text).state.workspaces[2]
+    expect(presets.defaultStartup).toEqual({ kind: 'codex' })
+    expect(presets.cards.map((c: { startup: unknown }) => c.startup)).toEqual([
+      { kind: 'codex' },
+      { kind: 'gemini' },
+      { kind: 'opencode' }
+    ])
+    expect(presets.cards[0].startedAgents).toEqual(['codex'])
+    expect(JSON.parse(text).state.workspaces[0].cards[0].startedAgents).toEqual([])
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('reads a card without startedAgents, as written before #21, as none started (AC7)', () => {
+    const old = parseSavedState(
+      fileWith((s) => {
+        for (const w of s.workspaces) for (const c of w.cards) delete c.startedAgents
+      })
+    )
+    expect(old).toEqual({ ok: true, value: fullState() })
+  })
+
+  it('rejects an unknown kind, a non-array or repeated startedAgents', () => {
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = ['cursor'])))
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = ['claude'])))
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = 'codex')))
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = null)))
+    expectRejected(
+      presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = ['codex', 'codex']))
+    )
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startup = { kind: 'amp' })))
+  })
+})

@@ -67,7 +67,8 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         ...(c.host !== undefined && { host: c.host }),
         startup: startupCopy(c.startup),
         agentSessionId: c.agentSessionId,
-        claudeStarted: c.host === undefined ? false : c.claudeStarted
+        claudeStarted: c.host === undefined ? false : c.claudeStarted,
+        startedAgents: [...c.startedAgents]
       })),
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup)

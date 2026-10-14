@@ -15,7 +15,8 @@ const card = (id: string, columnId: string, title = id): Card => ({
   directory: '/tmp/drovr-alpha',
   startup: { kind: 'shell' },
   agentSessionId: 'x',
-  claudeStarted: false
+  claudeStarted: false,
+  startedAgents: []
 })
 
 const workspace = (id: string, cards: Card[]): Workspace => ({

@@ -27,6 +27,7 @@ function card(id: string, columnId: string, over: Partial<Card> = {}): Card {
     startup: { kind: 'claude' },
     agentSessionId: `${id}-session`,
     claudeStarted: false,
+    startedAgents: [],
     ...over
   }
 }

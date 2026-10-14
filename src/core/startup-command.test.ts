@@ -79,3 +79,48 @@ describe('checkStartup (D2, AC7)', () => {
     }
   })
 })
+
+describe('agent presets (#21 D1, D2)', () => {
+  const presets = [
+    ['codex', 'codex', 'codex resume --last'],
+    ['gemini', 'gemini', 'gemini --resume latest'],
+    ['opencode', 'opencode', 'opencode --continue']
+  ] as const
+
+  it('types the plain command the first time a card starts a preset (AC1)', () => {
+    for (const [kind, plain] of presets) {
+      expect(
+        startLine({ startup: { kind }, agentSessionId: U, claudeStarted: true, startedAgents: [] })
+      ).toBe(plain)
+    }
+  })
+
+  it('resumes, falling back to the plain command, once the preset was started (AC2, AC3)', () => {
+    for (const [kind, plain, resume] of presets) {
+      expect(
+        startLine({
+          startup: { kind },
+          agentSessionId: U,
+          claudeStarted: false,
+          startedAgents: [kind]
+        })
+      ).toBe(`${resume} || ${plain}`)
+    }
+  })
+
+  it("counts only the card's own preset as started (AC4)", () => {
+    expect(
+      startLine({
+        startup: { kind: 'codex' },
+        agentSessionId: U,
+        claudeStarted: true,
+        startedAgents: ['gemini', 'opencode']
+      })
+    ).toBe('codex')
+  })
+
+  it('passes the presets through checkStartup', () => {
+    for (const [kind] of presets)
+      expect(checkStartup({ kind })).toEqual({ ok: true, value: { kind } })
+  })
+})

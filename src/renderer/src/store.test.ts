@@ -19,7 +19,8 @@ const saved: WorkspaceState = {
           directory: '/tmp/drovr-alpha',
           startup: { kind: 'shell' },
           agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
-          claudeStarted: false
+          claudeStarted: false,
+          startedAgents: []
         }
       ],
       nextCardNumber: 2,

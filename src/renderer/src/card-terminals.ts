@@ -230,8 +230,9 @@ function sessionRouter(): SessionRouter {
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(window.drovr.terminal, () => new XtermScreen(), sessionRouter())
-    // When the main pane's shell stops, every extra pane ends with it (#11 D6).
-    registry.onStopped((cardId) => cardPanes().dispose(cardId))
+    // When the main pane's shell stops or couldn't start, every extra pane ends with it
+    // (#11 D1, D6).
+    registry.onEnded((cardId) => cardPanes().dispose(cardId))
   }
   return registry
 }

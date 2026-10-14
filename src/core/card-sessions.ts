@@ -55,7 +55,7 @@ interface Entry<S> {
 
 export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
-  private readonly stoppedListeners: ((cardId: string) => void)[] = []
+  private readonly endedListeners: ((cardId: string) => void)[] = []
 
   /** `router` is shared with the cards' extra panes (#11), or a new one over `api`. */
   constructor(
@@ -111,6 +111,7 @@ export class CardSessions<S extends CardScreen> {
       if (!current()) return
       screen.write(`Couldn't start: ${reason}\r\n`)
       this.setState(entry, { kind: 'failed', reason })
+      this.endedListeners.forEach((listener) => listener(card.id))
     }
     entry.closing = false
     this.setState(entry, state)
@@ -164,12 +165,12 @@ export class CardSessions<S extends CardScreen> {
   }
 
   /**
-   * Called with a card's id each time its shell stops for any reason (it exits, or is Closed),
-   * once the card is Stopped; not when the card is disposed. The card's extra panes end with it
-   * (#11 D6).
+   * Called with a card's id each time a start of it ends: its shell stops for any reason (it
+   * exits, or is Closed) and the card is Stopped, or its shell couldn't start (#5 D8); not when
+   * the card is disposed. The card's extra panes end with it (#11 D1, D6).
    */
-  onStopped(listener: (cardId: string) => void): void {
-    this.stoppedListeners.push(listener)
+  onEnded(listener: (cardId: string) => void): void {
+    this.endedListeners.push(listener)
   }
 
   /** Called when the card's status changes. Returns an unsubscribe function. */
@@ -225,7 +226,7 @@ export class CardSessions<S extends CardScreen> {
     entry.timer = null
     entry.dirty = false
     this.setState(entry, { kind: 'stopped' })
-    this.stoppedListeners.forEach((listener) => listener(cardId))
+    this.endedListeners.forEach((listener) => listener(cardId))
   }
 
   /** Leading-edge update, then at most one more per interval while output keeps coming. */

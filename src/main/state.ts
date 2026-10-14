@@ -15,6 +15,11 @@ import { IPC } from '../shared/api'
 export interface MainState {
   /** Main's latest state: the last valid save, else the file's, else an empty board. */
   load(): WorkspaceState
+  /**
+   * Replaces main's state with a board from the sync folder (#13 D7, D11) and writes it like a
+   * save; not passed to `onSaved`, since it came from the folder.
+   */
+  set(state: WorkspaceState): void
   flush(): void
 }
 
@@ -45,5 +50,11 @@ export function registerState(onSaved?: (state: WorkspaceState) => void): MainSt
   ipcMain.on(IPC.stateSave, (event, state: unknown) => {
     if (fromMainFrame(event) && file.save(state)) onSaved?.(file.load())
   })
-  return { load: () => file.load(), flush: () => file.flush() }
+  return {
+    load: () => file.load(),
+    set: (next) => {
+      file.save(next)
+    },
+    flush: () => file.flush()
+  }
 }

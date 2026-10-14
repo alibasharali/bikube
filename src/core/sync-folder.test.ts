@@ -287,3 +287,86 @@ describe('at launch with sync on (#13 AC12)', () => {
     expect(fs.events).toEqual([])
   })
 })
+
+describe('reading the file at launch (#13 D11, AC8)', () => {
+  it("returns the file's board to apply, compared with nothing", () => {
+    const api = workspace('api', 'api')
+    open().setFolder(F, state({ ...api, name: 'y' }))
+    const sync = open()
+    expect(sync.start(F, state({ ...api, name: 'x' }))).toEqual([{ ...api, name: 'y' }])
+  })
+
+  it('returns nothing to apply with no file or no folder', () => {
+    expect(open().start(F, state(workspace('api', 'api')))).toBeNull()
+    expect(open().start(null, state(workspace('api', 'api')))).toBeNull()
+  })
+})
+
+describe('reading changes live (#13 D4, D7, D11, AC2, AC13)', () => {
+  const api = workspace('api', 'api')
+  /** Another machine, with its own home, writing `workspaces` to the shared folder. */
+  const otherWrites = (...workspaces: Workspace[]): void => {
+    const other = new SyncFolder({ fs, home: '/home/other', now: () => NOW })
+    other.start(F, state())
+    other.noteBoard(
+      state(
+        ...workspaces.map((w) => ({ ...w, directory: w.directory.replace(HOME, '/home/other') }))
+      )
+    )
+    other.flush()
+  }
+
+  it("returns another machine's board once, then nothing until it changes again", () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    otherWrites({ ...api, name: 'api2' })
+    expect(sync.read()).toEqual([{ ...api, name: 'api2' }])
+    expect(sync.read()).toBeNull()
+    expect(sync.status()).toEqual({ kind: 'synced', folder: F, at: NOW.toISOString() })
+  })
+
+  it('returns nothing for the board this machine wrote itself', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'mine' }))
+    sync.flush()
+    expect(sync.read()).toBeNull()
+  })
+
+  it('writes nothing back when the applied board is saved, so machines never echo', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    otherWrites({ ...api, name: 'api2' })
+    const before = writes()
+    const read = sync.read()!
+    sync.noteBoard({ workspaces: read, activeId: 'api' })
+    vi.advanceTimersByTime(5000)
+    expect(writes()).toBe(before)
+  })
+
+  it('writes the applied board back when it differs (a card kept running, D8)', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    otherWrites({ ...api, name: 'api2' })
+    const read = sync.read()!
+    sync.noteBoard(state(...read, workspace('kept', 'kept')))
+    vi.advanceTimersByTime(SYNC_WRITE_DELAY_MS)
+    expect(written().board.workspaces.map((w) => w.name)).toEqual(['api2', 'kept'])
+  })
+
+  it('drops a pending write of an older board when a newer one is read (last writer wins)', () => {
+    const sync = open()
+    sync.setFolder(F, state(api))
+    sync.noteBoard(state({ ...api, name: 'local' }))
+    otherWrites({ ...api, name: 'remote' })
+    expect(sync.read()).toEqual([{ ...api, name: 'remote' }])
+    vi.advanceTimersByTime(5000)
+    expect(written().board.workspaces[0].name).toBe('remote')
+  })
+
+  it('reads nothing while sync is off', () => {
+    const sync = open()
+    otherWrites(api)
+    expect(sync.read()).toBeNull()
+  })
+})

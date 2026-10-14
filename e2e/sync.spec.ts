@@ -1,7 +1,17 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  watch,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { claudeLogLines } from './fake-claude'
+import { fakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Sync between machines (#13). Every instance has its own data directory and its own home
@@ -33,10 +43,17 @@ interface Instance {
   home: string
 }
 
-/** Launches an instance with its own home under the test's root (D15); reuse `dataDir` to restart. */
-async function launch(home: string, dataDir = newDataDir()): Promise<Instance> {
+/**
+ * Launches an instance with its own home under the test's root (D15); reuse `dataDir` to restart.
+ * `base` is the environment to start from (this process's when omitted).
+ */
+async function launch(
+  home: string,
+  dataDir = newDataDir(),
+  base: Record<string, string | undefined> = process.env
+): Promise<Instance> {
   const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
+  for (const [key, value] of Object.entries(base)) if (value !== undefined) env[key] = value
   env['DROVR_HOME_DIR'] = home
   const launched = await launchApp({ dataDir, env })
   apps.push(launched.app)
@@ -282,4 +299,284 @@ test('AC12: a settings file from #10 without syncFolder loads with sync off and 
   await expect(settings(a.page).getByTestId('settings-theme-dark')).toBeChecked()
   await expect(settings(a.page).getByTestId('settings-font-size')).toHaveValue('16')
   await expect(settings(a.page).getByTestId('settings-font-family')).toHaveValue('Courier New')
+})
+
+// Reading changes live (S2): two instances synced to one folder.
+
+const card = (page: Page, title: string): Locator =>
+  page
+    .getByTestId('card')
+    .filter({ has: page.getByTestId('card-title').getByText(title, { exact: true }) })
+
+const column = (page: Page, name: string): Locator =>
+  page.getByTestId('column').filter({ has: page.getByRole('heading', { name, exact: true }) })
+
+const cardTitles = (scope: Locator): Promise<string[]> =>
+  scope.getByTestId('card-title').allInnerTexts()
+
+const activeWorkspace = (page: Page): Locator =>
+  page.locator('[data-testid=workspace-item][aria-current=true] .workspace-name')
+
+/** Creates card `title` in Backlog (its view opens and it starts), then goes back to the board. */
+async function newCard(page: Page, title: string, startup?: 'Claude Code'): Promise<void> {
+  await column(page, 'Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill(title)
+  if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
+  await page.getByTestId('new-card-input').press('Enter')
+  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await page.getByTestId('card-back').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+}
+
+async function renameCard(page: Page, from: string, to: string): Promise<void> {
+  await card(page, from).getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-rename').click()
+  await page.getByTestId('card-rename-input').fill(to)
+  await page.getByTestId('card-rename-input').press('Enter')
+  await expect(card(page, to)).toHaveCount(1)
+}
+
+/** Deletes a card from its menu, confirming when it is running. */
+async function deleteCard(page: Page, title: string): Promise<void> {
+  await card(page, title).getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-delete').click()
+  const confirm = page.getByTestId('confirm-delete')
+  if (await confirm.isVisible().catch(() => false)) await confirm.click()
+  await expect(card(page, title)).toHaveCount(0)
+}
+
+async function selectWorkspace(page: Page, name: string): Promise<void> {
+  await page.getByTestId('workspace-item').filter({ hasText: name }).click()
+  await expect(page.getByTestId('board-title')).toHaveText(name)
+}
+
+/** A and B, each with its own home and data directory, both synced to `folder` with `api`. */
+async function twoSynced(folder: string): Promise<{ a: Instance; b: Instance }> {
+  makeDir('hb', 'api')
+  const a = await launch(makeDir('ha'))
+  await createWorkspace(a.page, makeDir('ha', 'api'), 'api')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  const b = await launch(makeDir('hb'))
+  await setSyncFolder(b.page, folder)
+  await closeSettings(b.page)
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['api'])
+  return { a, b }
+}
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+test('AC2: a rename and move on A reach B live, Stopped, with no process started on B', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  await newCard(a.page, 'Terminal 1')
+  await expect(card(b.page, 'Terminal 1')).toHaveCount(1)
+
+  await renameCard(a.page, 'Terminal 1', 'server')
+  await card(a.page, 'server').getByTestId('card-menu').click()
+  await a.page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await expect(card(a.page, 'server')).toHaveCount(1)
+
+  await expect
+    .poll(() => cardTitles(column(b.page, 'Running')), { timeout: 5000 })
+    .toEqual(['server'])
+  await expect(card(b.page, 'Terminal 1')).toHaveCount(0)
+  await expect(card(b.page, 'server').getByTestId('card-status-label')).toHaveText('Stopped')
+  await expect(card(b.page, 'server').getByTestId('card-status-line')).toHaveCount(0)
+})
+
+test('AC4: deletions win, but a card running on B stays and is written back to A', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  await newCard(a.page, 'one')
+  await newCard(a.page, 'two')
+  await expect.poll(() => cardTitles(column(b.page, 'Backlog'))).toEqual(['one', 'two'])
+
+  // Start `two` on B and read its shell's pid.
+  await card(b.page, 'two').getByTestId('card-open').click()
+  await expect(b.page.getByTestId('card-view-title')).toHaveText('two')
+  const pidFile = join(root, 'pid-two')
+  await expect
+    .poll(() =>
+      b.page.evaluate(
+        () =>
+          document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
+      )
+    )
+    .toBe(true)
+  await b.page.keyboard.type(`echo $$ > '${pidFile}'`)
+  await b.page.keyboard.press('Enter')
+  await expect
+    .poll(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== '')
+    .toBe(true)
+  const pid = Number(readFileSync(pidFile, 'utf8').trim())
+  await b.page.getByTestId('card-back').click()
+  await expect(card(b.page, 'two').getByTestId('card-status-label')).toHaveText('Running')
+
+  await deleteCard(a.page, 'one')
+  await deleteCard(a.page, 'two')
+
+  await expect.poll(() => cardTitles(column(b.page, 'Backlog')), { timeout: 5000 }).toEqual(['two'])
+  await expect(card(b.page, 'two').getByTestId('card-status-label')).toHaveText('Running')
+  expect(alive(pid)).toBe(true)
+  // B wrote the board back with `two`, and A shows it again, Stopped there.
+  await expect.poll(() => cardTitles(column(a.page, 'Backlog')), { timeout: 5000 }).toEqual(['two'])
+  await expect(card(a.page, 'two').getByTestId('card-status-label')).toHaveText('Stopped')
+  await a.page.waitForTimeout(500)
+  expect(alive(pid)).toBe(true)
+  await expect(card(b.page, 'two').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('AC5: a workspace created on A reaches B live under its own home; SSH unchanged', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  await createWorkspace(a.page, makeDir('ha', 'proj'), 'proj')
+  await a.page.getByTestId('workspace-add').click()
+  await a.page.getByTestId('workspace-location-ssh').click()
+  await a.page.getByTestId('workspace-host').fill('devbox')
+  await a.page.getByTestId('workspace-directory').fill('~/srv')
+  await a.page.getByTestId('workspace-name').fill('srv')
+  await a.page.getByTestId('workspace-submit').click()
+  await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await expect
+    .poll(() => readSyncFile(folder)?.board.workspaces.map((w) => [w.name, w.directory]))
+    .toEqual([
+      ['api', '~/api'],
+      ['proj', '~/proj'],
+      ['srv', '~/srv']
+    ])
+
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api', 'proj', 'srv'])
+  await editWorkspace(b.page, 1)
+  await expect(b.page.getByTestId('workspace-directory')).toHaveValue(join(b.home, 'proj'))
+  await b.page.keyboard.press('Escape')
+  await editWorkspace(b.page, 2)
+  await expect(b.page.getByTestId('workspace-host')).toHaveValue('devbox')
+  await expect(b.page.getByTestId('workspace-directory')).toHaveValue('~/srv')
+})
+
+test("AC6: B starts A's local Claude Code card with --session-id and its SSH one with --resume", async () => {
+  const remote = '/tmp/drovr-remote'
+  mkdirSync(remote, { recursive: true })
+  const folder = makeDir('F')
+  const fakeA = fakeSshHome(makeDir('a'))
+  const fakeB = fakeSshHome(makeDir('b'))
+  mkdirSync(join(fakeA.home, 'api'))
+  mkdirSync(join(fakeB.home, 'api'))
+  const a = await launch(fakeA.home, newDataDir(), fakeA.env)
+  await createWorkspace(a.page, join(fakeA.home, 'api'), 'api')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  const b = await launch(fakeB.home, newDataDir(), fakeB.env)
+  await setSyncFolder(b.page, folder)
+  await closeSettings(b.page)
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['api'])
+
+  await newCard(a.page, 'local', 'Claude Code')
+  await a.page.getByTestId('workspace-add').click()
+  await a.page.getByTestId('workspace-location-ssh').click()
+  await a.page.getByTestId('workspace-host').fill('me@devbox')
+  await a.page.getByTestId('workspace-directory').fill(remote)
+  await a.page.getByTestId('workspace-name').fill('remote')
+  await a.page.getByTestId('workspace-submit').click()
+  await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await newCard(a.page, 'ssh', 'Claude Code')
+  await expect.poll(() => claudeLogLines(fakeA.log), { timeout: 15_000 }).toHaveLength(2)
+
+  // A's file: the SSH card started, the local one written as not started (D6).
+  type FileCard = { title: string; agentSessionId: string; claudeStarted: boolean }
+  const fileCards = (): FileCard[] =>
+    (readSyncFile(folder)?.board.workspaces ?? []).flatMap((w) => w.cards as unknown as FileCard[])
+  await expect
+    .poll(() => fileCards().map((c) => [c.title, c.claudeStarted]))
+    .toEqual([
+      ['local', false],
+      ['ssh', true]
+    ])
+  const id = (title: string): string => fileCards().find((c) => c.title === title)!.agentSessionId
+
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api', 'remote'])
+  await selectWorkspace(b.page, 'api')
+  await card(b.page, 'local').getByTestId('card-open').click()
+  await expect
+    .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
+    .toEqual([`--session-id ${id('local')}`])
+  await b.page.getByTestId('card-back').click()
+  await selectWorkspace(b.page, 'remote')
+  await card(b.page, 'ssh').getByTestId('card-open').click()
+  await expect
+    .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
+    .toEqual([`--session-id ${id('local')}`, `--resume ${id('ssh')}`])
+})
+
+test("AC7: the active workspace stays per machine; B's goes to the first when A deletes it", async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  makeDir('hb', 'web')
+  await createWorkspace(a.page, makeDir('ha', 'web'), 'web')
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api', 'web'])
+  await selectWorkspace(a.page, 'api')
+  await selectWorkspace(b.page, 'web')
+
+  await editWorkspace(a.page, 0)
+  await a.page.getByTestId('workspace-name').fill('api2')
+  await a.page.getByTestId('workspace-submit').click()
+  await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api2', 'web'])
+  await expect(activeWorkspace(b.page)).toHaveText('web')
+
+  const row = a.page.locator('.workspace-row').nth(1)
+  await row.hover()
+  await row.getByTestId('workspace-delete').click()
+  await a.page.getByTestId('confirm-delete').click()
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api2'])
+  await expect(activeWorkspace(b.page)).toHaveText('api2')
+  await expect(activeWorkspace(a.page)).toHaveText('api2')
+})
+
+test("AC8: launch reads the folder, so B's first board shows A's rename made while B was closed", async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  await newCard(a.page, 'x')
+  await expect(card(b.page, 'x')).toHaveCount(1)
+  await quit(b)
+
+  await renameCard(a.page, 'x', 'y')
+  await expect
+    .poll(() => readSyncFile(folder)?.board.workspaces[0].cards.map((c) => c.title))
+    .toEqual(['y'])
+
+  const b2 = await launch(b.home, b.dataDir)
+  // No polling: the first render already shows the folder's board.
+  expect(await cardTitles(b2.page.getByTestId('board'))).toEqual(['y'])
+})
+
+test('AC13: one change is written once and never echoed between the machines', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  await newCard(a.page, 'one')
+  await expect(card(b.page, 'one')).toHaveCount(1)
+  // Let both settle, then count every write of the file from here on.
+  await a.page.waitForTimeout(1000)
+  const writes = new Set<string>()
+  const watcher = watch(folder, (_, name) => {
+    if (name !== 'drovr-board.json') return
+    const savedAt = readSyncFile(folder)?.savedAt
+    if (savedAt) writes.add(savedAt)
+  })
+  try {
+    await renameCard(a.page, 'one', 'uno')
+    await expect(card(b.page, 'uno')).toHaveCount(1, { timeout: 5000 })
+    await a.page.waitForTimeout(5000)
+    expect(writes.size).toBe(1)
+  } finally {
+    watcher.close()
+  }
 })

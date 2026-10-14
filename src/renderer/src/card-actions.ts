@@ -27,7 +27,7 @@ export function closeCard(cardId: string): void {
 }
 
 /** Stops every pane's process of a card being deleted and frees its screens (#11 D6). */
-function disposeCard(cardId: string): void {
+export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
 }

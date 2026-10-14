@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   DEFAULT_FONT_FAMILY,
   MAX_FONT_FAMILY_LENGTH,
@@ -150,8 +150,17 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
     setText(folder ?? '')
     setNotFound(false)
   }
+  // Only the latest folder request's answer shows: an older one, superseded (e.g. by Turn off),
+  // must not bring `Folder not found` back.
+  const request = useRef(0)
+  const answer = (result: Promise<{ ok: boolean }>): void => {
+    const mine = ++request.current
+    void result.then((r) => {
+      if (mine === request.current) setNotFound(!r.ok)
+    })
+  }
 
-  const apply = async (): Promise<void> => {
+  const apply = (): void => {
     const typed = text.trim()
     const next = typed === '' ? null : typed
     if (next === folder) {
@@ -159,8 +168,7 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
       setNotFound(false)
       return
     }
-    const result = await window.drovr.sync.setFolder(next)
-    setNotFound(!result.ok)
+    answer(window.drovr.sync.setFolder(next))
   }
 
   const statusText = syncStatusText(status)
@@ -178,20 +186,18 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
           aria-invalid={notFound ? true : undefined}
           aria-describedby={notFound ? errorId : undefined}
           onChange={(e) => setText(e.target.value)}
-          onBlur={() => void apply()}
+          onBlur={apply}
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return
             e.preventDefault()
-            void apply()
+            apply()
           }}
         />
         <button
           type="button"
           className="btn"
           data-testid="settings-sync-choose"
-          onClick={() => {
-            void window.drovr.sync.pickFolder().then((result) => setNotFound(!result.ok))
-          }}
+          onClick={() => answer(window.drovr.sync.pickFolder())}
         >
           Choose…
         </button>
@@ -200,9 +206,12 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
             type="button"
             className="btn"
             data-testid="settings-sync-off"
+            // Keeps the field focused, so its blur doesn't apply a typed folder before turning off.
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setText('')
               setNotFound(false)
+              ++request.current
               void window.drovr.sync.setFolder(null)
             }}
           >

@@ -165,6 +165,15 @@ export function defaultWorkspaceName(directory: string, host?: string | null): s
   return basename(dir)
 }
 
+/**
+ * `state` with every workspace replaced by `workspaces` (#13 D7): the active workspace stays active
+ * when it is still there, else the first one is (or none).
+ */
+export function withBoard(state: WorkspaceState, workspaces: Workspace[]): WorkspaceState {
+  const kept = workspaces.some((w) => w.id === state.activeId)
+  return { workspaces, activeId: kept ? state.activeId : (workspaces[0]?.id ?? null) }
+}
+
 /** The column's cards, top to bottom (#6 D2). */
 export function cardsInColumn(workspace: Workspace, columnId: string): Card[] {
   return workspace.cards.filter((c) => c.columnId === columnId)
@@ -411,9 +420,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   }
 
   replaceBoard(workspaces: Workspace[]): void {
-    const { activeId } = this.state
-    const kept = workspaces.some((w) => w.id === activeId)
-    this.set({ workspaces, activeId: kept ? activeId : (workspaces[0]?.id ?? null) })
+    this.set(withBoard(this.state, workspaces))
   }
 
   private updateCard(

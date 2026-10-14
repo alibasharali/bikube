@@ -71,7 +71,7 @@ export class SyncFolder {
       this.setStatus({ kind: 'off' })
       return null
     }
-    const read = this.read(folder)
+    const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
         this.write(this.boardText(local.workspaces))
@@ -98,28 +98,67 @@ export class SyncFolder {
 
   /**
    * At launch, with the folder kept in the settings (or null): reads the file to know the last
-   * board and the status. A missing file gets `local`'s board. Not a join (D11).
+   * board and the status, and returns the file's board for this machine to apply (D7, D11): not a
+   * join, and compared with nothing, so a valid file always applies. A missing file gets `local`'s
+   * board. Returns null when there is nothing to apply.
    */
-  start(folder: string | null, local: WorkspaceState): void {
+  start(folder: string | null, local: WorkspaceState): Workspace[] | null {
     this.folder = folder
     this.last = null
-    if (folder === null) return
-    const read = this.read(folder)
+    if (folder === null) return null
+    const read = this.readFile(folder)
     switch (read.kind) {
       case 'missing':
         this.write(this.boardText(local.workspaces))
-        return
+        return null
       case 'valid':
         this.last = this.boardText(read.workspaces)
         this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
-        return
+        return read.workspaces
       case 'unreadable':
         this.log(`sync file unreadable (${read.reason}); not writing`)
         this.setStatus({ kind: 'unreadable', folder })
-        return
+        return null
       case 'unavailable':
         this.log(`sync folder unavailable (${read.reason})`)
         this.setStatus({ kind: 'unavailable', folder })
+        return null
+    }
+  }
+
+  /**
+   * Reads the file again (the folder changed, or a window gained focus, D11): returns its board
+   * for this machine to apply when it differs from the last one read or written (D4, D7), dropping
+   * a pending write of an older board (last writer wins); else null. Applying it saves a board
+   * equal to the file's, which is then not written back, so machines never echo (D4).
+   */
+  read(): Workspace[] | null {
+    const folder = this.folder
+    if (folder === null) return null
+    const read = this.readFile(folder)
+    switch (read.kind) {
+      case 'missing':
+        return null
+      case 'valid': {
+        this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
+        const text = this.boardText(read.workspaces)
+        if (text === this.last) return null
+        this.cancelPending()
+        this.last = text
+        return read.workspaces
+      }
+      case 'unreadable':
+        if (this.current.kind !== 'unreadable') {
+          this.log(`sync file unreadable (${read.reason}); not writing`)
+          this.setStatus({ kind: 'unreadable', folder })
+        }
+        return null
+      case 'unavailable':
+        if (this.current.kind !== 'unavailable') {
+          this.log(`sync folder unavailable (${read.reason})`)
+          this.setStatus({ kind: 'unavailable', folder })
+        }
+        return null
     }
   }
 
@@ -163,7 +202,7 @@ export class SyncFolder {
     return JSON.stringify(toSyncBoard({ workspaces, activeId: null }, this.options.home))
   }
 
-  private read(folder: string): ReadResult {
+  private readFile(folder: string): ReadResult {
     let text: string
     try {
       text = this.options.fs.readFileSync(join(folder, SYNC_FILE_NAME), 'utf8')

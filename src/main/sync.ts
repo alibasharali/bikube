@@ -1,9 +1,26 @@
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  type WebContents
+} from 'electron'
+import {
+  closeSync,
+  fsyncSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  watch,
+  writeFileSync,
+  type FSWatcher
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { isDirectory, isPathArg } from '../core/directories'
+import { applySyncBoard } from '../core/sync-apply'
 import { SyncFolder } from '../core/sync-folder'
-import type { WorkspaceState } from '../core/workspace-store'
+import { withBoard, type Workspace, type WorkspaceState } from '../core/workspace-store'
 import { IPC, type SyncFolderResult } from '../shared/api'
 import type { MainSettings } from './settings'
 import type { MainState } from './state'
@@ -11,14 +28,18 @@ import type { MainState } from './state'
 export interface MainSync {
   /** A valid `state:save`: written to the sync file when its board changed (#13 D4). */
   noteBoard(state: WorkspaceState): void
-  /** Writes a pending board now (before quit). */
+  /** Writes a pending board now and stops watching the folder (before quit). */
   flush(): void
 }
 
+/** Folder events come in bursts (a temp file, then a rename): read once they settle. */
+const WATCH_SETTLE_MS = 100
+
 /**
- * The sync folder (#13 D1, D4, D9, D10, D13, D14): reads the folder from the settings at once (so
- * the status is known before the window asks), writes the board from every save, and serves the
- * `sync:*` channels to a window's own top-level page only.
+ * The sync folder (#13 D1, D4, D9, D10, D11, D13, D14): reads the folder from the settings at once
+ * and applies its board to main's state before any window asks for it (so the window opens on the
+ * synced board), reads it again whenever the folder changes or a window gains focus, writes the
+ * board from every save, and serves the `sync:*` channels to a window's own top-level page only.
  */
 export function registerSync(state: MainState, settings: MainSettings): MainSync {
   // D15: a test can give each instance its own home, which D5 maps to `~`.
@@ -32,7 +53,62 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
       }
     }
   })
-  sync.start(settings.syncFolder(), state.load())
+  /**
+   * A board read from the folder (D7): main's state takes it at once with no card running (what a
+   * window not yet listening loads), and every window gets it to apply keeping its running cards
+   * (D8), saving the result as any change.
+   */
+  const apply = (incoming: Workspace[]): void => {
+    const local = state.load()
+    state.set(
+      withBoard(
+        local,
+        applySyncBoard(incoming, local.workspaces, () => false)
+      )
+    )
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(IPC.syncBoard, incoming)
+    }
+  }
+
+  // D11: the folder's contents are watched (sync tools replace the file by renaming it).
+  let watcher: FSWatcher | null = null
+  let settle: ReturnType<typeof setTimeout> | null = null
+  const readNow = (): void => {
+    const incoming = sync.read()
+    if (incoming !== null) apply(incoming)
+  }
+  const unwatch = (): void => {
+    watcher?.close()
+    watcher = null
+    if (settle !== null) clearTimeout(settle)
+    settle = null
+  }
+  const watchFolder = (folder: string | null): void => {
+    unwatch()
+    if (folder === null) return
+    try {
+      const w = watch(folder, () => {
+        if (settle !== null) clearTimeout(settle)
+        settle = setTimeout(() => {
+          settle = null
+          readNow()
+        }, WATCH_SETTLE_MS)
+      })
+      w.on('error', (err) => {
+        console.error(`sync folder not watched: ${String(err)}`)
+        if (watcher === w) unwatch()
+      })
+      watcher = w
+    } catch (err) {
+      console.error(`sync folder not watched: ${String(err)}`)
+    }
+  }
+
+  const launched = sync.start(settings.syncFolder(), state.load())
+  if (launched !== null) apply(launched)
+  watchFolder(sync.folderPath())
+  app.on('browser-window-focus', readNow)
 
   const fromMainFrame = (event: IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
@@ -41,6 +117,7 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   const applyFolder = (folder: string | null, sender: WebContents): void => {
     settings.setSyncFolder(folder)
     const joined = sync.setFolder(folder, state.load())
+    watchFolder(sync.folderPath())
     if (joined !== null) sender.send(IPC.syncBoard, joined)
   }
 
@@ -77,6 +154,9 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
 
   return {
     noteBoard: (next) => sync.noteBoard(next),
-    flush: () => sync.flush()
+    flush: () => {
+      sync.flush()
+      unwatch()
+    }
   }
 }

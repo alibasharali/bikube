@@ -745,11 +745,25 @@ test('#26 AC6: a change made just before quit is in the file once the app has ex
   const a = await oneSynced(folder)
   await editWorkspace(a.page, 0)
   await a.page.getByTestId('workspace-name').fill('renamed')
-  await a.page.getByTestId('workspace-submit').click()
-  await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
   const child = a.app.process()
-  // No card runs, so only the sync folder's flush holds this quit (D5).
-  await quit(a)
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+  // The window is closed (quitting the app) by the page itself as soon as the rename is stored
+  // (and so saved: the dialog closes after the store's save), well within `SYNC_WRITE_DELAY_MS`,
+  // so only quit's flush can write the change. No card runs, so only the sync folder holds this
+  // quit (D5).
+  await a.page
+    .evaluate(() => {
+      const closeOnceStored = new MutationObserver(() => {
+        if (document.querySelector('[data-testid="workspace-dialog"]') !== null) return
+        closeOnceStored.disconnect()
+        window.close()
+      })
+      closeOnceStored.observe(document.body, { childList: true, subtree: true })
+      document.querySelector<HTMLButtonElement>('[data-testid="workspace-submit"]')!.click()
+    })
+    .catch(() => {})
+  await exited
+  apps.splice(apps.indexOf(a.app), 1)
   expect(readSyncFile(folder)?.board.workspaces.map((w) => w.name)).toEqual(['renamed'])
   // The flush finished, so the process ended on its own, not by D5's SIGKILL.
   expect(child.signalCode).toBeNull()
@@ -778,7 +792,7 @@ test('#26 AC6: with the sync file stalled, the app still ends within two quit ho
   apps.splice(apps.indexOf(b.app), 1)
 })
 
-test('#26 AC1: a stalled sync file freezes nothing, and its board applies once it is read', async () => {
+test("#26 AC1: a stalled sync file freezes nothing, and this machine's changed board wins once it is read", async () => {
   const folder = makeDir('F')
   const a = await oneSynced(folder)
   const valid = JSON.parse(readFileSync(syncFilePath(folder), 'utf8')) as SyncFile
@@ -823,8 +837,14 @@ test('#26 AC1: a stalled sync file freezes nothing, and its board applies once i
     writeFileSync(next, text)
     renameSync(next, syncFilePath(folder))
     await writeFile(feed, text)
-    await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['remote'])
-    await expect(b.page.getByTestId('sync-status')).toHaveText(SYNCED)
+    // D4: this machine's board changed since launch (its new card), so it wins and is written.
+    await expect(b.page.getByTestId('sync-status')).toHaveText(SYNCED, { timeout: 5000 })
+    await expect
+      .poll(() => readSyncFile(folder)?.board.workspaces.map((w) => w.name), { timeout: 5000 })
+      .toEqual(['api'])
+    expect(cardsInFile(folder)).toEqual(['Terminal 1'])
+    expect(await workspaceNames(b.page)).toEqual(['api'])
+    expect(await cardTitles(column(b.page, 'Backlog'))).toEqual(['Terminal 1'])
   } finally {
     // A read still stalled would keep the app from exiting (libuv waits for its thread): opening
     // the FIFO read-write never blocks and, once closed, ends any stalled read with EOF.

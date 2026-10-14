@@ -115,7 +115,7 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   }
   const watchFolder = (folder: string | null): void => {
     unwatch()
-    if (folder === null) return
+    if (folder === null || stopped) return
     try {
       const w = watch(folder, () => {
         if (settle !== null) clearTimeout(settle)
@@ -139,11 +139,14 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
    * and the folder is retried every `UNAVAILABLE_RETRY_MS`; once it is back it is watched again.
    */
   let retry: ReturnType<typeof setInterval> | null = null
+  /** Set by quit's flush (#26 D6): the folder is no longer watched or retried after it. */
+  let stopped = false
   const stopRetry = (): void => {
     if (retry !== null) clearInterval(retry)
     retry = null
   }
   const followStatus = (kind: SyncStatus['kind']): void => {
+    if (stopped) return
     if (kind === 'unavailable') {
       unwatch()
       if (retry === null) retry = setInterval(readNow, UNAVAILABLE_RETRY_MS)
@@ -163,12 +166,13 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
 
   /**
-   * Keeps `folder` in the settings and joins the boards, handing a joined board to `sender`;
-   * resolves once the queued set-folder operation has finished (#26 D6).
+   * Joins the boards, handing a joined board to `sender`, and keeps `folder` in the settings once
+   * the queued set-folder operation has finished (#26 D6): one that never runs (stuck behind a
+   * stalled old folder at quit) leaves the old folder in the settings.
    */
   const applyFolder = async (folder: string | null, sender: WebContents): Promise<void> => {
-    settings.setSyncFolder(folder)
     const joined = await sync.setFolder(folder, state.load())
+    settings.setSyncFolder(folder)
     watchFolder(sync.folderPath())
     if (joined !== null && !sender.isDestroyed()) sender.send(IPC.syncBoard, joined)
   }
@@ -210,6 +214,7 @@ export function registerSync(state: MainState, settings: MainSettings): MainSync
   return {
     noteBoard: (next) => sync.noteBoard(next),
     flush: () => {
+      stopped = true
       stopRetry()
       unwatch()
       return sync.flush()

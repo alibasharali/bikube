@@ -13,6 +13,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-10-14 S1 (full auto, reviewer HUMAN finding): a board change saved while the launch read is still running was dropped (folder set only inside the queued start). → `start` sets the folder at once and the launch op uses the latest noted local board; a valid file still wins at launch (#13 D11). Fixed in S1's review round.
 - 2026-10-14 S2 (full auto, implementer finding): a libuv worker blocked on a stalled fs call keeps the process alive forever after quit (and the single-instance lock with it). → option (a): at Electron's `quit` with sync still busy, main SIGKILLs itself (spec D5/AC6 updated in its own commit).
+- 2026-10-14 ship review (full auto): (1) late valid launch read after the user changed the board → this machine's board wins and is written (D12-like); (2) setting a folder behind a stalled old folder → the setting is kept only once the set-folder op finishes; coalesced reads hand the board to one caller only; no watch/retry after quit's flush. Spec D3/D4/D6/AC4 updated in b3f71f3.
 
 ## Verification
 

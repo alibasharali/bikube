@@ -7,8 +7,8 @@
  * The fs is async (#26 D1), so a stalled folder never blocks main's event loop. Every operation
  * (set folder, launch read, read, the timer's write, flush) runs on one queue, each to completion
  * before the next starts (#26 D2), so each sees and leaves the state the synchronous code did; a
- * read asked for while one is waiting to start shares that one's result (#26 D3). The returned
- * promises never reject: an operation that throws is logged and resolves to nothing.
+ * read asked for while one is waiting to start joins that one and resolves null (#26 D3). The
+ * returned promises never reject: an operation that throws is logged and resolves to nothing.
  */
 import { join } from 'node:path'
 import {
@@ -89,7 +89,7 @@ export class SyncFolder {
   private tail: Promise<void> = Promise.resolve()
   /** Operations queued or running. */
   private queued = 0
-  /** A read queued and not yet started, which a later read shares (#26 D3); null for none. */
+  /** A read queued and not yet started, which a later read joins (#26 D3); null for none. */
   private waitingRead: Promise<Workspace[] | null> | null = null
 
   constructor(private readonly options: SyncFolderOptions) {}
@@ -156,7 +156,8 @@ export class SyncFolder {
   /**
    * At launch, with the folder kept in the settings (or null): reads the file to know the last
    * board and the status, and returns the file's board for this machine to apply (D7, D11): not a
-   * join, and compared with nothing, so a valid file always applies. A missing file gets `local`'s
+   * join, and compared with nothing, so a valid file applies, unless this machine's board changed
+   * while the read ran, which is then written instead (#26 D4). A missing file gets `local`'s
    * board. Returns null when there is nothing to apply. Queued (#26 D2); resolves once done. The
    * folder is in use at once, so a board change noted while the read runs is kept (its write is
    * queued behind this read) and the read uses the latest board noted.
@@ -180,13 +181,21 @@ export class SyncFolder {
         this.cancelPending()
         await this.write(localText)
         return null
-      case 'valid':
-        // The file's board wins at launch (D11), over a change noted while it was read.
+      case 'valid': {
         this.cancelPending()
-        this.last = this.boardText(read.workspaces)
-        this.local = this.last
+        const text = this.boardText(read.workspaces)
+        // #26 D4: a change noted here since launch (while a late read stalled) wins and is
+        // written, as D12's recovery.
+        if (localText !== launchText && localText !== text) {
+          await this.write(localText)
+          return null
+        }
+        // Else the file's board applies (D11), and a later join starts from it (D9).
+        this.last = text
+        this.noteLocal(read.workspaces)
         this.setStatus({ kind: 'synced', folder, at: this.now().toISOString() })
         return read.workspaces
+      }
       case 'unreadable':
         // Once the file is valid it applies (D11), unless a change was noted here since launch,
         // even during this read, which then wins (D12).
@@ -210,11 +219,13 @@ export class SyncFolder {
    * a pending write of an older board (last writer wins); else null. Applying it saves a board
    * equal to the file's, which is then not written back, so machines never echo (D4). A folder
    * with no file gets this machine's board. While the folder is unavailable or its file
-   * unreadable, this is D12's retry and recovery. Queued (#26 D2), and shared with a read already
-   * waiting to start (#26 D3), so at most one read runs and one waits.
+   * unreadable, this is D12's retry and recovery. Queued (#26 D2); a read asked for while one is
+   * already waiting to start joins it and resolves null, once it has run (#26 D3), so at most one
+   * read runs and one waits.
    */
   read(): Promise<Workspace[] | null> {
-    if (this.waitingRead !== null) return this.waitingRead
+    // #26 D3: only the waiting read's own caller applies what it finds.
+    if (this.waitingRead !== null) return this.waitingRead.then(() => null)
     const read = this.enqueue(() => {
       this.waitingRead = null
       return this.readNow()

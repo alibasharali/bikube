@@ -825,7 +825,7 @@ describe('never overwriting with the async fs (#26 AC3)', () => {
 })
 
 describe('reads coalescing (#26 D3, AC4)', () => {
-  it('runs one read at a time with at most one waiting, shared by every read asked for meanwhile', async () => {
+  it('runs one read at a time with at most one waiting, whose board goes to its own caller only', async () => {
     const api = workspace('api', 'api')
     const sync = open()
     await sync.setFolder(F, state(api))
@@ -842,9 +842,12 @@ describe('reads coalescing (#26 D3, AC4)', () => {
     await settle()
     expect(fs.readsInFlight).toBe(1)
     expect(fs.reads).toBe(reads + 2)
+    // Another machine writes a newer board, which the second read finds.
+    const remote = { ...api, name: 'remote' }
+    fs.files.set(FILE, fs.files.get(FILE)!.replace('"name":"api"', '"name":"remote"'))
     fs.releaseRead()
     expect(await first).toBeNull()
-    expect(await Promise.all(more)).toEqual(Array(10).fill(null))
+    expect(await Promise.all(more)).toEqual([[remote], ...Array(9).fill(null)])
     await settle()
     expect(fs.reads).toBe(reads + 2)
     expect(sync.busy()).toBe(false)
@@ -940,7 +943,7 @@ describe('a board change while the launch read runs (#26 D2, #13 D11)', () => {
     expect(sync.status().kind).toBe('synced')
   })
 
-  it("returns the file's board and writes nothing when the file is valid", async () => {
+  it("writes the change over another machine's valid file, returning nothing to apply (D4)", async () => {
     await open().setFolder(F, state({ ...api, name: 'file' }))
     fs.events = []
     fs.holdReads = true
@@ -951,11 +954,50 @@ describe('a board change while the launch read runs (#26 D2, #13 D11)', () => {
     await tick(SYNC_WRITE_DELAY_MS)
     fs.holdReads = false
     fs.releaseRead()
+    expect(await launched).toBeNull()
+    await tick(1000)
+    expect(written().board.workspaces[0].name).toBe('changed')
+    expect(writes()).toBe(1)
+    expect(sync.status().kind).toBe('synced')
+    expect(sync.busy()).toBe(false)
+  })
+
+  it("returns the file's board and writes nothing when nothing changed during the read (D4)", async () => {
+    await open().setFolder(F, state({ ...api, name: 'file' }))
+    fs.events = []
+    fs.holdReads = true
+    const sync = open()
+    const launched = sync.start(F, state(api))
+    await settle()
+    fs.holdReads = false
+    fs.releaseRead()
     expect(await launched).toEqual([{ ...api, name: 'file' }])
     await tick(1000)
     expect(fs.events).toEqual([])
-    expect(written().board.workspaces[0].name).toBe('file')
-    expect(sync.busy()).toBe(false)
+    expect(sync.status().kind).toBe('synced')
+  })
+
+  it('a folder set before a late valid launch read joins from the board that read applied (D4)', async () => {
+    const B = '/sync-b'
+    fs.dirs.add(B)
+    const web = workspace('web', 'web')
+    const local = workspace('local', 'local')
+    await open().setFolder(F, state(api))
+    await open().setFolder(B, state(web))
+    fs.events = []
+    fs.holdReads = true
+    const sync = open()
+    const launched = sync.start(F, state(local))
+    await settle()
+    const joined = sync.setFolder(B, state(local))
+    fs.holdReads = false
+    fs.releaseRead()
+    expect(await launched).toEqual([api])
+    expect(await joined).toEqual([web, api])
+    const fileB = JSON.parse(fs.files.get(`${B}/drovr-board.json`)!) as {
+      board: { workspaces: Workspace[] }
+    }
+    expect(fileB.board.workspaces.map((w) => w.id)).toEqual(['web', 'api'])
   })
 })
 

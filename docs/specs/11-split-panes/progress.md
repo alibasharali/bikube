@@ -7,8 +7,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `d16b200..fcf8659` | fixed r1 | `split-tree` (MAIN_PANE, MAX_PANES, PaneLayout, splitFocused, removePane, focusPane, canSplit, paneIds); `SessionRouter(api)` single onData/onExit with spawn/adopt/release; `CardSessions(api, createScreen, router?)`; `CardPanes(api, router, createScreen)` layout/screen/split/focus/close/subscribe (no dispose yet); renderer `cardPanes()`, `usePaneLayout(cardId)`, `paneScreen`; test ids `pane` (data-focused), `pane-close`, `pane-split-right`, `pane-split-down`; Split down button exists, not disabled at 4 |
-| S2 | running | | | |
-| S3 | todo | | | |
+| S2 | done | `77c2c9f..ed21dce` | CLEAN | `splitShortcut(event, platform): SplitDirection | null` in card-shortcuts.ts; CardView capture listener handles Back + split; buttons disabled at 4 |
+| S3 | running | | | |
 
 ## Rulings
 

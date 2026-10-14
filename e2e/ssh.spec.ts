@@ -586,8 +586,10 @@ test('AC9: board is not found in an SSH card', async () => {
   await createCard('api')
   await connected()
   await run('board status . hi')
+  // bash prints `board: command not found`; Ubuntu's command-not-found hook (CI runners)
+  // prints `Command 'board' not found, ...` instead.
   await expect
-    .poll(async () => (await bufferLines()).some((l) => l.includes('command not found')))
+    .poll(async () => (await bufferLines()).some((l) => /\bboard\b.*not found/i.test(l)))
     .toBe(true)
   await back()
   await expect(tileStatus('api')).toHaveText('Running')

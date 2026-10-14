@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | done | see branch | pending | none |
+| S1 | done | `f689028..HEAD` | fresh-context review: no blocking findings; untested vectors added (location.replace, window.open _self) | none |
 
 ## Rulings
 

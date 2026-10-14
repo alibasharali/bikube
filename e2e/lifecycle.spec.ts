@@ -79,6 +79,13 @@ test('the page cannot navigate away or open windows', async () => {
     await page.waitForTimeout(500)
     expect(page.url()).toBe(url)
   }
+  // Other ways into `about:blank` go through the same navigate event.
+  await page.evaluate(() => location.replace('about:blank'))
+  await page.waitForTimeout(500)
+  expect(page.url()).toBe(url)
+  await page.evaluate(() => window.open('about:blank', '_self'))
+  await page.waitForTimeout(500)
+  expect(page.url()).toBe(url)
   // Not a locator: it would wait for the cancelled navigations to finish.
   expect(await page.evaluate(() => document.querySelector('[data-testid=app]') !== null)).toBe(true)
   const opened = await page.evaluate(() => window.open('https://example.com') === null)

@@ -23,6 +23,12 @@ const REMOTE_PATH_PATTERN = /^(\/|~$|~\/)/
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 
+/**
+ * The SSH line is parsed by the user's local login shell (D5); in fish a backslash inside single
+ * quotes is an escape and could break out of the quoting, so none is allowed (D3).
+ */
+const BACKSLASH = /\\/
+
 /** The trimmed host, or why it fails D2. */
 export function checkHost(raw: string): LocationCheck {
   const host = raw.trim()
@@ -39,7 +45,8 @@ export function checkRemoteDirectory(raw: string): LocationCheck {
   if (
     directory.length > MAX_REMOTE_DIRECTORY ||
     !REMOTE_PATH_PATTERN.test(directory) ||
-    CONTROL_CHARACTERS.test(directory)
+    CONTROL_CHARACTERS.test(directory) ||
+    BACKSLASH.test(directory)
   ) {
     return { ok: false, message: REMOTE_DIRECTORY_INVALID }
   }

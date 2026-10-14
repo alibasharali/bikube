@@ -83,4 +83,10 @@ describe('checkRemoteDirectory (D3)', () => {
     }
     expect(checkRemoteDirectory('/srv/\u00a0é').ok).toBe(true)
   })
+
+  it('rejects backslashes, which a fish login shell reads as escapes in the SSH line', () => {
+    for (const dir of ['/a\\', "/x\\'; touch /tmp/pwned; #", '~/a\\\\b']) {
+      expect(checkRemoteDirectory(dir)).toEqual({ ok: false, message: REMOTE_DIRECTORY_INVALID })
+    }
+  })
 })

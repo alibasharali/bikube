@@ -117,5 +117,10 @@ describe('sshShellLine (#12 D5)', () => {
       ok: false,
       reason: 'invalid working directory'
     })
+    // A fish login shell would read `\'` in the quoted line as an escape (D3).
+    expect(sshShellLine('devbox', "/x\\'; touch /tmp/pwned; #")).toEqual({
+      ok: false,
+      reason: 'invalid working directory'
+    })
   })
 })

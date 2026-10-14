@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
 import { isSettingsShortcut } from '../../core/card-shortcuts'
+import { syncStatusText } from '../../core/sync-status'
 import type { Workspace } from '../../core/workspace-store'
 import { removeWorkspace, startCard } from './card-actions'
 import { useRunningCount } from './card-terminals'
@@ -12,9 +13,11 @@ import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
 import Sidebar from './Sidebar'
 import { useWorkspaceState, workspaceStore } from './store'
+import { useSyncStatus } from './sync'
 
 function App(): React.JSX.Element {
   const { workspaces, activeId } = useWorkspaceState()
+  const syncStatus = syncStatusText(useSyncStatus())
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
   // One card open at full size at a time, always one of the active workspace's (#4 D7). It is
@@ -77,6 +80,7 @@ function App(): React.JSX.Element {
         onEdit={(id) => setDialog({ kind: 'edit', id })}
         onDelete={(id) => setDialog({ kind: 'delete', id })}
         onSettings={() => setSettingsOpen(true)}
+        syncStatus={syncStatus}
       />
       <main className="main">
         {active && openCard ? (

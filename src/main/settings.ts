@@ -18,6 +18,10 @@ export interface MainSettings {
   /** The window background of the resolved theme (#10 D2), so a light launch doesn't flash dark. */
   backgroundColor(): string
   flush(): void
+  /** The sync folder kept in the settings file (#13 D10), or null when sync is off. */
+  syncFolder(): string | null
+  /** Keeps `folder` (already checked) as the sync folder, or null for off, and writes the file. */
+  setSyncFolder(folder: string | null): void
 }
 
 /**
@@ -57,6 +61,8 @@ export function registerSettings(): MainSettings {
   return {
     applyTheme: () => applyTheme(file.load()),
     backgroundColor: () => THEME_BACKGROUNDS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'],
-    flush: () => file.flush()
+    flush: () => file.flush(),
+    syncFolder: () => file.syncFolder(),
+    setSyncFolder: (folder) => file.setSyncFolder(folder)
   }
 }

@@ -6,15 +6,19 @@ import {
   type Theme
 } from '../../core/settings'
 import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
+import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import Modal from './Modal'
 import { settingsStore, useSettings } from './settings'
+import { useSyncStatus } from './sync'
+
+export const SYNC_FOLDER_ERROR = 'Folder not found'
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
 
 /**
- * The Settings dialog (#10 D5): Theme, Font size and Font family. Every valid change applies and
- * saves at once; closing applies a typed family, keeps what was applied and drops an invalid
- * font size.
+ * The Settings dialog (#10 D5): Theme, Font size, Font family and Sync folder (#13 D10). Every
+ * valid change applies and saves at once; closing applies a typed family, keeps what was applied
+ * and drops an invalid font size.
  */
 function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const settings = useSettings()
@@ -44,6 +48,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
   }
 
   const sizeId = `${id}-size`
+  const syncId = `${id}-sync`
+  const syncErrorId = `${id}-sync-error`
   const sizeErrorId = `${id}-size-error`
   const familyId = `${id}-family`
   return (
@@ -112,6 +118,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           }}
         />
       </div>
+      <SyncFolderField id={syncId} errorId={syncErrorId} />
       <div className="modal-actions">
         <button
           type="button"
@@ -123,6 +130,102 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
         </button>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * The Sync folder section (#13 D10, D13): a typed path applies on blur or Enter (empty turns sync
+ * off), `Choose…` opens the native picker, `Turn off` shows while sync is on; main checks the folder
+ * and keeps the previous one when it isn't found. The status line follows main's status.
+ */
+function SyncFolderField({ id, errorId }: { id: string; errorId: string }): React.JSX.Element {
+  const status = useSyncStatus()
+  const folder = syncFolderOf(status)
+  const [text, setText] = useState(folder ?? '')
+  const [shown, setShown] = useState(folder)
+  const [notFound, setNotFound] = useState(false)
+  // The folder changed in main (picked, turned off, set): the field shows it.
+  if (shown !== folder) {
+    setShown(folder)
+    setText(folder ?? '')
+    setNotFound(false)
+  }
+
+  const apply = async (): Promise<void> => {
+    const typed = text.trim()
+    const next = typed === '' ? null : typed
+    if (next === folder) {
+      setText(folder ?? '')
+      setNotFound(false)
+      return
+    }
+    const result = await window.drovr.sync.setFolder(next)
+    setNotFound(!result.ok)
+  }
+
+  const statusText = syncStatusText(status)
+  return (
+    <div className="field">
+      <label htmlFor={id}>Sync folder</label>
+      <div className="field-row">
+        <input
+          id={id}
+          data-testid="settings-sync-folder"
+          value={text}
+          placeholder="Off"
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={notFound ? true : undefined}
+          aria-describedby={notFound ? errorId : undefined}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => void apply()}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            void apply()
+          }}
+        />
+        <button
+          type="button"
+          className="btn"
+          data-testid="settings-sync-choose"
+          onClick={() => {
+            void window.drovr.sync.pickFolder().then((result) => setNotFound(!result.ok))
+          }}
+        >
+          Choose…
+        </button>
+        {folder !== null && (
+          <button
+            type="button"
+            className="btn"
+            data-testid="settings-sync-off"
+            onClick={() => {
+              setText('')
+              setNotFound(false)
+              void window.drovr.sync.setFolder(null)
+            }}
+          >
+            Turn off
+          </button>
+        )}
+      </div>
+      {notFound && (
+        <p
+          className="field-error"
+          id={errorId}
+          role="alert"
+          data-testid="settings-error-sync-folder"
+        >
+          {SYNC_FOLDER_ERROR}
+        </p>
+      )}
+      {statusText !== null && (
+        <p className="field-hint" data-testid="settings-sync-status">
+          {statusText}
+        </p>
+      )}
+    </div>
   )
 }
 

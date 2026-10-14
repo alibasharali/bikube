@@ -183,3 +183,46 @@ describe('SettingsFile.save (#10 D6)', () => {
     expect(JSON.parse(fs.files.get(FILE)!).settings.theme).toBe('dark')
   })
 })
+
+describe('SettingsFile sync folder (#13 D10, AC12)', () => {
+  it('loads the sync folder from the file, off when missing', () => {
+    expect(open().syncFolder()).toBeNull()
+    fs.files.set(
+      FILE,
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","syncFolder":"/sync"}}'
+    )
+    const file = open()
+    expect(file.syncFolder()).toBe('/sync')
+    expect(file.load()).toEqual({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo' })
+  })
+
+  it('writes a new sync folder with the other settings, and leaves it out once off', () => {
+    const file = open()
+    file.setSyncFolder('/sync')
+    expect(file.syncFolder()).toBe('/sync')
+    vi.advanceTimersByTime(SETTINGS_SAVE_INTERVAL_MS)
+    expect(fs.files.get(FILE)).toBe(
+      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","syncFolder":"/sync"}}'
+    )
+    file.setSyncFolder(null)
+    file.flush()
+    expect(JSON.parse(fs.files.get(FILE)!).settings).not.toHaveProperty('syncFolder')
+  })
+
+  it('keeps the sync folder when settings are saved, whatever the payload holds', () => {
+    fs.files.set(
+      FILE,
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","syncFolder":"/sync"}}'
+    )
+    const file = open()
+    file.save({ theme: 'light', fontSize: 13, fontFamily: 'Menlo', syncFolder: '/elsewhere' })
+    file.flush()
+    expect(JSON.parse(fs.files.get(FILE)!).settings).toEqual({
+      theme: 'light',
+      fontSize: 13,
+      fontFamily: 'Menlo',
+      syncFolder: '/sync'
+    })
+    expect(file.syncFolder()).toBe('/sync')
+  })
+})

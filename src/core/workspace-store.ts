@@ -130,6 +130,11 @@ export interface WorkspaceStore {
   setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card>
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
+  /**
+   * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
+   * active workspace stays active when it is still there, else the first one is (or none).
+   */
+  replaceBoard(workspaces: Workspace[]): void
 }
 
 export interface StoreOptions {
@@ -403,6 +408,12 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       ok: true,
       value: { ...card, claudeStarted: true }
     }))
+  }
+
+  replaceBoard(workspaces: Workspace[]): void {
+    const { activeId } = this.state
+    const kept = workspaces.some((w) => w.id === activeId)
+    this.set({ workspaces, activeId: kept ? activeId : (workspaces[0]?.id ?? null) })
   }
 
   private updateCard(

@@ -164,3 +164,51 @@ describe('resolveTheme (#10 D2)', () => {
     expect(resolveTheme('light', true)).toBe('light')
   })
 })
+
+describe('syncFolder in the settings file (#13 D10, AC12)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+
+  it('keeps an absolute syncFolder next to the other fields', () => {
+    const parsed = parseSettingsFile(
+      file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder: '/Users/me/Sync' })
+    )
+    expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo' })
+    expect(parsed.syncFolder).toBe('/Users/me/Sync')
+  })
+
+  it('loads a #10 file without syncFolder with sync off and its theme and font kept', () => {
+    const parsed = parseSettingsFile(
+      file({ theme: 'light', fontSize: 18, fontFamily: 'Courier New' })
+    )
+    expect(parsed.settings).toEqual({ theme: 'light', fontSize: 18, fontFamily: 'Courier New' })
+    expect(parsed.syncFolder).toBeUndefined()
+    expect(parsed.replaced).toEqual([])
+  })
+
+  it.each([42, '', 'relative/dir', '~/Sync', '/a\0b', null, `/${'a'.repeat(5000)}`])(
+    'loads syncFolder %j as off, keeping the other fields',
+    (syncFolder) => {
+      const parsed = parseSettingsFile(
+        file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder })
+      )
+      expect(parsed.syncFolder).toBeUndefined()
+      expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo' })
+    }
+  )
+
+  it('writes syncFolder after the font family, and leaves it out when off', () => {
+    const settings = { theme: 'dark' as const, fontSize: 13, fontFamily: 'Menlo' }
+    expect(serializeSettings(settings, '/Users/me/Sync')).toBe(
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","syncFolder":"/Users/me/Sync"}}'
+    )
+    expect(serializeSettings(settings, null)).toBe(
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo"}}'
+    )
+  })
+
+  it('never takes syncFolder from a settings:save payload', () => {
+    expect(
+      validateSettings({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo', syncFolder: '/x' })
+    ).toEqual({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo' })
+  })
+})

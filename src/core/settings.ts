@@ -1,7 +1,11 @@
 /**
  * App-wide settings (#10 D1) and their file format (D6, D7). Plain TS with no Electron or Node
  * imports, so main and the renderer can both use it. The file holds
- * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily" } }`.
+ * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily", "syncFolder"? } }`.
+ *
+ * `syncFolder` (#13 D10) is kept per machine in the same file but is not part of `Settings`:
+ * `settings:save` never carries or changes it, only the sync channels do. It is written only while
+ * sync is on; absent (or invalid) means off.
  *
  * `fontFamily` is always the family in effect: a typed family is trimmed, and an empty one
  * becomes the default (D4), so the file and every reader see the actual family.
@@ -78,6 +82,8 @@ export function validateSettings(value: unknown): Settings | null {
 
 export interface ParsedSettings {
   settings: Settings
+  /** The sync folder (#13 D10), present only when the file holds a valid one; absent means off. */
+  syncFolder?: string
   /** The fields that were invalid or missing and took their default (D7). */
   replaced: (keyof Settings)[]
   /** Why the whole file was ignored, when it was. */
@@ -108,13 +114,35 @@ export function parseSettingsFile(text: string): ParsedSettings {
   const family = normalizeFontFamily(raw.fontFamily)
   if (family !== null) settings.fontFamily = family
   else replaced.push('fontFamily')
+  if (isSyncFolderPath(raw.syncFolder)) return { settings, replaced, syncFolder: raw.syncFolder }
   return { settings, replaced }
 }
 
-/** The file contents for `settings`, fields in D6's order. */
-export function serializeSettings(settings: Settings): string {
+/**
+ * The file contents for `settings`, fields in D6's order, then the sync folder (#13 D10) when sync
+ * is on.
+ */
+export function serializeSettings(settings: Settings, syncFolder: string | null = null): string {
   const { theme, fontSize, fontFamily } = settings
-  return JSON.stringify({ version: SETTINGS_VERSION, settings: { theme, fontSize, fontFamily } })
+  return JSON.stringify({
+    version: SETTINGS_VERSION,
+    settings: { theme, fontSize, fontFamily, ...(syncFolder !== null && { syncFolder }) }
+  })
+}
+
+export const MAX_SYNC_FOLDER_LENGTH = 4096
+
+/**
+ * A sync folder as the settings file may hold it (#13 D10): an absolute path (POSIX, or a Windows
+ * drive path) of at most 4096 chars without NUL. Whether it exists is checked elsewhere.
+ */
+export function isSyncFolderPath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= MAX_SYNC_FOLDER_LENGTH &&
+    !value.includes('\0') &&
+    /^(\/|[A-Za-z]:[\\/])/.test(value)
+  )
 }
 
 /** The theme in effect: `system` follows the OS appearance (D2). */

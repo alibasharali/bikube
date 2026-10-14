@@ -12,6 +12,8 @@ interface SidebarProps {
   onDelete: (id: string) => void
   /** Opens the Settings dialog (#10 D5). */
   onSettings: () => void
+  /** The sync status line (#13 D13), or null when sync is off. */
+  syncStatus: string | null
 }
 
 function Sidebar({
@@ -23,7 +25,8 @@ function Sidebar({
   onAdd,
   onEdit,
   onDelete,
-  onSettings
+  onSettings,
+  syncStatus
 }: SidebarProps): React.JSX.Element {
   return (
     <nav
@@ -109,6 +112,11 @@ function Sidebar({
         })}
       </ul>
       <div className="sidebar-footer">
+        {!collapsed && syncStatus !== null && (
+          <p className="sidebar-sync" data-testid="sync-status">
+            {syncStatus}
+          </p>
+        )}
         <button
           type="button"
           className="sidebar-settings"

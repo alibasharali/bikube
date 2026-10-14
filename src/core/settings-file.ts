@@ -28,6 +28,8 @@ export class SettingsFile {
   private readonly path: string
   private readonly tmpPath: string
   private latest: Settings | null = null
+  /** The sync folder (#13 D10), read with the file; null when sync is off. */
+  private folder: string | null = null
   /** Whether `latest` has changes not yet written; a missing file stays unwritten until one. */
   private pending = false
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -43,6 +45,23 @@ export class SettingsFile {
     return { ...this.latest }
   }
 
+  /** The sync folder in effect (#13 D10), or null when sync is off. */
+  syncFolder(): string | null {
+    this.load()
+    return this.folder
+  }
+
+  /**
+   * Keeps `folder` (already checked by the caller) as the sync folder, or turns sync off with null,
+   * and writes the file within 200 ms, keeping the other settings (#13 D10).
+   */
+  setSyncFolder(folder: string | null): void {
+    this.load()
+    if (folder === this.folder) return
+    this.folder = folder
+    this.schedule()
+  }
+
   /**
    * Keeps `value` when every field is valid (D1) and writes it within 200 ms; saves in between
    * replace it. Returns the settings kept (family normalized), or null, changing nothing, for an
@@ -53,6 +72,11 @@ export class SettingsFile {
     if (checked === null) return null
     this.load()
     this.latest = checked
+    this.schedule()
+    return { ...checked }
+  }
+
+  private schedule(): void {
     this.pending = true
     if (this.timer === null) {
       this.timer = setTimeout(() => {
@@ -60,7 +84,6 @@ export class SettingsFile {
         this.write()
       }, SETTINGS_SAVE_INTERVAL_MS)
     }
-    return { ...checked }
   }
 
   /** Writes any pending change now, synchronously (before quit). */
@@ -79,7 +102,7 @@ export class SettingsFile {
     try {
       const fd = fs.openSync(this.tmpPath, 'w')
       try {
-        fs.writeFileSync(fd, serializeSettings(this.latest), 'utf8')
+        fs.writeFileSync(fd, serializeSettings(this.latest, this.folder), 'utf8')
         fs.fsyncSync(fd)
       } finally {
         fs.closeSync(fd)
@@ -101,6 +124,7 @@ export class SettingsFile {
       return { ...DEFAULT_SETTINGS }
     }
     const parsed = parseSettingsFile(text)
+    this.folder = parsed.syncFolder ?? null
     if (parsed.rejected) {
       this.log(`settings file ${parsed.rejected}; using defaults`)
     } else if (parsed.replaced.length > 0) {

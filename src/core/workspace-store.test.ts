@@ -873,3 +873,36 @@ describe('SSH workspaces (#12 D1, D2, D3)', () => {
     })
   })
 })
+
+describe('replacing the whole board (#13 D7, D14)', () => {
+  it('takes the new workspaces and keeps the active one when it still exists', () => {
+    const s = make()
+    const api = create(s, 'api')
+    const web = create(s, 'web')
+    ok(s.selectWorkspace(web.id))
+    const listener = vi.fn()
+    s.subscribe(listener)
+    s.replaceBoard([{ ...api, name: 'api2' }, web])
+    expect(s.getState()).toEqual({ workspaces: [{ ...api, name: 'api2' }, web], activeId: web.id })
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('makes the first workspace active when the active one is gone, or none when empty', () => {
+    const s = make()
+    const api = create(s, 'api')
+    const web = create(s, 'web')
+    ok(s.selectWorkspace(web.id))
+    s.replaceBoard([api])
+    expect(s.getState().activeId).toBe(api.id)
+    s.replaceBoard([])
+    expect(s.getState()).toEqual({ workspaces: [], activeId: null })
+  })
+
+  it('makes the first workspace active when there was none', () => {
+    const s = make()
+    const other = make()
+    const api = create(other, 'api')
+    s.replaceBoard([api])
+    expect(s.getState()).toEqual({ workspaces: [api], activeId: api.id })
+  })
+})

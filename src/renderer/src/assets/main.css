@@ -194,6 +194,16 @@ button {
   border-top: 1px solid var(--border);
 }
 
+.sidebar-sync {
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-settings {
   width: 100%;
   display: flex;
@@ -625,6 +635,12 @@ button {
 .field-error {
   margin: 0;
   color: var(--danger);
+  font-size: 12px;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--text-muted);
   font-size: 12px;
 }
 

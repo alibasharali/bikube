@@ -1,7 +1,8 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { Settings } from '../core/settings'
-import type { WorkspaceState } from '../core/workspace-store'
+import type { SyncStatus } from '../core/sync-status'
+import type { Workspace, WorkspaceState } from '../core/workspace-store'
 
 /** IPC channel names shared by main and preload. */
 export const IPC = {
@@ -20,7 +21,12 @@ export const IPC = {
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   boardRequest: 'board:request',
-  boardAnswer: 'board:answer'
+  boardAnswer: 'board:answer',
+  syncStatus: 'sync:status',
+  syncStatusChanged: 'sync:statusChanged',
+  syncSetFolder: 'sync:setFolder',
+  syncPickFolder: 'sync:pickFolder',
+  syncBoard: 'sync:board'
 } as const
 
 export interface TerminalExit {
@@ -109,6 +115,35 @@ export interface BoardApi {
   ): () => void
 }
 
+/** Outcome of setting the sync folder (#13 D10, D14). */
+export type SyncFolderResult = { ok: true } | { ok: false; reason: 'not found' }
+
+/**
+ * The sync folder (#13 D13, D14), owned by main: its status, setting it, and the boards main hands
+ * the renderer to apply. The folder itself is kept in `drovr-settings.json`, never through
+ * `settings:save` (D10).
+ */
+export interface SyncApi {
+  /** Main's current status; `off` when no folder is set. */
+  status(): Promise<SyncStatus>
+  /** `listener` gets every status change. Returns an unsubscribe function. */
+  onStatus(listener: (status: SyncStatus) => void): () => void
+  /**
+   * Sets the sync folder and joins the boards (D9), or turns sync off with null. Main checks the
+   * path is an absolute path to an existing directory, else resolves `not found` and keeps the
+   * previous folder.
+   */
+  setFolder(path: string | null): Promise<SyncFolderResult>
+  /** Opens the native folder picker and sets the chosen folder; cancelling changes nothing. */
+  pickFolder(): Promise<SyncFolderResult>
+  /**
+   * `listener` gets every board main hands the renderer to apply (D7, D9): it replaces the whole
+   * board, keeping the active workspace, and is saved through `state:save` as any change. Returns
+   * an unsubscribe function.
+   */
+  onBoard(listener: (workspaces: Workspace[]) => void): () => void
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
@@ -119,4 +154,5 @@ export interface DrovrApi {
   state: StateApi
   settings: SettingsApi
   board: BoardApi
+  sync: SyncApi
 }

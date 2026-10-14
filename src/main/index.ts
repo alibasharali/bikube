@@ -5,6 +5,7 @@ import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
+import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
 
 function createWindow(settings: MainSettings): void {
@@ -46,9 +47,12 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function startApp(): void {
-  const state = registerState()
+  // Every valid save reaches the sync folder (#13 D4); saves only come once the window is up.
+  const state = registerState((saved) => sync.noteBoard(saved))
   // Read before the window exists, so it opens in the saved theme (#10 D6).
   const settings = registerSettings()
+  // The sync folder from the settings, read before the window asks for its status (#13 D13).
+  const sync = registerSync(state, settings)
   const socketPath = boardSocketPath()
   const terminals = registerTerminals(boardShellEnvFor(socketPath))
   registerClipboard()
@@ -60,10 +64,11 @@ function startApp(): void {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   })
 
-  // Pending board and settings changes reach the disk, then no PTY process outlives the app.
+  // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives the app.
   app.on('before-quit', () => {
     state.flush()
     settings.flush()
+    sync.flush()
     terminals.killAll()
   })
 

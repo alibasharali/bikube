@@ -6,11 +6,13 @@ import App from './App'
 import { listenForBoardRequests } from './board-requests'
 import { loadSettingsStore } from './settings'
 import { loadWorkspaceStore } from './store'
+import { listenForSyncBoards, loadSyncStatus } from './sync'
 
-// The saved board and the settings are loaded before the first render, so the app opens on
-// them (#8 D5, D10; #10 D6).
-void Promise.all([loadWorkspaceStore(), loadSettingsStore()]).then(() => {
+// The saved board, the settings and the sync status are loaded before the first render, so the
+// app opens on them (#8 D5, D10; #10 D6; #13 D13).
+void Promise.all([loadWorkspaceStore(), loadSettingsStore(), loadSyncStatus()]).then(() => {
   listenForBoardRequests()
+  listenForSyncBoards()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

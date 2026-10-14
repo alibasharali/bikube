@@ -2,6 +2,7 @@
  * The saved-state file format (#8 D2, D3, D4). Plain TS: no Electron or Node imports, so main
  * and the renderer can both use it. The file holds `{ "version": 1, "state": WorkspaceState }`.
  */
+import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import type { Card, Column, Workspace, WorkspaceState } from './workspace-store'
 
@@ -67,6 +68,8 @@ function readWorkspace(raw: unknown): Workspace | string {
   if (!isObject(raw)) return 'workspace is not an object'
   const { id, name, directory, nextCardNumber } = raw
   if (!isId(id) || !isText(name) || !isText(directory)) return 'bad workspace'
+  const host = readHost(raw.host, directory)
+  if (typeof host !== 'object') return host
   if (!Number.isInteger(nextCardNumber) || (nextCardNumber as number) < 1)
     return 'bad nextCardNumber'
   const defaultStartup = readStartup(raw.defaultStartup)
@@ -89,6 +92,7 @@ function readWorkspace(raw: unknown): Workspace | string {
     id,
     name,
     directory,
+    ...host,
     columns,
     cards,
     nextCardNumber: nextCardNumber as number,
@@ -101,10 +105,26 @@ function readCard(raw: unknown): Card | string {
   if (!isObject(raw)) return 'card is not an object'
   const { id, columnId, title, directory, agentSessionId, claudeStarted } = raw
   if (!isId(id) || !isId(columnId) || !isText(title) || !isText(directory)) return 'bad card'
+  const host = readHost(raw.host, directory)
+  if (typeof host !== 'object') return host
   if (!isId(agentSessionId) || typeof claudeStarted !== 'boolean') return 'bad card session'
   const startup = readStartup(raw.startup)
   if (!startup) return 'bad startup command'
-  return { id, columnId, title, directory, startup, agentSessionId, claudeStarted }
+  return { id, columnId, title, directory, ...host, startup, agentSessionId, claudeStarted }
+}
+
+/**
+ * `{}` for a local workspace or card (no host, or null), `{ host }` for an SSH one whose host
+ * passes D2 and whose directory passes D3 unchanged (#12 D10), else why it is rejected.
+ */
+function readHost(raw: unknown, directory: string): { host?: string } | string {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw !== 'string') return 'bad host'
+  const host = checkHost(raw)
+  if (!host.ok || host.value !== raw) return 'bad host'
+  const remote = checkRemoteDirectory(directory)
+  if (!remote.ok || remote.value !== directory) return 'bad remote directory'
+  return { host: host.value }
 }
 
 /** A startup command that passes `checkStartup`, normalized by it; null otherwise. */

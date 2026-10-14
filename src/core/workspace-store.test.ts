@@ -790,3 +790,86 @@ describe('initial state (#8 D5, AC5)', () => {
     ])
   })
 })
+
+describe('SSH workspaces (#12 D1, D2, D3)', () => {
+  const never = (): string => 'This path does not exist or is not a directory'
+
+  it('creates an SSH workspace with a trimmed host, not checking the directory locally', () => {
+    const s = make(never)
+    const ws = ok(s.createWorkspace({ name: '', directory: '/nope/remote', host: ' me@devbox ' }))
+    expect(ws.host).toBe('me@devbox')
+    expect(ws.directory).toBe('/nope/remote')
+    expect(ws.name).toBe('remote')
+  })
+
+  it('names an SSH workspace in ~ after its host', () => {
+    const ws = ok(make().createWorkspace({ name: '', directory: '~', host: 'devbox' }))
+    expect(ws.name).toBe('devbox')
+  })
+
+  it('keeps local workspaces without a host', () => {
+    const s = make()
+    const ws = ok(s.createWorkspace({ name: 'a', directory: '/tmp/a', host: null }))
+    expect('host' in ws).toBe(false)
+    expect('host' in create(s, 'b')).toBe(false)
+  })
+
+  it('rejects a bad host or remote directory and creates nothing', () => {
+    const s = make()
+    expect(s.createWorkspace({ name: 'a', directory: '/tmp', host: '-oProxyCommand=x' })).toEqual({
+      ok: false,
+      error: { field: 'host', message: 'Enter a host as ssh takes it, e.g. me@devbox' }
+    })
+    expect(s.createWorkspace({ name: 'a', directory: '/tmp', host: '' })).toEqual({
+      ok: false,
+      error: { field: 'host', message: 'Host is required' }
+    })
+    expect(s.createWorkspace({ name: 'a', directory: 'relative/dir', host: 'devbox' })).toEqual({
+      ok: false,
+      error: { field: 'directory', message: 'Enter an absolute path or one starting with ~' }
+    })
+    expect(s.getState().workspaces).toEqual([])
+  })
+
+  it('copies the host to cards at creation; edits change new cards only (D1)', () => {
+    const s = make(never)
+    const ws = ok(s.createWorkspace({ name: 'remote', directory: '~/api', host: 'me@devbox' }))
+    const col = ws.columns[0].id
+    const a = ok(s.createCard(ws.id, col, 'a'))
+    expect(a.host).toBe('me@devbox')
+    expect(a.directory).toBe('~/api')
+    ok(s.updateWorkspace(ws.id, { host: 'other' }))
+    const b = ok(s.createCard(ws.id, col, 'b'))
+    expect(b.host).toBe('other')
+    const after = s.getState().workspaces[0]
+    expect(after.host).toBe('other')
+    expect(after.cards.find((c) => c.id === a.id)?.host).toBe('me@devbox')
+  })
+
+  it('switches a workspace to local with host null, checking the directory locally again', () => {
+    const s = make((d) => (d === '/tmp' ? null : 'missing'))
+    const ws = ok(s.createWorkspace({ name: 'remote', directory: '~', host: 'devbox' }))
+    expect(s.updateWorkspace(ws.id, { host: null })).toMatchObject({
+      ok: false,
+      error: { field: 'directory' }
+    })
+    const local = ok(s.updateWorkspace(ws.id, { host: null, directory: '/tmp' }))
+    expect('host' in local).toBe(false)
+    const card = ok(s.createCard(ws.id, ws.columns[0].id, 'c'))
+    expect('host' in card).toBe(false)
+  })
+
+  it('switches a local workspace to SSH, checking the directory by D3', () => {
+    const s = make()
+    const ws = create(s, 'a')
+    expect(s.updateWorkspace(ws.id, { host: '-x' })).toMatchObject({
+      ok: false,
+      error: { field: 'host' }
+    })
+    expect(ok(s.updateWorkspace(ws.id, { host: 'devbox' })).host).toBe('devbox')
+    expect(s.updateWorkspace(ws.id, { directory: 'rel' })).toMatchObject({
+      ok: false,
+      error: { field: 'directory' }
+    })
+  })
+})

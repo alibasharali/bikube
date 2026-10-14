@@ -66,7 +66,13 @@ function Sidebar({
                 data-testid="workspace-item"
                 aria-current={active ? 'true' : undefined}
                 aria-label={collapsed ? w.name : undefined}
-                title={collapsed ? w.name : w.directory}
+                title={
+                  collapsed
+                    ? w.name
+                    : w.host === undefined
+                      ? w.directory
+                      : `${w.host}:${w.directory}`
+                }
                 onClick={() => onSelect(w.id)}
               >
                 <span className="workspace-badge" aria-hidden="true">

@@ -5,6 +5,7 @@
  * `validateDirectory` that returns an error message or null.
  */
 
+import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { SHELL_STARTUP, checkStartup, type StartupCommand } from './startup-command'
 
 export const DEFAULT_COLUMN_NAMES = ['Backlog', 'Running', 'Needs me', 'Done'] as const
@@ -20,8 +21,13 @@ export interface Card {
   columnId: string
   /** Trimmed, never empty (#4 D5). */
   title: string
-  /** Absolute path, copied from the workspace at creation and never changed (#4 D2). */
+  /**
+   * Copied from the workspace at creation and never changed (#4 D2): an absolute local path, or
+   * for an SSH card a path on its host (#12 D3).
+   */
   directory: string
+  /** The SSH host, copied from the workspace at creation and never changed; absent when local (#12 D1). */
+  host?: string
   /** What is typed into the shell on every start (#5 D2); changed only per card (#5 D11). */
   startup: StartupCommand
   /** UUID v4 given at creation, kept whatever the startup command (#5 D4). */
@@ -33,8 +39,13 @@ export interface Card {
 export interface Workspace {
   id: string
   name: string
-  /** Absolute path. New cards start here; existing cards keep their own (#4 D2). */
+  /**
+   * Absolute path, or for an SSH workspace a path on its host (#12 D3). New cards start here;
+   * existing cards keep their own (#4 D2).
+   */
   directory: string
+  /** The SSH host (#12 D1, D2); absent for a local workspace. New cards copy it. */
+  host?: string
   /** Each workspace owns exactly one board; this is its ordered columns. */
   columns: Column[]
   /**
@@ -56,7 +67,7 @@ export interface WorkspaceState {
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
 export type ErrorField =
-  'name' | 'directory' | 'column' | 'workspace' | 'title' | 'card' | 'command'
+  'name' | 'directory' | 'host' | 'column' | 'workspace' | 'title' | 'card' | 'command'
 
 export interface FieldError {
   field: ErrorField
@@ -66,9 +77,11 @@ export interface FieldError {
 export type Result<T> = { ok: true; value: T } | { ok: false; error: FieldError }
 
 export interface WorkspaceInput {
-  /** Empty or whitespace defaults to the directory's basename (D6). */
+  /** Empty or whitespace defaults to `defaultWorkspaceName` (D6, #12 D4). */
   name: string
   directory: string
+  /** An SSH host makes an SSH workspace (#12 D1); absent or null means local. */
+  host?: string | null
   /** Defaults to Shell (#5 D10). */
   defaultStartup?: StartupCommand
 }
@@ -76,6 +89,8 @@ export interface WorkspaceInput {
 export interface WorkspacePatch {
   name?: string
   directory?: string
+  /** A host makes the workspace SSH, null makes it local; new cards only (#12 D1). */
+  host?: string | null
   /** Changes the preset for new cards only; existing cards keep theirs (#5 D10). */
   defaultStartup?: StartupCommand
 }
@@ -135,6 +150,16 @@ export function basename(path: string): string {
   return /^[A-Za-z]:$/.test(last) ? '' : last
 }
 
+/**
+ * The name a workspace gets when none is typed (D6, #12 D4): the directory's last path segment,
+ * or for an SSH workspace in `~` its host.
+ */
+export function defaultWorkspaceName(directory: string, host?: string | null): string {
+  const dir = directory.trim()
+  if (host && /^~\/*$/.test(dir)) return host.trim()
+  return basename(dir)
+}
+
 /** The column's cards, top to bottom (#6 D2). */
 export function cardsInColumn(workspace: Workspace, columnId: string): Card[] {
   return workspace.cards.filter((c) => c.columnId === columnId)
@@ -176,10 +201,10 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   }
 
   createWorkspace(input: WorkspaceInput): Result<Workspace> {
-    const directory = input.directory.trim()
-    const dir = this.checkDirectory(directory)
-    if (dir) return dir
-    const name = this.checkName(input.name.trim() || basename(directory), null)
+    const location = this.checkLocation(input.directory, input.host ?? null)
+    if (!location.ok) return location
+    const { directory, host } = location.value
+    const name = this.checkName(input.name.trim() || defaultWorkspaceName(directory, host), null)
     if (!name.ok) return name
     const startup = checkStartup(input.defaultStartup ?? SHELL_STARTUP)
     if (!startup.ok) return startup
@@ -187,6 +212,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       id: this.generateId(),
       name: name.value,
       directory,
+      ...(host !== null && { host }),
       columns: DEFAULT_COLUMN_NAMES.map((n) => ({ id: this.generateId(), name: n })),
       cards: [],
       nextCardNumber: 1,
@@ -204,10 +230,14 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!current) return unknownWorkspace()
     let name = current.name
     let directory = current.directory
-    if (patch.directory !== undefined) {
-      directory = patch.directory.trim()
-      const dir = this.checkDirectory(directory)
-      if (dir) return dir
+    let host = current.host ?? null
+    if (patch.directory !== undefined || patch.host !== undefined) {
+      const location = this.checkLocation(
+        patch.directory ?? current.directory,
+        patch.host !== undefined ? patch.host : host
+      )
+      if (!location.ok) return location
+      ;({ directory, host } = location.value)
     }
     if (patch.name !== undefined) {
       const checked = this.checkName(patch.name.trim(), id)
@@ -221,6 +251,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       defaultStartup = checked.value
     }
     const updated: Workspace = { ...current, name, directory, defaultStartup }
+    // A local workspace has no `host` key at all, so the saved file never gets one (#12 D10).
+    if (host === null) delete updated.host
+    else updated.host = host
     this.replace(updated)
     return { ok: true, value: updated }
   }
@@ -303,6 +336,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       columnId,
       title: trimmed || `Terminal ${ws.nextCardNumber}`,
       directory: ws.directory,
+      ...(ws.host !== undefined && { host: ws.host }),
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
       claudeStarted: false
@@ -388,6 +422,26 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
 
   private find(id: string): Workspace | undefined {
     return this.state.workspaces.find((w) => w.id === id)
+  }
+
+  /**
+   * The trimmed directory and host: a local directory by today's rules, or an SSH host and
+   * remote directory by #12 D2 and D3 (never checked locally).
+   */
+  private checkLocation(
+    rawDirectory: string,
+    rawHost: string | null
+  ): Result<{ directory: string; host: string | null }> {
+    if (rawHost === null) {
+      const directory = rawDirectory.trim()
+      const dir = this.checkDirectory(directory)
+      return dir ?? { ok: true, value: { directory, host: null } }
+    }
+    const host = checkHost(rawHost)
+    if (!host.ok) return fail('host', host.message)
+    const directory = checkRemoteDirectory(rawDirectory)
+    if (!directory.ok) return fail('directory', directory.message)
+    return { ok: true, value: { directory: directory.value, host: host.value } }
   }
 
   private checkDirectory(directory: string): { ok: false; error: FieldError } | null {

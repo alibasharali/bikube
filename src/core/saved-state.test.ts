@@ -178,3 +178,70 @@ describe('file names (#8 D2, D4)', () => {
     )
   })
 })
+
+describe('SSH hosts in the saved state (#12 D10)', () => {
+  /** `fullState()` plus SSH workspace `remote` with a card made while it was on `me@devbox`. */
+  function sshState(): WorkspaceState {
+    let n = 100
+    const s = new InMemoryWorkspaceStore({
+      initialState: fullState(),
+      generateId: () => `id-${++n}`,
+      generateSessionId: () => '00000000-0000-4000-8000-000000000100'
+    })
+    const remote = ok(s.createWorkspace({ name: 'remote', directory: '~/api', host: 'me@devbox' }))
+    ok(s.createCard(remote.id, remote.columns[0].id, 'a'))
+    ok(s.updateWorkspace(remote.id, { host: 'other' }))
+    return s.getState()
+  }
+
+  /** The file contents for `sshState()` after `change` edits a parsed copy of its state. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function sshFileWith(change: (state: any) => void): string {
+    const state = JSON.parse(JSON.stringify(sshState()))
+    change(state)
+    return JSON.stringify({ version: 1, state })
+  }
+
+  it('writes host only on SSH workspaces and cards, and reads it back', () => {
+    const state = sshState()
+    const text = serializeSavedState(state)
+    const file = JSON.parse(text)
+    expect(file.version).toBe(1)
+    const [alpha, beta, remote] = file.state.workspaces
+    expect(remote.host).toBe('other')
+    expect(remote.cards[0].host).toBe('me@devbox')
+    for (const ws of [alpha, beta]) {
+      expect('host' in ws).toBe(false)
+      for (const card of ws.cards) expect('host' in card).toBe(false)
+    }
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('loads a file without any host, or with host null, as local', () => {
+    const old = parseSavedState(serializeSavedState(fullState()))
+    expect(old).toEqual({ ok: true, value: fullState() })
+    const nulls = parseSavedState(
+      fileWith((s) => {
+        s.workspaces[0].host = null
+        s.workspaces[0].cards[0].host = null
+      })
+    )
+    expect(nulls).toEqual({ ok: true, value: fullState() })
+    if (!nulls.ok) return
+    expect('host' in nulls.value.workspaces[0]).toBe(false)
+    expect('host' in nulls.value.workspaces[0].cards[0]).toBe(false)
+  })
+
+  it('rejects a host failing D2 on a workspace or a card', () => {
+    expectRejected(sshFileWith((s) => (s.workspaces[2].cards[0].host = '-x')))
+    expectRejected(sshFileWith((s) => (s.workspaces[2].host = '-oProxyCommand=x')))
+    expectRejected(sshFileWith((s) => (s.workspaces[2].host = '')))
+    expectRejected(sshFileWith((s) => (s.workspaces[2].host = 7)))
+    expectRejected(fileWith((s) => (s.workspaces[0].cards[0].host = 'me@dev box')))
+  })
+
+  it('rejects an SSH workspace or card whose directory fails D3', () => {
+    expectRejected(sshFileWith((s) => (s.workspaces[2].directory = 'relative/dir')))
+    expectRejected(sshFileWith((s) => (s.workspaces[2].cards[0].directory = '~other')))
+  })
+})

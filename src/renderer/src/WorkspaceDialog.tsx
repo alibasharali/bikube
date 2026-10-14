@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   applyDirectory,
+  applyHost,
+  applyLocation,
   applyName,
   validateDraft,
+  emptyDraft,
   type DraftErrors,
-  type WorkspaceDraft
+  type WorkspaceDraft,
+  type WorkspaceLocation
 } from '../../core/workspace-form'
 import { SHELL_STARTUP, checkStartup } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
@@ -20,16 +24,30 @@ interface WorkspaceDialogProps {
   onClose: () => void
 }
 
+/** The Location choice (#12 D4), `This computer` first as the default. */
+const LOCATIONS: [WorkspaceLocation, string][] = [
+  ['local', 'This computer'],
+  ['ssh', 'SSH']
+]
+
 function WorkspaceDialog({
   workspace,
   workspaces,
   onClose
 }: WorkspaceDialogProps): React.JSX.Element {
+  const id = useId()
   const [draft, setDraft] = useState<WorkspaceDraft>(
     workspace
-      ? { name: workspace.name, directory: workspace.directory, nameTouched: true }
-      : { name: '', directory: '', nameTouched: false }
+      ? {
+          name: workspace.name,
+          directory: workspace.directory,
+          nameTouched: true,
+          location: workspace.host === undefined ? 'local' : 'ssh',
+          host: workspace.host ?? ''
+        }
+      : emptyDraft()
   )
+  const ssh = draft.location === 'ssh'
   const [errors, setErrors] = useState<DraftErrors>({})
   // The default startup command for new cards (#5 D10); Shell for a new workspace.
   const [startup, setStartup] = useState<StartupDraft>(() =>
@@ -62,7 +80,12 @@ function WorkspaceDialog({
         return
       }
       if (!command.ok) return
-      const input = { ...result.value, defaultStartup: command.value }
+      // An explicit null host makes an edited SSH workspace local again (#12 D1).
+      const input = {
+        ...result.value,
+        host: result.value.host ?? null,
+        defaultStartup: command.value
+      }
       const stored = workspace
         ? workspaceStore.updateWorkspace(workspace.id, input)
         : workspaceStore.createWorkspace(input)
@@ -71,7 +94,10 @@ function WorkspaceDialog({
           setCommandError(stored.error.message)
           return
         }
-        const field = stored.error.field === 'name' ? 'name' : 'directory'
+        const field =
+          stored.error.field === 'name' || stored.error.field === 'host'
+            ? stored.error.field
+            : 'directory'
         setErrors({ [field]: stored.error.message })
         return
       }
@@ -90,6 +116,54 @@ function WorkspaceDialog({
       initialFocus='[data-testid="workspace-directory"]'
     >
       <form onSubmit={(e) => void submit(e)} noValidate>
+        <fieldset className="field radio-group">
+          <legend>Location</legend>
+          {LOCATIONS.map(([location, label]) => (
+            <label key={location} className="radio">
+              <input
+                type="radio"
+                name={`${id}-location`}
+                value={location}
+                data-testid={`workspace-location-${location}`}
+                checked={(draft.location ?? 'local') === location}
+                onChange={() => {
+                  setDraft(applyLocation(draft, location))
+                  setErrors({ ...errors, directory: undefined, host: undefined })
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        {ssh && (
+          <div className="field">
+            <label htmlFor="workspace-host">Host</label>
+            <input
+              id="workspace-host"
+              data-testid="workspace-host"
+              value={draft.host ?? ''}
+              placeholder="me@devbox"
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={errors.host ? true : undefined}
+              aria-describedby={errors.host ? 'workspace-host-error' : undefined}
+              onChange={(e) => {
+                setDraft(applyHost(draft, e.target.value))
+                setErrors({ ...errors, host: undefined })
+              }}
+            />
+            {errors.host && (
+              <p
+                className="field-error"
+                id="workspace-host-error"
+                role="alert"
+                data-testid="workspace-error-host"
+              >
+                {errors.host}
+              </p>
+            )}
+          </div>
+        )}
         <div className="field">
           <label htmlFor="workspace-directory">Working directory</label>
           <div className="field-row">
@@ -97,7 +171,7 @@ function WorkspaceDialog({
               id="workspace-directory"
               data-testid="workspace-directory"
               value={draft.directory}
-              placeholder="/path/to/project"
+              placeholder={ssh ? '~/project' : '/path/to/project'}
               spellCheck={false}
               autoComplete="off"
               aria-invalid={errors.directory ? true : undefined}
@@ -107,14 +181,17 @@ function WorkspaceDialog({
                 setErrors({ ...errors, directory: undefined })
               }}
             />
-            <button
-              type="button"
-              className="btn"
-              data-testid="workspace-browse"
-              onClick={() => void browse()}
-            >
-              Browse…
-            </button>
+            {/* The picker sees only this computer's folders (#12 D3). */}
+            {!ssh && (
+              <button
+                type="button"
+                className="btn"
+                data-testid="workspace-browse"
+                onClick={() => void browse()}
+              >
+                Browse…
+              </button>
+            )}
           </div>
           {errors.directory && (
             <p

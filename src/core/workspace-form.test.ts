@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyDirectory,
+  applyHost,
+  applyLocation,
   applyName,
   emptyDraft,
   validateDraft,
@@ -90,5 +92,69 @@ describe('validateDraft', () => {
       }
     )
     expect(r).toMatchObject({ ok: false, errors: { directory: expect.any(String) } })
+  })
+})
+
+describe('SSH drafts (#12 D4)', () => {
+  const ssh = (draft: WorkspaceDraft): WorkspaceDraft => applyLocation(draft, 'ssh')
+
+  it('starts on This computer', () => {
+    expect(emptyDraft()).toMatchObject({ location: 'local', host: '' })
+  })
+
+  it('defaults the name to the host while the directory is ~, else the last segment', () => {
+    let d = applyHost(ssh(emptyDraft()), 'me@devbox')
+    d = applyDirectory(d, '~')
+    expect(d.name).toBe('me@devbox')
+    expect(applyHost(d, 'other').name).toBe('other')
+    d = applyDirectory(d, '/tmp/drovr-remote')
+    expect(d.name).toBe('drovr-remote')
+    expect(applyHost(d, 'third').name).toBe('drovr-remote')
+  })
+
+  it('keeps a typed name when the host changes', () => {
+    const d = applyDirectory(applyName(ssh(emptyDraft()), 'Mine'), '~')
+    expect(applyHost(d, 'devbox').name).toBe('Mine')
+  })
+
+  it('validates an SSH draft by the host and remote rules, never checking the path locally', async () => {
+    let calls = 0
+    const ctx = {
+      existingNames: [],
+      isDirectory: async (): Promise<boolean> => {
+        calls++
+        return false
+      }
+    }
+    expect(
+      await validateDraft(
+        { name: 'r', directory: ' /nope/remote ', location: 'ssh', host: ' me@devbox ' },
+        ctx
+      )
+    ).toEqual({ ok: true, value: { name: 'r', directory: '/nope/remote', host: 'me@devbox' } })
+    expect(
+      await validateDraft(
+        { name: 'r', directory: 'relative/dir', location: 'ssh', host: '-oProxyCommand=x' },
+        ctx
+      )
+    ).toEqual({
+      ok: false,
+      errors: {
+        host: 'Enter a host as ssh takes it, e.g. me@devbox',
+        directory: 'Enter an absolute path or one starting with ~'
+      }
+    })
+    expect(
+      await validateDraft({ name: 'r', directory: '~', location: 'ssh', host: '' }, ctx)
+    ).toEqual({ ok: false, errors: { host: 'Host is required' } })
+    expect(calls).toBe(0)
+  })
+
+  it('ignores the host of a local draft', async () => {
+    const r = await validateDraft(
+      { name: 'b', directory: '/tmp/beta', location: 'local', host: '-x' },
+      { existingNames: [], isDirectory }
+    )
+    expect(r).toEqual({ ok: true, value: { name: 'b', directory: '/tmp/beta' } })
   })
 })

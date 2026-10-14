@@ -556,7 +556,7 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
   async function startedSsh(
     id: string,
     startup: StartupCommand = { kind: 'shell' },
-    onClaudeStarted?: () => void
+    onClaudeStarted?: (kind: string) => void
   ): Promise<void> {
     sessions.start(sshCard(id, startup), onClaudeStarted)
     api.spawns[api.spawns.length - 1].resolve({ ok: true, id: 's1' })
@@ -585,6 +585,27 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     api.emitData('s1', READY_MARKER)
     expect(api.writes).toHaveLength(1)
     expect(claudeStarted).toHaveBeenCalledTimes(1)
+  })
+
+  it("types a preset's plain command and records its first start only at the marker (#21 D3)", async () => {
+    const firstStart = vi.fn()
+    await startedSsh('c1', { kind: 'codex' }, firstStart)
+    api.emitData('s1', 'Password: ')
+    expect(api.writes).toEqual([])
+    expect(firstStart).not.toHaveBeenCalled()
+    api.emitData('s1', READY_MARKER)
+    expect(api.writes).toEqual([['s1', 'codex\r']])
+    expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
+  })
+
+  it('records no preset first start when the marker never comes (#21 D3)', async () => {
+    const firstStart = vi.fn()
+    await startedSsh('c1', { kind: 'opencode' }, firstStart)
+    api.emitData('s1', 'Permission denied\r\n')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+    expect(firstStart).not.toHaveBeenCalled()
   })
 
   it('finds the marker in output that came before the spawn reply', async () => {

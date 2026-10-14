@@ -46,7 +46,7 @@ export interface SyncBoard {
 
 /**
  * The board this machine writes (D2, D5, D6): local directories mapped by `portableDirectory`,
- * local cards with `claudeStarted` false, SSH ones as they are. Objects are rebuilt with a fixed
+ * local cards with `claudeStarted` false and `startedAgents` empty (#21 D7), SSH ones as they are. Objects are rebuilt with a fixed
  * key order, so the same board always serializes to the same text (D4 compares it).
  */
 export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
@@ -68,7 +68,7 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         startup: startupCopy(c.startup),
         agentSessionId: c.agentSessionId,
         claudeStarted: c.host === undefined ? false : c.claudeStarted,
-        startedAgents: [...c.startedAgents]
+        startedAgents: c.host === undefined ? [] : [...c.startedAgents]
       })),
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup)
@@ -89,8 +89,8 @@ export type SyncFileResult = { ok: true; workspaces: Workspace[] } | { ok: false
 /**
  * Reads the file's contents (D3): valid when it is JSON, `version` is 1, `savedAt` a valid date and
  * `board` passes the saved-state validation (#8 D3) once local directories are expanded under
- * `home` (D5); anything else is unreadable. Local cards come back with `claudeStarted` false, as a
- * card new to this machine gets it (D6).
+ * `home` (D5); anything else is unreadable. Local cards come back with `claudeStarted` false and
+ * `startedAgents` empty, as a card new to this machine gets them (D6, #21 D7).
  */
 export function parseSyncFile(text: string, home: string): SyncFileResult {
   let file: unknown
@@ -118,7 +118,9 @@ export function parseSyncFile(text: string, home: string): SyncFileResult {
     ok: true,
     workspaces: checked.value.workspaces.map((w) => ({
       ...w,
-      cards: w.cards.map((c) => (c.host === undefined ? { ...c, claudeStarted: false } : c))
+      cards: w.cards.map((c) =>
+        c.host === undefined ? { ...c, claudeStarted: false, startedAgents: [] } : c
+      )
     }))
   }
 }

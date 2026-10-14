@@ -10,6 +10,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -319,7 +320,11 @@ const activeWorkspace = (page: Page): Locator =>
   page.locator('[data-testid=workspace-item][aria-current=true] .workspace-name')
 
 /** Creates card `title` in Backlog (its view opens and it starts), then goes back to the board. */
-async function newCard(page: Page, title: string, startup?: 'Claude Code'): Promise<void> {
+async function newCard(
+  page: Page,
+  title: string,
+  startup?: 'Claude Code' | 'Codex'
+): Promise<void> {
   await column(page, 'Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
@@ -515,6 +520,62 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
   await expect
     .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
     .toEqual([`--session-id ${id('local')}`, `--resume ${id('ssh')}`])
+})
+
+test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", async () => {
+  const remote = '/tmp/drovr-remote'
+  mkdirSync(remote, { recursive: true })
+  const folder = makeDir('F')
+  const fakeA = fakeSshHome(makeDir('a'))
+  const fakeB = fakeSshHome(makeDir('b'))
+  const logA = join(root, 'a', 'agents.log')
+  const logB = join(root, 'b', 'agents.log')
+  addFakeAgents(fakeA.home, logA)
+  addFakeAgents(fakeB.home, logB)
+  mkdirSync(join(fakeA.home, 'api'))
+  mkdirSync(join(fakeB.home, 'api'))
+  const a = await launch(fakeA.home, newDataDir(), fakeA.env)
+  await createWorkspace(a.page, join(fakeA.home, 'api'), 'api')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  const b = await launch(fakeB.home, newDataDir(), fakeB.env)
+  await setSyncFolder(b.page, folder)
+  await closeSettings(b.page)
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['api'])
+
+  await newCard(a.page, 'local', 'Codex')
+  await a.page.getByTestId('workspace-add').click()
+  await a.page.getByTestId('workspace-location-ssh').click()
+  await a.page.getByTestId('workspace-host').fill('me@devbox')
+  await a.page.getByTestId('workspace-directory').fill(remote)
+  await a.page.getByTestId('workspace-name').fill('remote')
+  await a.page.getByTestId('workspace-submit').click()
+  await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await newCard(a.page, 'ssh', 'Codex')
+  await expect.poll(() => agentLogLines(logA), { timeout: 15_000 }).toEqual(['codex', 'codex'])
+
+  // A's file: the SSH card started, the local one written with startedAgents empty (D7).
+  type FileCard = { title: string; startedAgents: string[] }
+  const fileCards = (): FileCard[] =>
+    (readSyncFile(folder)?.board.workspaces ?? []).flatMap((w) => w.cards as unknown as FileCard[])
+  await expect
+    .poll(() => fileCards().map((c) => [c.title, c.startedAgents]))
+    .toEqual([
+      ['local', []],
+      ['ssh', ['codex']]
+    ])
+
+  await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api', 'remote'])
+  await selectWorkspace(b.page, 'api')
+  await card(b.page, 'local').getByTestId('card-open').click()
+  await expect.poll(() => agentLogLines(logB), { timeout: 15_000 }).toEqual(['codex'])
+  await b.page.getByTestId('card-back').click()
+  await selectWorkspace(b.page, 'remote')
+  await card(b.page, 'ssh').getByTestId('card-open').click()
+  await expect
+    .poll(() => agentLogLines(logB), { timeout: 15_000 })
+    .toEqual(['codex', 'codex resume --last'])
+  expect(agentLogLines(logA)).toEqual(['codex', 'codex'])
 })
 
 test("AC7: the active workspace stays per machine; B's goes to the first when A deletes it", async () => {

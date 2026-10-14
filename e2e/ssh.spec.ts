@@ -10,6 +10,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, sshLogLines, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -350,8 +351,8 @@ async function back(): Promise<void> {
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
-/** Creates a card through `+ New card`, optionally with Claude Code; its view opens on it. */
-async function createCard(title: string, startup?: 'Claude Code'): Promise<void> {
+/** Creates a card through `+ New card`, optionally with a startup command; its view opens on it. */
+async function createCard(title: string, startup?: 'Claude Code' | 'Codex'): Promise<void> {
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
@@ -499,6 +500,34 @@ test('AC5: the startup command is typed once, after the ready marker', async () 
   expect(claudeLogLines(fake.log)).toHaveLength(1)
   await back()
   await expect(card('agent').getByTestId('card-status-line')).not.toContainText('drovr-ready')
+})
+
+test('#21 AC8: a Codex card types codex once, after the ready marker, and resumes on reopen', async () => {
+  const agentLog = join(root, 'agents.log')
+  addFakeAgents(fake.home, agentLog)
+  await launch({ FAKE_SSH_DELAY: '1' })
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('r', 'Codex')
+  await expect(page.getByTestId('card-view-title')).toHaveText('r')
+  await expect.poll(() => agentLogLines(agentLog), { timeout: 15_000 }).toEqual(['codex'])
+  await expect.poll(bufferLines).toContain('fake-codex')
+  const screen = (await bufferLines()).join('\n')
+  const password = screen.indexOf('Password:')
+  expect(password).toBeGreaterThanOrEqual(0)
+  expect(screen.slice(0, password)).not.toContain('codex')
+  await page.waitForTimeout(500)
+  expect(agentLogLines(agentLog)).toEqual(['codex'])
+
+  await page.keyboard.press('Enter')
+  await connected()
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(tileStatus('r')).toHaveText('Stopped')
+  await openCard('r')
+  await expect
+    .poll(() => agentLogLines(agentLog), { timeout: 15_000 })
+    .toEqual(['codex', 'codex resume --last'])
+  await expect.poll(bufferLines).toContain('fake-codex resume --last')
 })
 
 test('AC6: an unreachable host reads SSH failed with ssh error; opening it tries again', async () => {

@@ -94,6 +94,31 @@ describe('the board written to the sync file (#13 D2, D3, D5, D6, AC1, AC5)', ()
     expect(written.cards[0].claudeStarted).toBe(true)
   })
 
+  it("writes local cards' startedAgents empty and SSH ones' as they are (#21 D7)", () => {
+    const started = toSyncBoard(
+      {
+        workspaces: [
+          workspace('api', 'api', {
+            cards: [
+              card('l', 'api-backlog', { startup: { kind: 'codex' }, startedAgents: ['codex'] }),
+              card('r', 'api-backlog', {
+                host: 'devbox',
+                startup: { kind: 'codex' },
+                startedAgents: ['codex', 'gemini']
+              })
+            ]
+          })
+        ],
+        activeId: 'api'
+      },
+      HOME
+    ).workspaces[0].cards.map((c) => [c.id, c.startedAgents])
+    expect(started).toEqual([
+      ['l', []],
+      ['r', ['codex', 'gemini']]
+    ])
+  })
+
   it('serializes version 1, savedAt in UTC and the board, and nothing else', () => {
     const board = toSyncBoard(state, HOME)
     const text = serializeSyncFile(board, new Date(Date.UTC(2026, 9, 14, 9, 5, 0)))
@@ -170,6 +195,29 @@ describe('reading the sync file (#13 D3, D5, D6)', () => {
     })
     const parsed = parseSyncFile(text, HOME)
     expect(parsed.ok && parsed.workspaces[0].cards[0].claudeStarted).toBe(false)
+  })
+
+  it("reads a local card's startedAgents as empty and an SSH card's as written (#21 D7)", () => {
+    const text = fileWith((f) => {
+      const board = f.board as { workspaces: { cards: { startedAgents: string[] }[] }[] }
+      board.workspaces[0].cards[0].startedAgents = ['codex']
+      board.workspaces[1].cards[0].startedAgents = ['opencode']
+    })
+    const parsed = parseSyncFile(text, HOME)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.workspaces.map((w) => w.cards[0].startedAgents)).toEqual([[], ['opencode']])
+  })
+
+  it('reads a file without startedAgents as empty (#21 D7)', () => {
+    const text = fileWith((f) => {
+      const board = f.board as { workspaces: { cards: Record<string, unknown>[] }[] }
+      for (const w of board.workspaces) for (const c of w.cards) delete c.startedAgents
+    })
+    const parsed = parseSyncFile(text, HOME)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.workspaces.map((w) => w.cards[0].startedAgents)).toEqual([[], []])
   })
 
   it('reads an empty board', () => {

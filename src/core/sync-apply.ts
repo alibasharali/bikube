@@ -8,20 +8,22 @@ import type { Card, Workspace } from './workspace-store'
 
 /**
  * The board this machine takes from `incoming` (D7): the file's workspaces, columns, cards and
- * order, with this machine's `claudeStarted` for local cards it already has (D6), and every card
- * running here (`isRunning`) kept (D8): a running card the file lacks goes to the bottom of its
- * column, or of its workspace's first column when that column is gone; a workspace the file lacks
- * that has a running card stays as this machine has it, after the file's workspaces. A running
- * card the file has takes the file's values.
+ * order, with this machine's `claudeStarted` and `startedAgents` (#21 D7) for local cards it
+ * already has, else false and empty (D6), and every card running here (`isRunning`) kept (D8): a
+ * running card the file lacks goes to the bottom of its column, or of its workspace's first column
+ * when that column is gone; a workspace the file lacks that has a running card stays as this
+ * machine has it, after the file's workspaces. A running card the file has takes the file's values.
  */
 export function applySyncBoard(
   incoming: Workspace[],
   local: Workspace[],
   isRunning: (cardId: string) => boolean
 ): Workspace[] {
-  const localStarted = new Map<string, boolean>()
+  const localStarted = new Map<string, Pick<Card, 'claudeStarted' | 'startedAgents'>>()
   for (const w of local)
-    for (const c of w.cards) if (c.host === undefined) localStarted.set(c.id, c.claudeStarted)
+    for (const c of w.cards)
+      if (c.host === undefined)
+        localStarted.set(c.id, { claudeStarted: c.claudeStarted, startedAgents: c.startedAgents })
   const incomingCards = new Set(incoming.flatMap((w) => w.cards.map((c) => c.id)))
   const incomingIds = new Set(incoming.map((w) => w.id))
   const localById = new Map(local.map((w) => [w.id, w]))
@@ -31,7 +33,9 @@ export function applySyncBoard(
 
   const applied = incoming.map((w) => {
     const cards = w.cards.map((c) =>
-      c.host === undefined ? { ...c, claudeStarted: localStarted.get(c.id) ?? false } : c
+      c.host === undefined
+        ? { ...c, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
+        : c
     )
     const mine = localById.get(w.id)
     const first = w.columns[0]

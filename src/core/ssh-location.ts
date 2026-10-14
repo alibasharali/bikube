@@ -21,7 +21,7 @@ const HOST_PATTERN = /^[A-Za-z0-9._@:/%[\]][A-Za-z0-9._@:/%[\]-]*$/
 const REMOTE_PATH_PATTERN = /^(\/|~$|~\/)/
 
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 
 /** The trimmed host, or why it fails D2. */
 export function checkHost(raw: string): LocationCheck {

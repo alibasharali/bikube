@@ -76,4 +76,11 @@ describe('checkRemoteDirectory (D3)', () => {
     }
     expect(checkRemoteDirectory('/' + 'a'.repeat(4095)).ok).toBe(true)
   })
+
+  it('rejects C1 control characters (U+0080–U+009F) but accepts U+00A0 and above', () => {
+    for (const dir of ['/srv/a\u009b2Jb', '/srv/\u0080', '/srv/\u009f']) {
+      expect(checkRemoteDirectory(dir)).toEqual({ ok: false, message: REMOTE_DIRECTORY_INVALID })
+    }
+    expect(checkRemoteDirectory('/srv/\u00a0é').ok).toBe(true)
+  })
 })

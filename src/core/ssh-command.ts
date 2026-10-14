@@ -28,13 +28,15 @@ function remoteDirectory(directory: string): string {
 
 /**
  * The command a POSIX remote login shell runs: `cd` to the directory (or exit 255, which shows
- * as SSH failed, D7), print the ready marker, then become the remote user's login shell.
- * `directory` must already pass D3.
+ * as SSH failed, D7), print the ready marker, then run the remote user's login shell. The shell
+ * is not `exec`ed: its own exit status 255 is reported as 254, so only `ssh` itself or the failed
+ * `cd` give 255. `directory` must already pass D3.
  */
 export function remoteCommand(directory: string): string {
   return (
     `cd ${remoteDirectory(directory)} || exit 255; ` +
-    `printf '\\033]6973;drovr-ready\\007'; exec "\${SHELL:-/bin/sh}" -l`
+    `printf '\\033]6973;drovr-ready\\007'; ` +
+    `"\${SHELL:-/bin/sh}" -l; s=$?; [ $s = 255 ] && s=254; exit $s`
   )
 }
 

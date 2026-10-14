@@ -544,6 +544,17 @@ test('AC6: exit or Close leaves a running SSH card Stopped', async () => {
   await expect(tileStatus('b')).toHaveText('Stopped')
 })
 
+test("D5: a remote shell's own exit 255 (after a failed command) reads Stopped", async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('a')
+  await connected()
+  // `exit` without a code exits with the last status, 255; the remote command reports it as 254.
+  await run("bash -c 'exit 255' || exit")
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(tileStatus('a')).toHaveText('Stopped')
+})
+
 test('AC7: main refuses a bad host or remote directory from the page', async () => {
   rmSync('/tmp/pwned', { force: true })
   await launch()

@@ -9,7 +9,10 @@ import { BOARD_USAGE } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { ANSWER_TIMEOUT_MS, BOARD_PROTOCOL_VERSION, NO_ANSWER } from './board-protocol'
 
-/** `DROVR_SOCKET` is not a socket owned by the remote user, or connecting to it fails (D6). */
+/**
+ * `DROVR_SOCKET` is not a socket owned by the remote user (checked with `lstat`, so a symlink is
+ * refused, D3), or connecting to it fails (D6).
+ */
 export const CANT_REACH = "board: can't reach Drovr from this host"
 /** The remote host has neither interpreter (D5). */
 export const NEEDS_PERL_OR_PYTHON = 'board: needs perl or python3 on this host'
@@ -61,7 +64,7 @@ if (!(@a == 3 && ($a[0] eq "move" || $a[0] eq "status"))) { print STDERR $USAGE;
 my $id = $ENV{DROVR_CARD_ID};
 my $path = $ENV{DROVR_SOCKET};
 fail(${perlString(NOT_IN_A_CARD)}) unless defined $id && length $id && defined $path && length $path;
-my @st = stat($path);
+my @st = lstat($path);
 fail(${perlString(CANT_REACH)}) unless @st && -S _ && $st[4] == $>;
 sub js {
   my $o = join "", map { my $c = ord; ($c < 32 || $c == 34 || $c == 92) ? sprintf("%su%04x", $B, $c) : $_ } split //, $_[0];
@@ -188,7 +191,7 @@ if not card_id or not path:
 CANT = ${pythonString(CANT_REACH)}
 NO = ${pythonString(NO_ANSWER)}
 try:
-    st = os.stat(path)
+    st = os.lstat(path)
     good = stat.S_ISSOCK(st.st_mode) and st.st_uid == os.geteuid()
 except OSError:
     good = False

@@ -261,7 +261,7 @@ test('AC3: an SSH workspace and its cards keep their host across a restart', asy
   const before = sshLog().length
   await openCard('a')
   await expect.poll(sshLog).toHaveLength(before + 1)
-  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- me@devbox /)
+  expect(sshLog().at(-1)).toMatch(/^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox /)
 })
 
 test('D1: switching an SSH workspace to This computer makes it local again', async () => {
@@ -446,7 +446,9 @@ test('AC4: a card runs on its host, in the remote directory; the local ssh has n
   await expect(page.getByTestId('card-view-location')).toHaveText(`me@devbox:${REMOTE_DIR}`)
   await connected()
   await expect.poll(sshLog).toHaveLength(1)
-  expect(sshLog()[0]).toMatch(/^-R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
+  expect(sshLog()[0]).toMatch(
+    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /
+  )
   expect(await output('pwd', 'pwd')).toBe(REMOTE_DIR)
   // The remote shell has the card's id for `board` (#25 D4) ...
   expect(await output('echo "[$DROVR_CARD_ID]"', 'card')).toBe(`[${await cardId('api')}]`)
@@ -486,13 +488,13 @@ test('AC2: editing the host changes new cards only; This computer makes them loc
   await submit()
   await createCard('b')
   await connected()
-  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- other /)
+  expect(sshLog().at(-1)).toMatch(/^-o ExitOnForwardFailure=no -R \S+ -t -- other /)
   await back()
 
   await openCard('a')
   await connected()
   expect(sshLog()).toHaveLength(3)
-  expect(sshLog().at(-1)).toMatch(/^-R \S+ -t -- me@devbox /)
+  expect(sshLog().at(-1)).toMatch(/^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox /)
   await back()
 
   await openEditDialog('remote')
@@ -672,7 +674,9 @@ test('AC8: a split pane of an SSH card connects to its host, with no startup com
   await page.getByTestId('pane-split-right').click()
   await expect(panes()).toHaveCount(2)
   await expect.poll(sshLog).toHaveLength(2)
-  expect(sshLog()[1]).toMatch(/^-R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
+  expect(sshLog()[1]).toMatch(
+    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /
+  )
   await run('echo "pwd:$(pwd)"')
   await expect.poll(() => paneLines(1)).toContain(`pwd:${REMOTE_DIR}`)
   await page.waitForTimeout(500)
@@ -700,7 +704,7 @@ test('AC8: a pane whose ssh fails keeps its error and SSH failed until Close pan
 })
 
 // `board` inside SSH cards (#25): each SSH session's socket is forwarded with `ssh -R`, which the
-// fake ssh makes a symlink from the remote path to main's session socket. Each command's stdout
+// fake ssh serves with a real socket at the remote path relaying to main's session socket. Each command's stdout
 // and stderr go to files in this test's temp root and its exit code is echoed on the screen.
 
 let boardCommands = 0
@@ -744,7 +748,7 @@ const titlesIn = (name: string): Locator => column(name).getByTestId('card-title
 
 /** The `-R <remote>:<local>` of a fake ssh log line, or null without one. */
 function forwardOf(line: string): { remote: string; local: string } | null {
-  const match = /^-R (\S+?):(\S+) -t -- /.exec(line)
+  const match = /^-o ExitOnForwardFailure=no -R (\S+?):(\S+) -t -- /.exec(line)
   return match ? { remote: match[1], local: match[2] } : null
 }
 
@@ -776,7 +780,7 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   await expect.poll(sshLog).toHaveLength(1)
   expect(sshLog()[0]).toMatch(
     new RegExp(
-      `^-R /tmp/drovr-[0-9a-f]{32}\\.sock:${escaped(join(dataDir, 'board'))}/s-[0-9a-f]{16}\\.sock -t -- me@devbox `
+      `^-o ExitOnForwardFailure=no -R /tmp/drovr-[0-9a-f]{32}\\.sock:${escaped(join(dataDir, 'board'))}/s-[0-9a-f]{16}\\.sock -t -- me@devbox `
     )
   )
 

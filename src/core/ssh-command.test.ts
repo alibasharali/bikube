@@ -6,9 +6,9 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync
 } from 'node:fs'
+import { connect, createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -148,13 +148,15 @@ describe('sshShellLine (#12 D5)', () => {
 describe('the SSH line with board (#25 D1, D4, D7)', () => {
   const board = { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock', localSocket: '/l/s-1.sock' }
 
-  it('forwards the remote socket to the local one before -t --', () => {
+  it('forwards the remote socket to the local one before -t --, a refused forward never fatal', () => {
     const result = sshShellLine('me@devbox', '/srv/api', board)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.line.startsWith('exec ssh -R ')).toBe(true)
+    expect(result.line.startsWith('exec ssh -o ExitOnForwardFailure=no -R ')).toBe(true)
     expect(argv(result.line.replace(/^exec /, ''))).toEqual([
       'ssh',
+      '-o',
+      'ExitOnForwardFailure=no',
       '-R',
       '/tmp/drovr-r.sock:/l/s-1.sock',
       '-t',
@@ -218,6 +220,7 @@ describe('the SSH line with board (#25 D1, D4, D7)', () => {
 describe('the remote command with board, run by sh (#25 D4)', () => {
   let dir: string
   let server: BoardServer | undefined
+  let relay: Server | undefined
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'drovr-rc-'))
@@ -226,6 +229,8 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
   afterEach(async () => {
     await server?.close()
     server = undefined
+    await new Promise<void>((done) => (relay ? relay.close(() => done()) : done()))
+    relay = undefined
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -261,7 +266,13 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     const local = join(dir, 'board', 's-1.sock')
     server = await startBoardServer(local, handler)
     const remote = join(dir, 'drovr-r.sock')
-    symlinkSync(local, remote)
+    // The forward: a real socket at the remote path relaying to the local one, as ssh -R makes.
+    relay = createServer({ allowHalfOpen: true }, (client) => {
+      const upstream = connect(local)
+      client.pipe(upstream).on('error', () => client.destroy())
+      upstream.pipe(client).on('error', () => upstream.destroy())
+    })
+    await new Promise<void>((done) => relay!.listen(remote, done))
     const seen = join(dir, 'seen')
     const login = shell(
       `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "$DROVR_BIN" "\${PATH%%:*}" > ${seen}\n` +

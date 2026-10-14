@@ -88,7 +88,8 @@ export type SshLine = { ok: true; line: string } | { ok: false; reason: string }
  * The line the local login shell runs with `-c` for an SSH card, or the refusal when the host
  * fails D2 or the directory fails D3. The host is quoted too, so `[` `]` are never globbed.
  * With `board` (#25 D1, D4) the remote command sets up `board`, and `-R <remote>:<local>`
- * forwards the socket unless there is no local socket or ssh would split its path at a `:` (D7);
+ * forwards the socket unless there is no local socket or ssh would split its path at a `:` (D7),
+ * after `-o ExitOnForwardFailure=no` so a user's config can't make a refused forward fatal;
  * the line then has no backslash but the marker's and never `\\` or `\'` (#12 D3). A card id
  * with a backslash or a remote path needing quotes can't be written that way and gets no `board`.
  */
@@ -109,7 +110,7 @@ export function sshShellLine(host: unknown, directory: unknown, board?: BoardFor
   const { cardId, remoteSocket, localSocket } = board
   const forward =
     localSocket && !/[:\\]/.test(localSocket)
-      ? `-R ${shellQuote(`${remoteSocket}:${localSocket}`)} `
+      ? `-o ExitOnForwardFailure=no -R ${shellQuote(`${remoteSocket}:${localSocket}`)} `
       : ''
   const command = remoteCommand(checkedDirectory.value, { cardId, remoteSocket })
   return {

@@ -238,6 +238,22 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     }
   )
 
+  it.skipIf(!language.path)(
+    "says can't reach for a symlink to a listening socket the user owns (D3)",
+    async () => {
+      const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+      await serve(handler)
+      const link = join(dir, 'link.sock')
+      symlinkSync(socketPath, link)
+      expect(await run(['status', '.', 'x'], env({ DROVR_SOCKET: link }))).toEqual({
+        code: 1,
+        stdout: '',
+        stderr: `${CANT_REACH}\n`
+      })
+      expect(handler).not.toHaveBeenCalled()
+    }
+  )
+
   it.skipIf(!language.path)('says not running inside a card without its variables', async () => {
     await serve(async () => ({ ok: true }))
     for (const missing of [{ DROVR_CARD_ID: '' }, { DROVR_SOCKET: '' }] as Record<

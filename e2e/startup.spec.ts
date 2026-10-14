@@ -1,5 +1,12 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs'
+import {
+  appendFileSync,
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launchApp, removeDataDirs } from './launch'
@@ -264,6 +271,69 @@ test('AC7: a Custom card runs its command on every start; an empty command is re
   await stoppedToBoard('c')
   await openCard('c')
   await expect.poll(bufferLines).toContain('drovr-custom')
+})
+
+/** The open card's raw buffer rows, unjoined: each row's text and whether it continues a wrap. */
+function rawRows(): Promise<{ text: string; wrapped: boolean }[]> {
+  return page.evaluate(() => {
+    type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const rows: { text: string; wrapped: boolean }[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      rows.push({ text: line?.translateToString(true) ?? '', wrapped: line?.isWrapped ?? false })
+    }
+    return rows
+  })
+}
+
+/** The open card's xterm size. */
+function viewSize(): Promise<{ cols: number; rows: number } | undefined> {
+  return page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { cols: number; rows: number } }) | null
+    const term = host?.__xterm
+    return term && { cols: term.cols, rows: term.rows }
+  })
+}
+
+test("#22 AC3: a startup line longer than 80 columns is typed at the open view's size", async () => {
+  // A known prompt, so the line's length doesn't depend on the user, host or directory.
+  appendFileSync(join(home, '.bash_profile'), "PS1='drovr> '\n")
+  // The shell records its PTY's size as it starts, before anything could resize it (D1).
+  const shell = join(root, 'sized-bash')
+  const sizeLog = join(root, 'pty-size')
+  writeFileSync(shell, `#!/bin/sh\nstty size > '${sizeLog}'\nexec /bin/bash "$@"\n`)
+  chmodSync(shell, 0o755)
+  await app.evaluate((_, path) => {
+    process.env.SHELL = path
+  }, shell)
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  // Longer than 80 columns with the prompt, short enough for the open view (about 103).
+  const word = 'drovr-long-startup-line-'.padEnd(70, 'x')
+  const command = `tput cols; echo ${word}`
+  await newCard('long', 'Custom…', command)
+  await expect.poll(bufferLines).toContain(word)
+  const size = await viewSize()
+  expect(size?.cols).toBeGreaterThan(80)
+  // The shell's PTY has the open view's columns, and had them from the start.
+  const lines = await settledScreen()
+  expect(lines[lines.indexOf(word) - 1]).toBe(String(size?.cols))
+  expect(readFileSync(sizeLog, 'utf8').trim()).toBe(`${size?.rows} ${size?.cols}`)
+  // The typed command sits on one unwrapped row, right after the prompt, and nothing wraps
+  // onto the next row.
+  const rows = await rawRows()
+  const at = rows.findIndex((r) => r.text === `drovr> ${command}`)
+  expect(at, rows.map((r) => r.text).join('\n')).toBeGreaterThanOrEqual(0)
+  expect(rows[at].text.length).toBeGreaterThan(80)
+  expect(rows[at].wrapped).toBe(false)
+  expect(rows[at + 1].wrapped).toBe(false)
 })
 
 /** Opens the edit dialog of the workspace row at `index`; row actions show on hover. */

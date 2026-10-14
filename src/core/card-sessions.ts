@@ -66,11 +66,17 @@ export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
   private readonly endedListeners: ((cardId: string) => void)[] = []
 
-  /** `router` is shared with the cards' extra panes (#11), or a new one over `api`. */
+  /**
+   * `router` is shared with the cards' extra panes (#11), or a new one over `api`. `defer` runs
+   * each card's spawn: the app defers it past the current task, so the view that opens the card
+   * has fitted its new screen and the shell starts at the size the user sees (#22 D1); by
+   * default the spawn runs at once.
+   */
   constructor(
     private readonly api: TerminalApi,
     private readonly createScreen: (cardId: string) => S,
-    private readonly router: SessionRouter = new SessionRouter(api)
+    private readonly router: SessionRouter = new SessionRouter(api),
+    private readonly defer: (spawn: () => void) => void = (spawn) => spawn()
   ) {}
 
   /**
@@ -118,7 +124,6 @@ export class CardSessions<S extends CardScreen> {
     screen.onResize(({ cols, rows }) => {
       if (entry.screen === screen && entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
     })
-    const { cols, rows } = screen
     const line = startLine(card)
     const first = firstStart(card)
     // Each start owns its screen; a reply for an older start, or after dispose, is stale.
@@ -139,42 +144,47 @@ export class CardSessions<S extends CardScreen> {
       this.api.write(id, `${line}\r`)
       if (first !== null) onFirstStart?.(first)
     }
-    this.router.spawn(
-      cols,
-      rows,
-      card.directory,
-      card.id,
-      (result) => {
-        if (!result.ok) return failed(result.reason)
-        if (!current()) return this.api.kill(result.id)
-        entry.sessionId = result.id
-        const early = this.router.adopt(result.id, {
-          output: (data, parsed) => this.output(entry, data, parsed),
-          exited: (exit) => this.exited(card.id, entry, exit)
-        })
-        // The view may have fitted the screen while the shell was starting.
-        if (screen.cols !== cols || screen.rows !== rows) {
-          this.api.resize(result.id, screen.cols, screen.rows)
-        }
-        if (entry.closing) this.api.kill(result.id)
-        else if (line !== null && !early.exit) {
-          if (card.host === undefined) sessionStarted(result.id)
-          else {
-            const seen = readyWatcher()
-            entry.watch = (data) => {
-              if (!seen(data)) return
-              entry.watch = null
-              sessionStarted(result.id)
+    // Spawned at the screen's size when the deferral ends (#22 D1). A card closed or deleted
+    // meanwhile is killed once its session arrives, like one closed while starting (#22 D2).
+    this.defer(() => {
+      const { cols, rows } = screen
+      this.router.spawn(
+        cols,
+        rows,
+        card.directory,
+        card.id,
+        (result) => {
+          if (!result.ok) return failed(result.reason)
+          if (!current()) return this.api.kill(result.id)
+          entry.sessionId = result.id
+          const early = this.router.adopt(result.id, {
+            output: (data, parsed) => this.output(entry, data, parsed),
+            exited: (exit) => this.exited(card.id, entry, exit)
+          })
+          // The view may have fitted the screen while the shell was starting.
+          if (screen.cols !== cols || screen.rows !== rows) {
+            this.api.resize(result.id, screen.cols, screen.rows)
+          }
+          if (entry.closing) this.api.kill(result.id)
+          else if (line !== null && !early.exit) {
+            if (card.host === undefined) sessionStarted(result.id)
+            else {
+              const seen = readyWatcher()
+              entry.watch = (data) => {
+                if (!seen(data)) return
+                entry.watch = null
+                sessionStarted(result.id)
+              }
             }
           }
-        }
-        early.data.forEach((data) =>
-          this.output(entry, data, this.router.ackWhenParsed(result.id, data))
-        )
-        if (early.exit) this.exited(card.id, entry, early.exit)
-      },
-      card.host ?? null
-    )
+          early.data.forEach((data) =>
+            this.output(entry, data, this.router.ackWhenParsed(result.id, data))
+          )
+          if (early.exit) this.exited(card.id, entry, early.exit)
+        },
+        card.host ?? null
+      )
+    })
   }
 
   /** Running, Stopped or couldn't start; undefined for an unknown card. */

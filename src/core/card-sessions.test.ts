@@ -456,6 +456,91 @@ describe('CardSessions', () => {
   })
 })
 
+describe('deferred spawns (#22)', () => {
+  let deferred: (() => void)[]
+
+  beforeEach(() => {
+    deferred = []
+    sessions = new CardSessions(
+      api,
+      (cardId) => {
+        const screen = new FakeScreen()
+        screens.set(cardId, screen)
+        return screen
+      },
+      undefined,
+      (spawn) => deferred.push(spawn)
+    )
+  })
+
+  /** Runs the spawns waiting in the deferral. */
+  function runDeferred(): void {
+    deferred.splice(0).forEach((spawn) => spawn())
+  }
+
+  it('is Running with its screen at once, and spawns only when the deferral ends', () => {
+    sessions.start(card('c1'))
+    expect(sessions.runState('c1')).toEqual({ kind: 'running' })
+    expect(sessions.screen('c1')).toBe(screens.get('c1'))
+    expect(api.spawns).toEqual([])
+    runDeferred()
+    expect(api.spawns).toHaveLength(1)
+  })
+
+  it('spawns at the size the screen was fitted to meanwhile, with no resize after (AC1)', async () => {
+    sessions.start(card('c1', '/tmp/a', { kind: 'custom', command: 'echo hi' }))
+    screens.get('c1')!.resize(103, 31)
+    runDeferred()
+    expect(api.spawns[0]).toMatchObject({ cols: 103, rows: 31 })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.resizes).toEqual([])
+    expect(api.writes).toEqual([['s1', 'echo hi\r']])
+  })
+
+  it('still resizes for a fit that lands while the shell is starting (D1)', async () => {
+    sessions.start(card('c1'))
+    runDeferred()
+    screens.get('c1')!.resize(103, 31)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.resizes).toEqual([['s1', 103, 31]])
+  })
+
+  it('a card closed during the deferral is killed as soon as it arrives, typing nothing (AC2)', async () => {
+    const firstStarted = vi.fn()
+    sessions.start(card('c1', '/tmp/a', { kind: 'claude' }), firstStarted)
+    sessions.close('c1')
+    runDeferred()
+    expect(api.kills).toEqual([])
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.kills).toEqual(['s1'])
+    expect(api.writes).toEqual([])
+    expect(firstStarted).not.toHaveBeenCalled()
+    api.emitExit({ id: 's1', exitCode: 129 })
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
+  })
+
+  it("a card deleted during the deferral has its spawn's session killed (AC2)", async () => {
+    sessions.start(card('c1', '/tmp/a', { kind: 'custom', command: 'echo hi' }))
+    sessions.dispose('c1')
+    runDeferred()
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.kills).toEqual(['s1'])
+    expect(api.writes).toEqual([])
+    expect(sessions.runState('c1')).toBeUndefined()
+  })
+
+  it('starting a card again during the deferral spawns it once (D2)', () => {
+    sessions.start(card('c1'))
+    sessions.start(card('c1'))
+    runDeferred()
+    expect(api.spawns).toHaveLength(1)
+  })
+})
+
 describe('onEnded (#11 D1, D6)', () => {
   it("tells the listener with the card's id when its shell stops, however it stopped", async () => {
     const stopped: string[] = []

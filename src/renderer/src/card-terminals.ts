@@ -229,7 +229,14 @@ function sessionRouter(): SessionRouter {
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
-    registry = new CardSessions(window.drovr.terminal, () => new XtermScreen(), sessionRouter())
+    registry = new CardSessions(
+      window.drovr.terminal,
+      () => new XtermScreen(),
+      sessionRouter(),
+      // Every start opens the card at full size: its view fits the new screen in this task's
+      // render, so the shell spawns after it, at the size the user sees (#22 D1).
+      (spawn) => setTimeout(spawn, 0)
+    )
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
     registry.onEnded((cardId) => cardPanes().dispose(cardId))

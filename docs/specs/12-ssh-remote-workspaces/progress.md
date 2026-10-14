@@ -17,4 +17,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- running
+- done (ALL PASS; posted to the item)

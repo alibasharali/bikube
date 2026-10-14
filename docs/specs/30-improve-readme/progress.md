@@ -14,4 +14,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done (all ACs pass; posted to the item)

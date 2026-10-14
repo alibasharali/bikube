@@ -46,8 +46,9 @@ export interface SyncBoard {
 
 /**
  * The board this machine writes (D2, D5, D6): local directories mapped by `portableDirectory`,
- * local cards with `claudeStarted` false and `startedAgents` empty (#21 D7), SSH ones as they are. Objects are rebuilt with a fixed
- * key order, so the same board always serializes to the same text (D4 compares it).
+ * local cards with `claudeStarted` false and `startedAgents` empty (#21 D7), SSH ones as they are.
+ * Objects are rebuilt with a fixed key order, so the same board always serializes to the same text
+ * (D4 compares it).
  */
 export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
   const dir = (directory: string, host: string | undefined): string =>

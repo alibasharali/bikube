@@ -31,8 +31,9 @@ export async function loadSyncStatus(): Promise<void> {
 
 /**
  * Applies a board main hands over (#13 D7, D9, D14) to the store, which saves it as any change:
- * cards running here stay (D8) and local cards keep this machine's `claudeStarted` (D6) and `startedAgents` (#21 D7). Nothing
- * is stopped; a card that is gone had no process, and its stale screen is freed.
+ * cards running here stay (D8) and local cards keep this machine's `claudeStarted` (D6) and
+ * `startedAgents` (#21 D7). Nothing is stopped; a card that is gone had no process, and its stale
+ * screen is freed.
  */
 function applyBoard(incoming: Workspace[]): void {
   const terminals = cardTerminals()

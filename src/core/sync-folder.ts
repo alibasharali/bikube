@@ -158,7 +158,7 @@ export class SyncFolder {
    * for this machine to apply when it differs from the last one read or written (D4, D7), dropping
    * a pending write of an older board (last writer wins); else null. Applying it saves a board
    * equal to the file's, which is then not written back, so machines never echo (D4). A folder
-   * with no file gets this machine's board. While the folder is unavailable this is D12's retry.
+   * with no file gets this machine's board. While the folder is unavailable or its file unreadable, this is D12's retry and recovery.
    */
   read(): Workspace[] | null {
     const folder = this.folder

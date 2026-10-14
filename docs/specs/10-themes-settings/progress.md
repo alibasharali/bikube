@@ -15,6 +15,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 Decisions the developer made during implementation, with the date. A ruling that changes the spec also got its own `docs(spec):` commit.
 
 - 2026-10-14 S3 (full auto, round 2): light terminal palette's ANSI white/brightWhite → darken white (~#6e7781) and give brightWhite its own value, both ≥ ~3:1 on white; the test covers every colour. Within D3's wording; no spec change.
+- 2026-10-14 ship review (full auto, round 3): Q1 apply the font family on every close (Done/Escape/outside); Q2 family field maxLength 200; Q3 size stays a text field, AC5 starts from the default window width. Spec D5, AC5, AC6 updated.
 
 ## Verification
 

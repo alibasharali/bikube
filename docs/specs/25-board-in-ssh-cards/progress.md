@@ -18,4 +18,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: all 11 ACs pass (smoke 179/179, check.sh green)

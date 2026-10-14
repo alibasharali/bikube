@@ -11,7 +11,7 @@ The factory created the repo with the agent kit and `docs/agents/stack.md`: the 
 
 - The item description: the whole project in the developer's words (also in `docs/product.md`), and the stack summary. It may describe far more than one item should build.
 - `docs/agents/stack.md`: each picked option's guidelines, secrets, docs links and free-tier limits, plus anything described in words that isn't in the registry yet.
-- `docs/agents/project-standard.md`: what every factory repo needs (check.sh, the `check` job, what the delivery preset needs, board URLs, instructions in `AGENTS.md`).
+- `docs/agents/project-standard.md`: what every factory repo needs (check.sh, the `check` job, what the delivery preset needs, board URLs, instructions in `AGENTS.md`, formatters that ignore the kit).
 - The repo tree. With a recipe, its `AGENTS.md` and `.claude/check.sh` already meet most of the standard.
 
 ## 1b. Deciding the stack (auto only)
@@ -49,7 +49,7 @@ The answer is the spec's **Scope** decision. Everything else the description ask
 
 Grill with `ask_questions` as `write-spec` describes: about the first step itself, and when scaffolding, about what the stack leaves open (versions, package manager, layout, how the parts connect). A category left at "none" stays none: if the first step seems to need it (a database, auth), ask rather than add it. If the description and the picked stack disagree (it says Postgres, D1 was picked), ask in the first round with both as options and your recommendation; never settle it silently, and don't scaffold before the answer. The answer goes in the spec as a domain decision, and `.factory/stack.json` follows it.
 
-Then write the spec with `write-spec`. Without a recipe, its first slice is **"Scaffold and prove the stack"**, with acceptance criteria from the project standard: check.sh green, the `check` job, the deploy workflow with environment names, the URLs, the instructions. The first step's behaviour follows in later slices.
+Then write the spec with `write-spec`. Without a recipe, its first slice is **"Scaffold and prove the stack"**, with acceptance criteria from the project standard: check.sh green, the `check` job, the deploy workflow with environment names, the URLs, the instructions, the formatter's ignore file when the stack has a formatter. The first step's behaviour follows in later slices.
 
 The spec adds two things for this item:
 

@@ -29,7 +29,7 @@ Read `docs/agents/project-standard.md`, then gather these before asking anything
 
 ## 3. Questions and spec
 
-Grill with `ask_questions` as `write-spec` describes, about what the facts can't settle: the hosting choice, slow or flaky checks, custom domains, whether existing CI is replaced or kept next to the `check` job. Then write the spec with `write-spec`, one slice per gap from the project standard: check.sh (including `node .factory/check-stack.mjs`), PR CI, hosting, URLs, the declared stack, instructions. Hosting on Cloudflare follows the standard's last section. The **last slice is always "Contribute to the stack registry"** (step 4), with the AC: `propose_stack_change` returned a pull request, linked in the item's PR, or the ledger says why there was nothing to propose. It goes in the spec because implementation runs in a later session that only has the spec.
+Grill with `ask_questions` as `write-spec` describes, about what the facts can't settle: the hosting choice, slow or flaky checks, custom domains, whether existing CI is replaced or kept next to the `check` job. Then write the spec with `write-spec`, one slice per gap from the project standard: check.sh (including `node .factory/check-stack.mjs`), PR CI, hosting, URLs, the declared stack, instructions, the formatter's ignore file (when the repo has a formatter). Hosting on Cloudflare follows the standard's last section. The **last slice is always "Contribute to the stack registry"** (step 4), with the AC: `propose_stack_change` returned a pull request, linked in the item's PR, or the ledger says why there was nothing to propose. It goes in the spec because implementation runs in a later session that only has the spec.
 
 ## 4. Contribute what the repo knows
 

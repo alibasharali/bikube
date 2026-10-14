@@ -19,6 +19,8 @@ Why: one item in one context degrades toward the end. Fresh workers get a precis
 
 Call `update_item_status(N, "in_progress")` if the item isn't there yet.
 
+**Background workers:** the harness may run any dispatched worker (`slice-implementer`, `slice-reviewer`, `verifier`) in the background, whatever you asked for. When one comes back running, end your turn with one line saying what you're waiting for (e.g. "Waiting for the S2 implementer."), and don't touch the tree or git until that worker's report arrives: it wakes you.
+
 A slice that is only factory tool calls (`set_environment_urls`, `create_item`, `propose_stack_change`) needs no implementer or reviewer: make the calls yourself, record the result in the ledger, and commit the ledger.
 
 **Stack changes** (the spec's section of that name): in the slice that adds or removes the dependency, include the new `.factory/stack.json` in the brief. After the slice, call `render_stack_files(N, stack_json)` yourself, write the files it returns, delete what the old `.claude/stack-files` listed and the new one doesn't, and commit them with the slice. `.factory/check-stack.mjs` must pass.
@@ -26,13 +28,13 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
 ## 1. Each slice, in spec order, one at a time
 
 1. `BASE=$(git rev-parse HEAD)`. Set the slice to `running` in the ledger and `report_progress(N, "Slice <k>/<total>: <slice name>")`.
-2. **Brief** a `slice-implementer` (foreground). It sees nothing but the brief:
+2. **Brief** a `slice-implementer`. It sees nothing but the brief:
    - **Objective:** the slice text, every AC it satisfies, and the domain decisions those ACs rest on, all verbatim.
    - **Sources:** the spec path, the *Test seams* rows for these ACs, the ledger's *Interfaces* from earlier slices, rulings that touch this slice.
    - **Boundaries:** the spec's *Out of scope*, other slices' ACs ("not yours").
    - **Output:** the report shape from its definition. Tell it not to commit.
 3. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes (under full auto the round comes back answered with your recommendation unless it is `for_developer`: record the ruling and carry on); the answers come back here (`record_answers`) or in a new session that resumes from the ledger. Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
-4. **DONE:** compare `git status` with the reported *Changed files*: nothing outside the slice, no scratch files. Commit `feat(<area>): S<n> <slice name> (#<n>)`. Record `BASE..HEAD` and the *Interfaces* in the ledger. Brief a `slice-reviewer` with the spec path, slice, ACs, seams and range.
+4. **DONE:** compare `git status` with the reported *Changed files*: nothing outside the slice, no scratch files. Put back with `git checkout -- <path>` any change to a file the slice may not edit (a formatter's rewrite of kit files, `.github/workflows/`, `.claude/`) rather than committing it. Commit `feat(<area>): S<n> <slice name> (#<n>)`. Record `BASE..HEAD` and the *Interfaces* in the ledger. Brief a `slice-reviewer` with the spec path, slice, ACs, seams and range.
 5. **Route the review:**
    - `CLEAN` → step 6.
    - `FIX` → resume the same implementer with the findings verbatim, commit `fix(review): <what>`, re-review the new range. At most two rounds; what's left becomes a question for the developer.

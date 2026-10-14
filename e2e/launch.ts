@@ -24,6 +24,11 @@ export interface LaunchOptions {
   env?: Record<string, string>
   /** Extra Electron arguments after `. --no-sandbox`. */
   args?: string[]
+  /**
+   * A packaged app's executable (e.g. `dist/linux-unpacked/drovr`) to launch instead of the dev
+   * build; it loads its own bundled app, so no `.` is passed.
+   */
+  executablePath?: string
   /** Called with the main process's stderr from the start. */
   onStderr?: (chunk: string) => void
 }
@@ -46,7 +51,8 @@ export async function launchApp(options: LaunchOptions = {}): Promise<Launched> 
     if (value !== undefined) base[key] = value
   }
   const app = await electron.launch({
-    args: ['.', '--no-sandbox', ...(options.args ?? [])],
+    ...(options.executablePath ? { executablePath: options.executablePath } : {}),
+    args: [...(options.executablePath ? [] : ['.']), '--no-sandbox', ...(options.args ?? [])],
     env: { ...base, DROVR_USER_DATA_DIR: dataDir }
   })
   const onStderr = options.onStderr

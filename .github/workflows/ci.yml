@@ -20,3 +20,5 @@ jobs:
       - run: .claude/check.sh
       - name: Electron smoke test
         run: xvfb-run -a npm run test:smoke
+      - name: Packaged app check
+        run: xvfb-run -a npm run test:packaged

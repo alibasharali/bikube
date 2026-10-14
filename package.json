@@ -20,6 +20,7 @@
     "dist": "npm run build && electron-builder",
     "pack": "npm run build && electron-builder --dir",
     "test:smoke": "electron-vite build && playwright test",
+    "test:packaged": "npm run pack && playwright test -c playwright.packaged.config.ts",
     "benchmark": "electron-vite build && playwright test -c playwright.benchmark.config.ts"
   },
   "devDependencies": {

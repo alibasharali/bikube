@@ -901,8 +901,9 @@ test('#25 AC6: a host refusing the forward still runs the card; board cannot rea
   await connected()
   await expect
     .poll(async () =>
+      // Not anchored: the probe typed while ssh connects can echo on the same row.
       (await bufferLines()).some((l) =>
-        /^Warning: remote port forwarding failed for listen path \/tmp\/drovr-[0-9a-f]{32}\.sock$/.test(
+        /Warning: remote port forwarding failed for listen path \/tmp\/drovr-[0-9a-f]{32}\.sock/.test(
           l
         )
       )

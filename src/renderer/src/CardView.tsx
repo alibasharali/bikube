@@ -13,6 +13,11 @@ import {
   type XtermScreen
 } from './card-terminals'
 
+/** A pane's screen: the card's own terminal for the main pane, else the extra pane's. */
+function paneScreen(cardId: string, paneId: string): XtermScreen | undefined {
+  return paneId === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, paneId)
+}
+
 /**
  * One pane (#11 D1, D3, D5): its own screen, fitted to its area, focused by a click; an extra
  * pane has a close button in its top-right corner.
@@ -38,7 +43,11 @@ function Pane({
       className="pane"
       data-testid="pane"
       data-focused={focused}
-      onMouseDownCapture={() => cardPanes().focus(cardId, paneId)}
+      onMouseDownCapture={(event) => {
+        // Closing a pane isn't clicking into it: the focus stays where it was (D3).
+        if ((event.target as Element).closest('.pane-close')) return
+        cardPanes().focus(cardId, paneId)
+      }}
     >
       <div className="pane-terminal" ref={hostRef} />
       {paneId !== MAIN_PANE && (
@@ -48,7 +57,11 @@ function Pane({
           data-testid="pane-close"
           aria-label="Close pane"
           title="Close pane"
-          onClick={() => cardPanes().close(cardId, paneId)}
+          onClick={() => {
+            cardPanes().close(cardId, paneId)
+            // The button is gone: keyboard focus goes back to the focused pane's terminal.
+            paneScreen(cardId, cardPanes().layout(cardId).focused)?.focus()
+          }}
         >
           ×
         </button>
@@ -68,9 +81,14 @@ function PaneTree({
   focused: string
 }): React.JSX.Element {
   if (tree.kind === 'leaf') {
-    const screen =
-      tree.id === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, tree.id)
-    return <Pane cardId={cardId} paneId={tree.id} screen={screen} focused={tree.id === focused} />
+    return (
+      <Pane
+        cardId={cardId}
+        paneId={tree.id}
+        screen={paneScreen(cardId, tree.id)}
+        focused={tree.id === focused}
+      />
+    )
   }
   return (
     <div className={`pane-split pane-split-${tree.direction}`}>

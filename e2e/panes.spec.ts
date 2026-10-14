@@ -207,3 +207,21 @@ test('AC5: Close pane and exit remove extra panes; the main pane has no close', 
   await page.getByTestId('card-back').click()
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
+
+test('AC5: closing a pane that is not focused leaves the focus where it was', async () => {
+  await openApi()
+  await page.getByTestId('pane-split-right').click()
+  await page.getByTestId('pane-split-down').click()
+  await expect(panes()).toHaveCount(3)
+  await panes().nth(1).click()
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+
+  await panes().nth(2).getByRole('button', { name: 'Close pane' }).click()
+  await expect(panes()).toHaveCount(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'false')
+  const mainBefore = (await bufferLines(0)).filter(Boolean)
+  await run(1, 'echo still-here')
+  await expectLine(1, 'still-here')
+  expect((await bufferLines(0)).filter(Boolean)).toEqual(mainBefore)
+})

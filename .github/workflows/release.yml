@@ -28,3 +28,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.event.release.tag_name }}
+
+  # Independent of the macOS job (#14 D7): one failing doesn't cancel the other.
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build AppImage and .deb
+        run: npm run dist
+      - name: Attach AppImage and .deb to the release
+        run: gh release upload "$TAG" dist/*.AppImage dist/*.deb --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}

@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
-import { isBackShortcut, isSettingsShortcut } from '../../core/card-shortcuts'
+import { isBackShortcut, isSettingsShortcut, splitShortcut } from '../../core/card-shortcuts'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
 import { SessionRouter } from '../../core/session-router'
@@ -101,6 +101,8 @@ export class XtermScreen implements CardScreen {
       if (isBackShortcut(event, window.drovr.platform)) return false
       // So is opening Settings, handled by the app (#10 D5).
       if (isSettingsShortcut(event, window.drovr.platform)) return false
+      // And splitting the focused pane, handled by the view (#11 D4).
+      if (splitShortcut(event, window.drovr.platform)) return false
       const action = clipboardShortcut(event, window.drovr.platform)
       if (!action) return true
       // Stop the native paste event too, or xterm would paste twice.

@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 import { launchApp, removeDataDirs } from './launch'
 
 // Split panes inside a card (#11): the full-size view splits into panes, each a live shell in
@@ -224,4 +225,132 @@ test('AC5: closing a pane that is not focused leaves the focus where it was', as
   await run(1, 'echo still-here')
   await expectLine(1, 'still-here')
   expect((await bufferLines(0)).filter(Boolean)).toEqual(mainBefore)
+})
+
+/** Pane `index`'s buffer as one string without whitespace. */
+const screenText = async (index: number): Promise<string> =>
+  (await bufferLines(index)).join('').replace(/\s+/g, '')
+
+const SPLIT_RIGHT = process.platform === 'darwin' ? 'Meta+D' : 'Control+Shift+D'
+const SPLIT_DOWN = process.platform === 'darwin' ? 'Meta+Shift+D' : 'Control+Shift+E'
+
+/**
+ * Pane `index`'s screen gained no input from a shortcut: its text is unchanged (ignoring line
+ * breaks, which a narrower pane rewraps), and a command typed next runs as typed (a stray `D`
+ * would garble it, a Ctrl+D would end the shell).
+ */
+async function expectNoInput(index: number, before: string, marker: string): Promise<void> {
+  await page.waitForTimeout(500)
+  expect(await screenText(index)).toBe(before)
+  await run(index, `echo ${marker}-$((1+2))`)
+  await expectLine(index, `${marker}-3`)
+}
+
+test('AC2: Split down nests, the shortcut splits without reaching the shell, 4 is the limit', async () => {
+  await openApi()
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+
+  await page.getByTestId('pane-split-down').click()
+  await expect(panes()).toHaveCount(3)
+  const area = await box(page.getByTestId('card-terminal'))
+  const [main, top, bottom] = [
+    await box(panes().nth(0)),
+    await box(panes().nth(1)),
+    await box(panes().nth(2))
+  ]
+  expect(Math.abs(main.height - area.height)).toBeLessThanOrEqual(10)
+  expect(Math.abs(main.width - area.width / 2)).toBeLessThanOrEqual(10)
+  for (const pane of [top, bottom]) {
+    expect(Math.abs(pane.width - area.width / 2)).toBeLessThanOrEqual(10)
+    expect(Math.abs(pane.height - area.height / 2)).toBeLessThanOrEqual(10)
+    expect(pane.x).toBeGreaterThan(main.x + main.width - 10)
+  }
+  expect(bottom.y).toBeGreaterThan(top.y + top.height - 10)
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+
+  await run(2, 'echo bottom-ready')
+  await expectLine(2, 'bottom-ready')
+  const bottomBefore = await screenText(2)
+  await page.keyboard.press(SPLIT_RIGHT)
+  await expect(panes()).toHaveCount(4)
+  await expect(panes().nth(3)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(focusedPaneIndex).toBe(3)
+  await panes().nth(2).click()
+  await expectNoInput(2, bottomBefore, 'bottom')
+
+  await expect(page.getByTestId('pane-split-right')).toBeDisabled()
+  await expect(page.getByTestId('pane-split-down')).toBeDisabled()
+  await run(2, 'echo limit-ready')
+  await expectLine(2, 'limit-ready')
+  const limitBefore = await screenText(2)
+  await page.keyboard.press(SPLIT_RIGHT)
+  await page.keyboard.press(SPLIT_DOWN)
+  await expect(panes()).toHaveCount(4)
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+  await expectNoInput(2, limitBefore, 'limit')
+})
+
+test('AC3: an extra pane of a Claude Code card is a plain shell', async () => {
+  // Relaunch with the fake `claude` of #5's smoke tests on the login PATH.
+  await app.close()
+  const fake = fakeClaudeHome(root)
+  ;({ app, page } = await launchApp({ env: fake.env }))
+  await createWorkspace(ALPHA, 'alpha')
+  await column('Running').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('agent')
+  await page.getByTestId('new-card-startup').selectOption({ label: 'Claude Code' })
+  await page.getByTestId('new-card-input').press('Enter')
+  await expect(page.getByTestId('card-view-title')).toHaveText('agent')
+  await expect.poll(() => claudeLogLines(fake.log)).toHaveLength(1)
+  await expect
+    .poll(async () => (await bufferLines(0)).some((l) => l.startsWith('fake-claude --session-id')))
+    .toBe(true)
+
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  await run(1, 'echo extra-$((1+1))')
+  await expectLine(1, 'extra-2')
+  expect(claudeLogLines(fake.log)).toHaveLength(1)
+})
+
+/** Pane `index`'s xterm font size and columns. */
+const paneLook = (index: number): Promise<{ fontSize: number; cols: number }> =>
+  panes()
+    .nth(index)
+    .evaluate((pane) => {
+      const host = pane.querySelector('[data-testid=terminal]') as HTMLElement & {
+        __xterm: { cols: number; options: { fontSize: number } }
+      }
+      return { fontSize: host.__xterm.options.fontSize, cols: host.__xterm.cols }
+    })
+
+test('AC11: font size reaches every pane, each refitted to its own columns', async () => {
+  await openApi()
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  const before = [await paneLook(0), await paneLook(1)]
+  expect(before.map((l) => l.fontSize)).toEqual([13, 13])
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByLabel('Font size').fill('18')
+  // A dialog owns the keyboard: the split shortcuts do nothing while it is open (D4).
+  await page.keyboard.press(SPLIT_RIGHT)
+  await page.keyboard.press(SPLIT_DOWN)
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expect(panes()).toHaveCount(2)
+
+  for (const index of [0, 1]) {
+    await expect.poll(async () => (await paneLook(index)).fontSize).toBe(18)
+    await expect.poll(async () => (await paneLook(index)).cols).toBeLessThan(before[index].cols)
+  }
+  for (const index of [0, 1]) {
+    const { cols } = await paneLook(index)
+    await panes().nth(index).click()
+    await run(index, 'echo cols-$(tput cols)')
+    await expectLine(index, `cols-${cols}`)
+  }
 })

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { isBackShortcut } from '../../core/card-shortcuts'
-import { MAIN_PANE, type SplitTree } from '../../core/split-tree'
+import { isBackShortcut, splitShortcut } from '../../core/card-shortcuts'
+import { canSplit, MAIN_PANE, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import CardStatusLine from './CardStatusLine'
 import CloseCardDialog from './CloseCardDialog'
@@ -118,19 +118,26 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
     if (stopped) onBack()
   }, [stopped, onBack])
 
+  const running = runState.kind === 'running'
+  const splittable = running && canSplit(layout)
+
   // Capture phase: works wherever focus is, including the terminal, which swallows the key.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!isBackShortcut(event, window.drovr.platform)) return
+      const back = isBackShortcut(event, window.drovr.platform)
+      const split = splitShortcut(event, window.drovr.platform)
+      if (!back && !split) return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
       event.stopPropagation()
-      onBack()
+      if (back) onBack()
+      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
+      else if (split && splittable) cardPanes().split(card, split)
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [onBack])
+  }, [onBack, card, splittable])
 
   return (
     <section className="card-view" data-testid="card-view" aria-label={card.title}>
@@ -142,12 +149,13 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
         <button type="button" className="btn btn-small" data-testid="card-back" onClick={onBack}>
           Back
         </button>
-        {runState.kind === 'running' && (
+        {running && (
           <>
             <button
               type="button"
               className="btn btn-small"
               data-testid="pane-split-right"
+              disabled={!splittable}
               onClick={() => cardPanes().split(card, 'right')}
             >
               Split right
@@ -156,6 +164,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
               type="button"
               className="btn btn-small"
               data-testid="pane-split-down"
+              disabled={!splittable}
               onClick={() => cardPanes().split(card, 'down')}
             >
               Split down

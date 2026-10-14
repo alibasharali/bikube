@@ -2,7 +2,7 @@
 item: 12
 type: feature
 title: SSH and remote workspaces
-status: draft
+status: approved
 branch: claude/12-ssh-remote-workspaces
 ---
 

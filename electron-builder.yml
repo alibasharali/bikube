@@ -22,8 +22,10 @@ mac:
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
-# Linux release: AppImage and .deb, x64 only (#14 D2, D4, D5). Chromium's
-# sandbox stays on: no sandbox-disabling flags here (#14 D6).
+# Linux release: AppImage and .deb, x64 only (#14 D2, D4, D5).
+# Chromium's sandbox stays on: no sandbox-disabling flags here (#14 D6). The AppImage's AppRun
+# (electron-builder's, not configurable) adds --no-sandbox where user namespaces are blocked;
+# D6 accepts that.
 linux:
   target:
     - target: AppImage
@@ -39,6 +41,8 @@ appImage:
   artifactName: ${name}-${version}-x86_64.${ext}
   # electron-builder otherwise puts --no-sandbox in the AppImage's desktop entry.
   executableArgs: []
+# The .deb's install script (electron-builder's default) loads an AppArmor profile so the
+# sandbox works where user namespaces are restricted (#14 D5); keep it.
 deb:
   artifactName: ${name}-${version}-amd64.${ext}
 npmRebuild: true

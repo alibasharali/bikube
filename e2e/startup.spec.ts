@@ -456,8 +456,12 @@ test("AC9: changing a card's command applies at its next start, keeping its sess
   await expect.poll(logLines).toHaveLength(1)
   const u = logLines()[0].slice('--session-id '.length)
   expect(u).toMatch(UUID_V4)
+  // The fake claude's own row: a redraw of the typed row can leave characters after it, never
+  // before (#23 D1).
   await expect
-    .poll(async () => (await bufferLines()).some((l) => l.endsWith(`claude --session-id ${u}`)))
+    .poll(async () =>
+      (await bufferLines()).some((l) => l.startsWith(`fake-claude --session-id ${u}`))
+    )
     .toBe(true)
   await page.keyboard.press('Enter')
   await run('exit')

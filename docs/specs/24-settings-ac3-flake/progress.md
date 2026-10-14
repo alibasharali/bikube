@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
+| S1 | done | `5beede7..6d09898` | CLEAN | `settledBufferLines(page, line)` in e2e/settings.spec.ts |
 
 ## Rulings
 

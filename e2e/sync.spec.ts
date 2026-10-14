@@ -741,6 +741,7 @@ test('AC10: an unreadable file shows unreadable, the board stays, and the file i
 // Async I/O for the sync folder (#26).
 
 test('#26 AC6: a change made just before quit is in the file once the app has exited', async () => {
+  test.skip(process.platform === 'darwin', 'closing the last window quits only off macOS')
   const folder = makeDir('F')
   const a = await oneSynced(folder)
   await editWorkspace(a.page, 0)

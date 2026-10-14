@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `6e11d2f..5ab138e` | CLEAN | `AgentKind`, `AGENT_PRESETS`, `isAgentKind` (core/agent-presets); `Card.startedAgents`; store `markAgentStarted`; `firstStart(card)`, `CardSessions.start(card, onFirstStart(kind))` fires in `sessionStarted` (after the SSH marker); `toSyncBoard` passes `startedAgents` through (S2: D7 mapping in sync-file + sync-apply); e2e `fakeAgentsHome`, `addFakeAgents(home, log)`, `agentLogLines` |
+| S2 | running | | | |
 
 ## Rulings
 

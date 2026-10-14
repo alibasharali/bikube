@@ -8,7 +8,7 @@ A kanban board for macOS and Linux where every card is a live terminal, for runn
 
 - **Workspaces**, typically one per repo, each with a name, a working directory and its own board of columns you add, rename, reorder and delete.
 - **Cards as terminals**: each card is a real login shell. Open one to use it at full size; on the board it shows its title and status. Drag cards between columns or move them from the keyboard or the card menu; moving never stops the process. Close stops a card's process after asking, and the card can be opened again later.
-- **Startup commands and agent resume**: a card can start `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode` or a custom command, and reopening it resumes the agent's session. The board survives a restart, with every card stopped until opened.
+- **Startup commands and agent resume**: a card can start `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, a custom command or a plain shell, and reopening an agent card resumes the agent's session. The board survives a restart, with every card stopped until opened.
 - **Split panes**: up to 4 terminals side by side or stacked inside a card.
 - **Settings and themes**: System, Dark or Light theme, and the terminals' font size and family.
 - **SSH workspaces**: cards run on another machine through your own `ssh`, in a directory on that host.
@@ -36,7 +36,7 @@ Download the files from the [latest release](https://github.com/alibasharali/dro
 
 - `npm ci` installs the dependencies and rebuilds node-pty for Electron (on Linux it needs python3, make and a C++ compiler).
 - `npm run dev` starts the app with hot reload; `npm start` previews the production build.
-- `.claude/check.sh` runs typecheck, lint, the unit tests and the build.
+- `.claude/check.sh` runs typecheck, lint, the unit tests, the build and the stack and workflow checks.
 - `xvfb-run -a npm run test:smoke` runs the end-to-end tests on Linux (without `xvfb-run` where there is a display).
 - `npm run dist` builds the release packages for the OS it runs on, in `dist/`.
 

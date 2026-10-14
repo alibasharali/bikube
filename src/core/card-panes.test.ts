@@ -79,17 +79,25 @@ class FakeApi implements TerminalApi {
 let api: FakeApi
 let screens: FakeScreen[]
 let panes: CardPanes<FakeScreen>
+/** Whether the card's main shell runs, as `isRunning` reports it to the panes. */
+let mainRunning: boolean
 
 const API = { id: 'card-1', directory: '/tmp/drovr-alpha' }
 
 beforeEach(() => {
   api = new FakeApi()
   screens = []
-  panes = new CardPanes(api, new SessionRouter(api), () => {
-    const screen = new FakeScreen()
-    screens.push(screen)
-    return screen
-  })
+  mainRunning = true
+  panes = new CardPanes(
+    api,
+    new SessionRouter(api),
+    () => {
+      const screen = new FakeScreen()
+      screens.push(screen)
+      return screen
+    },
+    () => mainRunning
+  )
 })
 
 /** Lets pending spawn replies settle. */
@@ -128,11 +136,16 @@ describe('CardPanes with CardSessions on one router', () => {
       },
       router
     )
-    panes = new CardPanes(api, router, () => {
-      const screen = new FakeScreen()
-      screens.push(screen)
-      return screen
-    })
+    panes = new CardPanes(
+      api,
+      router,
+      () => {
+        const screen = new FakeScreen()
+        screens.push(screen)
+        return screen
+      },
+      (cardId) => sessions.runState(cardId)?.kind === 'running'
+    )
     sessions.start({
       ...API,
       startup: { kind: 'shell' },
@@ -224,6 +237,16 @@ describe('CardPanes failures and the limit', () => {
     panes.close(API.id, id)
     expect(paneIds(panes.layout(API.id).tree)).toEqual([MAIN_PANE])
     expect(api.kills).toEqual([])
+  })
+
+  it("starts nothing unless the card's main shell is running (D4)", () => {
+    mainRunning = false
+    expect(panes.split(API, 'right')).toBeUndefined()
+    expect(api.spawns).toEqual([])
+    expect(screens).toEqual([])
+    expect(panes.layout(API.id).tree).toEqual({ kind: 'leaf', id: MAIN_PANE })
+    mainRunning = true
+    expect(panes.split(API, 'right')).toBeDefined()
   })
 
   it('starts nothing at 4 panes', () => {

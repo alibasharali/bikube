@@ -293,6 +293,58 @@ test('AC2: Split down nests, the shortcut splits without reaching the shell, 4 i
   await expectNoInput(2, limitBefore, 'limit')
 })
 
+test('AC5: a pane whose shell exits under an open dialog leaves the keyboard with the dialog', async () => {
+  await openApi()
+  await page.getByTestId('pane-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  const mainBefore = await screenText(0)
+
+  await run(1, 'sleep 1; exit')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  const settings = page.getByTestId('settings-dialog')
+  await expect(settings).toBeVisible()
+  await expect(panes()).toHaveCount(1)
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+
+  // The main pane is focused in the layout, but keyboard focus stays in the dialog.
+  const inDialog = (): Promise<boolean> =>
+    page.evaluate(() => !!document.activeElement?.closest('[data-testid=settings-dialog]'))
+  await page.waitForTimeout(300)
+  expect(await inDialog()).toBe(true)
+  await page.keyboard.type('q')
+  await page.waitForTimeout(300)
+  expect(await screenText(0)).toBe(mainBefore)
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+})
+
+test('AC2: a held split shortcut (auto-repeat) splits once', async () => {
+  await openApi()
+  const swallowed = await page.evaluate((darwin) => {
+    const key = (repeat: boolean): boolean => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'D',
+        code: 'KeyD',
+        shiftKey: !darwin,
+        ctrlKey: !darwin,
+        metaKey: darwin,
+        repeat,
+        bubbles: true,
+        cancelable: true
+      })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    return [key(false), key(true), key(true), key(true)]
+  }, process.platform === 'darwin')
+  // Every repeat is still swallowed, but only the first keydown splits.
+  expect(swallowed).toEqual([true, true, true, true])
+  await expect(panes()).toHaveCount(2)
+  await page.waitForTimeout(300)
+  await expect(panes()).toHaveCount(2)
+})
+
 test('AC3: an extra pane of a Claude Code card is a plain shell', async () => {
   // Relaunch with the fake `claude` of #5's smoke tests on the login PATH.
   await app.close()

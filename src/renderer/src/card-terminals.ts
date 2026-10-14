@@ -239,7 +239,12 @@ export function cardTerminals(): CardSessions<XtermScreen> {
 
 /** The app-wide extra panes of cards (#11 D1), with their layouts. */
 export function cardPanes(): CardPanes<XtermScreen> {
-  paneRegistry ??= new CardPanes(window.drovr.terminal, sessionRouter(), () => new XtermScreen())
+  paneRegistry ??= new CardPanes(
+    window.drovr.terminal,
+    sessionRouter(),
+    () => new XtermScreen(),
+    (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
+  )
   return paneRegistry
 }
 

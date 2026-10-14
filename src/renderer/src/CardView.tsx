@@ -18,6 +18,14 @@ function paneScreen(cardId: string, paneId: string): XtermScreen | undefined {
   return paneId === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, paneId)
 }
 
+/** A dialog over the view owns the keyboard: nothing moves focus or acts on keys behind it. */
+const dialogOpen = (): boolean => document.querySelector('[aria-modal="true"]') !== null
+
+/** Gives the screen keyboard focus, unless a dialog is open over the view. */
+function focusScreen(screen: XtermScreen | undefined): void {
+  if (!dialogOpen()) screen?.focus()
+}
+
 /**
  * One pane (#11 D1, D3, D5): its own screen, fitted to its area, focused by a click; an extra
  * pane has a close button in its top-right corner.
@@ -36,7 +44,7 @@ function Pane({
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => screen?.attach(hostRef.current!), [screen])
   useEffect(() => {
-    if (focused) screen?.focus()
+    if (focused) focusScreen(screen)
   }, [focused, screen])
   return (
     <div
@@ -60,7 +68,7 @@ function Pane({
           onClick={() => {
             cardPanes().close(cardId, paneId)
             // The button is gone: keyboard focus goes back to the focused pane's terminal.
-            paneScreen(cardId, cardPanes().layout(cardId).focused)?.focus()
+            focusScreen(paneScreen(cardId, cardPanes().layout(cardId).focused))
           }}
         >
           ×
@@ -128,12 +136,13 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       const split = splitShortcut(event, window.drovr.platform)
       if (!back && !split) return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
-      if (document.querySelector('[aria-modal="true"]')) return
+      if (dialogOpen()) return
       event.preventDefault()
       event.stopPropagation()
       if (back) onBack()
-      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
-      else if (split && splittable) cardPanes().split(card, split)
+      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); a held
+      // shortcut's auto-repeat is swallowed without splitting again.
+      else if (split && splittable && !event.repeat) cardPanes().split(card, split)
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)

@@ -68,7 +68,7 @@ None. electron-builder already builds the .dmg and gains Linux targets; no new d
 
 ## Data and migrations
 
-None. On Linux the data directory is Electron's `userData` (`~/.config/Drovr`), as it already is when the app runs there.
+None. On Linux the data directory is Electron's `userData` (`~/.config/drovr`, from the package name), as it already is when the app runs there.
 
 ## Out of scope
 

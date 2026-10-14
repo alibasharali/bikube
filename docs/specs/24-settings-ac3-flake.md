@@ -2,7 +2,7 @@
 item: 24
 type: chore
 title: 'Flaky smoke test: settings AC3 snapshots the terminal before the prompt prints'
-status: draft
+status: approved
 branch: claude/24-settings-ac3-flake
 ---
 

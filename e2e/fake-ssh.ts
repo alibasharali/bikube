@@ -8,8 +8,10 @@ import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 // `bash -l` reads this HOME's .bash_profile, so the fake `claude` is found there too).
 // FAKE_SSH_DELAY=<s>: first prints `Password:` and reads a hidden line for up to <s> seconds,
 // as a password prompt would (so a start line typed too early is swallowed, never run).
+// It also logs the local side's `board` variables to $DROVR_SSH_ENV_LOG (#12 D5: none).
 // FAKE_SSH_FAIL_AFTER=<n>: every connection after the first <n> fails with exit code 255.
 const FAKE_SSH = `#!/bin/bash
+[ -n "$DROVR_SSH_ENV_LOG" ] && echo "card=[$DROVR_CARD_ID] bin=[$DROVR_BIN]" >> "$DROVR_SSH_ENV_LOG"
 connections=0
 [ -f "$DROVR_SSH_LOG" ] && connections=$(wc -l < "$DROVR_SSH_LOG")
 echo "$*" >> "$DROVR_SSH_LOG"
@@ -36,6 +38,8 @@ exec env -i HOME="$HOME" PATH=/usr/bin:/bin SHELL=/bin/bash TERM="$TERM" sh -c "
 export interface FakeSshHome extends FakeClaudeHome {
   /** The fake ssh's log file: one line of arguments per connection. */
   sshLog: string
+  /** One line per connection: the local `board` variables ssh saw, `card=[…] bin=[…]`. */
+  sshEnvLog: string
 }
 
 /**
@@ -46,6 +50,7 @@ export interface FakeSshHome extends FakeClaudeHome {
 export function fakeSshHome(root: string): FakeSshHome {
   const claude = fakeClaudeHome(root)
   const sshLog = join(root, 'ssh.log')
+  const sshEnvLog = join(root, 'ssh-env.log')
   const ssh = join(claude.home, 'bin', 'ssh')
   writeFileSync(ssh, FAKE_SSH)
   chmodSync(ssh, 0o755)
@@ -53,7 +58,12 @@ export function fakeSshHome(root: string): FakeSshHome {
     join(claude.home, '.bash_profile'),
     `[ -n "$DROVR_CLAUDE_LOG" ] || export DROVR_CLAUDE_LOG='${claude.log}'\n`
   )
-  return { ...claude, sshLog, env: { ...claude.env, DROVR_SSH_LOG: sshLog } }
+  return {
+    ...claude,
+    sshLog,
+    sshEnvLog,
+    env: { ...claude.env, DROVR_SSH_LOG: sshLog, DROVR_SSH_ENV_LOG: sshEnvLog }
+  }
 }
 
 /** The fake ssh's log, one line of arguments per connection. */

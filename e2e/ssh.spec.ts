@@ -426,6 +426,8 @@ test('AC4: a card runs on its host, in the remote directory, without board varia
   expect(sshLog()[0]).toMatch(/^-t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /)
   expect(await output('pwd', 'pwd')).toBe(REMOTE_DIR)
   expect(await output('echo "[$DROVR_CARD_ID]"', 'card')).toBe('[]')
+  // The local shell that ran ssh had none of the `board` variables either (#12 D5).
+  expect(sshLogLines(fake.sshEnvLog)).toEqual(['card=[] bin=[]'])
   await back()
   await expect(tileStatus('api')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).not.toContainText('drovr-ready')

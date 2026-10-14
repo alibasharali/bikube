@@ -4,7 +4,10 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { isBackShortcut, isSettingsShortcut } from '../../core/card-shortcuts'
+import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
+import { SessionRouter } from '../../core/session-router'
+import type { PaneLayout } from '../../core/split-tree'
 import {
   knownRunState,
   knownStatus,
@@ -211,12 +214,34 @@ export class XtermScreen implements CardScreen {
   }
 }
 
+let router: SessionRouter | undefined
 let registry: CardSessions<XtermScreen> | undefined
+let paneRegistry: CardPanes<XtermScreen> | undefined
+
+/** The one router of terminal events, shared by cards' own terminals and their extra panes. */
+function sessionRouter(): SessionRouter {
+  router ??= new SessionRouter(window.drovr.terminal)
+  return router
+}
 
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
-  registry ??= new CardSessions(window.drovr.terminal, () => new XtermScreen())
+  registry ??= new CardSessions(window.drovr.terminal, () => new XtermScreen(), sessionRouter())
   return registry
+}
+
+/** The app-wide extra panes of cards (#11 D1), with their layouts. */
+export function cardPanes(): CardPanes<XtermScreen> {
+  paneRegistry ??= new CardPanes(window.drovr.terminal, sessionRouter(), () => new XtermScreen())
+  return paneRegistry
+}
+
+/** The card's panes and which is focused (#11 D2, D3), re-rendering when they change. */
+export function usePaneLayout(cardId: string): PaneLayout {
+  return useSyncExternalStore(
+    (listener) => cardPanes().subscribe(cardId, listener),
+    () => cardPanes().layout(cardId)
+  )
 }
 
 /**

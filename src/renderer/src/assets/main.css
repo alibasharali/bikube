@@ -802,6 +802,55 @@ button {
   flex: 1;
 }
 
+/* Split panes (#11 D2, D3, D5): 50/50 splits, the focused pane outlined once there are several */
+.pane-split {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.pane-split-down {
+  flex-direction: column;
+}
+
+.pane {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.pane-split .pane[data-focused='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.pane-terminal {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.pane-close {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* Startup command (#5 D9, D10, D12) */
 .inline-select,
 .field select {

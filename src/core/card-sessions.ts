@@ -5,6 +5,7 @@
  * tests), so views can come and go while a running card's screen keeps receiving output.
  */
 import type { TerminalApi, TerminalExit } from '../shared/api'
+import { SessionRouter } from './session-router'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
 import { startLine, type StartupState } from './startup-command'
 
@@ -54,26 +55,13 @@ interface Entry<S> {
 
 export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
-  private readonly bySession = new Map<string, Entry<S>>()
-  /** Spawns awaiting their reply; while any are, events for unknown sessions are kept. */
-  private starting = 0
-  private readonly early = new Map<string, { data: string[]; exit?: TerminalExit }>()
 
+  /** `router` is shared with the cards' extra panes (#11), or a new one over `api`. */
   constructor(
     private readonly api: TerminalApi,
-    private readonly createScreen: (cardId: string) => S
-  ) {
-    api.onData((id, data) => {
-      const entry = this.bySession.get(id)
-      if (entry) this.output(entry, data)
-      else if (this.starting > 0) this.earlyFor(id).data.push(data)
-    })
-    api.onExit((exit) => {
-      const entry = this.bySession.get(exit.id)
-      if (entry) this.exited(entry, exit)
-      else if (this.starting > 0) this.earlyFor(exit.id).exit = exit
-    })
-  }
+    private readonly createScreen: (cardId: string) => S,
+    private readonly router: SessionRouter = new SessionRouter(api)
+  ) {}
 
   /**
    * Starts the card's shell in its directory on a new, empty screen (#5 D7): a card with no
@@ -125,33 +113,26 @@ export class CardSessions<S extends CardScreen> {
     }
     entry.closing = false
     this.setState(entry, state)
-    this.starting++
-    void this.api
-      .spawn(cols, rows, card.directory, card.id)
-      .then(
-        (result) => {
-          if (!result.ok) return failed(result.reason)
-          if (!current()) return this.api.kill(result.id)
-          entry.sessionId = result.id
-          this.bySession.set(result.id, entry)
-          // The view may have fitted the screen while the shell was starting.
-          if (screen.cols !== cols || screen.rows !== rows) {
-            this.api.resize(result.id, screen.cols, screen.rows)
-          }
-          const early = this.early.get(result.id)
-          if (entry.closing) this.api.kill(result.id)
-          else if (line !== null && !early?.exit) {
-            this.api.write(result.id, `${line}\r`)
-            if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
-          }
-          early?.data.forEach((data) => this.output(entry, data))
-          if (early?.exit) this.exited(entry, early.exit)
-        },
-        (error: unknown) => failed(error instanceof Error ? error.message : String(error))
-      )
-      .finally(() => {
-        if (--this.starting === 0) this.early.clear()
+    this.router.spawn(cols, rows, card.directory, card.id, (result) => {
+      if (!result.ok) return failed(result.reason)
+      if (!current()) return this.api.kill(result.id)
+      entry.sessionId = result.id
+      const early = this.router.adopt(result.id, {
+        output: (data) => this.output(entry, data),
+        exited: (exit) => this.exited(entry, exit)
       })
+      // The view may have fitted the screen while the shell was starting.
+      if (screen.cols !== cols || screen.rows !== rows) {
+        this.api.resize(result.id, screen.cols, screen.rows)
+      }
+      if (entry.closing) this.api.kill(result.id)
+      else if (line !== null && !early.exit) {
+        this.api.write(result.id, `${line}\r`)
+        if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
+      }
+      early.data.forEach((data) => this.output(entry, data))
+      if (early.exit) this.exited(entry, early.exit)
+    })
   }
 
   /** Running, Stopped or couldn't start; undefined for an unknown card. */
@@ -210,18 +191,12 @@ export class CardSessions<S extends CardScreen> {
     entry.disposed = true
     this.entries.delete(cardId)
     if (entry.sessionId) {
-      this.bySession.delete(entry.sessionId)
+      this.router.release(entry.sessionId)
       this.api.kill(entry.sessionId)
     }
     if (entry.timer) clearTimeout(entry.timer)
     entry.listeners.clear()
     entry.screen?.dispose()
-  }
-
-  private earlyFor(id: string): { data: string[]; exit?: TerminalExit } {
-    let early = this.early.get(id)
-    if (!early) this.early.set(id, (early = { data: [] }))
-    return early
   }
 
   private output(entry: Entry<S>, data: string): void {
@@ -232,7 +207,7 @@ export class CardSessions<S extends CardScreen> {
 
   /** Stopped: the old screen and its scrollback are discarded (#5 D6). */
   private exited(entry: Entry<S>, { id }: TerminalExit): void {
-    this.bySession.delete(id)
+    this.router.release(id)
     entry.sessionId = null
     entry.screen?.dispose()
     entry.screen = null

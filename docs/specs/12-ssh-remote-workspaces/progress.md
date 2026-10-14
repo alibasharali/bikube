@@ -14,6 +14,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-10-14: Idea promoted to feature by full auto; grilling round 1 answered by full auto; spec approved by full auto (no stack change).
 - 2026-10-14 S3: follow-up idea created for `board` in SSH cards: #25.
+- 2026-10-14 ship review (full auto, round 2): (1) remote login shell no longer `exec`ed, its 255 mapped to 254 so a normal logout is never `SSH failed` (D5 updated); (2) D3 also rejects C1 control characters; (3) name defaulting to the host for `~/` as well as `~` kept (an empty basename would fail validation): PR trade-off.
 
 ## Verification
 

@@ -31,6 +31,7 @@ interface SessionFlow {
 
 export class FlowControl {
   private readonly sessions = new Map<string, SessionFlow>()
+  private peak = 0
 
   constructor(private readonly target: FlowTarget) {}
 
@@ -39,11 +40,26 @@ export class FlowControl {
     return this.sessions.get(id)?.unacked ?? 0
   }
 
+  /**
+   * The most characters any session had unacknowledged since the last `resetPeak` (the
+   * benchmark's backlog reading, #16 D7).
+   */
+  peakUnacked(): number {
+    return this.peak
+  }
+
+  /** Starts a new peak window from what the sessions have unacknowledged now. */
+  resetPeak(): void {
+    this.peak = 0
+    for (const flow of this.sessions.values()) this.peak = Math.max(this.peak, flow.unacked)
+  }
+
   /** Counts a chunk of `chars` characters sent to the renderer; pauses above the high mark. */
   sent(id: string, chars: number): void {
     let flow = this.sessions.get(id)
     if (!flow) this.sessions.set(id, (flow = { unacked: 0, paused: false, ending: false }))
     flow.unacked += chars
+    if (flow.unacked > this.peak) this.peak = flow.unacked
     if (!flow.paused && !flow.ending && flow.unacked > HIGH_WATERMARK) {
       flow.paused = true
       this.target.pause(id)

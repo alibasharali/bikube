@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
+import { HIGH_WATERMARK } from '../src/core/flow-control'
 import { launchApp, removeDataDirs } from './launch'
 
 // D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
@@ -12,13 +13,18 @@ const TERMINALS = 10
 const MEASURE_MS = 8_000
 const ECHO_SAMPLES = 20
 // sustained: bursts of 200 lines every 50 ms per terminal (about 4000 lines/s each).
-// firehose: unthrottled `yes`, a worst case with no flow control (BENCH_PROFILE=firehose).
+// firehose: unthrottled `yes`, a worst case kept bounded by flow control (#16) (BENCH_PROFILE=firehose).
 const PROFILE = process.env.BENCH_PROFILE === 'firehose' ? 'firehose' : 'sustained'
 const flood = (i: number): string =>
   PROFILE === 'firehose'
     ? `yes drovr-bench-${i} | cat -n`
     : `while :; do yes drovr-bench-${i} | head -n 200; sleep 0.05; done`
 const BUDGET = { fps: 30, echoMs: 100, mainLagMs: 100 }
+// #16 D7: sustained keeps the full D8 budget; firehose asserts no dropped echoes, live sessions
+// and main lag, and reports fps and echo max as info.
+const FULL_BUDGET = PROFILE === 'sustained'
+
+type FlowPeak = { __drovrFlowPeak: { read(): number; reset(): void } }
 
 type DrovrWindow = Window & { drovr: import('../src/shared/api').DrovrApi }
 type XtermHost = HTMLElement & { __xterm: { input(data: string, wasUserInput?: boolean): void } }
@@ -58,7 +64,9 @@ function openShellReady(page: Page): Promise<boolean> {
 test('AC13: 10 cards in one workspace stream output and the D8 budget holds', async () => {
   const root = mkdtempSync(join(os.tmpdir(), 'drovr-bench-'))
   const { app, page } = await launchApp({
-    args: process.env.BENCH_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? []
+    args: process.env.BENCH_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? [],
+    // Exposes main's peak unacknowledged reading on `globalThis` (#16 D7).
+    env: { ...(process.env as Record<string, string>), DROVR_BENCH: '1' }
   })
   try {
     // Per-session byte counters (renderer side), from before the first card exists.
@@ -150,6 +158,8 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
         g.__lag.push(Math.max(0, now - last - 10))
         last = now
       }, 10)
+      // The peak backlog in main is measured over the same window (#16 D7).
+      ;(globalThis as unknown as FlowPeak).__drovrFlowPeak.reset()
     })
 
     // Renderer fps (requestAnimationFrame) and input echo latency, over the same window.
@@ -227,15 +237,21 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
       clearInterval(g.__lagTimer)
       return g.__lag
     })
+    const peakUnacked = await app.evaluate(() =>
+      (globalThis as unknown as FlowPeak).__drovrFlowPeak.read()
+    )
 
     // Every session must still be live: back on the board, each card's status line (read from
     // its own screen, attached or not) shows its own marker.
     await back()
+    // Under firehose the status line mostly shows the cursor's partial line (`1234  drovr-be`),
+    // so it is sampled often rather than on the default backing-off intervals.
     const live = await Promise.all(
       Array.from({ length: TERMINALS }, (_, i) =>
         expect
           .poll(async () => (await card(i).getByTestId('card-status-line').textContent()) ?? '', {
-            timeout: 10_000
+            timeout: 10_000,
+            intervals: [100]
           })
           .toContain(`drovr-bench-${i}`)
           .then(
@@ -256,6 +272,8 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
 
     const fmt = (n: number): string => (Number.isFinite(n) ? n.toFixed(1) : 'n/a')
     const verdict = (ok: boolean): string => (ok ? 'PASS' : 'FAIL')
+    // A metric only asserted for the sustained profile reads `info` under firehose (#16 D7).
+    const fullVerdict = (ok: boolean): string => (FULL_BUDGET ? verdict(ok) : 'info')
     const echoMax = rendered[rendered.length - 1]
     const md = [
       '# Drovr D8 benchmark',
@@ -268,18 +286,19 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
       '',
       '| Metric | Value | Budget | Result |',
       '|---|---|---|---|',
-      `| Renderer fps (rAF) | ${fmt(fps)} | >= ${BUDGET.fps} | ${verdict(fps >= BUDGET.fps)} |`,
+      `| Renderer fps (rAF) | ${fmt(fps)} | >= ${BUDGET.fps} | ${fullVerdict(fps >= BUDGET.fps)} |`,
       `| Renderer fps, 10 idle shells, one card open (baseline) | ${fmt(idleFps)} | n/a | info |`,
       `| Longest frame gap | ${fmt(renderer.maxFrameGap)} ms | n/a | info |`,
       `| Input echo to buffer, p50 | ${fmt(percentile(rendered, 50))} ms | n/a | info |`,
       `| Input echo to buffer, p95 | ${fmt(percentile(rendered, 95))} ms | n/a | info |`,
-      `| Input echo to buffer, max (${ECHO_SAMPLES} samples) | ${fmt(echoMax)} ms | <= ${BUDGET.echoMs} ms | ${verdict(echoMax <= BUDGET.echoMs)} |`,
+      `| Input echo to buffer, max (${ECHO_SAMPLES} samples) | ${fmt(echoMax)} ms | <= ${BUDGET.echoMs} ms | ${fullVerdict(echoMax <= BUDGET.echoMs)} |`,
       `| Input echo arrival at renderer, p50 / max | ${fmt(percentile(arrival, 50))} / ${fmt(arrival[arrival.length - 1])} ms | n/a | info |`,
       `| Dropped echoes (never appeared) | ${droppedEchoes} | 0 | ${verdict(droppedEchoes === 0)} |`,
       `| Main event-loop lag, p99 | ${fmt(lagP99)} ms | <= ${BUDGET.mainLagMs} ms | ${verdict(lagP99 <= BUDGET.mainLagMs)} |`,
       `| Main event-loop lag, max (${lag.length} ticks) | ${fmt(lagMax)} ms | n/a | info |`,
       `| Sessions producing output | ${renderer.bytes.filter((b) => b > 0).length} / ${TERMINALS} | ${TERMINALS} / ${TERMINALS} | ${verdict(renderer.bytes.length === TERMINALS && renderer.bytes.every((b) => b > 0))} |`,
       `| Cards whose status line shows their own output | ${live.filter(Boolean).length} / ${TERMINALS} | ${TERMINALS} / ${TERMINALS} | ${verdict(live.every(Boolean))} |`,
+      `| Most characters unacknowledged in main, any session | ${peakUnacked} (high watermark ${HIGH_WATERMARK}) | n/a | info |`,
       `| Output per session (KiB, min / max) | ${fmt(Math.min(...kb))} / ${fmt(Math.max(...kb))} | n/a | info |`,
       `| Open card renders with WebGL (canvas) | ${renderer.openCardCanvas ? 'yes' : 'no (DOM renderer)'} | n/a | info |`,
       ''
@@ -292,9 +311,11 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
     expect(renderer.bytes.length).toBe(TERMINALS)
     expect(renderer.bytes.every((b) => b > 0)).toBe(true)
     expect(live.every(Boolean)).toBe(true)
-    expect(fps).toBeGreaterThanOrEqual(BUDGET.fps)
     expect(droppedEchoes).toBe(0)
-    expect(echoMax).toBeLessThanOrEqual(BUDGET.echoMs)
+    if (FULL_BUDGET) {
+      expect(fps).toBeGreaterThanOrEqual(BUDGET.fps)
+      expect(echoMax).toBeLessThanOrEqual(BUDGET.echoMs)
+    }
     expect(lagP99).toBeLessThanOrEqual(BUDGET.mainLagMs)
   } finally {
     await app.close()

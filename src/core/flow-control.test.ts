@@ -97,3 +97,22 @@ describe('FlowControl (#16 D1)', () => {
     expect(pty.calls).toEqual(['kill 1', 'kill 2'])
   })
 })
+
+describe('FlowControl peak (#16 D7, benchmark)', () => {
+  it('reports the most characters any session had unacknowledged since the last reset', () => {
+    expect(flow.peakUnacked()).toBe(0)
+    flow.sent('1', 30_000)
+    flow.sent('2', 50_000)
+    flow.sent('1', 10_000)
+    flow.acknowledged('2', 50_000)
+    flow.sent('1', 5_000)
+    expect(flow.peakUnacked()).toBe(50_000)
+    flow.resetPeak()
+    expect(flow.peakUnacked()).toBe(45_000)
+    flow.acknowledged('1', 45_000)
+    flow.sent('2', 1_000)
+    expect(flow.peakUnacked()).toBe(45_000)
+    flow.resetPeak()
+    expect(flow.peakUnacked()).toBe(1_000)
+  })
+})

@@ -38,6 +38,13 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
   const manager = new SessionManager()
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
   const flow = new FlowControl(manager)
+  // The benchmark's backlog reading (#16 D7), read through `app.evaluate`; only when it runs.
+  if (process.env.DROVR_BENCH) {
+    ;(globalThis as { __drovrFlowPeak?: { read(): number; reset(): void } }).__drovrFlowPeak = {
+      read: () => flow.peakUnacked(),
+      reset: () => flow.resetPeak()
+    }
+  }
   const owners = new SessionOwners<WebContents>()
   const pages = new PageGenerations<WebContents>()
   const cards = new SessionCards()

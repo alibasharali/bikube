@@ -1,5 +1,6 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
+import type { Settings } from '../core/settings'
 import type { WorkspaceState } from '../core/workspace-store'
 
 /** IPC channel names shared by main and preload. */
@@ -16,6 +17,8 @@ export const IPC = {
   dialogPickDirectory: 'dialog:pickDirectory',
   stateLoad: 'state:load',
   stateSave: 'state:save',
+  settingsLoad: 'settings:load',
+  settingsSave: 'settings:save',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer'
 } as const
@@ -75,6 +78,17 @@ export interface StateApi {
   save(state: WorkspaceState): void
 }
 
+/** App-wide settings, stored by main in `userData/drovr-settings.json` (#10 D6). */
+export interface SettingsApi {
+  /** Main's latest settings: the last valid save, else the file's (invalid fields defaulted), else the defaults. */
+  load(): Promise<Settings>
+  /**
+   * Main validates `settings` (#10 D1), ignores them when any field is invalid, sets the native
+   * theme and writes the file within 200 ms.
+   */
+  save(settings: Settings): void
+}
+
 /**
  * `board` requests main forwards from a card's shell (#9 D10). The renderer resolves and applies
  * each one against its store and returns the reply the CLI prints; preload sends it back.
@@ -94,5 +108,6 @@ export interface DrovrApi {
   fs: FsApi
   dialog: DialogApi
   state: StateApi
+  settings: SettingsApi
   board: BoardApi
 }

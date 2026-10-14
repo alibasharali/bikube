@@ -3,15 +3,18 @@ import { join } from 'node:path'
 import { boardShellEnvFor, boardSocketPath, registerBoard } from './board'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
+import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
 import { registerTerminals } from './terminals'
 
-function createWindow(): void {
+function createWindow(settings: MainSettings): void {
   const mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
     show: false,
     title: 'Drovr',
+    // The resolved theme's background (#10 D2), so a light launch doesn't flash dark.
+    backgroundColor: settings.backgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -44,6 +47,8 @@ if (!app.requestSingleInstanceLock()) {
 
 function startApp(): void {
   const state = registerState()
+  // Read before the window exists, so it opens in the saved theme (#10 D6).
+  const settings = registerSettings()
   const socketPath = boardSocketPath()
   const terminals = registerTerminals(boardShellEnvFor(socketPath))
   registerClipboard()
@@ -55,9 +60,10 @@ function startApp(): void {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }))
   })
 
-  // Pending board changes reach the disk, then no PTY process outlives the app.
+  // Pending board and settings changes reach the disk, then no PTY process outlives the app.
   app.on('before-quit', () => {
     state.flush()
+    settings.flush()
     terminals.killAll()
   })
 
@@ -66,7 +72,7 @@ function startApp(): void {
     if (!app.isReady()) return
     const [window] = BrowserWindow.getAllWindows()
     if (!window) {
-      createWindow()
+      createWindow(settings)
       return
     }
     if (window.isMinimized()) window.restore()
@@ -78,9 +84,10 @@ function startApp(): void {
     // `board` requests from cards (#9 D5): the socket is gone again once the app quits.
     const closeBoard = registerBoard(socketPath, terminals)
     app.on('will-quit', closeBoard)
-    createWindow()
+    settings.applyTheme()
+    createWindow(settings)
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      if (BrowserWindow.getAllWindows().length === 0) createWindow(settings)
     })
   })
 

@@ -8,6 +8,12 @@
   --accent: #6d8dfa;
   --accent-text: #0e1220;
   --danger: #e5484d;
+  --danger-text: #ffffff;
+  --badge-active: rgba(14, 18, 32, 0.2);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-strong: rgba(0, 0, 0, 0.5);
+  --backdrop: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -15,6 +21,30 @@
   --space-6: 24px;
   --radius: 6px;
   --chrome-inset: 28px;
+}
+
+/*
+ * The light palette (#10 D2): main sets the native theme from the Theme setting, so
+ * `prefers-color-scheme` follows it (and the OS under System) for every view and dialog.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-hover: #eceef2;
+    --border: #d9dce3;
+    --text: #1b1d24;
+    --text-muted: #5d6170;
+    --accent: #3d63dd;
+    --accent-text: #ffffff;
+    --danger: #d1343a;
+    --danger-text: #ffffff;
+    --badge-active: rgba(255, 255, 255, 0.25);
+    --shadow: rgba(16, 24, 40, 0.14);
+    --shadow-strong: rgba(16, 24, 40, 0.18);
+    --backdrop: rgba(16, 24, 40, 0.35);
+    color-scheme: light;
+  }
 }
 
 html,
@@ -148,7 +178,7 @@ button {
 }
 
 .workspace-item.active .workspace-badge {
-  background: rgba(14, 18, 32, 0.2);
+  background: var(--badge-active);
 }
 
 .workspace-name {
@@ -311,7 +341,7 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px var(--shadow);
 }
 
 .menu-item {
@@ -462,7 +492,7 @@ button {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--backdrop);
   z-index: 10;
 }
 
@@ -472,7 +502,7 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 40px var(--shadow-strong);
 }
 
 .modal-title {
@@ -537,7 +567,7 @@ button {
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--danger-text);
   font-weight: 600;
 }
 

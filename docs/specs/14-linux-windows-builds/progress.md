@@ -19,4 +19,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS (AC5 CI log pending the PR)

@@ -2,7 +2,7 @@
 item: 14
 type: feature
 title: Linux and Windows builds
-status: draft
+status: approved
 branch: claude/14-linux-windows-builds
 ---
 

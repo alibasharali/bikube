@@ -73,16 +73,17 @@ function startApp(): void {
 
   // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives
   // the app (#18 D2): the first quit with live shells is held until they have exited (SIGHUP, then
-  // SIGKILL, #18 D1) or `QUIT_WAIT_MS` passed; any later quit SIGKILLs what is left and goes through.
+  // SIGKILL, #18 D1) or `QUIT_WAIT_MS` passed; any later quit flushes again (the window stays live
+  // during the hold, so changes can still come in), SIGKILLs what is left and goes through.
   let holding = false
   app.on('before-quit', (event) => {
+    state.flush()
+    settings.flush()
+    sync.flush()
     if (holding) {
       terminals.forceKillAll()
       return
     }
-    state.flush()
-    settings.flush()
-    sync.flush()
     if (terminals.sessionCount === 0) return
     holding = true
     event.preventDefault()

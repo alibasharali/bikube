@@ -75,26 +75,34 @@ export class CardPanes<S extends CardScreen> {
       if (pane.sessionId) this.api.resize(pane.sessionId, cols, rows)
     })
     const { cols, rows } = screen
-    this.router.spawn(cols, rows, card.directory, card.id, (result) => {
-      if (pane.removed) return result.ok ? this.api.kill(result.id) : undefined
-      if (!result.ok) {
-        // Read-only, and it stays until closed (D5, #5 D8).
-        screen.write(`Couldn't start: ${result.reason}\r\n`)
-        return screen.setReadOnly()
-      }
-      pane.sessionId = result.id
-      const early = this.router.adopt(result.id, {
-        output: (data) => screen.write(data),
-        exited: () => this.remove(card.id, id)
-      })
-      // The view may have fitted the screen while the shell was starting.
-      if (screen.cols !== cols || screen.rows !== rows) {
-        this.api.resize(result.id, screen.cols, screen.rows)
-      }
-      early.data.forEach((data) => screen.write(data))
-      // A shell that exits by itself takes its pane with it (D5).
-      if (early.exit) this.remove(card.id, id)
-    })
+    // An SSH card's pane connects to the card's host too (#12 D8).
+    this.router.spawn(
+      cols,
+      rows,
+      card.directory,
+      card.id,
+      (result) => {
+        if (pane.removed) return result.ok ? this.api.kill(result.id) : undefined
+        if (!result.ok) {
+          // Read-only, and it stays until closed (D5, #5 D8).
+          screen.write(`Couldn't start: ${result.reason}\r\n`)
+          return screen.setReadOnly()
+        }
+        pane.sessionId = result.id
+        const early = this.router.adopt(result.id, {
+          output: (data) => screen.write(data),
+          exited: () => this.remove(card.id, id)
+        })
+        // The view may have fitted the screen while the shell was starting.
+        if (screen.cols !== cols || screen.rows !== rows) {
+          this.api.resize(result.id, screen.cols, screen.rows)
+        }
+        early.data.forEach((data) => screen.write(data))
+        // A shell that exits by itself takes its pane with it (D5).
+        if (early.exit) this.remove(card.id, id)
+      },
+      card.host ?? null
+    )
     this.setLayout(card.id, after)
     return id
   }

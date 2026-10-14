@@ -24,7 +24,8 @@ const api: DrovrApi = {
     save: (settings) => ipcRenderer.send(IPC.settingsSave, settings)
   },
   terminal: {
-    spawn: (cols, rows, cwd, cardId) => ipcRenderer.invoke(IPC.spawn, cols, rows, cwd, cardId),
+    spawn: (cols, rows, cwd, cardId, host = null) =>
+      ipcRenderer.invoke(IPC.spawn, cols, rows, cwd, cardId, host),
     write: (id, data) => ipcRenderer.send(IPC.write, id, data),
     resize: (id, cols, rows) => ipcRenderer.send(IPC.resize, id, cols, rows),
     kill: (id) => ipcRenderer.send(IPC.kill, id),

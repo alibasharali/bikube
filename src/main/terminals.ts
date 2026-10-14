@@ -29,7 +29,8 @@ export interface Terminals {
 
 /**
  * Wires the session manager to IPC. Sessions stream to the window that spawned them; each
- * shell gets its card's `board` variables from `shellEnv` (#9 D3).
+ * local shell gets its card's `board` variables from `shellEnv` (#9 D3), an SSH card's none
+ * (#12 D5).
  */
 export function registerTerminals(shellEnv: (cardId: string) => Record<string, string>): Terminals {
   const manager = new SessionManager()
@@ -79,7 +80,7 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
 
   ipcMain.handle(
     IPC.spawn,
-    async (event, cols: unknown, rows: unknown, cwd: unknown, cardId: unknown) => {
+    async (event, cols: unknown, rows: unknown, cwd: unknown, cardId: unknown, host: unknown) => {
       if (!fromMainFrame(event)) throw new Error('terminal:spawn rejected: untrusted sender')
       if (!isCardId(cardId)) return { ok: false, reason: SPAWN_REFUSAL.invalidCard }
       const owner = event.sender
@@ -88,8 +89,13 @@ export function registerTerminals(shellEnv: (cardId: string) => Record<string, s
       // Re-checked after the directory check: no spawn for a page that reloaded or closed meanwhile.
       // The frame check catches an old page's request that main only handled after the reload.
       const result = await spawnInDirectory(
-        { cols, rows, cwd },
-        (options) => manager.spawn({ ...options, env: shellEnv(cardId) }),
+        { cols, rows, cwd, host },
+        // An SSH card's local shell gets none of the `board` variables (#12 D5, D9).
+        (options) =>
+          manager.spawn({
+            ...options,
+            env: options.command === undefined ? shellEnv(cardId) : undefined
+          }),
         {
           stillCurrent: () =>
             samePage() &&

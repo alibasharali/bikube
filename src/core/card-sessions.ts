@@ -7,6 +7,7 @@
 import type { TerminalApi, TerminalExit } from '../shared/api'
 import { SessionRouter } from './session-router'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
+import { readyWatcher } from './ready-marker'
 import { startLine, type StartupState } from './startup-command'
 
 /** What the registry needs from a terminal emulator. */
@@ -28,6 +29,8 @@ export interface CardScreen {
 export interface CardRef {
   id: string
   directory: string
+  /** The SSH host the card runs on (#12 D1); absent for a local card. */
+  host?: string
 }
 
 /** A card as it is when it starts: its startup command is read then (#5 D7). */
@@ -51,6 +54,12 @@ interface Entry<S> {
   disposed: boolean
   /** Closed while its shell was starting: killed as soon as the session arrives (#7 D2). */
   closing: boolean
+  /** Closed during this start (#7): its stop is never SSH failed (#12 D7). */
+  closed: boolean
+  /** The current start's SSH host; undefined for a local card (#12 D5). */
+  host: string | undefined
+  /** Fed each output chunk while an SSH card's start line waits for the ready marker (#12 D6). */
+  watch: ((data: string) => void) | null
 }
 
 export class CardSessions<S extends CardScreen> {
@@ -71,6 +80,8 @@ export class CardSessions<S extends CardScreen> {
    *
    * Right after a successful spawn it types the card's start line and Enter, before any
    * keystroke (#5 D3); `onClaudeStarted` runs when that was Claude Code's first start (#5 D5).
+   * An SSH card (#12 D5) spawns with its host, and its start line is typed once, when the ready
+   * marker first appears in its output (#12 D6); never if its session ends before.
    */
   start(card: StartingCard, onClaudeStarted?: () => void): void {
     const existing = this.entries.get(card.id)
@@ -87,7 +98,10 @@ export class CardSessions<S extends CardScreen> {
       timer: null,
       dirty: false,
       disposed: false,
-      closing: false
+      closing: false,
+      closed: false,
+      host: card.host,
+      watch: null
     }
     if (existing) {
       // The old screen is gone already when Stopped; a failed one still shows its reason.
@@ -114,27 +128,49 @@ export class CardSessions<S extends CardScreen> {
       this.endedListeners.forEach((listener) => listener(card.id))
     }
     entry.closing = false
+    entry.closed = false
+    entry.host = card.host
+    entry.watch = null
     this.setState(entry, state)
-    this.router.spawn(cols, rows, card.directory, card.id, (result) => {
-      if (!result.ok) return failed(result.reason)
-      if (!current()) return this.api.kill(result.id)
-      entry.sessionId = result.id
-      const early = this.router.adopt(result.id, {
-        output: (data) => this.output(entry, data),
-        exited: (exit) => this.exited(card.id, entry, exit)
-      })
-      // The view may have fitted the screen while the shell was starting.
-      if (screen.cols !== cols || screen.rows !== rows) {
-        this.api.resize(result.id, screen.cols, screen.rows)
-      }
-      if (entry.closing) this.api.kill(result.id)
-      else if (line !== null && !early.exit) {
-        this.api.write(result.id, `${line}\r`)
-        if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
-      }
-      early.data.forEach((data) => this.output(entry, data))
-      if (early.exit) this.exited(card.id, entry, early.exit)
-    })
+    const sessionStarted = (id: string): void => {
+      if (line === null) return
+      this.api.write(id, `${line}\r`)
+      if (card.startup.kind === 'claude' && !card.claudeStarted) onClaudeStarted?.()
+    }
+    this.router.spawn(
+      cols,
+      rows,
+      card.directory,
+      card.id,
+      (result) => {
+        if (!result.ok) return failed(result.reason)
+        if (!current()) return this.api.kill(result.id)
+        entry.sessionId = result.id
+        const early = this.router.adopt(result.id, {
+          output: (data) => this.output(entry, data),
+          exited: (exit) => this.exited(card.id, entry, exit)
+        })
+        // The view may have fitted the screen while the shell was starting.
+        if (screen.cols !== cols || screen.rows !== rows) {
+          this.api.resize(result.id, screen.cols, screen.rows)
+        }
+        if (entry.closing) this.api.kill(result.id)
+        else if (line !== null && !early.exit) {
+          if (card.host === undefined) sessionStarted(result.id)
+          else {
+            const seen = readyWatcher()
+            entry.watch = (data) => {
+              if (!seen(data)) return
+              entry.watch = null
+              sessionStarted(result.id)
+            }
+          }
+        }
+        early.data.forEach((data) => this.output(entry, data))
+        if (early.exit) this.exited(card.id, entry, early.exit)
+      },
+      card.host ?? null
+    )
   }
 
   /** Running, Stopped or couldn't start; undefined for an unknown card. */
@@ -191,6 +227,8 @@ export class CardSessions<S extends CardScreen> {
   close(cardId: string): void {
     const entry = this.entries.get(cardId)
     if (entry?.state.kind !== 'running') return
+    entry.closed = true
+    entry.watch = null
     if (entry.sessionId) this.api.kill(entry.sessionId)
     else entry.closing = true
   }
@@ -211,21 +249,39 @@ export class CardSessions<S extends CardScreen> {
   }
 
   private output(entry: Entry<S>, data: string): void {
+    entry.watch?.(data)
     entry.screen?.write(data, () => {
       if (!entry.disposed) this.outputLanded(entry)
     })
   }
 
-  /** Stopped: the old screen and its scrollback are discarded (#5 D6). */
-  private exited(cardId: string, entry: Entry<S>, { id }: TerminalExit): void {
+  /**
+   * Stopped: the old screen and its scrollback are discarded (#5 D6). An SSH card whose shell
+   * exited by itself with `ssh`'s 255 is SSH failed with its last output line (#12 D7), read once
+   * the screen has parsed everything written to it.
+   */
+  private exited(cardId: string, entry: Entry<S>, { id, exitCode }: TerminalExit): void {
     this.router.release(id)
     entry.sessionId = null
+    entry.watch = null
+    const screen = entry.screen
+    if (entry.host === undefined || exitCode !== 255 || entry.closed || !screen) {
+      return this.stopped(cardId, entry, { kind: 'stopped' })
+    }
+    screen.write('', () => {
+      if (entry.disposed || entry.screen !== screen) return
+      const { lines, cursorRow } = screen.screen()
+      this.stopped(cardId, entry, { kind: 'stopped', sshFailed: lastOutputLine(lines, cursorRow) })
+    })
+  }
+
+  private stopped(cardId: string, entry: Entry<S>, state: CardRunState): void {
     entry.screen?.dispose()
     entry.screen = null
     if (entry.timer) clearTimeout(entry.timer)
     entry.timer = null
     entry.dirty = false
-    this.setState(entry, { kind: 'stopped' })
+    this.setState(entry, state)
     this.endedListeners.forEach((listener) => listener(cardId))
   }
 

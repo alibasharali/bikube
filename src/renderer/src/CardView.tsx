@@ -154,6 +154,16 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
         <h1 className="card-view-title" data-testid="card-view-title" title={card.title}>
           {card.title}
         </h1>
+        {card.host !== undefined && (
+          // Where an SSH card runs, so it is told apart where the user types into it (#12 D11).
+          <p
+            className="card-view-location"
+            data-testid="card-view-location"
+            title={`${card.host}:${card.directory}`}
+          >
+            {card.host}:{card.directory}
+          </p>
+        )}
         <CardStatusLine status={status} className="card-view-status" />
         <button type="button" className="btn btn-small" data-testid="card-back" onClick={onBack}>
           Back

@@ -28,18 +28,21 @@ export function lastOutputLine(lines: readonly string[], cursorRow: number): str
 
 /**
  * A card's process state. `stopped`: its shell exited, however it ended (#5 D6, which replaces
- * #4's exit code and signal); its screen is gone.
+ * #4's exit code and signal); its screen is gone. `sshFailed` is set when an SSH card's shell
+ * exited by itself with `ssh`'s code 255 (#12 D7), to its last output line at exit (empty when
+ * none); such a card is Stopped in every other way.
  */
 export type CardRunState =
-  { kind: 'running' } | { kind: 'stopped' } | { kind: 'failed'; reason: string }
+  { kind: 'running' } | { kind: 'stopped'; sshFailed?: string } | { kind: 'failed'; reason: string }
 
-/** `Running`, `Stopped` or `Couldn't start: <reason>`. */
+/** `Running`, `Stopped`, `SSH failed: <line>` or `Couldn't start: <reason>`. */
 export function statusLabel(state: CardRunState): string {
   switch (state.kind) {
     case 'running':
       return 'Running'
     case 'stopped':
-      return 'Stopped'
+      if (state.sshFailed === undefined) return 'Stopped'
+      return `SSH failed: ${state.sshFailed || 'exit code 255'}`
     case 'failed':
       return `Couldn't start: ${state.reason}`
   }

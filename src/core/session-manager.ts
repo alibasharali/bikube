@@ -9,6 +9,11 @@ export interface SpawnOptions {
   shell?: string
   /** Defaults to the user's home directory. */
   cwd?: string
+  /**
+   * Run with `-c` by the login shell instead of an interactive session, e.g. an SSH card's
+   * `exec ssh …` line (#12 D5).
+   */
+  command?: string
   /** Variables added to the inherited environment, e.g. the card's `board` variables (#9 D3). */
   env?: Record<string, string>
 }
@@ -62,7 +67,8 @@ export class SessionManager {
   spawn(options: SpawnOptions): SessionInfo {
     const shell = options.shell ?? SessionManager.defaultShell()
     const id = String(this.nextId++)
-    const proc = pty.spawn(shell, ['-l'], {
+    const args = options.command === undefined ? ['-l'] : ['-l', '-c', options.command]
+    const proc = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols: options.cols,
       rows: options.rows,

@@ -43,17 +43,19 @@ export class SessionRouter {
   /**
    * Spawns a shell through `terminal:spawn`; `settle` gets the reply (a rejection as a failed
    * one) and, on success, should `adopt` the session at once to receive what it printed so far.
+   * `host` is an SSH card's host (#12 D5), null for a local card.
    */
   spawn(
     cols: number,
     rows: number,
     cwd: string,
     cardId: string,
-    settle: (result: SpawnResult) => void
+    settle: (result: SpawnResult) => void,
+    host: string | null = null
   ): void {
     this.starting++
     void this.api
-      .spawn(cols, rows, cwd, cardId)
+      .spawn(cols, rows, cwd, cardId, host)
       .then(settle, (error: unknown) =>
         settle({ ok: false, reason: error instanceof Error ? error.message : String(error) })
       )

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SpawnResult, TerminalApi, TerminalExit } from '../shared/api'
 import { CardSessions, type CardScreen, type StartingCard } from './card-sessions'
+import { READY_MARKER } from './ssh-command'
 import type { StartupCommand } from './startup-command'
 
 /** A screen that keeps written text as lines; the cursor sits on the last line. */
@@ -48,6 +49,7 @@ class FakeApi implements TerminalApi {
     rows: number
     cwd: string
     cardId?: string
+    host?: string | null
     resolve: (r: SpawnResult) => void
   }[] = []
   writes: [string, string][] = []
@@ -55,8 +57,14 @@ class FakeApi implements TerminalApi {
   kills: string[] = []
   dataListeners = new Set<(id: string, data: string) => void>()
   exitListeners = new Set<(exit: TerminalExit) => void>()
-  spawn(cols: number, rows: number, cwd: string, cardId?: string): Promise<SpawnResult> {
-    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, cardId, resolve }))
+  spawn(
+    cols: number,
+    rows: number,
+    cwd: string,
+    cardId?: string,
+    host?: string | null
+  ): Promise<SpawnResult> {
+    return new Promise((resolve) => this.spawns.push({ cols, rows, cwd, cardId, host, resolve }))
   }
   write(id: string, data: string): void {
     this.writes.push([id, data])
@@ -507,5 +515,126 @@ describe('agent status (#9 D8)', () => {
     await vi.advanceTimersByTimeAsync(0)
     sessions.start(card('c1'))
     expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+  })
+})
+
+describe('SSH cards (#12 D5, D6, D7)', () => {
+  /** An SSH card on `me@devbox`. */
+  function sshCard(id: string, startup: StartupCommand = { kind: 'shell' }): StartingCard {
+    return { ...card(id, '/srv/api', startup), host: 'me@devbox' }
+  }
+
+  async function startedSsh(
+    id: string,
+    startup: StartupCommand = { kind: 'shell' },
+    onClaudeStarted?: () => void
+  ): Promise<void> {
+    sessions.start(sshCard(id, startup), onClaudeStarted)
+    api.spawns[api.spawns.length - 1].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+  }
+
+  it("sends the card's host with the spawn; a local card sends null", () => {
+    sessions.start(sshCard('c1'))
+    sessions.start(card('c2'))
+    expect(api.spawns.map((s) => [s.cwd, s.host])).toEqual([
+      ['/srv/api', 'me@devbox'],
+      ['/tmp/a', null]
+    ])
+  })
+
+  it('types the start line once, when the ready marker first appears (D6)', async () => {
+    const claudeStarted = vi.fn()
+    await startedSsh('c1', { kind: 'claude' }, claudeStarted)
+    api.emitData('s1', 'Password: ')
+    api.emitData('s1', '\r\n\x1b]6973;drovr')
+    expect(api.writes).toEqual([])
+    expect(claudeStarted).not.toHaveBeenCalled()
+    api.emitData('s1', '-ready\x07$ ')
+    expect(api.writes).toEqual([['s1', `claude --session-id ${UUID}\r`]])
+    expect(claudeStarted).toHaveBeenCalledTimes(1)
+    api.emitData('s1', READY_MARKER)
+    expect(api.writes).toHaveLength(1)
+    expect(claudeStarted).toHaveBeenCalledTimes(1)
+  })
+
+  it('finds the marker in output that came before the spawn reply', async () => {
+    sessions.start(sshCard('c1', { kind: 'custom', command: 'make dev' }))
+    api.emitData('s1', `motd${READY_MARKER}`)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([['s1', 'make dev\r']])
+  })
+
+  it('types nothing, and records no first start, when the marker never comes', async () => {
+    const claudeStarted = vi.fn()
+    await startedSsh('c1', { kind: 'claude' }, claudeStarted)
+    api.emitData('s1', 'Permission denied\r\n')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.writes).toEqual([])
+    expect(claudeStarted).not.toHaveBeenCalled()
+  })
+
+  it("doesn't type the start line once the card is being closed", async () => {
+    await startedSsh('c1', { kind: 'custom', command: 'make dev' })
+    sessions.close('c1')
+    api.emitData('s1', READY_MARKER)
+    expect(api.writes).toEqual([])
+  })
+
+  it('reads SSH failed with the last output line after an exit with 255 (D7)', async () => {
+    await startedSsh('c1')
+    api.emitData('s1', 'ssh: Could not resolve hostname x: Name or service not known\r\n')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c1')).toEqual({
+      kind: 'stopped',
+      sshFailed: 'ssh: Could not resolve hostname x: Name or service not known'
+    })
+    expect(sessions.status('c1')).toEqual({
+      label: 'SSH failed: ssh: Could not resolve hostname x: Name or service not known',
+      lastLine: ''
+    })
+    expect(sessions.screen('c1')).toBeUndefined()
+    // Opening it again starts it again, like a Stopped card.
+    sessions.start(sshCard('c1'))
+    expect(api.spawns).toHaveLength(2)
+    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+  })
+
+  it('reads SSH failed: exit code 255 when nothing was printed', async () => {
+    await startedSsh('c1')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.status('c1')?.label).toBe('SSH failed: exit code 255')
+  })
+
+  it('is Stopped after any other exit, after Close, and for a local card', async () => {
+    await startedSsh('c1')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
+
+    await startedSsh('c2')
+    api.emitData('s1', 'Connection closed\r\n')
+    sessions.close('c2')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c2')).toEqual({ kind: 'stopped' })
+
+    await started('c3', { ok: true, id: 's3' })
+    api.emitExit({ id: 's3', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c3')).toEqual({ kind: 'stopped' })
+  })
+
+  it('tells onEnded once an SSH card failed', async () => {
+    const ended = vi.fn()
+    sessions.onEnded(ended)
+    await startedSsh('c1')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ended).toHaveBeenCalledWith('c1')
   })
 })

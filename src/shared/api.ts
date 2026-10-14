@@ -41,9 +41,18 @@ export interface TerminalApi {
   /**
    * Starts the login shell in `cwd`, which main checks is an absolute path to an existing
    * directory, for the card `cardId` (a non-empty string of at most 100 chars): the shell gets
-   * the card's `board` variables (#9 D3).
+   * the card's `board` variables (#9 D3). With the card's SSH `host` (#12 D5, D12) it instead
+   * runs `ssh` to the host and `cwd` there, which main checks by #12 D2 and D3 (refusing with
+   * `invalid host` or `invalid working directory`), with no `board` variables; `null` (or
+   * omitted) is a local card.
    */
-  spawn(cols: number, rows: number, cwd: string, cardId: string): Promise<SpawnResult>
+  spawn(
+    cols: number,
+    rows: number,
+    cwd: string,
+    cardId: string,
+    host?: string | null
+  ): Promise<SpawnResult>
   write(id: string, data: string): void
   resize(id: string, cols: number, rows: number): void
   kill(id: string): void

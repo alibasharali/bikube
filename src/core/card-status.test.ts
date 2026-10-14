@@ -35,6 +35,22 @@ describe('statusLabel (D9)', () => {
   })
 })
 
+describe('SSH failed (#12 D7)', () => {
+  it('labels a Stopped SSH card whose ssh failed with its last output line', () => {
+    expect(statusLabel({ kind: 'stopped', sshFailed: 'ssh: Could not resolve hostname x' })).toBe(
+      'SSH failed: ssh: Could not resolve hostname x'
+    )
+    expect(cardStatus({ kind: 'stopped', sshFailed: 'Permission denied' }, 'ignored')).toEqual({
+      label: 'SSH failed: Permission denied',
+      lastLine: ''
+    })
+  })
+
+  it('falls back to the exit code when there was no output', () => {
+    expect(statusLabel({ kind: 'stopped', sshFailed: '' })).toBe('SSH failed: exit code 255')
+  })
+})
+
 describe('cardStatus (D9)', () => {
   it('pairs the label with the last output line, except when stopped or it could not start', () => {
     expect(cardStatus({ kind: 'running' }, 'drovr-marker')).toEqual({

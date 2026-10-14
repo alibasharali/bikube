@@ -791,6 +791,19 @@ button {
   flex: 1;
 }
 
+/* An SSH card's `<host>:<directory>` (#12 D11). */
+.card-view-location {
+  flex: none;
+  max-width: 30%;
+  margin: 0;
+  color: var(--text-muted);
+  font-family: Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .card-view-terminal {
   flex: 1;
   min-height: 0;

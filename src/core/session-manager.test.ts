@@ -57,6 +57,15 @@ describe('SessionManager', () => {
     await until(() => /x=card-7\r?\n/.test(output.get(id) ?? ''), 'env output')
   })
 
+  it('runs the login shell with -c and a command, in the home directory (#12 D5)', async () => {
+    const m = create()
+    const { output, exits } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/bash', cols: 80, rows: 24, command: 'pwd; exit 255' })
+    await until(() => exits.has(id), 'exit')
+    expect(exits.get(id)?.exitCode).toBe(255)
+    expect(output.get(id)).toContain(homedir())
+  })
+
   it('starts in the given cwd', async () => {
     const m = create()
     const { output } = collect(m)

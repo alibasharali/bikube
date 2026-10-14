@@ -175,7 +175,8 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     15000
   )
 
-  it.skipIf(!language.path || !PYTHON)(
+  // Linux only: the blocked connect it builds behaves differently on macOS.
+  it.skipIf(!language.path || !PYTHON || process.platform !== 'linux')(
     "says can't reach, within the timeout, when connecting blocks",
     async () => {
       // A listener with a full backlog that never accepts: a blocking connect waits on it.

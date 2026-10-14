@@ -17,6 +17,7 @@ import {
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
 import { isSoftwareRenderer } from '../../core/webgl-support'
+import { ghosttyStore } from './ghostty'
 import { settingsStore } from './settings'
 import '@xterm/xterm/css/xterm.css'
 
@@ -50,7 +51,7 @@ function osPrefersDark(): boolean {
 
 /** The terminal look for the current settings and OS appearance (#10 D3, D4). */
 function currentAppearance(): TerminalAppearance {
-  return terminalAppearance(settingsStore.get(), osPrefersDark())
+  return terminalAppearance(settingsStore.get(), osPrefersDark(), ghosttyStore.palettes())
 }
 
 /**
@@ -65,6 +66,7 @@ function followAppearance(): void {
     for (const screen of liveScreens) screen.applyAppearance(appearance)
   }
   settingsStore.subscribe(apply)
+  ghosttyStore.subscribe(apply)
   osPrefersDark()
   darkQuery?.addEventListener('change', apply)
 }

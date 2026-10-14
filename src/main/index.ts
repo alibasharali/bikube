@@ -70,7 +70,9 @@ function startApp(): void {
   const socketPath = boardSocketPath()
   // Each SSH session's own `board` socket (#25 D2), relaying once `registerBoard` runs.
   const sshBoard = sshBoardSockets(socketPath)
-  const terminals = registerTerminals(boardShellEnvFor(socketPath), sshBoard.sockets)
+  const terminals = registerTerminals(boardShellEnvFor(socketPath), sshBoard.sockets, () =>
+    settings.shell()
+  )
   registerClipboard()
   registerDirectories()
 

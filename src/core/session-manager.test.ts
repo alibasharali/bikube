@@ -240,23 +240,27 @@ describe('SessionManager', () => {
     sessions.forEach(({ id }, i) => expect(output.get(id)?.length ?? 0).toBeGreaterThan(atKill[i]))
   })
 
-  it('resumes a paused session whose shell exits by itself, so its last output arrives (#16 D1, D5)', async () => {
-    const m = create()
-    const { output, exits } = collect(m)
-    const { id } = m.spawn({
-      shell: '/bin/sh',
-      cols: 80,
-      rows: 24,
-      command: 'sleep 0.3; head -c 2000 /dev/zero | tr "\\0" x; echo TAIL-MARKER'
-    })
-    await new Promise((r) => setTimeout(r, 100))
-    // Paused and never resumed: node-pty drops unread output 200 ms after the child is reaped.
-    m.pause(id)
-    await until(() => exits.has(id), 'exit event', 5_000)
-    expect(output.get(id) ?? '').toContain('TAIL-MARKER')
-    // Ending now: never paused again.
-    m.pause(id)
-  })
+  // Linux only: its 2000 bytes must fit the PTY buffer, which is smaller on macOS (the shell blocks).
+  it.runIf(process.platform === 'linux')(
+    'resumes a paused session whose shell exits by itself, so its last output arrives (#16 D1, D5)',
+    async () => {
+      const m = create()
+      const { output, exits } = collect(m)
+      const { id } = m.spawn({
+        shell: '/bin/sh',
+        cols: 80,
+        rows: 24,
+        command: 'sleep 0.3; head -c 2000 /dev/zero | tr "\\0" x; echo TAIL-MARKER'
+      })
+      await new Promise((r) => setTimeout(r, 100))
+      // Paused and never resumed: node-pty drops unread output 200 ms after the child is reaped.
+      m.pause(id)
+      await until(() => exits.has(id), 'exit event', 5_000)
+      expect(output.get(id) ?? '').toContain('TAIL-MARKER')
+      // Ending now: never paused again.
+      m.pause(id)
+    }
+  )
 
   it('ignores operations on unknown sessions', () => {
     const m = create()

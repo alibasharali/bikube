@@ -1,7 +1,9 @@
 /**
  * App-wide settings (#10 D1) and their file format (D6, D7). Plain TS with no Electron or Node
  * imports, so main and the renderer can both use it. The file holds
- * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily", "syncFolder"? } }`.
+ * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily", "shell", "terminalThemeDark",
+ * "terminalThemeLight", "useGhosttyTheme", "syncFolder"? } }`; a file from before the last four
+ * gets their defaults.
  *
  * `syncFolder` (#13 D10) is kept per machine in the same file but is not part of `Settings`:
  * `settings:save` never carries or changes it, only the sync channels do. It is written only while
@@ -10,6 +12,8 @@
  * `fontFamily` is always the family in effect: a typed family is trimmed, and an empty one
  * becomes the default (D4), so the file and every reader see the actual family.
  */
+
+import { DROVR_DARK, DROVR_LIGHT, isTerminalThemeName } from './terminal-themes'
 
 export const SETTINGS_FILE_NAME = 'drovr-settings.json'
 export const SETTINGS_VERSION = 1
@@ -23,6 +27,13 @@ export interface Settings {
   theme: Theme
   fontSize: number
   fontFamily: string
+  /** The shell every local card starts: an absolute path, or '' for the login shell (`$SHELL`). */
+  shell: string
+  /** The terminal colour theme under the dark app theme, and under the light one. */
+  terminalThemeDark: string
+  terminalThemeLight: string
+  /** Use the colours of the user's Ghostty config instead of the two themes above. */
+  useGhosttyTheme: boolean
 }
 
 export const MIN_FONT_SIZE = 8
@@ -33,8 +44,25 @@ export const DEFAULT_FONT_FAMILY = 'Menlo, Consolas, monospace'
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   theme: 'system',
   fontSize: 13,
-  fontFamily: DEFAULT_FONT_FAMILY
+  fontFamily: DEFAULT_FONT_FAMILY,
+  shell: '',
+  terminalThemeDark: DROVR_DARK,
+  terminalThemeLight: DROVR_LIGHT,
+  useGhosttyTheme: false
 })
+
+export const MAX_SHELL_LENGTH = 4096
+
+/** '' (the login shell) or an absolute path of at most 4096 chars without control chars. */
+export function isShellSetting(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    (value === '' ||
+      (value.length <= MAX_SHELL_LENGTH &&
+        !CONTROL_CHARS.test(value) &&
+        /^(\/|[A-Za-z]:[\\/])/.test(value)))
+  )
+}
 
 /** The window background of each resolved theme (D2), matching `--bg` in the CSS. */
 export const THEME_BACKGROUNDS: Readonly<Record<ResolvedTheme, string>> = Object.freeze({
@@ -76,8 +104,26 @@ export function normalizeFontFamily(value: unknown): string | null {
 export function validateSettings(value: unknown): Settings | null {
   if (!isObject(value)) return null
   const fontFamily = normalizeFontFamily(value.fontFamily)
-  if (!isTheme(value.theme) || !isFontSize(value.fontSize) || fontFamily === null) return null
-  return { theme: value.theme, fontSize: value.fontSize, fontFamily }
+  if (
+    !isTheme(value.theme) ||
+    !isFontSize(value.fontSize) ||
+    fontFamily === null ||
+    !isShellSetting(value.shell) ||
+    !isTerminalThemeName(value.terminalThemeDark) ||
+    !isTerminalThemeName(value.terminalThemeLight) ||
+    typeof value.useGhosttyTheme !== 'boolean'
+  ) {
+    return null
+  }
+  return {
+    theme: value.theme,
+    fontSize: value.fontSize,
+    fontFamily,
+    shell: value.shell,
+    terminalThemeDark: value.terminalThemeDark,
+    terminalThemeLight: value.terminalThemeLight,
+    useGhosttyTheme: value.useGhosttyTheme
+  }
 }
 
 export interface ParsedSettings {
@@ -114,6 +160,18 @@ export function parseSettingsFile(text: string): ParsedSettings {
   const family = normalizeFontFamily(raw.fontFamily)
   if (family !== null) settings.fontFamily = family
   else replaced.push('fontFamily')
+  // Absent in a file from before them: the default, not a replacement.
+  const check = <K extends keyof Settings>(
+    key: K,
+    valid: (value: unknown) => value is Settings[K]
+  ): void => {
+    if (valid(raw[key])) settings[key] = raw[key]
+    else if (key in raw) replaced.push(key)
+  }
+  check('shell', isShellSetting)
+  check('terminalThemeDark', isTerminalThemeName)
+  check('terminalThemeLight', isTerminalThemeName)
+  check('useGhosttyTheme', (v): v is boolean => typeof v === 'boolean')
   if (isSyncFolderPath(raw.syncFolder)) return { settings, replaced, syncFolder: raw.syncFolder }
   return { settings, replaced }
 }
@@ -123,10 +181,19 @@ export function parseSettingsFile(text: string): ParsedSettings {
  * is on.
  */
 export function serializeSettings(settings: Settings, syncFolder: string | null = null): string {
-  const { theme, fontSize, fontFamily } = settings
+  const { theme, fontSize, fontFamily, shell, terminalThemeDark, terminalThemeLight } = settings
   return JSON.stringify({
     version: SETTINGS_VERSION,
-    settings: { theme, fontSize, fontFamily, ...(syncFolder !== null && { syncFolder }) }
+    settings: {
+      theme,
+      fontSize,
+      fontFamily,
+      shell,
+      terminalThemeDark,
+      terminalThemeLight,
+      useGhosttyTheme: settings.useGhosttyTheme,
+      ...(syncFolder !== null && { syncFolder })
+    }
   })
 }
 

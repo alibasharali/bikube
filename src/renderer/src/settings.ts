@@ -27,11 +27,7 @@ export function createSettingsStore(
     update(change) {
       const next = validateSettings({ ...current, ...change })
       if (next === null) return false
-      if (
-        next.theme === current.theme &&
-        next.fontSize === current.fontSize &&
-        next.fontFamily === current.fontFamily
-      ) {
+      if ((Object.keys(next) as (keyof Settings)[]).every((key) => next[key] === current[key])) {
         return true
       }
       current = next

@@ -117,9 +117,14 @@ async function openLook(page: Page): Promise<TerminalLook> {
       | null
     const term = host?.__xterm
     if (!term) return null
+    // Every family ends with the bundled symbols font; the tests compare what comes before it.
+    const symbols = ', "Symbols Nerd Font Mono"'
+    const family = term.options.fontFamily
     return {
       fontSize: term.options.fontSize,
-      fontFamily: term.options.fontFamily,
+      fontFamily: family.endsWith(symbols)
+        ? family.slice(0, -symbols.length)
+        : `no symbols font: ${family}`,
       background: term.options.theme.background,
       foreground: term.options.theme.foreground,
       cols: term.cols
@@ -212,7 +217,7 @@ test('a saved Light theme gives a light window and board from the start', async 
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace"}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -232,7 +237,7 @@ test('a saved Dark theme gives a dark window and board from the start, whatever 
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace"}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -505,7 +510,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New"}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
 
   await page.keyboard.press(SHORTCUT)
@@ -515,7 +520,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace"}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
 })
 
@@ -531,7 +536,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveCount(0)
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace"}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
   for (const text of ['40', '7', '12.5', 'abc']) {
     await size.fill(text)
@@ -546,7 +551,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace"}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
 
   // Closing drops the invalid size; reopening shows the last valid one.
@@ -561,7 +566,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace"}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
 })
 
@@ -583,7 +588,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   await app.close()
   const expected =
-    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace"}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   expect(readSettingsFile(dataDir)).toBe(expected)
   const statePath = join(dataDir, 'drovr-state.json')
   const stateBefore = JSON.parse(readFileSync(statePath, 'utf8')) as { version: number }
@@ -628,7 +633,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New"}}'
+    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -642,7 +647,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New"}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
   )
   // The app works: a workspace and a running card.
   await page.keyboard.press('Escape')

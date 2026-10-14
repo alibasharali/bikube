@@ -23,7 +23,9 @@ const api: DrovrApi = {
   },
   settings: {
     load: () => ipcRenderer.invoke(IPC.settingsLoad),
-    save: (settings) => ipcRenderer.send(IPC.settingsSave, settings)
+    save: (settings) => ipcRenderer.send(IPC.settingsSave, settings),
+    shells: () => ipcRenderer.invoke(IPC.settingsShells),
+    ghosttyTheme: () => ipcRenderer.invoke(IPC.settingsGhosttyTheme)
   },
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),

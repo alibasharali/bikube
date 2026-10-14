@@ -754,7 +754,8 @@ button {
 }
 
 .card-status-line {
-  font-family: Menlo, Consolas, monospace;
+  /* The bundled symbols font (loaded in symbols-font.ts) shows prompt icons in the status too. */
+  font-family: Menlo, Consolas, monospace, 'Symbols Nerd Font Mono';
 }
 
 .new-card {
@@ -929,4 +930,230 @@ button {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/* Settings: Shell and Terminal colours */
+.modal {
+  box-sizing: border-box;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.modal-wide {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.terminal-colours {
+  padding: 0;
+  border: 0;
+  margin: 0 0 var(--space-3);
+}
+
+.terminal-colours legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.theme-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.theme-choice-label {
+  flex: none;
+  width: 110px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.theme-choice-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--text);
+  text-align: left;
+}
+
+.theme-choice-btn > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-chips {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.theme-chips > span {
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.checkbox input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.ghostty-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.ghostty-status .field-hint {
+  overflow-wrap: anywhere;
+}
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-4);
+  height: min(520px, calc(100vh - 140px));
+}
+
+.theme-picker-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.theme-search {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.theme-filter {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.theme-filter-btn {
+  flex: 1;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.theme-filter-btn[aria-pressed='true'] {
+  background: var(--surface-hover);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.theme-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  list-style: none;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.theme-option:hover {
+  background: var(--surface-hover);
+}
+
+.theme-option[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.theme-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-empty {
+  padding: var(--space-3);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.theme-picker-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+}
+
+.theme-picker-name {
+  font-weight: 600;
+}
+
+.theme-picker-main .modal-actions {
+  margin-top: auto;
+}
+
+.terminal-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.terminal-preview-swatches {
+  display: flex;
+  gap: 0;
+  margin: var(--space-1) 0;
+}
+
+.terminal-preview-swatches > span {
+  width: 28px;
+  height: 16px;
 }

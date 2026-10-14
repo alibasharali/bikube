@@ -1,5 +1,6 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
+import type { GhosttyTheme } from '../core/ghostty-config'
 import type { Settings } from '../core/settings'
 import type { SyncStatus } from '../core/sync-status'
 import type { Workspace, WorkspaceState } from '../core/workspace-store'
@@ -21,6 +22,8 @@ export const IPC = {
   stateSave: 'state:save',
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
+  settingsShells: 'settings:shells',
+  settingsGhosttyTheme: 'settings:ghosttyTheme',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer',
   syncStatus: 'sync:status',
@@ -108,6 +111,15 @@ export interface SettingsApi {
    * theme and writes the file within 200 ms.
    */
   save(settings: Settings): void
+  /** The login shell (`$SHELL`) and the shells in `/etc/shells` that exist, for the Shell setting. */
+  shells(): Promise<ShellChoices>
+  /** Reads the user's Ghostty config and theme now, for the "Use Ghostty theme" setting. */
+  ghosttyTheme(): Promise<GhosttyTheme>
+}
+
+export interface ShellChoices {
+  login: string
+  shells: string[]
 }
 
 /**

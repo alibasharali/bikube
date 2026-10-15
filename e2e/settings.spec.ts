@@ -721,6 +721,38 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
   )
 })
 
+test('#31 D8: Reset is refused while another action holds the default; the value stays', async () => {
+  const dataDir = newDataDir()
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  // Close card's default as a Playwright press, per OS (e2e/card-view.ts).
+  const closeCardDefault = process.platform === 'darwin' ? 'Meta+Shift+W' : 'Control+Shift+Q'
+
+  await page.getByTestId('settings-open').click()
+  const defaultText = await shortcutField(page, 'closeCard').innerText()
+  // Close card moves away, then Split right takes Close card's default, free by then.
+  await shortcutField(page, 'closeCard').click()
+  await page.keyboard.press('Control+Alt+X')
+  const movedText = await shortcutField(page, 'closeCard').innerText()
+  expect(movedText).not.toBe(defaultText)
+  await shortcutField(page, 'splitRight').click()
+  await page.keyboard.press(closeCardDefault)
+  await expect(shortcutField(page, 'splitRight')).toHaveText(defaultText)
+
+  await shortcutReset(page, 'closeCard').click()
+  await expect(shortcutError(page, 'closeCard')).toHaveText('Already used by Split right')
+  await expect(shortcutField(page, 'closeCard')).toHaveText(movedText)
+  await expect(shortcutField(page, 'splitRight')).toHaveText(defaultText)
+
+  // Once Split right is reset, Close card's Reset applies and the refusal is gone.
+  await shortcutReset(page, 'splitRight').click()
+  await shortcutReset(page, 'closeCard').click()
+  await expect(shortcutError(page, 'closeCard')).toHaveCount(0)
+  await expect(shortcutField(page, 'closeCard')).toHaveText(defaultText)
+  await expect(shortcutReset(page, 'closeCard')).toBeDisabled()
+})
+
 test('#31 AC7: refused presses keep the old shortcut and recording; Escape stops it without a change', async () => {
   test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
   const dataDir = newDataDir()

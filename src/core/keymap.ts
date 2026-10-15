@@ -295,13 +295,37 @@ export function recordPress(
     cmd: event.metaKey,
     key
   })
-  const owner =
+  const owner = shortcutOwner(shortcut, action, keymap, platform)
+  if (owner !== undefined) return { kind: 'refused', message: `Already used by ${owner}` }
+  return { kind: 'set', shortcut }
+}
+
+/** What else holds `shortcut` (a fixed shortcut or another action), named as D8 shows it. */
+function shortcutOwner(
+  shortcut: string,
+  action: ShortcutAction,
+  keymap: Keymap,
+  platform: string
+): string | undefined {
+  return (
     fixedShortcuts(platform).get(shortcut) ??
     SHORTCUT_ACTIONS.filter((other) => other !== action && keymap[other] === shortcut).map(
       (other) => SHORTCUT_LABELS[other]
     )[0]
-  if (owner !== undefined) return { kind: 'refused', message: `Already used by ${owner}` }
-  return { kind: 'set', shortcut }
+  )
+}
+
+/**
+ * Why Reset can't bring back `action`'s default (D8): another action holds it now, e.g.
+ * `Already used by Split right`; null when Reset may apply it.
+ */
+export function resetRefusal(
+  action: ShortcutAction,
+  keymap: Keymap,
+  platform: string
+): string | null {
+  const owner = shortcutOwner(defaultKeymap(platform)[action], action, keymap, platform)
+  return owner === undefined ? null : `Already used by ${owner}`
 }
 
 /** The shortcuts that differ from this OS's default, keyed by action (D9). */

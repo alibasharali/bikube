@@ -4,6 +4,7 @@ import {
   SHORTCUT_LABELS,
   defaultKeymap,
   recordPress,
+  resetRefusal,
   resolveKeymap,
   shortcutOverrides,
   type Keymap,
@@ -481,7 +482,8 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
   const defaults = defaultKeymap(platform)
   const id = useId()
   const [recording, setRecording] = useState<ShortcutAction | null>(null)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  // A refusal belongs to one action: the field being recorded, or the Reset just pressed.
+  const [refusal, setRefusal] = useState<{ action: ShortcutAction; message: string } | null>(null)
 
   const stop = (): void => {
     setRecording(null)
@@ -503,7 +505,7 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
     event.stopPropagation()
     const result = recordPress(event.nativeEvent, action, keymap, platform)
     if (result.kind === 'cancel') stop()
-    else if (result.kind === 'refused') setRefusal(result.message)
+    else if (result.kind === 'refused') setRefusal({ action, message: result.message })
     else if (result.kind === 'set') {
       apply(action, result.shortcut)
       stop()
@@ -517,7 +519,7 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
         const labelId = `${id}-${action}`
         const errorId = `${id}-${action}-error`
         const isRecording = recording === action
-        const error = isRecording ? refusal : null
+        const error = refusal?.action === action ? refusal.message : null
         return (
           <div key={action} className="shortcut-row">
             <span id={labelId} className="shortcut-label">
@@ -552,6 +554,13 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
               disabled={keymap[action] === defaults[action]}
               onClick={() => {
                 if (isRecording) stop()
+                // The default may be another action's shortcut now: refused, the value stays.
+                const message = resetRefusal(action, keymap, platform)
+                if (message !== null) {
+                  setRefusal({ action, message })
+                  return
+                }
+                setRefusal(null)
                 apply(action, defaults[action])
               }}
             >

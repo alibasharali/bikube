@@ -5,6 +5,7 @@ import {
   keymapAction,
   readShortcuts,
   recordPress,
+  resetRefusal,
   resolveKeymap,
   shortcutOverrides,
   validateShortcuts,
@@ -408,5 +409,24 @@ describe('workspaceShortcut (#31 D18, AC16)', () => {
 
   it('matches every event type, so the whole key is swallowed', () => {
     expect(workspaceShortcut(digit(3, { ctrlKey: true, type: 'keyup' }), 'linux')).toBe(3)
+  })
+})
+
+describe('resetRefusal (#31 D8)', () => {
+  it('refuses a default another action holds now, naming that action', () => {
+    // Close card moved away, then Split right took Close card's default.
+    const keymap = {
+      ...defaultKeymap('linux'),
+      closeCard: 'Ctrl+Alt+X',
+      splitRight: 'Ctrl+Shift+Q'
+    }
+    expect(resetRefusal('closeCard', keymap, 'linux')).toBe('Already used by Split right')
+    // Split right's own default is free again, so its Reset may apply.
+    expect(resetRefusal('splitRight', keymap, 'linux')).toBeNull()
+  })
+
+  it('lets Reset apply a default nobody else holds', () => {
+    const keymap = { ...defaultKeymap('darwin'), back: 'Cmd+Alt+B' }
+    expect(resetRefusal('back', keymap, 'darwin')).toBeNull()
   })
 })

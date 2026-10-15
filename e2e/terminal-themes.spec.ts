@@ -78,8 +78,9 @@ test('the dark theme picker: search, preview, pick with Enter; Cancel and Escape
   await workspaceWithCard(page, 'api')
   await page.getByTestId('settings-open').click()
   await dialog(page).getByTestId('settings-theme-dark').check()
+  await dialog(page).getByTestId('settings-section-terminal').click()
 
-  // Cancel leaves the theme as it was and returns to Settings.
+  // Cancel leaves the theme as it was and returns to Settings, on the Terminal section.
   await dialog(page).getByTestId('settings-terminal-theme-dark').click()
   await expect(dialog(page).getByTestId('theme-picker')).toBeVisible()
   await expect(dialog(page).getByTestId('theme-filter-dark')).toHaveAttribute(
@@ -139,12 +140,14 @@ test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is 
   await workspaceWithCard(page, 'api')
 
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-terminal').click()
   await dialog(page).getByTestId('settings-use-ghostty').check()
   await expect(dialog(page).getByTestId('settings-ghostty-status')).toContainText(
     'Theme: light:Catppuccin Latte, dark:Catppuccin Mocha'
   )
-  await expect(dialog(page).getByTestId('settings-terminal-theme-dark')).toBeDisabled()
-  await expect(dialog(page).getByTestId('settings-terminal-theme-light')).toBeDisabled()
+  // The built-in themes' pickers give way to what was read from Ghostty.
+  await expect(dialog(page).getByTestId('settings-terminal-theme-dark')).toHaveCount(0)
+  await expect(dialog(page).getByTestId('settings-terminal-theme-light')).toHaveCount(0)
   // Playwright pins a light page: Latte, with the config's own red over the theme's.
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#eff1f5')
   expect((await openTerminal(page)).red).toBe('#ff0000')
@@ -167,7 +170,8 @@ test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is 
 
   // Turned off: the picked themes again.
   await page.getByTestId('settings-open').click()
-  await dialog(page).getByTestId('settings-use-ghostty').uncheck()
+  await dialog(page).getByTestId('settings-section-terminal').click()
+  await dialog(page).getByTestId('settings-colours-builtin').check()
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#14151a')
 })
 
@@ -176,8 +180,11 @@ test('the Shell setting: a listed shell starts new cards with $SHELL set; a miss
   app = launched.app
   const { page, dataDir } = launched
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shell').click()
   const shell = dialog(page).getByTestId('settings-shell')
-  await expect(shell.locator('option').first()).toHaveText(/^Login shell \(.+\)$/)
+  // Shells by name, then path: `Login shell — zsh — /bin/zsh`, `sh — /bin/sh`.
+  await expect(shell.locator('option').first()).toHaveText(/^Login shell — \S+ — \/.+$/)
+  await expect(shell.locator('option[value="/bin/sh"]')).toHaveText('sh — /bin/sh')
   await shell.selectOption('/bin/sh')
   await expect.poll(() => savedSettings(dataDir).shell).toBe('/bin/sh')
   await page.keyboard.press('Escape')
@@ -190,6 +197,7 @@ test('the Shell setting: a listed shell starts new cards with $SHELL set; a miss
 
   // Another path, typed; one that doesn't exist refuses to start.
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shell').click()
   await shell.selectOption({ label: 'Other…' })
   const path = dialog(page).getByTestId('settings-shell-path')
   await path.fill('fish')

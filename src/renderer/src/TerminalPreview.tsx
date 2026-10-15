@@ -60,10 +60,13 @@ const SESSION: Run[][] = [
  */
 function TerminalPreview({
   palette,
-  fontFamily
+  fontFamily,
+  fontSize
 }: {
   palette: Readonly<TerminalPalette>
   fontFamily: string
+  /** The terminals' font size; the preview's own size when left out. */
+  fontSize?: number
 }): React.JSX.Element {
   const colour = (name: Colour | undefined): string | undefined =>
     name === undefined ? undefined : palette[name]
@@ -72,7 +75,7 @@ function TerminalPreview({
       className="terminal-preview"
       data-testid="theme-preview"
       data-background={palette.background}
-      style={{ background: palette.background, color: palette.foreground, fontFamily }}
+      style={{ background: palette.background, color: palette.foreground, fontFamily, fontSize }}
       aria-hidden="true"
     >
       {SESSION.map((line, i) => (

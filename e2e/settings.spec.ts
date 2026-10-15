@@ -709,6 +709,7 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
 
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'Dark' })).toBeChecked()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
   await expect(shortcutField(page, 'back')).toHaveText('Ctrl+Shift+B')
   await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Shift+D')
   await expect(shortcutField(page, 'closePane')).toHaveText('Ctrl+Shift+W')
@@ -730,6 +731,7 @@ test('#31 D8: Reset is refused while another action holds the default; the value
   const closeCardDefault = process.platform === 'darwin' ? 'Meta+Shift+W' : 'Control+Shift+Q'
 
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
   const defaultText = await shortcutField(page, 'closeCard').innerText()
   // Close card moves away, then Split right takes Close card's default, free by then.
   await shortcutField(page, 'closeCard').click()
@@ -761,6 +763,7 @@ test('#31 AC7: refused presses keep the old shortcut and recording; Escape stops
   const { page } = launched
 
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
   const field = shortcutField(page, 'splitRight')
   await field.click()
   await expect(field).toHaveText('Press a shortcut…')
@@ -805,6 +808,7 @@ test('#31 AC6: a recorded shortcut works in a card, is kept across a restart, an
   await settledBufferLines(page, '')
 
   await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
   await shortcutField(page, 'splitRight').click()
   await page.keyboard.press('Control+Alt+R')
   await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Alt+R')
@@ -864,6 +868,7 @@ test('#31 AC6: a recorded shortcut works in a card, is kept across a restart, an
   app = launched.app
   page = launched.page
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
   await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Alt+R')
   await shortcutReset(page, 'splitRight').click()
   await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Shift+D')

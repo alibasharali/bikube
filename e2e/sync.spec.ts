@@ -101,9 +101,15 @@ async function editWorkspace(page: Page, index: number): Promise<void> {
 
 const settings = (page: Page): Locator => page.getByTestId('settings-dialog')
 
+/** Opens Settings when it isn't open, on section `section` (`sync`, `appearance`…). */
+async function settingsSection(page: Page, section: string): Promise<void> {
+  if ((await settings(page).count()) === 0) await page.getByTestId('settings-open').click()
+  await settings(page).getByTestId(`settings-section-${section}`).click()
+}
+
 /** Types `folder` into Settings → Sync folder and presses Enter, leaving Settings open. */
 async function setSyncFolder(page: Page, folder: string): Promise<void> {
-  if ((await settings(page).count()) === 0) await page.getByTestId('settings-open').click()
+  await settingsSection(page, 'sync')
   await settings(page).getByTestId('settings-sync-folder').fill(folder)
   await settings(page).getByTestId('settings-sync-folder').press('Enter')
 }
@@ -273,6 +279,7 @@ test('AC12: the sync folder is kept per machine across a restart, never in the s
   let a = await launch(makeDir('ha'))
   await createWorkspace(a.page, makeDir('ha', 'api'), 'api')
   await setSyncFolder(a.page, folder)
+  await settingsSection(a.page, 'appearance')
   await settings(a.page).getByTestId('settings-theme-dark').check()
   await closeSettings(a.page)
   await expect(a.page.getByTestId('sync-status')).toHaveText(SYNCED)
@@ -280,7 +287,7 @@ test('AC12: the sync folder is kept per machine across a restart, never in the s
 
   a = await launch(a.home, a.dataDir)
   await expect(a.page.getByTestId('sync-status')).toHaveText(SYNCED)
-  await a.page.getByTestId('settings-open').click()
+  await settingsSection(a.page, 'sync')
   await expect(settings(a.page).getByTestId('settings-sync-folder')).toHaveValue(folder)
   await expect(settings(a.page).getByTestId('settings-sync-status')).toHaveText(SYNCED)
 
@@ -304,9 +311,10 @@ test('AC12: a settings file from #10 without syncFolder loads with sync off and 
   const a = await launch(makeDir('ha'), dataDir)
   await expect(a.page.getByTestId('sidebar')).toBeVisible()
   await expect(a.page.getByTestId('sync-status')).toHaveCount(0)
-  await a.page.getByTestId('settings-open').click()
+  await settingsSection(a.page, 'sync')
   await expect(settings(a.page).getByTestId('settings-sync-folder')).toHaveValue('')
   await expect(settings(a.page).getByTestId('settings-sync-off')).toHaveCount(0)
+  await settingsSection(a.page, 'appearance')
   await expect(settings(a.page).getByTestId('settings-theme-dark')).toBeChecked()
   await expect(settings(a.page).getByTestId('settings-font-size')).toHaveValue('16')
   await expect(settings(a.page).getByTestId('settings-font-family')).toHaveValue('Courier New')

@@ -7,7 +7,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 Configurable shortcuts | done | `27fd188..d41237d` | CLEAN | `src/core/keymap.ts`: SHORTCUT_ACTIONS (back, splitRight, splitDown, closePane, closeCard, settings), SHORTCUT_LABELS, defaultKeymap(platform), fixedShortcuts(platform) (incl. Mod+1…9 → Switch workspace), parseShortcut, formatShortcut, eventKey, matchesShortcut, keymapAction(event, keymap), recordPress, resolveKeymap, shortcutOverrides, readShortcuts, validateShortcuts. Settings.shortcuts?: ShortcutOverrides; parseSettingsFile/validateSettings/createSettingsStore take platform. Renderer: currentKeymap(). Test ids settings-shortcut-<action>, settings-shortcut-reset-<action>, settings-shortcut-error-<action>. macOS defaults written Shift+Cmd+… (D7 order). |
-| S2 No bar | todo | | | |
+| S2 No bar | done | `a6c3f78..1b2c667` | CLEAN | `e2e/card-view.ts`: SHORTCUTS, cardView, expectCardOpen, backToBoard, splitRight, splitDown, closeCard, boardCard, checkOnBoard(page,title,check), expectStatusOnBoard. Card view has no header; `card-view` keeps aria-label=title; `pane-close` is a plain × glyph (S7 swaps to lucide X), hidden via opacity until hover/focus-visible. CardStatusLine still used by CardItem. |
 | S3 Board card and stop button | todo | | | |
 | S4 Activity | todo | | | |
 | S5 Claude Code hooks | todo | | | |

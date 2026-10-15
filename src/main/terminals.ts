@@ -1,5 +1,5 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
-import { accessSync, constants } from 'node:fs'
+import { accessSync, constants, statSync } from 'node:fs'
 import { acknowledgeRequest } from '../core/ack-request'
 import { FlowControl } from '../core/flow-control'
 import {
@@ -189,6 +189,8 @@ export function registerTerminals(
 
 function isExecutableSync(path: string): boolean {
   try {
+    // A directory passes X_OK too, and node-pty would only fail once the shell's exec does.
+    if (!statSync(path).isFile()) return false
     accessSync(path, constants.X_OK)
     return true
   } catch {

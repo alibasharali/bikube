@@ -632,3 +632,15 @@ test('D9: moving between the new-card fields keeps the form; leaving it unchange
   await newCard('agent', 'Claude Code')
   await expect.poll(logLines).toHaveLength(1)
 })
+
+test('D9: Enter in the select creates the card once the type is picked', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('picked')
+  // Title first, then the type: the focus is on the select when Enter is pressed.
+  const select = page.getByTestId('new-card-startup')
+  await select.selectOption({ label: 'Claude Code' })
+  await select.press('Enter')
+  await expectCardOpen(page, 'picked')
+  await expect.poll(logLines).toHaveLength(1)
+})

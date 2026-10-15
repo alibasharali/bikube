@@ -23,8 +23,8 @@ interface NewCardProps {
 
 /**
  * `+ New card` at the end of a column (#4 D4, #5 D9): an inline title with a startup command
- * select next to it, and a `Command` field below for Custom…. Enter in the title or command
- * creates the card at the bottom and opens it, which starts it (D3, D6, #5 D7). Esc cancels;
+ * select next to it, and a `Command` field below for Custom…. Enter in the title, the select or the
+ * command creates the card at the bottom and opens it, which starts it (D3, D6, #5 D7). Esc cancels;
  * leaving the form cancels while the title is empty and the command is the default.
  */
 function NewCard(props: NewCardProps): React.JSX.Element {
@@ -75,10 +75,10 @@ function NewCardForm({
     }
   }
 
-  /** Enter submits from the text fields; Esc cancels from anywhere in the form. */
-  const onKeyDown = (e: React.KeyboardEvent, submits: boolean): void => {
+  /** Enter submits and Esc cancels from anywhere in the form. */
+  const onKeyDown = (e: React.KeyboardEvent): void => {
     const action = editKeyAction(e.key)
-    if (!action || (action === 'submit' && !submits)) return
+    if (!action) return
     e.preventDefault()
     e.stopPropagation()
     if (action === 'submit') submit()
@@ -107,7 +107,7 @@ function NewCardForm({
             setTitle(e.target.value)
             setTitleError(null)
           }}
-          onKeyDown={(e) => onKeyDown(e, true)}
+          onKeyDown={onKeyDown}
         />
         <select
           className="inline-select"
@@ -118,7 +118,8 @@ function NewCardForm({
             setDraft({ ...draft, choice: parseChoice(e.target.value) })
             setCommandError(null)
           }}
-          onKeyDown={(e) => onKeyDown(e, false)}
+          // An open dropdown takes Enter to pick; once picked, Enter here creates the card.
+          onKeyDown={onKeyDown}
         >
           <StartupOptions />
         </select>
@@ -143,7 +144,7 @@ function NewCardForm({
             setDraft({ ...draft, command: e.target.value })
             setCommandError(null)
           }}
-          onKeyDown={(e) => onKeyDown(e, true)}
+          onKeyDown={onKeyDown}
         />
       )}
       {commandError && (

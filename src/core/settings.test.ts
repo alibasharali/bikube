@@ -11,21 +11,23 @@ import {
 describe('parseSettingsFile (#10 D7, AC8)', () => {
   it('replaces the invalid fields with defaults and keeps the valid ones', () => {
     const parsed = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New"}}'
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New"}}',
+      'linux'
     )
     expect(parsed.settings).toEqual({ theme: 'system', fontSize: 13, fontFamily: 'Courier New' })
     expect(parsed.replaced).toEqual(['theme', 'fontSize'])
   })
 
   it('gives all defaults for a file that is not JSON', () => {
-    const parsed = parseSettingsFile('not json')
+    const parsed = parseSettingsFile('not json', 'linux')
     expect(parsed.settings).toEqual(DEFAULT_SETTINGS)
     expect(parsed.rejected).toBe('not JSON')
   })
 
   it('serializes a change to dark as exactly the expected file', () => {
     const { settings } = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New"}}'
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New"}}',
+      'linux'
     )
     expect(serializeSettings({ ...settings, theme: 'dark' })).toBe(
       '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New"}}'
@@ -49,7 +51,8 @@ describe('parseSettingsFile, the rest of D7', () => {
 
   it('keeps a fully valid file as it is', () => {
     const parsed = parseSettingsFile(
-      file({ theme: 'light', fontSize: 16, fontFamily: 'Courier New, monospace' })
+      file({ theme: 'light', fontSize: 16, fontFamily: 'Courier New, monospace' }),
+      'linux'
     )
     expect(parsed).toEqual({
       settings: { theme: 'light', fontSize: 16, fontFamily: 'Courier New, monospace' },
@@ -62,7 +65,7 @@ describe('parseSettingsFile, the rest of D7', () => {
     ['null', 'null'],
     ['a number', '3']
   ])('gives all defaults for %s', (_, text) => {
-    expect(parseSettingsFile(text)).toEqual({
+    expect(parseSettingsFile(text, 'linux')).toEqual({
       settings: DEFAULT_SETTINGS,
       replaced: [],
       rejected: 'not an object'
@@ -70,45 +73,55 @@ describe('parseSettingsFile, the rest of D7', () => {
   })
 
   it.each([2, 0, '1', null])('gives all defaults for version %j', (version) => {
-    const parsed = parseSettingsFile(file({ theme: 'dark' }, version))
+    const parsed = parseSettingsFile(file({ theme: 'dark' }, version), 'linux')
     expect(parsed.settings).toEqual(DEFAULT_SETTINGS)
     expect(parsed.rejected).toBe('unsupported version')
   })
 
   it('gives all defaults when the version is missing', () => {
-    expect(parseSettingsFile('{"settings":{"theme":"dark"}}').settings).toEqual(DEFAULT_SETTINGS)
+    expect(parseSettingsFile('{"settings":{"theme":"dark"}}', 'linux').settings).toEqual(
+      DEFAULT_SETTINGS
+    )
   })
 
   it('gives defaults for every missing field', () => {
-    expect(parseSettingsFile(file({ theme: 'dark' }))).toEqual({
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux')).toEqual({
       settings: { ...DEFAULT_SETTINGS, theme: 'dark' },
       replaced: ['fontSize', 'fontFamily']
     })
-    expect(parseSettingsFile('{"version":1}').replaced).toEqual(['theme', 'fontSize', 'fontFamily'])
+    expect(parseSettingsFile('{"version":1}', 'linux').replaced).toEqual([
+      'theme',
+      'fontSize',
+      'fontFamily'
+    ])
   })
 
   it.each([7, 33, 12.5, '13', null])('replaces font size %j with 13', (fontSize) => {
-    const parsed = parseSettingsFile(file({ theme: 'dark', fontSize, fontFamily: 'Menlo' }))
+    const parsed = parseSettingsFile(
+      file({ theme: 'dark', fontSize, fontFamily: 'Menlo' }),
+      'linux'
+    )
     expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo' })
     expect(parsed.replaced).toEqual(['fontSize'])
   })
 
   it.each([8, 32])('keeps font size %d at the edge of the range', (fontSize) => {
     expect(
-      parseSettingsFile(file({ theme: 'dark', fontSize, fontFamily: 'x' })).settings.fontSize
+      parseSettingsFile(file({ theme: 'dark', fontSize, fontFamily: 'x' }), 'linux').settings
+        .fontSize
     ).toBe(fontSize)
   })
 
   it.each(['Dark', '', 1])('replaces theme %j with system', (theme) => {
-    expect(parseSettingsFile(file({ theme, fontSize: 13, fontFamily: 'x' })).settings.theme).toBe(
-      'system'
-    )
+    expect(
+      parseSettingsFile(file({ theme, fontSize: 13, fontFamily: 'x' }), 'linux').settings.theme
+    ).toBe('system')
   })
 
   it.each([42, 'a'.repeat(201), 'Menlo\nEvil', 'Menlo\u0007'])(
     'replaces font family %j with the default',
     (fontFamily) => {
-      const parsed = parseSettingsFile(file({ theme: 'dark', fontSize: 13, fontFamily }))
+      const parsed = parseSettingsFile(file({ theme: 'dark', fontSize: 13, fontFamily }), 'linux')
       expect(parsed.settings.fontFamily).toBe('Menlo, Consolas, monospace')
       expect(parsed.replaced).toEqual(['fontFamily'])
     }
@@ -117,8 +130,8 @@ describe('parseSettingsFile, the rest of D7', () => {
   it('trims the family, and keeps 200 chars after trimming', () => {
     const long = 'a'.repeat(200)
     expect(
-      parseSettingsFile(file({ theme: 'dark', fontSize: 13, fontFamily: `  ${long}  ` })).settings
-        .fontFamily
+      parseSettingsFile(file({ theme: 'dark', fontSize: 13, fontFamily: `  ${long}  ` }), 'linux')
+        .settings.fontFamily
     ).toBe(long)
   })
 })
@@ -140,7 +153,10 @@ describe('normalizeFontFamily (#10 D4)', () => {
 describe('validateSettings (#10 D6)', () => {
   it('accepts valid settings, keeping only D1 fields and normalizing the family', () => {
     expect(
-      validateSettings({ theme: 'light', fontSize: 16, fontFamily: ' Courier New ', extra: 1 })
+      validateSettings(
+        { theme: 'light', fontSize: 16, fontFamily: ' Courier New ', extra: 1 },
+        'linux'
+      )
     ).toEqual({ theme: 'light', fontSize: 16, fontFamily: 'Courier New' })
   })
 
@@ -152,7 +168,7 @@ describe('validateSettings (#10 D6)', () => {
     { theme: 'dark', fontSize: 13, fontFamily: 'a'.repeat(201) },
     { theme: 'dark', fontSize: 13 }
   ])('rejects %j', (value) => {
-    expect(validateSettings(value)).toBeNull()
+    expect(validateSettings(value, 'linux')).toBeNull()
   })
 })
 
@@ -170,7 +186,8 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
 
   it('keeps an absolute syncFolder next to the other fields', () => {
     const parsed = parseSettingsFile(
-      file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder: '/Users/me/Sync' })
+      file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder: '/Users/me/Sync' }),
+      'linux'
     )
     expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo' })
     expect(parsed.syncFolder).toBe('/Users/me/Sync')
@@ -178,7 +195,8 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
 
   it('loads a #10 file without syncFolder with sync off and its theme and font kept', () => {
     const parsed = parseSettingsFile(
-      file({ theme: 'light', fontSize: 18, fontFamily: 'Courier New' })
+      file({ theme: 'light', fontSize: 18, fontFamily: 'Courier New' }),
+      'linux'
     )
     expect(parsed.settings).toEqual({ theme: 'light', fontSize: 18, fontFamily: 'Courier New' })
     expect(parsed.syncFolder).toBeUndefined()
@@ -189,7 +207,8 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
     'loads syncFolder %j as off, keeping the other fields',
     (syncFolder) => {
       const parsed = parseSettingsFile(
-        file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder })
+        file({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo', syncFolder }),
+        'linux'
       )
       expect(parsed.syncFolder).toBeUndefined()
       expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 16, fontFamily: 'Menlo' })
@@ -208,7 +227,77 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
 
   it('never takes syncFolder from a settings:save payload', () => {
     expect(
-      validateSettings({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo', syncFolder: '/x' })
+      validateSettings(
+        { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', syncFolder: '/x' },
+        'linux'
+      )
     ).toEqual({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo' })
+  })
+})
+
+describe('shortcuts in the settings file (#31 D9, AC8)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+
+  it('reads each shortcut on its own and keeps the theme', () => {
+    const parsed = parseSettingsFile(
+      file({
+        theme: 'dark',
+        fontSize: 13,
+        fontFamily: 'Menlo',
+        shortcuts: { back: 'B', splitRight: 'Ctrl+Alt+R', closePane: 'Ctrl+Alt+R', bogus: 'Ctrl+K' }
+      }),
+      'linux'
+    )
+    expect(parsed.settings).toEqual({ theme: 'dark', fontSize: 13, fontFamily: 'Menlo' })
+    expect(parsed.settings.shortcuts).toBeUndefined()
+    expect(parsed.replaced).toEqual(['shortcuts'])
+  })
+
+  it('keeps the shortcuts that differ from the default and writes only those', () => {
+    const parsed = parseSettingsFile(
+      file({
+        theme: 'dark',
+        fontSize: 13,
+        fontFamily: 'Menlo',
+        shortcuts: { splitRight: 'Ctrl+Alt+R', back: 'Ctrl+Shift+B' }
+      }),
+      'linux'
+    )
+    expect(parsed.settings.shortcuts).toEqual({ splitRight: 'Ctrl+Alt+R' })
+    expect(parsed.replaced).toEqual([])
+    expect(serializeSettings(parsed.settings, '/Sync')).toBe(
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shortcuts":{"splitRight":"Ctrl+Alt+R"},"syncFolder":"/Sync"}}'
+    )
+    expect(serializeSettings({ ...parsed.settings, shortcuts: {} })).toBe(
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo"}}'
+    )
+  })
+
+  it('reads the defaults of the OS it runs on', () => {
+    const parsed = parseSettingsFile(
+      file({
+        theme: 'dark',
+        fontSize: 13,
+        fontFamily: 'Menlo',
+        shortcuts: { splitRight: 'Cmd+D' }
+      }),
+      'darwin'
+    )
+    expect(parsed.settings.shortcuts).toBeUndefined()
+  })
+
+  it('saves a valid set and rejects the whole save for a bad one', () => {
+    const base = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo' }
+    expect(
+      validateSettings(
+        { ...base, shortcuts: { splitRight: 'Ctrl+Alt+R', back: 'Ctrl+Shift+B' } },
+        'linux'
+      )
+    ).toEqual({ ...base, shortcuts: { splitRight: 'Ctrl+Alt+R' } })
+    expect(validateSettings({ ...base, shortcuts: {} }, 'linux')).toEqual(base)
+    expect(validateSettings({ ...base, shortcuts: { back: 'B' } }, 'linux')).toBeNull()
+    expect(
+      validateSettings({ ...base, shortcuts: { back: 'Ctrl+K', closeCard: 'Ctrl+K' } }, 'linux')
+    ).toBeNull()
   })
 })

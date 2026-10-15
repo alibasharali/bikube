@@ -6,6 +6,7 @@ import { KILL_GRACE_MS } from '../core/session-manager'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
+import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
 import { registerSync } from './sync'
@@ -135,6 +136,7 @@ function startApp(): void {
     const closeBoard = registerBoard(socketPath, terminals, sshBoard)
     app.on('will-quit', closeBoard)
     settings.applyTheme()
+    installAppMenu()
     createWindow(settings)
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(settings)

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { isBackShortcut, splitShortcut } from '../../core/card-shortcuts'
+import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import CardStatusLine from './CardStatusLine'
 import CloseCardDialog from './CloseCardDialog'
+import { currentKeymap } from './settings'
 import {
   cardPanes,
   cardTerminals,
@@ -128,25 +129,37 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
 
   const running = runState.kind === 'running'
   const splittable = running && canSplit(layout)
+  const focusedPane = layout.focused
 
-  // Capture phase: works wherever focus is, including the terminal, which swallows the key.
+  // The card's shortcuts (#31 D5). Capture phase: works wherever focus is, including the
+  // terminal, which swallows the key.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const back = isBackShortcut(event, window.drovr.platform)
-      const split = splitShortcut(event, window.drovr.platform)
-      if (!back && !split) return
+      const action = keymapAction(event, currentKeymap())
+      if (action === null || action === 'settings') return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
       if (dialogOpen()) return
       event.preventDefault()
       event.stopPropagation()
-      if (back) onBack()
-      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); a held
-      // shortcut's auto-repeat is swallowed without splitting again.
-      else if (split && splittable && !event.repeat) cardPanes().split(card, split)
+      // A held shortcut's auto-repeat is swallowed without acting again (D7).
+      if (event.repeat) return
+      if (action === 'back') onBack()
+      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
+      else if (action === 'splitRight' || action === 'splitDown') {
+        if (splittable) cardPanes().split(card, action === 'splitRight' ? 'right' : 'down')
+      } else if (action === 'closePane' && focusedPane !== MAIN_PANE) {
+        // An extra pane closes at once (D4); the focus moves to the pane that gets it.
+        cardPanes().close(card.id, focusedPane)
+        focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused))
+      } else if (running) {
+        // Close card, or Close pane in the main pane: the Close confirmation (#7), only while
+        // the card runs.
+        setClosing(true)
+      }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [onBack, card, splittable])
+  }, [onBack, card, splittable, running, focusedPane])
 
   return (
     <section className="card-view" data-testid="card-view" aria-label={card.title}>

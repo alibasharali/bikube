@@ -1,5 +1,15 @@
 import { useId, useRef, useState } from 'react'
 import {
+  SHORTCUT_ACTIONS,
+  SHORTCUT_LABELS,
+  defaultKeymap,
+  recordPress,
+  resolveKeymap,
+  shortcutOverrides,
+  type Keymap,
+  type ShortcutAction
+} from '../../core/keymap'
+import {
   DEFAULT_FONT_FAMILY,
   MAX_FONT_FAMILY_LENGTH,
   THEMES,
@@ -16,7 +26,8 @@ export const SYNC_FOLDER_ERROR = 'Folder not found'
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
 
 /**
- * The Settings dialog (#10 D5): Theme, Font size, Font family and Sync folder (#13 D10). Every
+ * The Settings dialog (#10 D5): Theme, Font size, Font family, Sync folder (#13 D10) and
+ * Shortcuts (#31 D8). Every
  * valid change applies and saves at once; closing applies a typed family, keeps what was applied
  * and drops an invalid font size.
  */
@@ -119,6 +130,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
         />
       </div>
       <SyncFolderField id={syncId} errorId={syncErrorId} />
+      <ShortcutsSection keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)} />
       <div className="modal-actions">
         <button
           type="button"
@@ -239,3 +251,107 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
 }
 
 export default SettingsDialog
+
+/**
+ * The Shortcuts section (#31 D8): each configurable action with its shortcut and a Reset button.
+ * Clicking a field records the next press with Cmd, Ctrl or Alt; Escape (or leaving the field)
+ * stops recording; a press that can't be a shortcut, or is already used, shows why and keeps
+ * recording. A new shortcut or a Reset applies and saves at once, like the dialog's other fields.
+ */
+function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
+  const platform = window.drovr.platform
+  const defaults = defaultKeymap(platform)
+  const id = useId()
+  const [recording, setRecording] = useState<ShortcutAction | null>(null)
+  const [refusal, setRefusal] = useState<string | null>(null)
+
+  const stop = (): void => {
+    setRecording(null)
+    setRefusal(null)
+  }
+  const apply = (action: ShortcutAction, shortcut: string): void => {
+    settingsStore.update({
+      shortcuts: shortcutOverrides({ ...keymap, [action]: shortcut }, platform)
+    })
+  }
+
+  const onKeyDown = (action: ShortcutAction, event: React.KeyboardEvent): void => {
+    if (recording !== action) return
+    const { key, ctrlKey, altKey, metaKey } = event
+    // Tab still moves the focus out of the field, which stops recording.
+    if (key === 'Tab' && !ctrlKey && !altKey && !metaKey) return
+    // The press is the field's alone: it never closes the dialog or reaches anything else.
+    event.preventDefault()
+    event.stopPropagation()
+    const result = recordPress(event.nativeEvent, action, keymap, platform)
+    if (result.kind === 'cancel') stop()
+    else if (result.kind === 'refused') setRefusal(result.message)
+    else if (result.kind === 'set') {
+      apply(action, result.shortcut)
+      stop()
+    }
+  }
+
+  return (
+    <fieldset className="field shortcuts" data-testid="settings-shortcuts">
+      <legend>Shortcuts</legend>
+      {SHORTCUT_ACTIONS.map((action) => {
+        const labelId = `${id}-${action}`
+        const errorId = `${id}-${action}-error`
+        const isRecording = recording === action
+        const error = isRecording ? refusal : null
+        return (
+          <div key={action} className="shortcut-row">
+            <span id={labelId} className="shortcut-label">
+              {SHORTCUT_LABELS[action]}
+            </span>
+            <button
+              type="button"
+              className="shortcut-field"
+              data-testid={`settings-shortcut-${action}`}
+              data-recording={isRecording}
+              aria-labelledby={`${labelId} ${id}-${action}-value`}
+              aria-describedby={error !== null ? errorId : undefined}
+              aria-pressed={isRecording}
+              onClick={() => {
+                setRecording(action)
+                setRefusal(null)
+              }}
+              onKeyDown={(event) => onKeyDown(action, event)}
+              onBlur={() => {
+                if (isRecording) stop()
+              }}
+            >
+              <span id={`${id}-${action}-value`}>
+                {isRecording && error === null ? 'Press a shortcut…' : keymap[action]}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid={`settings-shortcut-reset-${action}`}
+              aria-label={`Reset ${SHORTCUT_LABELS[action]}`}
+              disabled={keymap[action] === defaults[action]}
+              onClick={() => {
+                if (isRecording) stop()
+                apply(action, defaults[action])
+              }}
+            >
+              Reset
+            </button>
+            {error !== null && (
+              <p
+                className="field-error shortcut-error"
+                id={errorId}
+                role="alert"
+                data-testid={`settings-shortcut-error-${action}`}
+              >
+                {error}
+              </p>
+            )}
+          </div>
+        )
+      })}
+    </fieldset>
+  )
+}

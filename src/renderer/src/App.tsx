@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
-import { isSettingsShortcut } from '../../core/card-shortcuts'
+import { keymapAction } from '../../core/keymap'
 import { syncStatusText } from '../../core/sync-status'
 import type { Workspace } from '../../core/workspace-store'
 import { removeWorkspace, startCard } from './card-actions'
@@ -11,6 +11,7 @@ import WorkspaceDialog from './WorkspaceDialog'
 import Board from './Board'
 import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
+import { currentKeymap } from './settings'
 import Sidebar from './Sidebar'
 import { useWorkspaceState, workspaceStore } from './store'
 import { useSyncStatus } from './sync'
@@ -48,12 +49,12 @@ function App(): React.JSX.Element {
   const target =
     dialog && dialog.kind !== 'create' ? workspaces.find((w) => w.id === dialog.id) : undefined
 
-  // Settings (#10 D5): from the sidebar, or Cmd+, / Ctrl+, anywhere. Capture phase, so it works
-  // wherever focus is, including a terminal (which swallows the key too).
+  // Settings (#10 D5): from the sidebar, or its shortcut (#31 D5) anywhere. Capture phase, so it
+  // works wherever focus is, including a terminal (which swallows the key too).
   const [settingsOpen, setSettingsOpen] = useState(false)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!isSettingsShortcut(event, window.drovr.platform)) return
+      if (keymapAction(event, currentKeymap()) !== 'settings') return
       // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()

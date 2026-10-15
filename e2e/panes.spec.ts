@@ -589,3 +589,46 @@ test('AC10: panes are not kept across a restart', async () => {
   expect(saved.version).toBe(1)
   expect(keysOf(saved).filter((key) => /pane|layout|split|focus/i.test(key))).toEqual([])
 })
+
+const CLOSE_PANE = process.platform === 'darwin' ? 'Meta+W' : 'Control+Shift+W'
+const CLOSE_CARD = process.platform === 'darwin' ? 'Meta+Shift+W' : 'Control+Shift+Q'
+
+test('#31 AC3: the shortcuts split, close the focused extra pane, and ask before closing from the main pane', async () => {
+  await openApi()
+  await page.keyboard.press(SPLIT_RIGHT)
+  await expect(panes()).toHaveCount(2)
+  await page.keyboard.press(SPLIT_DOWN)
+  await expect(panes()).toHaveCount(3)
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+  const pid = await shellPid(2)
+
+  await page.keyboard.press(CLOSE_PANE)
+  await expect(panes()).toHaveCount(2)
+  await expect.poll(() => alive(pid)).toBe(false)
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  // The focus goes to another pane, which can be typed into at once.
+  await expect.poll(focusedPaneIndex).not.toBe(-1)
+
+  await panes().nth(0).click()
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  const mainBefore = await screenText(0)
+  await page.keyboard.press(CLOSE_PANE)
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await page.getByTestId('confirm-cancel').click()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect(panes()).toHaveCount(2)
+  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectNoInput(0, mainBefore, 'main')
+})
+
+test('#31 AC4: the Close card shortcut asks, then stops the card with every pane', async () => {
+  await apiWithPanes(2)
+  const pids = await panePids(2)
+  await page.keyboard.press(CLOSE_CARD)
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await page.getByTestId('confirm-close').click()
+
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  for (const pid of pids) await expect.poll(() => alive(pid)).toBe(false)
+})

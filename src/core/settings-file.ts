@@ -21,6 +21,8 @@ export interface SettingsFileOptions {
   /** The directory holding `drovr-settings.json` (Electron's `userData`). */
   dir: string
   fs: StateFileFs
+  /** The OS the app runs on (`process.platform`), whose default shortcuts apply (#31 D6, D9). */
+  platform: string
   log?: (message: string) => void
 }
 
@@ -68,7 +70,7 @@ export class SettingsFile {
    * invalid value.
    */
   save(value: unknown): Settings | null {
-    const checked = validateSettings(value)
+    const checked = validateSettings(value, this.options.platform)
     if (checked === null) return null
     this.load()
     this.latest = checked
@@ -123,7 +125,7 @@ export class SettingsFile {
       if (!isMissing(err)) this.log(`settings file not readable (${String(err)}); using defaults`)
       return { ...DEFAULT_SETTINGS }
     }
-    const parsed = parseSettingsFile(text)
+    const parsed = parseSettingsFile(text, this.options.platform)
     this.folder = parsed.syncFolder ?? null
     if (parsed.rejected) {
       this.log(`settings file ${parsed.rejected}; using defaults`)

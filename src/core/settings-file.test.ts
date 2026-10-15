@@ -52,7 +52,7 @@ class FakeFs implements StateFileFs {
 
 let fs: FakeFs
 const log = vi.fn()
-const open = (): SettingsFile => new SettingsFile({ dir: DIR, fs, log })
+const open = (): SettingsFile => new SettingsFile({ dir: DIR, fs, log, platform: 'linux' })
 
 beforeEach(() => {
   fs = new FakeFs()
@@ -224,5 +224,41 @@ describe('SettingsFile sync folder (#13 D10, AC12)', () => {
       syncFolder: '/sync'
     })
     expect(file.syncFolder()).toBe('/sync')
+  })
+})
+
+describe('shortcuts in SettingsFile (#31 D9, AC6)', () => {
+  it('writes only the changed shortcut, keeps it across a restart, and drops it on reset', () => {
+    const file = open()
+    const loaded = file.load()
+    expect(file.save({ ...loaded, shortcuts: { splitRight: 'Ctrl+Alt+R' } })).toEqual({
+      ...DEFAULT_SETTINGS,
+      shortcuts: { splitRight: 'Ctrl+Alt+R' }
+    })
+    vi.advanceTimersByTime(SETTINGS_SAVE_INTERVAL_MS)
+    expect(JSON.parse(fs.files.get(FILE)!).settings.shortcuts).toEqual({ splitRight: 'Ctrl+Alt+R' })
+
+    const restarted = open()
+    expect(restarted.load().shortcuts).toEqual({ splitRight: 'Ctrl+Alt+R' })
+    restarted.save({ ...restarted.load(), shortcuts: {} })
+    vi.advanceTimersByTime(SETTINGS_SAVE_INTERVAL_MS)
+    expect(JSON.parse(fs.files.get(FILE)!).settings).not.toHaveProperty('shortcuts')
+  })
+
+  it('rejects a save whose shortcuts share one, changing nothing', () => {
+    const file = open()
+    const bad = { ...DEFAULT_SETTINGS, shortcuts: { splitRight: 'Ctrl+Shift+B' } }
+    expect(file.save(bad)).toBeNull()
+    vi.advanceTimersByTime(SETTINGS_SAVE_INTERVAL_MS)
+    expect(fs.events).toEqual([])
+  })
+
+  it('logs shortcuts that fell back when reading', () => {
+    fs.files.set(
+      FILE,
+      JSON.stringify({ version: 1, settings: { ...DEFAULT_SETTINGS, shortcuts: { back: 'B' } } })
+    )
+    expect(open().load()).toEqual(DEFAULT_SETTINGS)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('shortcuts'))
   })
 })

@@ -37,7 +37,8 @@ export function registerSettings(): MainSettings {
   }
   const file = new SettingsFile({
     dir,
-    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync }
+    fs: { readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync },
+    platform: process.platform
   })
   file.load()
 

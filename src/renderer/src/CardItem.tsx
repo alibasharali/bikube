@@ -20,7 +20,7 @@ import { workspaceStore } from './store'
 /**
  * The card's startup command on the board (#5 D12, #21 D5): `Claude` for Claude Code, a preset's
  * tag with its select label as tooltip, `Custom` with the command as its tooltip, nothing for
- * Shell. It follows the setting, not what is running.
+ * Shell. It follows the setting, not what is running, and takes its kind's colour (`--kind`).
  */
 function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
   if (startup.kind === 'shell') return null
@@ -31,7 +31,7 @@ function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element
         ? ['Claude', 'Claude Code']
         : [AGENT_PRESETS[startup.kind].tag, AGENT_PRESETS[startup.kind].label]
   return (
-    <span className="card-tag" data-testid="card-tag" title={title}>
+    <span className="card-tag" data-testid="card-tag" data-kind={startup.kind} title={title}>
       {tag}
     </span>
   )
@@ -140,6 +140,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
       className={dragging ? 'card card-dragging' : 'card'}
       data-testid="card"
       data-card-id={card.id}
+      data-kind={card.startup.kind}
       data-drop={drop}
     >
       {renaming ? (

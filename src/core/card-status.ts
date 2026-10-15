@@ -16,13 +16,25 @@ export function stripEscapes(text: string): string {
   return text.replace(ESCAPES, '')
 }
 
+// Unicode's Private Use Areas, where Nerd Fonts puts its icons and Powerline separators.
+const PRIVATE_USE = /[\uE000-\uF8FF]|[\u{F0000}-\u{10FFFF}]/gu
+
 /**
- * The last non-blank line of the screen at or above the cursor row, with escape sequences
- * removed and whitespace trimmed; empty when there is none. `cursorRow` indexes `lines`.
+ * `text` without Private Use Area glyphs (prompt icons and separators such as starship's, which
+ * only make sense with the terminal's colours), runs of spaces left behind collapsed.
+ */
+export function withoutPromptGlyphs(text: string): string {
+  return text.replace(PRIVATE_USE, ' ').replace(/ {2,}/g, ' ')
+}
+
+/**
+ * The last non-blank line of the screen at or above the cursor row, with escape sequences and
+ * prompt glyphs removed and whitespace trimmed; empty when there is none. `cursorRow` indexes
+ * `lines`.
  */
 export function lastOutputLine(lines: readonly string[], cursorRow: number): string {
   for (let row = Math.min(cursorRow, lines.length - 1); row >= 0; row--) {
-    const text = stripEscapes(lines[row]).trim()
+    const text = withoutPromptGlyphs(stripEscapes(lines[row])).trim()
     if (text) return text
   }
   return ''

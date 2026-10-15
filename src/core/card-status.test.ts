@@ -17,6 +17,17 @@ describe('lastOutputLine (D9)', () => {
     expect(lastOutputLine(screen, 2)).toBe('user@host:~/api$')
   })
 
+  it("drops Nerd Font icons and Powerline separators, keeping the prompt's text", () => {
+    // A starship prompt as the screen holds it: icons and separators from the Private Use Area.
+    const prompt =
+      '\ue0b6\uf179 aliali\ue0b0 \uf07c /\ue0b0\ue0b0\ue0b0\ue0b0 \u{f0954} 22:48 \ue0b4 \u276f'
+    expect(lastOutputLine([prompt], 0)).toBe('aliali / 22:48 \u276f')
+    // A line of only glyphs counts as blank; other symbols and emoji stay.
+    expect(lastOutputLine(['\u2713 128 passed \ud83d\ude80', '\ue0b0\ue0b4'], 1)).toBe(
+      '\u2713 128 passed \ud83d\ude80'
+    )
+  })
+
   it('is empty when there is no output, and clamps the cursor row', () => {
     expect(lastOutputLine([], 0)).toBe('')
     expect(lastOutputLine(['', '  '], 1)).toBe('')

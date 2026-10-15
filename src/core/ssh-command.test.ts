@@ -51,7 +51,8 @@ function remoteDirectory(directory: string, home: string): string {
 describe('remoteCommand (#12 D5)', () => {
   it('cds to the directory, prints the ready marker, then runs the login shell without exec', () => {
     expect(remoteCommand('/srv/api')).toBe(
-      `cd '/srv/api' || exit 255; printf '\\033]6973;drovr-ready\\007'; ` +
+      `cd '/srv/api' || exit 255; DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETTINGS; ` +
+        `printf '\\033]6973;drovr-ready\\007'; ` +
         `"\${SHELL:-/bin/sh}" -l; s=$?; [ $s = 255 ] && s=254; exit $s`
     )
   })
@@ -331,7 +332,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     expect(readFileSync(seen, 'utf8')).toBe(`${odd}\n`)
   })
 
-  it('starts the shell with the card variables but no board when mktemp fails', async () => {
+  it('starts the shell with the card variables, no board and empty Claude settings when mktemp fails', async () => {
     const seen = join(dir, 'seen')
     const login = shell(
       `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "\${DROVR_BIN-unset}" "$PATH" > ${seen}\n` +
@@ -343,7 +344,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     )
     expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
     expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/drovr-none.sock|unset|/usr/bin:/bin`)
-    expect(readFileSync(`${seen}-claude`, 'utf8')).toBe('unset')
+    expect(readFileSync(`${seen}-claude`, 'utf8')).toBe('{}')
   })
 
   it.each([

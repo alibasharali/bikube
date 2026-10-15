@@ -75,7 +75,7 @@ function boardSetup({ cardId, remoteSocket }: RemoteBoard): string {
  * Inside the `board` setup (#31 D14): copies of the Claude settings file and its instruction
  * beside `board`, removed with it, and `DROVR_CLAUDE_SETTINGS` naming the copy. The JSON's
  * backslashes (each `\"` in a hook command) are written as `$b`, a backslash `awk` prints, so
- * the command keeps none (#12 D3). When anything fails the variable stays unset.
+ * the command keeps none (#12 D3). When anything fails the variable keeps `{}` (#31 round 3).
  */
 function claudeSetup(): string {
   const json = claudeSettings().split('\\').map(shellQuote).join(' "$b" ')
@@ -88,6 +88,12 @@ function claudeSetup(): string {
 }
 
 /**
+ * An empty Claude settings JSON, which `claude --settings` accepts: an SSH card whose remote setup
+ * failed, or that has no `board`, still starts Claude, without hooks (#31 round 3).
+ */
+const NO_CLAUDE_SETTINGS = "DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETTINGS; "
+
+/**
  * The command a POSIX remote login shell runs: `cd` to the directory (or exit 255, which shows
  * as SSH failed, D7), print the ready marker, then run the remote user's login shell. The shell
  * is not `exec`ed: its own exit status 255 is reported as 254, so only `ssh` itself or the failed
@@ -96,8 +102,8 @@ function claudeSetup(): string {
  */
 export function remoteCommand(directory: string, board?: RemoteBoard): string {
   const cd = board
-    ? `cd ${remoteDirectory(directory, shellQuote)} || exit 255; ${boardSetup(board)}`
-    : `cd ${remoteDirectory(directory)} || exit 255; `
+    ? `cd ${remoteDirectory(directory, shellQuote)} || exit 255; ${NO_CLAUDE_SETTINGS}${boardSetup(board)}`
+    : `cd ${remoteDirectory(directory)} || exit 255; ${NO_CLAUDE_SETTINGS}`
   return (
     cd +
     `printf '\\033]6973;drovr-ready\\007'; ` +

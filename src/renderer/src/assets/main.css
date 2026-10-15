@@ -3,6 +3,7 @@
   --surface: #1b1d24;
   --surface-raised: #1f2129;
   --surface-hover: #262933;
+  --segment-active: #2c303c;
   --column: #191b21;
   --card: #21232b;
   --card-hover: #262933;
@@ -62,6 +63,7 @@
     --surface: #ffffff;
     --surface-raised: #ffffff;
     --surface-hover: #eceef2;
+    --segment-active: #ffffff;
     --column: #eef0f3;
     --card: #ffffff;
     --card-hover: #ffffff;
@@ -375,19 +377,58 @@ button {
   font-size: var(--text-xs);
 }
 
-.radio-group .radio {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-right: var(--space-4);
-  color: var(--text);
-  font-size: var(--text-md);
+/*
+ * A segmented control: the radios of a group side by side in one rounded track, the chosen one
+ * raised. Each radio stays a real input covering its segment, for the keyboard and screen readers.
+ */
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
 }
 
-.radio-group .radio input {
+.segmented .radio {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.segmented .radio:hover {
+  color: var(--text);
+}
+
+.segmented .radio:has(input:checked) {
+  background: var(--segment-active);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.segmented .radio:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.segmented .radio input {
+  position: absolute;
+  inset: 0;
   margin: 0;
-  padding: 0;
-  accent-color: var(--accent);
+  opacity: 0;
+  cursor: pointer;
 }
 
 .main {

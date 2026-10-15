@@ -1,3 +1,4 @@
+import { Monitor, Moon, Sun, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   SHORTCUT_ACTIONS,
@@ -24,6 +25,7 @@ import type { ShellChoices } from '../../shared/api'
 import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import { ghosttyStore, useGhosttyTheme } from './ghostty'
+import { SMALL_ICON } from './icons'
 import Modal from './Modal'
 import { settingsStore, useSettings } from './settings'
 import ThemePicker from './ThemePicker'
@@ -32,6 +34,7 @@ import { useSyncStatus } from './sync'
 export const SYNC_FOLDER_ERROR = 'Folder not found'
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
+const THEME_ICONS: Record<Theme, LucideIcon> = { system: Monitor, dark: Moon, light: Sun }
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
@@ -111,19 +114,25 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
     >
       <fieldset className="field radio-group">
         <legend>Theme</legend>
-        {THEMES.map((theme) => (
-          <label key={theme} className="radio">
-            <input
-              type="radio"
-              name={`${id}-theme`}
-              value={theme}
-              data-testid={`settings-theme-${theme}`}
-              checked={settings.theme === theme}
-              onChange={() => settingsStore.update({ theme })}
-            />
-            {THEME_LABELS[theme]}
-          </label>
-        ))}
+        <div className="segmented">
+          {THEMES.map((theme) => {
+            const Icon = THEME_ICONS[theme]
+            return (
+              <label key={theme} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-theme`}
+                  value={theme}
+                  data-testid={`settings-theme-${theme}`}
+                  checked={settings.theme === theme}
+                  onChange={() => settingsStore.update({ theme })}
+                />
+                <Icon {...SMALL_ICON} />
+                {THEME_LABELS[theme]}
+              </label>
+            )
+          })}
+        </div>
       </fieldset>
       <div className="field">
         <label htmlFor={sizeId}>Font size</label>

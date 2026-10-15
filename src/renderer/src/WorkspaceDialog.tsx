@@ -1,3 +1,4 @@
+import { Laptop, Server, type LucideIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 import {
   applyDirectory,
@@ -13,6 +14,7 @@ import {
 import { SHELL_STARTUP, checkStartup } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
 import type { Workspace } from '../../core/workspace-store'
+import { SMALL_ICON } from './icons'
 import Modal from './Modal'
 import StartupField from './StartupField'
 import { workspaceStore } from './store'
@@ -25,9 +27,9 @@ interface WorkspaceDialogProps {
 }
 
 /** The Location choice (#12 D4), `This computer` first as the default. */
-const LOCATIONS: [WorkspaceLocation, string][] = [
-  ['local', 'This computer'],
-  ['ssh', 'SSH']
+const LOCATIONS: [WorkspaceLocation, string, LucideIcon][] = [
+  ['local', 'This computer', Laptop],
+  ['ssh', 'SSH', Server]
 ]
 
 function WorkspaceDialog({
@@ -118,22 +120,25 @@ function WorkspaceDialog({
       <form onSubmit={(e) => void submit(e)} noValidate>
         <fieldset className="field radio-group">
           <legend>Location</legend>
-          {LOCATIONS.map(([location, label]) => (
-            <label key={location} className="radio">
-              <input
-                type="radio"
-                name={`${id}-location`}
-                value={location}
-                data-testid={`workspace-location-${location}`}
-                checked={(draft.location ?? 'local') === location}
-                onChange={() => {
-                  setDraft(applyLocation(draft, location))
-                  setErrors({ ...errors, directory: undefined, host: undefined })
-                }}
-              />
-              {label}
-            </label>
-          ))}
+          <div className="segmented">
+            {LOCATIONS.map(([location, label, Icon]) => (
+              <label key={location} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-location`}
+                  value={location}
+                  data-testid={`workspace-location-${location}`}
+                  checked={(draft.location ?? 'local') === location}
+                  onChange={() => {
+                    setDraft(applyLocation(draft, location))
+                    setErrors({ ...errors, directory: undefined, host: undefined })
+                  }}
+                />
+                <Icon {...SMALL_ICON} />
+                {label}
+              </label>
+            ))}
+          </div>
         </fieldset>
         {ssh && (
           <div className="field">

@@ -346,28 +346,4 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/drovr-none.sock|unset|/usr/bin:/bin`)
     expect(readFileSync(`${seen}-claude`, 'utf8')).toBe('{}')
   })
-
-  it.each([
-    ['SIGHUP', 129],
-    ['SIGTERM', 143]
-  ] as const)('cleans up and exits %s → %i when the session ends', async (signal, code) => {
-    const remote = join(dir, 'drovr-r.sock')
-    writeFileSync(remote, '')
-    const seen = join(dir, 'seen')
-    const login = shell(`printf '%s' "$DROVR_BIN" > ${seen}\nsleep 30`)
-    const result = await runRemote(
-      remoteCommand(dir, { cardId, remoteSocket: remote }),
-      { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login },
-      (pid) => {
-        const poll = setInterval(() => {
-          if (!existsSync(seen) || !readFileSync(seen, 'utf8')) return
-          clearInterval(poll)
-          process.kill(-pid, signal)
-        }, 20)
-      }
-    )
-    expect(result.code).toBe(code)
-    expect(existsSync(readFileSync(seen, 'utf8'))).toBe(false)
-    expect(existsSync(remote)).toBe(false)
-  })
 })

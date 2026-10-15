@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { claudeLogLines } from './fake-claude'
+import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -412,7 +412,7 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
   await expect(card('custom').getByTestId('card-tag')).toHaveText('Custom')
   await openCard('agent')
-  await expect.poll(bufferLines).toContain(`fake-claude --resume ${u}`)
-  expect(claudeLogLines(claudeLog)).toEqual([`--resume ${u}`])
+  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --resume ${u}`)
+  expect(claudeLogLines(claudeLog)).toEqual([`${SETTINGS_ARGS} --resume ${u}`])
   expect(logLines()).toEqual([])
 })

@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { claudeLogLines, fakeClaudeHome } from './fake-claude'
+import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS } from './fake-claude'
 import {
   backToBoard,
   closeCard,
@@ -384,7 +384,9 @@ test('AC3: an extra pane of a Claude Code card is a plain shell', async () => {
   await expectCardOpen(page, 'agent')
   await expect.poll(() => claudeLogLines(fake.log)).toHaveLength(1)
   await expect
-    .poll(async () => (await bufferLines(0)).some((l) => l.startsWith('fake-claude --session-id')))
+    .poll(async () =>
+      (await bufferLines(0)).some((l) => l.startsWith(`fake-claude ${SETTINGS_ARGS} --session-id`))
+    )
     .toBe(true)
 
   await splitRight(page)

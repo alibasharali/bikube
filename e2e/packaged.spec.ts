@@ -5,11 +5,13 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { CLAUDE_INSTRUCTION, claudeSettings } from '../src/core/claude-hooks'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
@@ -50,6 +52,14 @@ test('AC4: the unpacked app has an executable board wrapper and the unpacked CLI
   expect(statSync(board).isFile()).toBe(true)
   expect(() => accessSync(board, constants.X_OK)).not.toThrow()
   expect(existsSync(join(resources, 'app.asar.unpacked', 'out', 'main', 'board-cli.js'))).toBe(true)
+})
+
+test('#31 AC12: the Claude settings file and its instruction ship beside board, outside the asar', () => {
+  const settings = readFileSync(join(resources, 'bin', 'claude-settings.json'), 'utf8')
+  expect(settings).toBe(claudeSettings())
+  expect(readFileSync(join(resources, 'bin', 'claude-instruction.txt'), 'utf8')).toBe(
+    `${CLAUDE_INSTRUCTION}\n`
+  )
 })
 
 test('AC4: the packaged app opens, makes a workspace and a card, and board status shows on it', async () => {

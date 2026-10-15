@@ -33,4 +33,10 @@ describe('boardShellEnv', () => {
     expect(boardShellEnv({ ...paths, cardId: 'c1', path: undefined }).PATH).toBe('/app/bin')
     expect(boardShellEnv({ ...paths, cardId: 'c1', path: '' }).PATH).toBe('/app/bin')
   })
+
+  it("names Drovr's Claude settings file in the bin directory (#31 D14)", () => {
+    expect(boardShellEnv({ ...paths, cardId: 'c1', path: '/bin' }).DROVR_CLAUDE_SETTINGS).toBe(
+      '/app/bin/claude-settings.json'
+    )
+  })
 })

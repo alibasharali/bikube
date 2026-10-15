@@ -17,7 +17,7 @@ import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addFakeAgents, agentLogLines } from './fake-agents'
-import { claudeLogLines } from './fake-claude'
+import { claudeLogLines, REMOTE_SETTINGS_ARGS, SETTINGS_ARGS } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards } from './fake-ssh'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -522,13 +522,16 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
   await card(b.page, 'local').getByTestId('card-open').click()
   await expect
     .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
-    .toEqual([`--session-id ${id('local')}`])
+    .toEqual([`${SETTINGS_ARGS} --session-id ${id('local')}`])
   await backToBoard(b.page)
   await selectWorkspace(b.page, 'remote')
   await card(b.page, 'ssh').getByTestId('card-open').click()
   await expect
     .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
-    .toEqual([`--session-id ${id('local')}`, `--resume ${id('ssh')}`])
+    .toEqual([
+      `${SETTINGS_ARGS} --session-id ${id('local')}`,
+      expect.stringMatching(new RegExp(`^${REMOTE_SETTINGS_ARGS} --resume ${id('ssh')}$`))
+    ])
 })
 
 /** The open card's terminal buffer on `page`, one trimmed string per line, wrapped lines joined. */

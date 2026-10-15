@@ -14,6 +14,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardReply } from './board-protocol'
 import { startBoardServer, type BoardServer } from './board-server'
+import {
+  CLAUDE_INSTRUCTION,
+  CLAUDE_INSTRUCTION_FILE,
+  CLAUDE_SETTINGS_FILE,
+  claudeSettings
+} from './claude-hooks'
 import { shellQuote } from './remote-board'
 import { READY_MARKER, remoteCommand, sshShellLine } from './ssh-command'
 
@@ -292,6 +298,27 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     expect(existsSync(remote)).toBe(false)
   })
 
+  it('writes the Claude settings and instruction beside board, exports the path, removes them (#31 D14)', async () => {
+    const seen = join(dir, 'seen')
+    const copies = join(dir, 'copies')
+    const login = shell(
+      `printf '%s|%s' "$DROVR_BIN" "$DROVR_CLAUDE_SETTINGS" > ${seen}\n` +
+        `cat "$DROVR_CLAUDE_SETTINGS" > ${copies}.json\n` +
+        `cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" > ${copies}.txt`
+    )
+    const result = await runRemote(
+      remoteCommand(dir, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login }
+    )
+    expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
+    const [bin, settings] = readFileSync(seen, 'utf8').split('|')
+    expect(settings).toBe(`${bin}/${CLAUDE_SETTINGS_FILE}`)
+    expect(readFileSync(`${copies}.json`, 'utf8')).toBe(claudeSettings())
+    expect(readFileSync(`${copies}.txt`, 'utf8')).toBe(`${CLAUDE_INSTRUCTION}\n`)
+    expect(existsSync(settings)).toBe(false)
+    expect(existsSync(bin)).toBe(false)
+  })
+
   it("cds into a directory with quotes in its name and still reports the shell's 255 as 254", async () => {
     const odd = join(dir, `it's "odd" $x`)
     mkdirSync(odd)
@@ -307,7 +334,8 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
   it('starts the shell with the card variables but no board when mktemp fails', async () => {
     const seen = join(dir, 'seen')
     const login = shell(
-      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "\${DROVR_BIN-unset}" "$PATH" > ${seen}`
+      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "\${DROVR_BIN-unset}" "$PATH" > ${seen}\n` +
+        `printf %s "\${DROVR_CLAUDE_SETTINGS-unset}" > ${seen}-claude`
     )
     const result = await runRemote(
       remoteCommand(dir, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
@@ -315,6 +343,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     )
     expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
     expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/drovr-none.sock|unset|/usr/bin:/bin`)
+    expect(readFileSync(`${seen}-claude`, 'utf8')).toBe('unset')
   })
 
   it.each([

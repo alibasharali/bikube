@@ -10,10 +10,11 @@ import {
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
+import { claudeSettings } from '../src/core/claude-hooks'
 import { addFakeAgents, agentLogLines } from './fake-agents'
-import { claudeLogLines } from './fake-claude'
+import { claudeLogLines, REMOTE_SETTINGS_ARGS } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, sshLogLines, type FakeSshHome } from './fake-ssh'
 import {
   backToBoard,
@@ -534,7 +535,7 @@ test('AC5: the startup command is typed once, after the ready marker', async () 
   await expectCardOpen(page, 'agent')
   await expect.poll(() => claudeLogLines(fake.log), { timeout: 15_000 }).toHaveLength(1)
   const [line] = claudeLogLines(fake.log)
-  expect(line).toMatch(/^--session-id [0-9a-f-]{36}$/)
+  expect(line).toMatch(new RegExp(`^${REMOTE_SETTINGS_ARGS} --session-id [0-9a-f-]{36}$`))
   const screen = (await bufferLines()).join('\n')
   const password = screen.indexOf('Password:')
   expect(password).toBeGreaterThanOrEqual(0)
@@ -544,6 +545,27 @@ test('AC5: the startup command is typed once, after the ready marker', async () 
   expect(claudeLogLines(fake.log)).toHaveLength(1)
   await back()
   await expect(card('agent').getByTestId('card-status-line')).not.toContainText('drovr-ready')
+})
+
+test("#31 AC12: an SSH card's claude gets a copy of the settings in its private directory, removed after", async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('agent', 'Claude Code')
+  await expectCardOpen(page, 'agent')
+  await expect.poll(() => claudeLogLines(fake.log), { timeout: 15_000 }).toHaveLength(1)
+  const [line] = claudeLogLines(fake.log)
+  expect(line).toMatch(new RegExp(`^${REMOTE_SETTINGS_ARGS} --session-id [0-9a-f-]{36}$`))
+  const path = line.split(' ')[1]
+  // Beside the session's board script, the same file as the local one.
+  expect(existsSync(join(dirname(path), 'board'))).toBe(true)
+  expect(readFileSync(path, 'utf8')).toBe(claudeSettings())
+  // Quit the fake claude, then end the session: the directory and its copy are gone.
+  await page.keyboard.press('Enter')
+  await connected()
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect.poll(() => existsSync(path)).toBe(false)
+  expect(existsSync(dirname(path))).toBe(false)
 })
 
 test('#21 AC8: a Codex card types codex once, after the ready marker, and resumes on reopen', async () => {

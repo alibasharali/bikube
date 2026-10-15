@@ -1,0 +1,61 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROVR_BIN/board\" activity . working >/dev/null 2>&1; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "a=working; case $(cat) in *'\"tool_name\":\"AskUserQuestion\"'*|*'\"tool_name\": \"AskUserQuestion\"'*) a=question;; esac; \"$DROVR_BIN/board\" activity . $a >/dev/null 2>&1; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROVR_BIN/board\" activity . question >/dev/null 2>&1; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$DROVR_BIN/board\" activity . waiting >/dev/null 2>&1; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

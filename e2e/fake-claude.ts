@@ -1,12 +1,38 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+
+/** The Claude settings file a local card's `claude` gets in the built app (#31 D14). */
+export const LOCAL_CLAUDE_SETTINGS = resolve(
+  __dirname,
+  '..',
+  'resources',
+  'bin',
+  'claude-settings.json'
+)
+
+/** What a local Claude Code card's `claude` receives before its session flags (#31 D14). */
+export const SETTINGS_ARGS = `--settings ${LOCAL_CLAUDE_SETTINGS}`
+
+/**
+ * A regular expression's source for what an SSH card's `claude` receives before its session flags:
+ * the copy in the session's private directory (#31 D14).
+ */
+export const REMOTE_SETTINGS_ARGS = String.raw`--settings /\S*/drovr\.[A-Za-z0-9]{8}/claude-settings\.json`
+
+/** The line a Claude Code card types the first time (#31 D14). */
+export const claudeFirstLine = (id: string): string =>
+  `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${id}`
+
+/** The line a Claude Code card types once started (#5 D5, #31 D14). */
+export const claudeResumeLine = (id: string): string =>
+  `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${id} || ${claudeFirstLine(id)}`
 
 // The fake `claude` of #5's smoke tests: it logs its arguments to $DROVR_CLAUDE_LOG, prints
 // them, and waits on stdin. With FAKE_CLAUDE_RESUME_FAILS=1 a `--resume` run fails at once.
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$*" >> "$DROVR_CLAUDE_LOG"
 echo "fake-claude $*"
-if [ "$1" = "--resume" ] && [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ]; then exit 1; fi
+case " $* " in *" --resume "*) [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ] && exit 1 ;; esac
 read -r _
 exit 0
 `

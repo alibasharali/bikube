@@ -10,7 +10,8 @@ asarUnpack:
   # The `board` CLI runs as plain Node from real files (#9 D4).
   - out/main/board-cli.js
   - out/main/chunks/**
-# The `board` wrapper, put first on PATH in every card's shell (#9 D3, D4).
+# The `board` wrapper, put first on PATH in every card's shell (#9 D3, D4), and the Claude
+# settings file and instruction beside it (#31 D14).
 extraResources:
   - from: resources/bin
     to: bin

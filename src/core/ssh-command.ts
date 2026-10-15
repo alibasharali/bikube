@@ -3,6 +3,12 @@
  * `exec ssh -t -- <host> <remote command>`, built here from the card's host and directory, both
  * re-checked by D2 and D3. The renderer never sends a command. Plain TS, no Node imports.
  */
+import {
+  CLAUDE_INSTRUCTION,
+  CLAUDE_INSTRUCTION_FILE,
+  CLAUDE_SETTINGS_FILE,
+  claudeSettings
+} from './claude-hooks'
 import { remoteBoardScript, shellQuote } from './remote-board'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 
@@ -60,7 +66,24 @@ function boardSetup({ cardId, remoteSocket }: RemoteBoard): string {
     `trap ${shellQuote(`${CLEANUP}; exit 143`)} TERM; ` +
     'd=$( (umask 077 && mktemp -d "${TMPDIR:-/tmp}/drovr.XXXXXXXX") 2>/dev/null) || d=; ' +
     `if [ -n "$d" ] && printf %s ${shellQuote(remoteBoardScript())} >"$d/board" 2>/dev/null && ` +
-    'chmod 700 "$d/board" 2>/dev/null; then DROVR_BIN=$d; PATH=$d:$PATH; export DROVR_BIN PATH; fi; '
+    'chmod 700 "$d/board" 2>/dev/null; then DROVR_BIN=$d; PATH=$d:$PATH; export DROVR_BIN PATH; ' +
+    `${claudeSetup()}fi; `
+  )
+}
+
+/**
+ * Inside the `board` setup (#31 D14): copies of the Claude settings file and its instruction
+ * beside `board`, removed with it, and `DROVR_CLAUDE_SETTINGS` naming the copy. The JSON's
+ * backslashes (each `\"` in a hook command) are written as `$b`, a backslash `awk` prints, so
+ * the command keeps none (#12 D3). When anything fails the variable stays unset.
+ */
+function claudeSetup(): string {
+  const json = claudeSettings().split('\\').map(shellQuote).join(' "$b" ')
+  return (
+    `b=$(awk ${shellQuote('BEGIN { printf "%c", 92 }')} 2>/dev/null) || b=; ` +
+    `if [ -n "$b" ] && printf %s ${json} >"$d/${CLAUDE_SETTINGS_FILE}" 2>/dev/null && ` +
+    `printf %s ${shellQuote(`${CLAUDE_INSTRUCTION}\n`)} >"$d/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
+    `then DROVR_CLAUDE_SETTINGS=$d/${CLAUDE_SETTINGS_FILE}; export DROVR_CLAUDE_SETTINGS; fi; `
   )
 }
 

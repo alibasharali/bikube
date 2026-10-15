@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, closeCard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
-import { claudeLogLines, fakeClaudeHome } from './fake-claude'
+import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS, claudeResumeLine } from './fake-claude'
 
 // Close card (#7): from the card menu and the full-size view (its shortcut, #31), with a
 // confirmation; the card stays where it is as Stopped and resumes when opened. Electron runs
@@ -271,9 +271,9 @@ test('AC4: a closed card resumes with its startup command when opened again', as
   await newCard('Backlog', 'agent', 'Claude Code')
   await expect.poll(logLines).toHaveLength(1)
   const [first] = logLines()
-  expect(first).toMatch(/^--session-id /)
-  const u = first.slice('--session-id '.length)
-  await expect.poll(bufferLines).toContain(`fake-claude --session-id ${u}`)
+  expect(first.startsWith(`${SETTINGS_ARGS} --session-id `)).toBe(true)
+  const u = first.slice(`${SETTINGS_ARGS} --session-id `.length)
+  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
   await back()
 
   await menuClose('agent')
@@ -281,10 +281,10 @@ test('AC4: a closed card resumes with its startup command when opened again', as
   await expect(status('agent')).toHaveText('Stopped')
 
   await openCard('agent')
-  const resume = `claude --resume ${u} || claude --session-id ${u}`
-  await expect.poll(bufferLines).toContain(`fake-claude --resume ${u}`)
+  const resume = claudeResumeLine(u)
+  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --resume ${u}`)
   expect((await bufferLines()).some((l) => l.endsWith(resume))).toBe(true)
-  expect(logLines().at(-1)).toBe(`--resume ${u}`)
+  expect(logLines().at(-1)).toBe(`${SETTINGS_ARGS} --resume ${u}`)
   await back()
 
   // A closed Shell card opened again runs a new shell in the card's directory.

@@ -48,7 +48,8 @@ export function checkStartup(startup: StartupCommand): Result<StartupCommand> {
 /**
  * The line to type into a freshly started shell, without the trailing Enter (`\r`, #5 D3),
  * or null when nothing is typed (Shell, or Claude Code with an agent session id that is not a
- * UUID, since the id is typed unquoted). An agent preset types its plain command until the card
+ * UUID, since the id is typed unquoted). Claude Code gets Drovr's hooks with
+ * `--settings "$DROVR_CLAUDE_SETTINGS"` (#31 D14), a variable every card's shell has. An agent preset types its plain command until the card
  * has started it, then `<resume> || <plain>` (#21 D2). Writing a first-start line is what the
  * caller then records (`firstStart`).
  */
@@ -59,9 +60,10 @@ export function startLine(card: StartupState): string | null {
     case 'claude': {
       const id = card.agentSessionId
       if (!UUID.test(id)) return null
+      const claude = `claude --settings "$DROVR_CLAUDE_SETTINGS"`
       return card.claudeStarted
-        ? `claude --resume ${id} || claude --session-id ${id}`
-        : `claude --session-id ${id}`
+        ? `${claude} --resume ${id} || ${claude} --session-id ${id}`
+        : `${claude} --session-id ${id}`
     }
     case 'custom':
       return card.startup.command

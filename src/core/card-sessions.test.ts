@@ -259,7 +259,7 @@ describe('CardSessions', () => {
     await vi.advanceTimersByTimeAsync(0)
     screens.get('c1')!.type('y')
     expect(api.writes).toEqual([
-      ['s1', `claude --session-id ${UUID}\r`],
+      ['s1', `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`],
       ['s1', 'x'],
       ['s1', 'y']
     ])
@@ -271,7 +271,13 @@ describe('CardSessions', () => {
     sessions.start(card('c1', '/tmp/a', { kind: 'claude' }, true), claudeStarted)
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(api.writes).toEqual([['s1', `claude --resume ${UUID} || claude --session-id ${UUID}\r`]])
+    expect(api.writes).toEqual([
+      [
+        's1',
+        `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID} || ` +
+          `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`
+      ]
+    ])
     expect(claudeStarted).not.toHaveBeenCalled()
   })
 
@@ -730,7 +736,9 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     expect(api.writes).toEqual([])
     expect(claudeStarted).not.toHaveBeenCalled()
     api.emitData('s1', '-ready\x07$ ')
-    expect(api.writes).toEqual([['s1', `claude --session-id ${UUID}\r`]])
+    expect(api.writes).toEqual([
+      ['s1', `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`]
+    ])
     expect(claudeStarted).toHaveBeenCalledTimes(1)
     api.emitData('s1', READY_MARKER)
     expect(api.writes).toHaveLength(1)

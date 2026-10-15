@@ -14,6 +14,9 @@ asarUnpack:
 extraResources:
   - from: resources/bin
     to: bin
+  # Licences of the bundled themes and symbols font.
+  - from: THIRD_PARTY_NOTICES
+    to: THIRD_PARTY_NOTICES
 mac:
   category: public.app-category.developer-tools
   target:

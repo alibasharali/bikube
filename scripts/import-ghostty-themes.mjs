@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds src/core/ghostty-themes.json from a directory of Ghostty theme files (Ghostty's
-// `themes`, from iTerm2-Color-Schemes, MIT). Usage: node scripts/import-ghostty-themes.mjs <dir>
+// `themes`, from iTerm2-Color-Schemes; keep THIRD_PARTY_NOTICES current). Usage: node scripts/import-ghostty-themes.mjs <dir>
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS, no types to declare */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

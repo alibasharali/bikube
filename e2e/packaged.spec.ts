@@ -51,6 +51,10 @@ test('AC4: the unpacked app has an executable board wrapper and the unpacked CLI
   expect(existsSync(join(resources, 'app.asar.unpacked', 'out', 'main', 'board-cli.js'))).toBe(true)
 })
 
+test('the unpacked app ships the third-party notices', () => {
+  expect(statSync(join(resources, 'THIRD_PARTY_NOTICES')).isFile()).toBe(true)
+})
+
 test('AC4: the packaged app opens, makes a workspace and a card, and board status shows on it', async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-packaged-'))
   const dir = join(root, 'alpha')

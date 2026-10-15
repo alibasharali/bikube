@@ -19,3 +19,7 @@ Inside a card's terminal, the agent (or you) can update the board:
 - `board status <card> <text>` shows a short status line on a running card; `""` clears it.
 
 `<card>` is a card's title or id in the same workspace, or `.` for the card you are in. `board` works only inside a Drovr card: Drovr puts it on the card's PATH, so there is nothing to install. If a shell profile reorders PATH (macOS `path_helper` in a login shell), `"$DROVR_BIN/board"` calls it whatever PATH says. `board help` prints the usage.
+
+## Third-party notices
+
+Drovr bundles terminal colour themes from iTerm2-Color-Schemes and the Symbols Nerd Font. Their licences are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES), which also ships inside the app.

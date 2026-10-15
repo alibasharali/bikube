@@ -1,6 +1,6 @@
 /**
  * The terminal colour themes to pick from: Drovr's own two palettes and every theme Ghostty ships
- * (from iTerm2-Color-Schemes, MIT; `scripts/import-ghostty-themes.mjs` builds the JSON). Plain TS.
+ * (from iTerm2-Color-Schemes, licence in THIRD_PARTY_NOTICES; `scripts/import-ghostty-themes.mjs` builds the JSON). Plain TS.
  */
 import GHOSTTY_THEMES from './ghostty-themes.json'
 import { ANSI_COLOUR_NAMES, TERMINAL_PALETTES, type TerminalPalette } from './terminal-palette'

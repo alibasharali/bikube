@@ -331,12 +331,15 @@ async function dragOver(title: string, target: Locator, y = 0.5): Promise<void> 
   await page.mouse.move(to.x + to.width / 2, to.y + to.height * y, { steps: 10 })
 }
 
-/** Widens the window so every default column is on screen: a drag doesn't scroll the board. */
+/**
+ * Widens the window so every default column (300 px since #31 D11) is on screen: a drag doesn't
+ * scroll the board.
+ */
 async function showAllColumns(): Promise<void> {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 800))
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1800, 800))
   await expect
     .poll(() => column('Done').evaluate((el) => el.getBoundingClientRect().right))
-    .toBeLessThan(1500)
+    .toBeLessThan(1700)
 }
 
 /** Drags a card onto `target` at `y` (see `dragOver`) and releases it there. */

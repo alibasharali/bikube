@@ -148,7 +148,7 @@ describe('CardSessions', () => {
     expect(api.spawns).toHaveLength(1)
     expect(api.spawns[0]).toMatchObject({ cols: 80, rows: 24, cwd: '/tmp/alpha' })
     expect(sessions.screen('c1')).toBe(screens.get('c1'))
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '' })
   })
 
   it("sends the card's id with the spawn, so its shell knows its card (#9 D3)", () => {
@@ -171,7 +171,7 @@ describe('CardSessions', () => {
     const seen: string[] = []
     sessions.subscribe('c1', () => seen.push(sessions.status('c1')!.lastLine))
     api.emitData('s1', 'first')
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'first' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: 'first' })
     api.emitData('s1', '\r\nsecond')
     api.emitData('s1', '\r\nthird')
     expect(seen).toEqual(['first'])
@@ -207,7 +207,7 @@ describe('CardSessions', () => {
     sessions.subscribe('c1', listener)
     const screen = screens.get('c1')!
     api.emitExit({ id: 's1', exitCode: 3 })
-    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', agentStatus: '', lastLine: '' })
     expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
     expect(listener).toHaveBeenCalled()
     expect(screen.disposed).toBe(true)
@@ -232,7 +232,7 @@ describe('CardSessions', () => {
     expect(api.spawns).toHaveLength(2)
     expect(api.spawns[1].cwd).toBe('/tmp/alpha')
     expect(sessions.runState('c1')).toEqual({ kind: 'running' })
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '' })
     expect(listener).toHaveBeenCalled()
     api.emitData('s2', 'new')
     api.emitData('s1', 'stale')
@@ -327,6 +327,7 @@ describe('CardSessions', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(sessions.status('c1')).toEqual({
       label: "Couldn't start: working directory not found",
+      agentStatus: '',
       lastLine: ''
     })
     expect(sessions.runState('c1')).toEqual({
@@ -409,7 +410,7 @@ describe('CardSessions', () => {
     expect(sessions.screen('c1')).toBe(screens.get('c1'))
     api.emitExit({ id: 's1', exitCode: 0 })
     expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
-    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', agentStatus: '', lastLine: '' })
     expect(listener).toHaveBeenCalled()
   })
   it('close leaves an unknown, Stopped or failed card as it is (#7 D1)', async () => {
@@ -588,24 +589,32 @@ describe('onEnded (#11 D1, D6)', () => {
 })
 
 describe('agent status (#9 D8)', () => {
-  it('shows in place of the last output line while running, even after more output', async () => {
+  it('shows beside the last output line while running, even after more output (#31 D11)', async () => {
     await started('c1', { ok: true, id: 's1' })
     api.emitData('s1', 'first')
     const listener = vi.fn()
     sessions.subscribe('c1', listener)
     expect(sessions.setAgentStatus('c1', 'running tests')).toBe(true)
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'running tests' })
+    expect(sessions.status('c1')).toEqual({
+      label: 'Running',
+      agentStatus: 'running tests',
+      lastLine: 'first'
+    })
     expect(listener).toHaveBeenCalled()
     api.emitData('s1', '\r\nmore')
     await vi.advanceTimersByTimeAsync(1000)
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'running tests' })
+    expect(sessions.status('c1')).toEqual({
+      label: 'Running',
+      agentStatus: 'running tests',
+      lastLine: 'more'
+    })
   })
-  it('empty text clears it, and the last output line shows again', async () => {
+  it('empty text clears it, and the last output line stays', async () => {
     await started('c1', { ok: true, id: 's1' })
     api.emitData('s1', 'first')
     sessions.setAgentStatus('c1', 'running tests')
     expect(sessions.setAgentStatus('c1', '')).toBe(true)
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: 'first' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: 'first' })
   })
 
   it('cannot be set on a Stopped, failed or unknown card', async () => {
@@ -615,17 +624,17 @@ describe('agent status (#9 D8)', () => {
     expect(sessions.setAgentStatus('c1', 'hi')).toBe(false)
     expect(sessions.setAgentStatus('c2', 'hi')).toBe(false)
     expect(sessions.setAgentStatus('ghost', 'hi')).toBe(false)
-    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', agentStatus: '', lastLine: '' })
   })
 
   it('is cleared when the process stops, and stays cleared when it starts again', async () => {
     await started('c1', { ok: true, id: 's1' })
     sessions.setAgentStatus('c1', 'running tests')
     api.emitExit({ id: 's1', exitCode: 0 })
-    expect(sessions.status('c1')).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Stopped', agentStatus: '', lastLine: '' })
     await started('c1', { ok: true, id: 's2' })
     api.emitData('s2', '$ ')
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '$' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '$' })
   })
 
   it('is cleared when a start fails', async () => {
@@ -634,7 +643,7 @@ describe('agent status (#9 D8)', () => {
     api.spawns[0].resolve({ ok: false, reason: 'no such directory' })
     await vi.advanceTimersByTimeAsync(0)
     sessions.start(card('c1'))
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '' })
   })
 })
 
@@ -735,13 +744,14 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     })
     expect(sessions.status('c1')).toEqual({
       label: 'SSH failed: ssh: Could not resolve hostname x: Name or service not known',
+      agentStatus: '',
       lastLine: ''
     })
     expect(sessions.screen('c1')).toBeUndefined()
     // Opening it again starts it again, like a Stopped card.
     sessions.start(sshCard('c1'))
     expect(api.spawns).toHaveLength(2)
-    expect(sessions.status('c1')).toEqual({ label: 'Running', lastLine: '' })
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '' })
   })
 
   it('reads SSH failed: exit code 255 when nothing was printed', async () => {

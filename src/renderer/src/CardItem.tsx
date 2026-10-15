@@ -4,7 +4,7 @@ import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
 import type { Card, Column } from '../../core/workspace-store'
-import CardStatusLine from './CardStatusLine'
+import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
@@ -53,7 +53,8 @@ interface CardItemProps {
  * it. Its ⋯ menu renames it inline (as does double-clicking the title), changes its startup
  * command (#5 D11), moves it to the bottom of another column (#6 D8), closes it while it runs
  * (#7 D3, D4), or deletes it, asking first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
- * on the board, dimmed meanwhile (#6 D5).
+ * on the board, dimmed meanwhile (#6 D5). A running card's stop button opens the same Close
+ * confirmation (#31 D10).
  */
 function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
@@ -150,7 +151,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             onCommit={(title) => workspaceStore.renameCard(workspaceId, card.id, title)}
             onDone={() => setRenaming(false)}
           />
-          <CardStatusLine status={status} />
+          <CardLines status={status} />
         </div>
       ) : (
         <button
@@ -177,7 +178,24 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             </span>
             <StartupTag startup={card.startup} />
           </span>
-          <CardStatusLine status={status} />
+          <CardLines status={status} />
+        </button>
+      )}
+      {running && (
+        <button
+          type="button"
+          className="card-stop"
+          data-testid="card-stop"
+          aria-label="Close"
+          title="Close"
+          onClick={(e) => {
+            // Opens the Close confirmation, never the card (#31 D10).
+            e.stopPropagation()
+            cancelPendingOpen()
+            setClosing(true)
+          }}
+        >
+          <span aria-hidden="true">■</span>
         </button>
       )}
       <MenuButton

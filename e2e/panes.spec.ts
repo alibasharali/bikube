@@ -577,7 +577,8 @@ test('AC9: board works from an extra pane, and from the main pane after the extr
   await apiWithPanes(2)
   expect(await board(1, 'board status . building')).toBe(0)
   await back()
-  await expect(card('api').getByTestId('card-status')).toHaveText('Running · building')
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-agent-status')).toHaveText('building')
 
   await openCard('api')
   expect(await board(1, 'board move . Done')).toBe(0)
@@ -589,7 +590,8 @@ test('AC9: board works from an extra pane, and from the main pane after the extr
   await expect(panes()).toHaveCount(1)
   expect(await board(0, 'board status . again')).toBe(0)
   await back()
-  await expect(card('api').getByTestId('card-status')).toHaveText('Running · again')
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-agent-status')).toHaveText('again')
 })
 
 /** Every key in a parsed JSON value, at any depth. */

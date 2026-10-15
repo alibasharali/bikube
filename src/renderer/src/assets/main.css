@@ -344,7 +344,7 @@ button {
 
 .board-column {
   flex: none;
-  width: 272px;
+  width: 300px;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -496,7 +496,7 @@ button {
 
 .board-add {
   flex: none;
-  width: 272px;
+  width: 300px;
 }
 
 .add-column {
@@ -724,9 +724,14 @@ button {
   overflow-y: auto;
 }
 
+/* A card (#31 D11): its body (the open button) spans the whole card and lays its lines out on
+   the card's rows (subgrid), so the ⋯ menu sits beside the title row and the stop button (D10)
+   beside the status row, though neither may be inside the button. Rows: title, status, agent
+   status, last output line. */
 .card {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: repeat(4, auto);
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -771,12 +776,38 @@ button {
 }
 
 .card-body {
-  flex: 1;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  gap: 0;
   padding: var(--space-2) var(--space-3);
+}
+
+.card-body > * {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.card-body > .card-status {
+  grid-row: 2;
+  margin-top: var(--space-1);
+}
+
+.card-body > .card-agent-status,
+.card-body > .card-status-line {
+  grid-column: 1 / -1;
+  margin-top: var(--space-1);
+}
+
+.card-body > .card-agent-status {
+  grid-row: 3;
+}
+
+.card-body > .card-status-line {
+  grid-row: 4;
 }
 
 .card-open {
@@ -788,7 +819,36 @@ button {
 }
 
 .card-menu-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
   padding: var(--space-1);
+}
+
+.card-stop {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: center;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.card-stop:hover,
+.card-stop:focus-visible {
+  background: var(--surface-hover);
+  color: var(--danger);
 }
 
 .card-title {
@@ -798,14 +858,30 @@ button {
   white-space: nowrap;
 }
 
-.card-status {
-  margin: 0;
-  min-width: 0;
+.card-status,
+.card-agent-status,
+.card-status-line {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.4;
   overflow: hidden;
+}
+
+.card-status,
+.card-status-line {
+  display: block;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Up to 2 lines, then an ellipsis; the full text is the tooltip (#31 D11). */
+.card-agent-status {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 .card-status-line {

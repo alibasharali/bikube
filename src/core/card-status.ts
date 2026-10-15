@@ -48,20 +48,21 @@ export function statusLabel(state: CardRunState): string {
   }
 }
 
+/** What a card shows below its title (#31 D11); only a running card has text after the label. */
 export interface CardStatus {
   /** See `statusLabel`. */
   label: string
-  /**
-   * The text after the label: the card's agent status while set (#9 D8), else its last output
-   * line (see `lastOutputLine`); only a running card has one.
-   */
+  /** The cleaned text `board status` set while running (#9 D8); empty when none. */
+  agentStatus: string
+  /** The last output line (see `lastOutputLine`) while running; empty otherwise. */
   lastLine: string
 }
 
 /** `agentStatus` is the cleaned text `board status` set; empty when none is set (#9 D8). */
 export function cardStatus(state: CardRunState, lastLine: string, agentStatus = ''): CardStatus {
-  if (state.kind !== 'running') return { label: statusLabel(state), lastLine: '' }
-  return { label: statusLabel(state), lastLine: agentStatus || lastLine }
+  const label = statusLabel(state)
+  if (state.kind !== 'running') return { label, agentStatus: '', lastLine: '' }
+  return { label, agentStatus, lastLine }
 }
 
 const NOT_STARTED: CardRunState = { kind: 'stopped' }

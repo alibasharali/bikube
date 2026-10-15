@@ -234,6 +234,37 @@ test('AC3: Close from the full-size view goes back to the board with the card St
   await expect.poll(() => alive(pid)).toBe(false)
 })
 
+test('#31 AC9: the stop button on the board asks, closes the card, and never opens it', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Running', 'api')
+  const pid = await shellPid()
+  await back()
+
+  const stop = card('api').getByTestId('card-stop')
+  await expect(stop).toHaveAccessibleName('Close')
+  await expect(stop).toHaveAttribute('title', 'Close')
+  await stop.click()
+  const dialog = page.getByTestId('confirm-dialog')
+  await expect(dialog.getByRole('heading')).toHaveText('Close card')
+  await expect(dialog.locator('.modal-message')).toHaveText(CLOSE_MESSAGE)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  await confirmClose()
+  await expect(status('api')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-stop')).toHaveCount(0)
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect.poll(() => alive(pid)).toBe(false)
+
+  // Clicking the card opens it and starts it again.
+  await openCard('api')
+  const next = await shellPid()
+  expect(next).not.toBe(pid)
+  await back()
+  await expect(status('api')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-stop')).toBeVisible()
+})
+
 test('AC4: a closed card resumes with its startup command when opened again', async () => {
   const dir = makeDir('alpha')
   await createWorkspace(dir, 'alpha')

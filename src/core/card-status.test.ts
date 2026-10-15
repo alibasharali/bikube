@@ -42,6 +42,7 @@ describe('SSH failed (#12 D7)', () => {
     )
     expect(cardStatus({ kind: 'stopped', sshFailed: 'Permission denied' }, 'ignored')).toEqual({
       label: 'SSH failed: Permission denied',
+      agentStatus: '',
       lastLine: ''
     })
   })
@@ -55,41 +56,48 @@ describe('cardStatus (D9)', () => {
   it('pairs the label with the last output line, except when stopped or it could not start', () => {
     expect(cardStatus({ kind: 'running' }, 'drovr-marker')).toEqual({
       label: 'Running',
+      agentStatus: '',
       lastLine: 'drovr-marker'
     })
     expect(cardStatus({ kind: 'stopped' }, '$ exit 3')).toEqual({
       label: 'Stopped',
+      agentStatus: '',
       lastLine: ''
     })
     expect(cardStatus({ kind: 'failed', reason: 'boom' }, 'stale')).toEqual({
       label: "Couldn't start: boom",
+      agentStatus: '',
       lastLine: ''
     })
   })
 })
 
-describe('cardStatus with an agent status (#9 D8)', () => {
-  it('shows the agent status in place of the last output line while running', () => {
+describe('cardStatus with an agent status (#9 D8, #31 D11)', () => {
+  it('shows the agent status and the last output line separately while running', () => {
     expect(cardStatus({ kind: 'running' }, '$ make', 'running tests')).toEqual({
       label: 'Running',
-      lastLine: 'running tests'
+      agentStatus: 'running tests',
+      lastLine: '$ make'
     })
   })
 
-  it('shows the last output line when the agent status is empty', () => {
+  it('has no agent status when it is empty', () => {
     expect(cardStatus({ kind: 'running' }, '$ make', '')).toEqual({
       label: 'Running',
+      agentStatus: '',
       lastLine: '$ make'
     })
   })
 
   it('shows no text when the card is not running', () => {
-    expect(cardStatus({ kind: 'stopped' }, '', 'running tests')).toEqual({
+    expect(cardStatus({ kind: 'stopped' }, '$ make', 'running tests')).toEqual({
       label: 'Stopped',
+      agentStatus: '',
       lastLine: ''
     })
     expect(cardStatus({ kind: 'failed', reason: 'boom' }, '', 'running tests')).toEqual({
       label: "Couldn't start: boom",
+      agentStatus: '',
       lastLine: ''
     })
   })
@@ -98,7 +106,7 @@ describe('cardStatus with an agent status (#9 D8)', () => {
 describe('cards the registry does not know (#8 D9)', () => {
   it('are Stopped, with no last line', () => {
     expect(knownRunState(undefined)).toEqual({ kind: 'stopped' })
-    expect(knownStatus(undefined)).toEqual({ label: 'Stopped', lastLine: '' })
+    expect(knownStatus(undefined)).toEqual({ label: 'Stopped', agentStatus: '', lastLine: '' })
   })
 
   it('return the same objects every time, for useSyncExternalStore', () => {

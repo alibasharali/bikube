@@ -90,7 +90,8 @@ test('AC4: the packaged app opens, makes a workspace and a card, and board statu
     .getByTestId('card')
     .filter({ has: page.getByTestId('card-title').getByText('api', { exact: true }) })
   // The first `board` starts the packaged executable as Node from a cold disk cache.
-  await expect(card.getByTestId('card-status')).toHaveText('Running · packaged', {
+  await expect(card.getByTestId('card-agent-status')).toHaveText('packaged', {
     timeout: 20_000
   })
+  await expect(card.getByTestId('card-status-label')).toHaveText('Running')
 })

@@ -762,7 +762,11 @@ const refused = (error: string): { code: number; stdout: string; stderr: string 
   stderr: `${error}\n`
 })
 
-const tile = (title: string): Locator => card(title).getByTestId('card-status')
+/** The card `title` on the board reads `Running` with the agent status `status` (#31 D11). */
+async function expectAgentStatus(tile: Locator, status: string): Promise<void> {
+  await expect(tile.getByTestId('card-status-label')).toHaveText('Running')
+  await expect(tile.getByTestId('card-agent-status')).toHaveText(status)
+}
 const titlesIn = (name: string): Locator => column(name).getByTestId('card-title')
 
 /** The `-R <remote>:<local>` of a fake ssh log line, or null without one. */
@@ -804,9 +808,7 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   )
 
   expect(await remoteRun('board status . hi')).toEqual(ok)
-  await checkOnBoard(page, 'api', (tile) =>
-    expect(tile.getByTestId('card-status')).toHaveText('Running · hi')
-  )
+  await checkOnBoard(page, 'api', (tile) => expectAgentStatus(tile, 'hi'))
   expect(await remoteRun('board move . Done')).toEqual(ok)
   expect(await output('echo "$DROVR_CARD_ID"', 'id')).toBe(await cardId('api'))
   expect(await remoteRun('"$DROVR_BIN/board" help')).toEqual({
@@ -816,7 +818,7 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   })
   await back()
   await expect(titlesIn('Done')).toHaveText(['api'])
-  await expect(tile('api')).toHaveText('Running · hi')
+  await expectAgentStatus(card('api'), 'hi')
 })
 
 test('#25 AC2, AC3: the same errors as a local card, and only its own card', async () => {
@@ -839,9 +841,9 @@ test('#25 AC2, AC3: the same errors as a local card, and only its own card', asy
     refused('board: invalid request')
   )
   await back()
-  await expect(tile('web')).toHaveText('Running · hey')
+  await expectAgentStatus(card('web'), 'hey')
   await page.waitForTimeout(300)
-  await expect(tile('web')).toHaveText('Running · hey')
+  await expectAgentStatus(card('web'), 'hey')
   await expect(tileStatus('api')).toHaveText('Running')
 })
 
@@ -859,7 +861,7 @@ test('#25 AC4: an extra pane of an SSH card has board through its own forward', 
 
   expect(await remoteRun('board status . pane', () => paneLines(1))).toEqual(ok)
   await back()
-  await expect(tile('api')).toHaveText('Running · pane')
+  await expectAgentStatus(card('api'), 'pane')
   const [main, pane] = sshLog().map(forwardOf)
   expect(main).not.toBeNull()
   expect(pane).not.toBeNull()

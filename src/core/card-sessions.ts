@@ -347,7 +347,13 @@ export class CardSessions<S extends CardScreen> {
   private refresh(entry: Entry<S>): void {
     const { lines, cursorRow } = entry.screen?.screen() ?? { lines: [], cursorRow: 0 }
     const next = cardStatus(entry.state, lastOutputLine(lines, cursorRow), entry.agentStatus)
-    if (next.label === entry.status.label && next.lastLine === entry.status.lastLine) return
+    const prev = entry.status
+    if (
+      next.label === prev.label &&
+      next.agentStatus === prev.agentStatus &&
+      next.lastLine === prev.lastLine
+    )
+      return
     entry.status = next
     entry.listeners.forEach((l) => l())
   }

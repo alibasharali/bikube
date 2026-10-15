@@ -1,6 +1,7 @@
 /**
- * What every card terminal looks like (#10 D3, D4): the colour palette of each resolved theme and
- * the font from the settings. Plain TS; the palette's shape matches xterm.js's `ITheme`.
+ * What every card terminal looks like (#10 D3, D4): the colour theme picked for the resolved app
+ * theme (or the user's Ghostty colours), and the font from the settings with the bundled Nerd
+ * Font symbols as a fallback. Plain TS; the palette's shape matches xterm.js's `ITheme`.
  */
 import {
   DEFAULT_FONT_FAMILY,
@@ -9,85 +10,18 @@ import {
   type ResolvedTheme,
   type Settings
 } from './settings'
+import { TERMINAL_PALETTES, type TerminalPalette } from './terminal-palette'
+import { terminalTheme } from './terminal-themes'
 
-export const ANSI_COLOUR_NAMES = [
-  'black',
-  'red',
-  'green',
-  'yellow',
-  'blue',
-  'magenta',
-  'cyan',
-  'white',
-  'brightBlack',
-  'brightRed',
-  'brightGreen',
-  'brightYellow',
-  'brightBlue',
-  'brightMagenta',
-  'brightCyan',
-  'brightWhite'
-] as const
-export type AnsiColourName = (typeof ANSI_COLOUR_NAMES)[number]
+export {
+  ANSI_COLOUR_NAMES,
+  TERMINAL_PALETTES,
+  type AnsiColourName,
+  type TerminalPalette
+} from './terminal-palette'
 
-export type TerminalPalette = {
-  background: string
-  foreground: string
-  cursor: string
-  cursorAccent: string
-  selectionBackground: string
-} & Record<AnsiColourName, string>
-
-export const TERMINAL_PALETTES: Readonly<Record<ResolvedTheme, Readonly<TerminalPalette>>> =
-  Object.freeze({
-    dark: Object.freeze({
-      background: '#14151a',
-      foreground: '#e6e7eb',
-      cursor: '#e6e7eb',
-      cursorAccent: '#14151a',
-      selectionBackground: '#3a4565',
-      black: '#1b1d24',
-      red: '#e5484d',
-      green: '#46a758',
-      yellow: '#e2b93d',
-      blue: '#6d8dfa',
-      magenta: '#c26ad9',
-      cyan: '#3eb3c4',
-      white: '#c9ccd4',
-      brightBlack: '#6b7080',
-      brightRed: '#ff7a7e',
-      brightGreen: '#6fcf7f',
-      brightYellow: '#f5d76e',
-      brightBlue: '#9ab0ff',
-      brightMagenta: '#dd94ee',
-      brightCyan: '#6fd4e2',
-      brightWhite: '#ffffff'
-    }),
-    // Readable on white (at least 3:1): yellow, white and bright white are darkened (D3).
-    light: Object.freeze({
-      background: '#ffffff',
-      foreground: '#1b1d24',
-      cursor: '#1b1d24',
-      cursorAccent: '#ffffff',
-      selectionBackground: '#c7d4fa',
-      black: '#1b1d24',
-      red: '#c4262c',
-      green: '#2a7a3b',
-      yellow: '#8a6400',
-      blue: '#2f55cc',
-      magenta: '#9b3bb5',
-      cyan: '#14798a',
-      white: '#6e7781',
-      brightBlack: '#5d6170',
-      brightRed: '#d1343a',
-      brightGreen: '#2f8a43',
-      brightYellow: '#9c7400',
-      brightBlue: '#3d63dd',
-      brightMagenta: '#a948c4',
-      brightCyan: '#16869a',
-      brightWhite: '#868e98'
-    })
-  })
+/** The icon font Drovr bundles, so prompts like starship show their Nerd Font glyphs. */
+export const SYMBOLS_FONT_FAMILY = 'Symbols Nerd Font Mono'
 
 export interface TerminalAppearance {
   fontSize: number
@@ -95,14 +29,38 @@ export interface TerminalAppearance {
   theme: Readonly<TerminalPalette>
 }
 
+/** The Ghostty colours for each appearance, once read; null while not read or not in use. */
+export type GhosttyPalettes = Readonly<Record<ResolvedTheme, Readonly<TerminalPalette>>> | null
+
 /**
- * The terminal options for `settings` under the OS appearance: the resolved theme's palette, the
- * size, and the family trimmed, an empty one meaning the default (D4).
+ * The terminal options for `settings` under the OS appearance: the palette of the theme picked
+ * for the resolved app theme, or Ghostty's when that setting is on and they are read; the size,
+ * and the family trimmed, an empty one meaning the default (D4), then the symbols font.
  */
-export function terminalAppearance(settings: Settings, osPrefersDark: boolean): TerminalAppearance {
+export function terminalAppearance(
+  settings: Settings,
+  osPrefersDark: boolean,
+  ghostty: GhosttyPalettes = null
+): TerminalAppearance {
+  const resolved = resolveTheme(settings.theme, osPrefersDark)
   return {
     fontSize: settings.fontSize,
-    fontFamily: normalizeFontFamily(settings.fontFamily) ?? DEFAULT_FONT_FAMILY,
-    theme: TERMINAL_PALETTES[resolveTheme(settings.theme, osPrefersDark)]
+    fontFamily: withSymbols(normalizeFontFamily(settings.fontFamily) ?? DEFAULT_FONT_FAMILY),
+    theme: terminalPalette(settings, resolved, ghostty)
   }
+}
+
+export function terminalPalette(
+  settings: Settings,
+  resolved: ResolvedTheme,
+  ghostty: GhosttyPalettes = null
+): Readonly<TerminalPalette> {
+  if (settings.useGhosttyTheme && ghostty !== null) return ghostty[resolved]
+  const name = resolved === 'dark' ? settings.terminalThemeDark : settings.terminalThemeLight
+  return terminalTheme(name) ?? TERMINAL_PALETTES[resolved]
+}
+
+/** `family` with the symbols font last, so it only fills glyphs the family lacks. */
+export function withSymbols(family: string): string {
+  return `${family}, "${SYMBOLS_FONT_FAMILY}"`
 }

@@ -1,5 +1,6 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
+import type { GhosttyTheme } from '../core/ghostty-config'
 import type { Settings } from '../core/settings'
 import type { SyncStatus } from '../core/sync-status'
 import type { Workspace, WorkspaceState } from '../core/workspace-store'
@@ -21,6 +22,8 @@ export const IPC = {
   stateSave: 'state:save',
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
+  settingsShells: 'settings:shells',
+  settingsGhosttyTheme: 'settings:ghosttyTheme',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer',
   syncStatus: 'sync:status',
@@ -46,7 +49,8 @@ export type SpawnResult = { ok: true; id: string } | { ok: false; reason: string
 /** Terminal operations the renderer may use; main owns the PTYs (D6). */
 export interface TerminalApi {
   /**
-   * Starts the login shell in `cwd`, which main checks is an absolute path to an existing
+   * Starts the Shell setting's shell (the login shell by default) as a login shell in `cwd`,
+   * which main checks is an absolute path to an existing
    * directory, for the card `cardId` (a non-empty string of at most 100 chars): the shell gets
    * the card's `board` variables (#9 D3). With the card's SSH `host` (#12 D5, D12) it instead
    * runs `ssh` to the host and `cwd` there, which main checks by #12 D2 and D3 (refusing with
@@ -108,6 +112,15 @@ export interface SettingsApi {
    * theme and writes the file within 200 ms.
    */
   save(settings: Settings): void
+  /** The login shell (`$SHELL`) and the shells in `/etc/shells` that exist, for the Shell setting. */
+  shells(): Promise<ShellChoices>
+  /** Reads the user's Ghostty config and theme now, for the "Use Ghostty theme" setting. */
+  ghosttyTheme(): Promise<GhosttyTheme>
+}
+
+export interface ShellChoices {
+  login: string
+  shells: string[]
 }
 
 /**

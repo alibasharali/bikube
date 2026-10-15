@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FONT_FAMILY, DEFAULT_SETTINGS } from './settings'
-import { ANSI_COLOUR_NAMES, TERMINAL_PALETTES, terminalAppearance } from './terminal-appearance'
+import { GHOSTTY_DEFAULT_PALETTE } from './ghostty-config'
+import {
+  ANSI_COLOUR_NAMES,
+  TERMINAL_PALETTES,
+  terminalAppearance,
+  withSymbols
+} from './terminal-appearance'
+import { terminalTheme } from './terminal-themes'
 
 /** WCAG contrast ratio of two `#rrggbb` colours. */
 function contrast(a: string, b: string): number {
@@ -59,10 +66,10 @@ describe('terminal palettes (#10 D3)', () => {
 })
 
 describe('terminalAppearance (#10 D3, D4)', () => {
-  it('defaults: 13 px Menlo, Consolas, monospace, dark palette under a dark OS', () => {
+  it('defaults: 13 px Menlo, Consolas, monospace with the symbols font, Drovr Dark under a dark OS', () => {
     expect(terminalAppearance(DEFAULT_SETTINGS, true)).toEqual({
       fontSize: 13,
-      fontFamily: 'Menlo, Consolas, monospace',
+      fontFamily: 'Menlo, Consolas, monospace, "Symbols Nerd Font Mono"',
       theme: TERMINAL_PALETTES.dark
     })
   })
@@ -79,21 +86,44 @@ describe('terminalAppearance (#10 D3, D4)', () => {
 
   it('uses the size and the family trimmed (AC6, AC7)', () => {
     const settings = {
+      ...DEFAULT_SETTINGS,
       theme: 'light',
       fontSize: 16,
       fontFamily: '  Courier New, monospace  '
     } as const
     expect(terminalAppearance(settings, true)).toMatchObject({
       fontSize: 16,
-      fontFamily: 'Courier New, monospace'
+      fontFamily: withSymbols('Courier New, monospace')
     })
   })
 
   it('an empty or whitespace-only family means the default', () => {
     for (const fontFamily of ['', '   ', '\t ']) {
       expect(terminalAppearance({ ...DEFAULT_SETTINGS, fontFamily }, true).fontFamily).toBe(
-        DEFAULT_FONT_FAMILY
+        withSymbols(DEFAULT_FONT_FAMILY)
       )
     }
+  })
+
+  it('uses the theme picked for the resolved app theme', () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      terminalThemeDark: 'Catppuccin Mocha',
+      terminalThemeLight: 'Catppuccin Latte'
+    }
+    expect(terminalAppearance({ ...settings, theme: 'dark' }, false).theme).toBe(
+      terminalTheme('Catppuccin Mocha')
+    )
+    expect(terminalAppearance(settings, false).theme).toBe(terminalTheme('Catppuccin Latte'))
+  })
+
+  it("uses Ghostty's colours when that setting is on and they are read, the picked theme until then", () => {
+    const ghostty = { dark: GHOSTTY_DEFAULT_PALETTE, light: TERMINAL_PALETTES.light }
+    const on = { ...DEFAULT_SETTINGS, theme: 'dark' as const, useGhosttyTheme: true }
+    expect(terminalAppearance(on, true, ghostty).theme).toBe(GHOSTTY_DEFAULT_PALETTE)
+    expect(terminalAppearance(on, true, null).theme).toBe(TERMINAL_PALETTES.dark)
+    expect(terminalAppearance({ ...on, useGhosttyTheme: false }, true, ghostty).theme).toBe(
+      TERMINAL_PALETTES.dark
+    )
   })
 })

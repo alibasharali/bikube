@@ -34,10 +34,9 @@ export function createSettingsStore(
     update(change) {
       const next = validateSettings({ ...current, ...change }, platform)
       if (next === null) return false
+      const keys = (Object.keys(next) as (keyof Settings)[]).filter((key) => key !== 'shortcuts')
       if (
-        next.theme === current.theme &&
-        next.fontSize === current.fontSize &&
-        next.fontFamily === current.fontFamily &&
+        keys.every((key) => next[key] === current[key]) &&
         sameShortcuts(next.shortcuts, current.shortcuts)
       ) {
         return true

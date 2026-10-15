@@ -1,4 +1,5 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { accessSync, constants, statSync } from 'node:fs'
 import { acknowledgeRequest } from '../core/ack-request'
 import { FlowControl } from '../core/flow-control'
 import {
@@ -14,6 +15,7 @@ import { SessionCards } from '../core/session-cards'
 import { SessionManager } from '../core/session-manager'
 import { SessionOwners } from '../core/session-owners'
 import type { SessionSockets } from '../core/session-sockets'
+import { shellToStart } from '../core/shells'
 import { spawnInDirectory } from '../core/terminal-spawn'
 import { IPC, type TerminalExit } from '../shared/api'
 
@@ -39,11 +41,13 @@ export interface Terminals {
  * Wires the session manager to IPC. Sessions stream to the window that spawned them; each
  * local shell gets its card's `board` variables from `shellEnv` (#9 D3), an SSH card's none
  * (#12 D5): each SSH session instead gets its own socket from `sessionSockets`, forwarded by
- * `ssh -R` (#25 D1, D2), closed when the session exits.
+ * `ssh -R` (#25 D1, D2), closed when the session exits. A local shell is the Shell setting's
+ * (`shellSetting`, '' for the login shell); the local shell running `ssh` is always the login shell.
  */
 export function registerTerminals(
   shellEnv: (cardId: string) => Record<string, string>,
-  sessionSockets?: SessionSockets
+  sessionSockets?: SessionSockets,
+  shellSetting: () => string = () => ''
 ): Terminals {
   const manager = new SessionManager()
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
@@ -121,9 +125,18 @@ export function registerTerminals(
         { cols, rows, cwd, host, board: board?.forward },
         // An SSH card's local shell gets none of the `board` variables (#12 D5, #25 D2).
         (options) => {
+          const local = options.command === undefined
+          const shell = local
+            ? shellToStart(shellSetting(), SessionManager.defaultShell())
+            : undefined
+          if (shell !== undefined && !isExecutableSync(shell)) {
+            throw new Error(`shell not found: ${shell}`)
+          }
           const info = manager.spawn({
             ...options,
-            env: options.command === undefined ? shellEnv(cardId) : undefined
+            shell,
+            // Programs that start "your shell" (editors, agents) read `$SHELL`.
+            env: local ? { ...shellEnv(cardId), ...(shell && { SHELL: shell }) } : undefined
           })
           board?.attach(info.id)
           return info
@@ -174,5 +187,16 @@ export function registerTerminals(
     },
     onWindowGone: (listener) => goneListeners.push(listener),
     onPageGone: (listener) => pageGoneListeners.push(listener)
+  }
+}
+
+function isExecutableSync(path: string): boolean {
+  try {
+    // A directory passes X_OK too, and node-pty would only fail once the shell's exec does.
+    if (!statSync(path).isFile()) return false
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
   }
 }

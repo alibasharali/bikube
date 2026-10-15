@@ -71,7 +71,7 @@ New file `drovr-settings.json` in `userData`, created on the first change. `drov
 ## Out of scope
 
 - Cursor style, cursor blink, scrollback length, line height, bell, and other terminal options.
-- Custom or imported colour themes; per-workspace or per-card settings.
+- Custom or imported colour themes (since added by PR #31, which also extends D1/D6's settings file to seven fields); per-workspace or per-card settings.
 - Saving window size or the collapsed sidebar (still not saved, per **Saved state**).
 - An app menu entry for Settings (the app has no custom menu yet).
 - Checking that a font family is installed, or listing installed fonts.

@@ -9,6 +9,8 @@ interface ModalProps {
   initialFocus?: string
   /** Close on a click outside the dialog (on the backdrop); off by default. */
   closeOnOutsideClick?: boolean
+  /** Extra class on the dialog, e.g. a wider variant. */
+  className?: string
 }
 
 const FOCUSABLE =
@@ -21,7 +23,8 @@ function Modal({
   testId,
   children,
   initialFocus,
-  closeOnOutsideClick = false
+  closeOnOutsideClick = false,
+  className
 }: ModalProps): React.JSX.Element {
   const titleId = useId()
   const ref = useRef<HTMLDivElement>(null)
@@ -84,7 +87,7 @@ function Modal({
     >
       <div
         ref={ref}
-        className="modal"
+        className={className ? `modal ${className}` : 'modal'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

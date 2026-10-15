@@ -2,9 +2,22 @@ import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../../core/settings'
 import { createSettingsStore } from './settings'
 
+/** The settings after #10's three, at their defaults. */
+const NEW_FIELDS = {
+  shell: '',
+  terminalThemeDark: 'Drovr Dark',
+  terminalThemeLight: 'Drovr Light',
+  useGhosttyTheme: false
+}
+
 describe('createSettingsStore (#10 D6)', () => {
   it('starts from the loaded settings', () => {
-    const loaded: Settings = { theme: 'light', fontSize: 16, fontFamily: 'Courier New' }
+    const loaded: Settings = {
+      theme: 'light',
+      fontSize: 16,
+      fontFamily: 'Courier New',
+      ...NEW_FIELDS
+    }
     expect(createSettingsStore(loaded, vi.fn(), 'linux').get()).toEqual(loaded)
   })
 
@@ -14,7 +27,7 @@ describe('createSettingsStore (#10 D6)', () => {
     const listener = vi.fn()
     store.subscribe(listener)
     expect(store.update({ theme: 'dark', fontFamily: '  Courier New  ' })).toBe(true)
-    const next = { theme: 'dark', fontSize: 13, fontFamily: 'Courier New' }
+    const next = { theme: 'dark', fontSize: 13, fontFamily: 'Courier New', ...NEW_FIELDS }
     expect(store.get()).toEqual(next)
     expect(listener).toHaveBeenCalledTimes(1)
     expect(save).toHaveBeenCalledWith(next)

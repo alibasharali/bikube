@@ -32,11 +32,12 @@ const activity = (value: Activity | '$a'): string =>
  * `PreToolUse` fires for every tool: `question` for `AskUserQuestion` (Claude asking the user),
  * else `working`. A matcher can't say "every tool but one" without two hooks racing, so the one
  * command reads the tool's name from its JSON input in plain sh. Inside the input every string's
- * `"` is escaped, so only the real `tool_name` key can match.
+ * `"` is escaped, so only the real `tool_name` key can match. `board` runs in the background with
+ * every stream detached, so Claude never waits for it before a tool (round 4 Q5).
  */
 const PRE_TOOL_USE =
   `a=working; case $(cat) in *'"tool_name":"AskUserQuestion"'*|*'"tool_name": "AskUserQuestion"'*) ` +
-  `a=question;; esac; ${activity('$a')}`
+  `a=question;; esac; "$DROVR_BIN/board" activity . $a </dev/null >/dev/null 2>&1 & exit 0`
 
 /** Prints the instruction, which Claude adds to its context; sets nothing. */
 const SESSION_START = `cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; exit 0`

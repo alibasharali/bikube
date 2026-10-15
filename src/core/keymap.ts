@@ -93,13 +93,13 @@ function isKeyText(key: string): boolean {
 }
 
 /**
- * The key of a press as D7 writes it, or null for a modifier alone. A letter or digit the layout
- * turns into another character (macOS Option+R types ®, Shift+1 types !) is read from the
- * physical key.
+ * The key of a press as D7 writes it, or null for a modifier alone. The typed character when it is
+ * one printable ASCII character (AZERTY's `,` on the M key stays `,`); else (a dead key, macOS
+ * Option+R typing ®, a non-Latin letter) the physical letter or digit key.
  */
 export function eventKey(event: KeyEventLike): string | null {
   const { key } = event
-  if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase()
+  if (/^[!-~]$/.test(key)) return key.toUpperCase()
   const physical = /^(?:Key([A-Z])|Digit([0-9]))$/.exec(event.code ?? '')
   if (physical) return physical[1] ?? physical[2]
   if (key === ' ') return 'Space'
@@ -192,9 +192,52 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   settings: 'Open Settings'
 })
 
+/** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */
+function menuAccelerators(platform: string): [string, string][] {
+  if (platform === 'darwin') {
+    return [
+      ['Alt+Cmd+H', 'Hide Others'],
+      ['Cmd+Z', 'Undo'],
+      ['Shift+Cmd+Z', 'Redo'],
+      ['Cmd+X', 'Cut'],
+      ['Alt+Shift+Cmd+V', 'Paste and Match Style'],
+      ['Cmd+A', 'Select All'],
+      ['Cmd+R', 'Reload'],
+      ['Shift+Cmd+R', 'Force Reload'],
+      ['Alt+Cmd+I', 'Toggle Developer Tools'],
+      ['Cmd+0', 'Actual Size'],
+      ['Cmd++', 'Zoom In'],
+      ['Shift+Cmd++', 'Zoom In'],
+      ['Cmd+=', 'Zoom In'],
+      ['Cmd+-', 'Zoom Out'],
+      ['Ctrl+Cmd+F', 'Toggle Full Screen']
+    ]
+  }
+  return [
+    ['Ctrl+Q', 'Quit'],
+    ['Ctrl+Z', 'Undo'],
+    [platform === 'win32' ? 'Ctrl+Y' : 'Ctrl+Shift+Z', 'Redo'],
+    ['Ctrl+X', 'Cut'],
+    ['Ctrl+C', 'Copy'],
+    ['Ctrl+V', 'Paste'],
+    ['Ctrl+A', 'Select All'],
+    ['Ctrl+R', 'Reload'],
+    ['Ctrl+Shift+R', 'Force Reload'],
+    ['Ctrl+Shift+I', 'Toggle Developer Tools'],
+    ['Ctrl+0', 'Actual Size'],
+    ['Ctrl++', 'Zoom In'],
+    ['Ctrl+Shift++', 'Zoom In'],
+    ['Ctrl+=', 'Zoom In'],
+    ['Ctrl+-', 'Zoom Out'],
+    ['Ctrl+M', 'Minimize'],
+    ['Ctrl+W', 'Close Window']
+  ]
+}
+
 /**
  * The fixed shortcuts a configurable one can't take (D8), as D7 text, with what they do: card
- * moves, copy and paste, workspace switching (D18) and, on macOS, Quit, Hide and Minimize.
+ * moves, copy and paste, workspace switching (D18), on macOS Quit, Hide and Minimize, and the app
+ * menu's accelerators.
  */
 export function fixedShortcuts(platform: string): ReadonlyMap<string, string> {
   const mac = platform === 'darwin'
@@ -210,6 +253,9 @@ export function fixedShortcuts(platform: string): ReadonlyMap<string, string> {
     fixed.set('Cmd+Q', 'Quit')
     fixed.set('Cmd+H', 'Hide')
     fixed.set('Cmd+M', 'Minimize')
+  }
+  for (const [shortcut, name] of menuAccelerators(platform)) {
+    if (!fixed.has(shortcut)) fixed.set(shortcut, name)
   }
   return fixed
 }
@@ -268,6 +314,11 @@ export function isShortcutText(value: unknown): value is string {
   return shortcut !== null && (shortcut.ctrl || shortcut.alt || shortcut.cmd)
 }
 
+/** Whether a configurable action may have `value` on this OS: shortcut text that isn't fixed (D9). */
+function isFreeShortcut(value: unknown, platform: string): value is string {
+  return isShortcutText(value) && !fixedShortcuts(platform).has(value)
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -294,7 +345,7 @@ function sharedActions(keymap: Keymap): ShortcutAction[] {
 }
 
 /**
- * Reads the settings file's `shortcuts` (D9) per entry: a missing, malformed or modifier-less entry
+ * Reads the settings file's `shortcuts` (D9) per entry: a missing, malformed, modifier-less or fixed entry
  * takes the default, two actions with the same shortcut both do, unknown keys are ignored and
  * anything but an object gives all defaults. `dropped` lists the entries that fell back.
  */
@@ -309,7 +360,7 @@ export function readShortcuts(
   for (const action of SHORTCUT_ACTIONS) {
     if (!(action in raw)) continue
     const value = raw[action]
-    if (isShortcutText(value)) keymap[action] = value
+    if (isFreeShortcut(value, platform)) keymap[action] = value
     else dropped.add(action)
   }
   // A fallback may take a shortcut another entry has: repeat until no two share one. Defaults
@@ -327,7 +378,7 @@ export function readShortcuts(
 }
 
 /**
- * Checks a whole set of shortcuts being saved (D9): null when an entry is unknown or invalid or two
+ * Checks a whole set of shortcuts being saved (D9): null when an entry is unknown, invalid or fixed or two
  * actions share a shortcut; else the entries that differ from the default. Absent means none.
  */
 export function validateShortcuts(raw: unknown, platform: string): ShortcutOverrides | null {
@@ -335,7 +386,10 @@ export function validateShortcuts(raw: unknown, platform: string): ShortcutOverr
   if (!isObject(raw)) return null
   const keymap = defaultKeymap(platform)
   for (const [action, value] of Object.entries(raw)) {
-    if (!(SHORTCUT_ACTIONS as readonly string[]).includes(action) || !isShortcutText(value)) {
+    if (
+      !(SHORTCUT_ACTIONS as readonly string[]).includes(action) ||
+      !isFreeShortcut(value, platform)
+    ) {
       return null
     }
     keymap[action as ShortcutAction] = value

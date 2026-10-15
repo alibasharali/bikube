@@ -687,7 +687,14 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
         theme: 'dark',
         fontSize: 13,
         fontFamily: 'Menlo',
-        shortcuts: { back: 'B', splitRight: 'Ctrl+Alt+R', closePane: 'Ctrl+Alt+R', bogus: 'Ctrl+K' }
+        shortcuts: {
+          back: 'B',
+          splitRight: 'Ctrl+Alt+R',
+          closePane: 'Ctrl+Alt+R',
+          // A fixed shortcut, refused by the recorder, is refused in the file too (round 4 Q4).
+          settings: 'Ctrl+Shift+C',
+          bogus: 'Ctrl+K'
+        }
       }
     })
   )
@@ -700,6 +707,7 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
   await expect(shortcutField(page, 'back')).toHaveText('Ctrl+Shift+B')
   await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Shift+D')
   await expect(shortcutField(page, 'closePane')).toHaveText('Ctrl+Shift+W')
+  await expect(shortcutField(page, 'settings')).toHaveText('Ctrl+,')
   for (const action of ['back', 'splitRight', 'splitDown', 'closePane', 'closeCard', 'settings']) {
     await expect(shortcutReset(page, action)).toBeDisabled()
   }
@@ -726,7 +734,9 @@ test('#31 AC7: refused presses keep the old shortcut and recording; Escape stops
     ['Control+Shift+B', 'Already used by Back to board'],
     ['Control+Shift+C', 'Already used by Copy'],
     ['Alt+ArrowUp', 'Already used by Move card'],
-    ['Control+1', 'Already used by Switch workspace']
+    ['Control+1', 'Already used by Switch workspace'],
+    // The app menu's accelerators (round 4 Q3); the recorder swallows the press, so no reload.
+    ['Control+R', 'Already used by Reload']
   ]
   for (const [press, message] of refusals) {
     await page.keyboard.press(press)

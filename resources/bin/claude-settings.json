@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "a=working; case $(cat) in *'\"tool_name\":\"AskUserQuestion\"'*|*'\"tool_name\": \"AskUserQuestion\"'*) a=question;; esac; \"$DROVR_BIN/board\" activity . $a >/dev/null 2>&1; exit 0",
+            "command": "a=working; case $(cat) in *'\"tool_name\":\"AskUserQuestion\"'*|*'\"tool_name\": \"AskUserQuestion\"'*) a=question;; esac; \"$DROVR_BIN/board\" activity . $a </dev/null >/dev/null 2>&1 & exit 0",
             "timeout": 5
           }
         ]

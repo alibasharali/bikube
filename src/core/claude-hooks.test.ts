@@ -86,7 +86,8 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     log = join(dir, 'board.log')
     writeFileSync(
       join(bin, 'board'),
-      `#!/bin/sh\necho "$*" >> '${log}'\necho noise; echo oops >&2\nexit "\${FAKE_BOARD_EXIT:-0}"\n`
+      `#!/bin/sh\nsleep "\${FAKE_BOARD_SLEEP:-0}"\necho "$*" >> '${log}'\necho noise; echo oops >&2\n` +
+        `exit "\${FAKE_BOARD_EXIT:-0}"\n`
     )
     chmodSync(join(bin, 'board'), 0o755)
     writeFileSync(join(bin, CLAUDE_INSTRUCTION_FILE), `${CLAUDE_INSTRUCTION}\n`)
@@ -100,6 +101,15 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     } catch {
       return []
     }
+  }
+
+  /** The log once it has `count` lines; PreToolUse runs `board` in the background (round 4 Q5). */
+  const loggedLines = (count: number): string[] => {
+    const until = Date.now() + 5000
+    while (logged().length < count && Date.now() < until) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+    }
+    return logged()
   }
 
   /** Runs `event`'s command with `input` on stdin, like Claude Code does. */
@@ -150,10 +160,10 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
 
   for (const shell of ['/bin/sh', '/bin/bash']) {
     it(`sets the calling card's activity, silently, exit 0 (${shell})`, () => {
-      for (const [event, input, activity] of samples) {
+      samples.forEach(([event, input, activity], index) => {
         expect(run(shell, event, input)).toEqual({ status: 0, stdout: '', stderr: '' })
-        expect(logged().at(-1)).toBe(`activity . ${activity}`)
-      }
+        expect(loggedLines(index + 1).at(-1)).toBe(`activity . ${activity}`)
+      })
       expect(logged()).toHaveLength(samples.length)
     })
 
@@ -192,6 +202,19 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
       tool_input: { command: 'echo AskUserQuestion "tool_name": "AskUserQuestion"' }
     }
     expect(run('/bin/sh', 'PreToolUse', input).status).toBe(0)
-    expect(logged()).toEqual(['activity . working'])
+    expect(loggedLines(1)).toEqual(['activity . working'])
+  })
+
+  it("returns before board finishes in PreToolUse, so Claude doesn't wait (round 4 Q5)", () => {
+    const input = { ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} }
+    const start = Date.now()
+    expect(run('/bin/sh', 'PreToolUse', input, { FAKE_BOARD_SLEEP: '2' })).toEqual({
+      status: 0,
+      stdout: '',
+      stderr: ''
+    })
+    expect(Date.now() - start).toBeLessThan(1500)
+    expect(logged()).toEqual([])
+    expect(loggedLines(1)).toEqual(['activity . working'])
   })
 })

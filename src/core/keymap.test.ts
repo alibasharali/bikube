@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   defaultKeymap,
+  fixedShortcuts,
   keymapAction,
   readShortcuts,
   recordPress,
@@ -82,6 +83,18 @@ describe('keymapAction (#31 D7, AC3)', () => {
     expect(keymapAction(press('r', { code: 'KeyR', ctrlKey: true, altKey: true }), keymap)).toBe(
       'splitRight'
     )
+    // A non-Latin layout's letter is read from the physical key too.
+    const ctrlB = press('и', { code: 'KeyB', ctrlKey: true, shiftKey: true })
+    expect(keymapAction(ctrlB, linux)).toBe('back')
+  })
+
+  it("keeps a typed ASCII character over the physical key (AZERTY's , on the M key)", () => {
+    const azertyComma = press(',', { code: 'KeyM', ctrlKey: true })
+    expect(keymapAction(azertyComma, linux)).toBe('settings')
+    expect(keymapAction(press(',', { code: 'KeyM', metaKey: true }), defaultKeymap('darwin'))).toBe(
+      'settings'
+    )
+    expect(keymapAction(press('m', { code: 'KeyM', ctrlKey: true }), linux)).toBeNull()
   })
 })
 
@@ -173,16 +186,50 @@ describe('recordPress (#31 D8, AC7)', () => {
     )
   })
 
+  it("refuses the app menu's accelerators on this OS (round 4 Q3)", () => {
+    expect(record(press('r', { ctrlKey: true }))).toEqual(refused('Already used by Reload'))
+    expect(record(press('w', { ctrlKey: true }))).toEqual(refused('Already used by Close Window'))
+    expect(record(press('c', { ctrlKey: true }))).toEqual(refused('Already used by Copy'))
+    expect(record(press('q', { ctrlKey: true }))).toEqual(refused('Already used by Quit'))
+    expect(record(press('0', { code: 'Digit0', ctrlKey: true }))).toEqual(
+      refused('Already used by Actual Size')
+    )
+    expect(record(press('+', { code: 'Equal', ctrlKey: true, shiftKey: true }))).toEqual(
+      refused('Already used by Zoom In')
+    )
+    expect(record(press('-', { code: 'Minus', ctrlKey: true }))).toEqual(
+      refused('Already used by Zoom Out')
+    )
+    expect(record(press('I', { ctrlKey: true, shiftKey: true }))).toEqual(
+      refused('Already used by Toggle Developer Tools')
+    )
+    expect(record(press('z', { metaKey: true }), 'darwin')).toEqual(refused('Already used by Undo'))
+    expect(record(press('r', { metaKey: true }), 'darwin')).toEqual(
+      refused('Already used by Reload')
+    )
+    expect(record(press('a', { metaKey: true }), 'darwin')).toEqual(
+      refused('Already used by Select All')
+    )
+  })
+
+  it('never makes a default shortcut fixed', () => {
+    for (const platform of ['darwin', 'linux', 'win32']) {
+      const fixed = fixedShortcuts(platform)
+      for (const shortcut of Object.values(defaultKeymap(platform))) {
+        expect(fixed.has(shortcut)).toBe(false)
+      }
+    }
+  })
+
   it("leaves the other OS's fixed shortcuts and other modifier mixes free", () => {
-    expect(record(press('c', { ctrlKey: true }))).toEqual({ kind: 'set', shortcut: 'Ctrl+C' })
-    expect(record(press('q', { ctrlKey: true }))).toEqual({ kind: 'set', shortcut: 'Ctrl+Q' })
-    expect(record(press('0', { code: 'Digit0', ctrlKey: true }))).toEqual({
+    expect(record(press('c', { metaKey: true }))).toEqual({ kind: 'set', shortcut: 'Cmd+C' })
+    expect(record(press('w', { ctrlKey: true }), 'darwin')).toEqual({
       kind: 'set',
-      shortcut: 'Ctrl+0'
+      shortcut: 'Ctrl+W'
     })
     expect(record(press('!', { code: 'Digit1', ctrlKey: true, shiftKey: true }))).toEqual({
       kind: 'set',
-      shortcut: 'Ctrl+Shift+1'
+      shortcut: 'Ctrl+Shift+!'
     })
     expect(record(press('ArrowUp', { altKey: true, shiftKey: true }))).toEqual({
       kind: 'set',
@@ -232,6 +279,24 @@ describe('readShortcuts (#31 D9, AC8)', () => {
     })
   })
 
+  it('drops a fixed shortcut: copy, a menu accelerator, workspace switching (round 4 Q4)', () => {
+    const raw = {
+      splitRight: 'Ctrl+Shift+C',
+      closeCard: 'Ctrl+R',
+      back: 'Ctrl+1',
+      settings: 'Alt+F5'
+    }
+    expect(readShortcuts(raw, 'linux')).toEqual({
+      shortcuts: { settings: 'Alt+F5' },
+      dropped: ['back', 'splitRight', 'closeCard']
+    })
+    // Fixed only on its own OS.
+    expect(readShortcuts({ splitRight: 'Ctrl+Shift+C' }, 'darwin')).toEqual({
+      shortcuts: { splitRight: 'Ctrl+Shift+C' },
+      dropped: []
+    })
+  })
+
   it('reads anything but an object as all defaults', () => {
     for (const raw of [undefined, null, 'Ctrl+K', ['Ctrl+K']]) {
       expect(readShortcuts(raw, 'linux')).toEqual({ shortcuts: {}, dropped: [] })
@@ -256,6 +321,8 @@ describe('validateShortcuts (#31 D9)', () => {
       validateShortcuts({ splitRight: 'Ctrl+Alt+R', closePane: 'Ctrl+Alt+R' }, 'linux')
     ).toBeNull()
     expect(validateShortcuts('Ctrl+K', 'linux')).toBeNull()
+    expect(validateShortcuts({ splitRight: 'Ctrl+Shift+C' }, 'linux')).toBeNull()
+    expect(validateShortcuts({ closeCard: 'Ctrl+R' }, 'linux')).toBeNull()
   })
 })
 

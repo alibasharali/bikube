@@ -15,6 +15,7 @@ import { SessionCards } from '../core/session-cards'
 import { SessionManager } from '../core/session-manager'
 import { SessionOwners } from '../core/session-owners'
 import type { SessionSockets } from '../core/session-sockets'
+import { shellToStart } from '../core/shells'
 import { spawnInDirectory } from '../core/terminal-spawn'
 import { IPC, type TerminalExit } from '../shared/api'
 
@@ -125,7 +126,9 @@ export function registerTerminals(
         // An SSH card's local shell gets none of the `board` variables (#12 D5, #25 D2).
         (options) => {
           const local = options.command === undefined
-          const shell = local ? shellSetting() || undefined : undefined
+          const shell = local
+            ? shellToStart(shellSetting(), SessionManager.defaultShell())
+            : undefined
           if (shell !== undefined && !isExecutableSync(shell)) {
             throw new Error(`shell not found: ${shell}`)
           }

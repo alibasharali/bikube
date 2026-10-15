@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { claudeLogLines } from './fake-claude'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
+import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Agent resume presets (#21): Codex, Gemini CLI and OpenCode in every startup command select, the
@@ -104,16 +105,16 @@ async function newCard(title: string, startup?: Choice): Promise<void> {
   await page.getByTestId('new-card-input').fill(title)
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -153,8 +154,6 @@ async function run(command: string): Promise<void> {
   await page.keyboard.type(command)
   await page.keyboard.press('Enter')
 }
-
-const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status-label')
 
 /** Quits the open card's fake agent with Enter and exits its shell: it is Stopped. */
 async function stopAgent(title: string, dir: string): Promise<void> {
@@ -224,8 +223,8 @@ test('AC1: the select lists the presets; their cards show tags and run the plain
   for (const { title, label, plain } of PRESETS) {
     await newCard(title, label)
     await expect.poll(bufferLines).toContain(`fake-${plain}`)
-    await expect(viewStatus()).toHaveText('Running')
     await back()
+    await expect(card(title).getByTestId('card-status-label')).toHaveText('Running')
   }
   for (const { title, label, tag } of PRESETS) {
     await expect(card(title).getByTestId('card-tag')).toHaveText(tag)
@@ -247,7 +246,7 @@ test('AC2/AC3: reopening a stopped preset card resumes, starting fresh when noth
     await expect.poll(() => typed(`${resume} || ${plain}`)).toBe(true)
     await expect.poll(bufferLines).toContain(`fake-${resume}`)
     expect(logLines().at(-1)).toBe(resume)
-    await expect(viewStatus()).toHaveText('Running')
+    await expectStatusOnBoard(page, title, 'Running')
     await stopAgent(title, dir)
   }
 
@@ -259,7 +258,8 @@ test('AC2/AC3: reopening a stopped preset card resumes, starting fresh when noth
   await page.waitForTimeout(500)
   const lines = (await bufferLines()).filter((l) => l !== '')
   expect(lines.at(-1)).toBe('fake-codex')
-  await expect(viewStatus()).toHaveText('Running')
+  await back()
+  await expect(card('cx').getByTestId('card-status-label')).toHaveText('Running')
 })
 
 test('AC4: switching a card away from a preset and back keeps it started', async () => {
@@ -267,8 +267,8 @@ test('AC4: switching a card away from a preset and back keeps it started', async
   const dir = makeDir('alpha')
   await createWorkspace(dir, 'alpha')
   await newCard('sh')
-  await expect(viewStatus()).toHaveText('Running')
   await back()
+  await expect(card('sh').getByTestId('card-status-label')).toHaveText('Running')
 
   await setStartup('sh', 'Codex')
   await expect(card('sh').getByTestId('card-tag')).toHaveText('Codex')

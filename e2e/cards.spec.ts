@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, expectCardOpen, expectStatusOnBoard, SHORTCUTS } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // Cards as terminals (#4): creation, full-size view, status, lifetime. Linux runs drive
@@ -57,18 +58,15 @@ async function newCard(columnName: string, title: string): Promise<void> {
   await column(columnName).getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
-async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
-  await expect(page.getByTestId('board')).toBeVisible()
-}
+const back = (): Promise<void> => backToBoard(page)
 
 /** The open card's terminal buffer, one trimmed string per line. */
 function bufferLines(): Promise<string[]> {
@@ -118,12 +116,46 @@ test('AC1: + New card creates the card, opens it focused, shell in the workspace
   await expect(view).toBeVisible()
   await expect(page.getByTestId('board')).toHaveCount(0)
   await expect(page.getByTestId('sidebar')).toBeVisible()
-  await expect(page.getByTestId('card-view-title')).toHaveText('api server')
-  await expect(view.getByTestId('card-status-label')).toHaveText('Running')
+  await expectCardOpen(page, 'api server')
+  await expectStatusOnBoard(page, 'api server', 'Running')
   await expect.poll(terminalFocused).toBe(true)
 
   await run('pwd')
   await expect.poll(bufferLines).toContain(dir)
+})
+
+test('#31 AC1: the open card has no bar; its terminal starts at the top of the main area', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+
+  const view = page.getByTestId('card-view')
+  for (const id of ['card-back', 'pane-split-right', 'pane-split-down', 'card-close']) {
+    await expect(page.getByTestId(id)).toHaveCount(0)
+  }
+  await expect(view.getByRole('button')).toHaveCount(0)
+  await expect(view.getByRole('heading')).toHaveCount(0)
+  await expect(view.getByTestId('card-status')).toHaveCount(0)
+  const main = await page.locator('main').boundingBox()
+  const terminal = await view.getByTestId('terminal').boundingBox()
+  expect(main).not.toBeNull()
+  expect(terminal).not.toBeNull()
+  expect(Math.abs(terminal!.y - main!.y)).toBeLessThanOrEqual(1)
+})
+
+test('#31 AC2: the Back shortcut and the active workspace go back; the card keeps running', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+
+  await page.keyboard.press(SHORTCUTS.back)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+
+  await openCard('api')
+  await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
 
 test('AC3: Back and Ctrl+Shift+B return to the board; Esc goes to the terminal', async () => {
@@ -243,7 +275,7 @@ test('#5 AC6: a Stopped shell card starts a new shell in its directory when open
   await stoppedToBoard('sh')
 
   await openCard('sh')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'sh', 'Running')
   // A new, empty screen like the first one: none of the earlier output, nothing typed.
   const screen = await settledScreen()
   expect(screen).toHaveLength(fresh.length)
@@ -261,7 +293,6 @@ test("AC7: a card whose directory is gone shows Couldn't start", async () => {
 
   await newCard('Backlog', 'x')
   const reason = "Couldn't start: working directory not found"
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText(reason)
   await back()
   await expect(card('x')).toHaveCount(1)
   await expect(card('x').getByTestId('card-status-label')).toHaveText(reason)
@@ -310,7 +341,7 @@ test('D4/D5/D7: inline creation cancels, defaults the title, Enter opens a focus
   // An empty title becomes Terminal 1, at the bottom of that column.
   await running.getByTestId('new-card').click()
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('Terminal 1')
+  await expectCardOpen(page, 'Terminal 1')
   await back()
   await expect(running.getByTestId('card')).toHaveCount(1)
   await expect(running.getByTestId('column-count')).toHaveText('1')
@@ -326,7 +357,7 @@ test('D4/D5/D7: inline creation cancels, defaults the title, Enter opens a focus
   // Enter on a focused card opens it.
   await card('Terminal 1').getByTestId('card-open').focus()
   await page.keyboard.press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('Terminal 1')
+  await expectCardOpen(page, 'Terminal 1')
   await expect.poll(terminalFocused).toBe(true)
 })
 
@@ -412,9 +443,9 @@ test('AC9: rename from the menu or by double-click; blank is rejected; Esc cance
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-title')).toHaveText(['api v2'])
 
-  // The full-size header follows the new title; a single click on the title still opens it.
+  // The full-size view follows the new title (its name); a single click on the title still opens it.
   await card('api v2').getByTestId('card-title').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText('api v2')
+  await expectCardOpen(page, 'api v2')
 })
 
 test('AC10: deleting a running card asks first and stops it; a Stopped card goes at once', async () => {
@@ -558,7 +589,7 @@ test('AC2: default titles count on per workspace; duplicate titles are allowed',
   const untitled = async (expected: string): Promise<void> => {
     await column('Backlog').getByTestId('new-card').click()
     await page.getByTestId('new-card-input').press('Enter')
-    await expect(page.getByTestId('card-view-title')).toHaveText(expected)
+    await expectCardOpen(page, expected)
     await back()
   }
   for (const expected of ['Terminal 1', 'Terminal 2', 'Terminal 3']) await untitled(expected)
@@ -608,16 +639,15 @@ test("#5 AC10: a card that couldn't start tries again when opened", async () => 
 
   await newCard('Backlog', 'x')
   const reason = "Couldn't start: working directory not found"
-  const view = page.getByTestId('card-view')
-  await expect(view.getByTestId('card-status-label')).toHaveText(reason)
-  // No retry on its own while the view stays open.
+  // No retry on its own while the view stays open: the board still shows the failure after it.
+  await page.waitForTimeout(1000)
   mkdirSync(dir)
   await page.waitForTimeout(500)
-  await expect(view.getByTestId('card-status-label')).toHaveText(reason)
-
   await back()
+  await expect(card('x').getByTestId('card-status-label')).toHaveText(reason)
+
   await openCard('x')
-  await expect(view.getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'x', 'Running')
   await expect.poll(terminalFocused).toBe(true)
   await run('pwd')
   await expect.poll(bufferLines).toContain(dir)

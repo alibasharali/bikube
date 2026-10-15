@@ -13,6 +13,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
+import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Persistence (#8): the board survives a restart. Each test launches with its own data directory
@@ -142,17 +143,17 @@ async function newCard(
     await page.getByTestId('new-card-input').press('Enter')
   }
   await expect(page.getByTestId('card-view')).toBeVisible()
-  if (title) await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  if (title) await expectCardOpen(page, title)
   await back()
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -328,7 +329,7 @@ test('AC4: opening restored cards starts them; Claude Code resumes its session',
   await restart()
 
   await openCard('sh')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'sh', 'Running')
   await run('pwd')
   await expect.poll(bufferLines).toContain(alpha)
   await back()

@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, closeCard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // Terminal output flow control (#16): a stalled renderer doesn't build a backlog, a paused card
@@ -48,11 +49,11 @@ async function newCard(title: string): Promise<void> {
   await column('Running').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -167,8 +168,7 @@ test('AC5: a paused card still stops when Closed, and still ends when deleted', 
   await streaming(/^drovr-flow$/)
   await blockRenderer(2_000)
 
-  const view = page.getByTestId('card-view')
-  await view.getByTestId('card-close').click()
+  await closeCard(page)
   await expect(page.getByTestId('confirm-dialog')).toBeVisible()
   await page.getByTestId('confirm-close').click()
   await expect(page.getByTestId('board')).toBeVisible()

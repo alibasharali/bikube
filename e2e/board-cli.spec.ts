@@ -12,6 +12,7 @@ import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
+import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // The `board` command (#9): typed into a card's terminal, it reaches the app over
@@ -83,18 +84,18 @@ async function newCard(columnName: string, title: string): Promise<void> {
   await column(columnName).getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
   await expect.poll(terminalFocused).toBe(true)
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
   await expect.poll(terminalFocused).toBe(true)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -194,7 +195,7 @@ test('AC1: board move . done moves the calling card to the bottom of Done, and i
 
   expect(await board(alpha, 'board move . done')).toEqual(ok)
   // A card open at full size stays open (#9 D7).
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
 
   await back()
   await expect(titlesIn('Done')).toHaveText(['shipped', 'api'])
@@ -413,8 +414,15 @@ test('AC10: bad requests get an error and a closed connection; board keeps worki
   await expect(titlesIn('Done')).toHaveText(['api'])
 })
 
-const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status')
-const viewStatusLine = (): Locator => page.getByTestId('card-view').getByTestId('card-status-line')
+/**
+ * The open card shows no status (#31 D1): reads `api`'s status (`card-status`) or status line
+ * (`card-status-line`) on the board, then opens `api` again.
+ */
+async function expectOnBoard(testId: string, text: string): Promise<void> {
+  await back()
+  await expect(card('api').getByTestId(testId)).toHaveText(text)
+  await openCard('api')
+}
 
 test('AC5: board status shows on the status line, cleaned and cut, until cleared', async () => {
   await launch()
@@ -423,27 +431,26 @@ test('AC5: board status shows on the status line, cleaned and cut, until cleared
   await newCard('Backlog', 'api')
 
   expect(await board(alpha, 'board status . "running tests"')).toEqual(ok)
-  await expect(viewStatus()).toHaveText('Running · running tests')
+  await expectOnBoard('card-status', 'Running · running tests')
 
   // More output doesn't replace it.
   await run("printf 'more-output\\n'")
   await expect.poll(async () => (await bufferLines()).includes('more-output')).toBe(true)
   await page.waitForTimeout(600)
-  await expect(viewStatus()).toHaveText('Running · running tests')
   await back()
   await expect(card('api').getByTestId('card-status')).toHaveText('Running · running tests')
 
   await openCard('api')
   expect(await board(alpha, `board status . "$(printf 'a\\033[31mb')"`)).toEqual(ok)
-  await expect(viewStatusLine()).toHaveText('ab')
+  await expectOnBoard('card-status-line', 'ab')
 
   const long = 'abcdefghij'.repeat(30)
   expect(await board(alpha, `board status . ${long}`)).toEqual(ok)
-  await expect(viewStatusLine()).toHaveText(long.slice(0, 200))
+  await expectOnBoard('card-status-line', long.slice(0, 200))
 
   await run(`board status . "" && printf 'drovr-marker'; sleep 30`)
-  await expect(viewStatusLine()).toHaveText('drovr-marker')
   await back()
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
   await expect(card('api').getByTestId('card-status')).toHaveText('Running · drovr-marker')
 })
 
@@ -458,7 +465,7 @@ test("AC6: stopping clears the status; a card that isn't running can't get one",
 
   await newCard('Backlog', 'api')
   expect(await board(alpha, 'board status . "running tests"')).toEqual(ok)
-  await expect(viewStatus()).toHaveText('Running · running tests')
+  await expectOnBoard('card-status', 'Running · running tests')
 
   await run('exit')
   await expect(page.getByTestId('board')).toBeVisible()
@@ -466,10 +473,9 @@ test("AC6: stopping clears the status; a card that isn't running can't get one",
   await expect(card('api').getByTestId('card-status-line')).toHaveCount(0)
 
   await openCard('api')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectOnBoard('card-status-label', 'Running')
   expect(await board(alpha, 'board status old hi')).toEqual(refused('board: "old" is not running'))
   await run("printf 'drovr-marker'; sleep 30")
-  await expect(viewStatus()).toHaveText('Running · drovr-marker')
   await back()
   await expect(card('api').getByTestId('card-status')).toHaveText('Running · drovr-marker')
   await expect(card('old').getByTestId('card-status')).toHaveText('Stopped')

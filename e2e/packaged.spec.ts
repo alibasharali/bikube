@@ -10,6 +10,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // The packaged Linux app (#14 AC4, D8): `npm run test:packaged` packs it (`npm run pack`), then
@@ -72,7 +73,7 @@ test('AC4: the packaged app opens, makes a workspace and a card, and board statu
   await backlog.getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('api')
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
   await expect
     .poll(() =>
       page.evaluate(
@@ -84,15 +85,12 @@ test('AC4: the packaged app opens, makes a workspace and a card, and board statu
 
   await page.keyboard.type('board status . packaged')
   await page.keyboard.press('Enter')
-  // The first `board` starts the packaged executable as Node from a cold disk cache.
-  await expect(page.getByTestId('card-view').getByTestId('card-status')).toHaveText(
-    'Running · packaged',
-    { timeout: 20_000 }
-  )
-
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   const card = page
     .getByTestId('card')
     .filter({ has: page.getByTestId('card-title').getByText('api', { exact: true }) })
-  await expect(card.getByTestId('card-status')).toHaveText('Running · packaged')
+  // The first `board` starts the packaged executable as Node from a cold disk cache.
+  await expect(card.getByTestId('card-status')).toHaveText('Running · packaged', {
+    timeout: 20_000
+  })
 })

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { HIGH_WATERMARK } from '../src/core/flow-control'
+import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
@@ -94,12 +95,12 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
         .getByTestId('card')
         .filter({ has: page.getByTestId('card-title').getByText(title(i), { exact: true }) })
     const back = async (): Promise<void> => {
-      await page.getByTestId('card-back').click()
+      await backToBoard(page)
       await expect(page.getByTestId('board')).toBeVisible()
     }
     const open = async (i: number): Promise<void> => {
       await card(i).getByTestId('card-open').click()
-      await expect(page.getByTestId('card-view-title')).toHaveText(title(i))
+      await expectCardOpen(page, title(i))
     }
 
     // Create the cards; each opens at full size on creation (D6). Wait for every shell's prompt.
@@ -108,7 +109,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
       await backlog.getByTestId('new-card').click()
       await page.getByTestId('new-card-input').fill(title(i))
       await page.getByTestId('new-card-input').press('Enter')
-      await expect(page.getByTestId('card-view-title')).toHaveText(title(i))
+      await expectCardOpen(page, title(i))
       await expect.poll(() => openShellReady(page), { timeout: 30_000 }).toBe(true)
       if (i < TERMINALS - 1) await back()
     }

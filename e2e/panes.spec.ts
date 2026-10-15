@@ -3,6 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
+import {
+  backToBoard,
+  closeCard,
+  expectCardOpen,
+  expectStatusOnBoard,
+  splitDown,
+  splitRight
+} from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // Split panes inside a card (#11): the full-size view splits into panes, each a live shell in
@@ -53,7 +61,7 @@ async function newCard(columnName: string, title: string): Promise<void> {
   await column(columnName).getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 /** The panes of the open card, in tree order. */
@@ -125,7 +133,7 @@ async function openApi(): Promise<void> {
 
 test('AC1: Split right shows two focused-right halves, the new one a shell in the card directory', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
 
   await expect(panes()).toHaveCount(2)
   const area = await box(page.getByTestId('card-terminal'))
@@ -146,7 +154,7 @@ test('AC1: Split right shows two focused-right halves, the new one a shell in th
 
 test('AC4: clicking the main pane focuses it and typing goes there only', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
   await run(1, 'echo right-ready')
   await expectLine(1, 'right-ready')
@@ -179,9 +187,9 @@ async function shellPid(index: number): Promise<number> {
 
 test('AC5: Close pane and exit remove extra panes; the main pane has no close', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
-  await page.getByTestId('pane-split-down').click()
+  await splitDown(page)
   await expect(panes()).toHaveCount(3)
   await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
   const pid = await shellPid(2)
@@ -205,15 +213,14 @@ test('AC5: Close pane and exit remove extra panes; the main pane has no close', 
   expect(Math.abs(only.width - area.width)).toBeLessThanOrEqual(10)
   expect(Math.abs(only.height - area.height)).toBeLessThanOrEqual(10)
   await expect(panes().nth(0).getByRole('button', { name: 'Close pane' })).toHaveCount(0)
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
 
 test('AC5: closing a pane that is not focused leaves the focus where it was', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
-  await page.getByTestId('pane-split-down').click()
+  await splitRight(page)
+  await splitDown(page)
   await expect(panes()).toHaveCount(3)
   await panes().nth(1).click()
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
@@ -226,6 +233,27 @@ test('AC5: closing a pane that is not focused leaves the focus where it was', as
   await run(1, 'echo still-here')
   await expectLine(1, 'still-here')
   expect((await bufferLines(0)).filter(Boolean)).toEqual(mainBefore)
+})
+
+test('#31 AC5: an extra pane shows its × only under the pointer; clicking it closes the pane', async () => {
+  await openApi()
+  await splitRight(page)
+  await expect(panes()).toHaveCount(2)
+  const close = panes().nth(1).getByRole('button', { name: 'Close pane' })
+  await expect(panes().nth(0).getByRole('button', { name: 'Close pane' })).toHaveCount(0)
+
+  await panes().nth(0).hover()
+  await expect(close).toHaveCSS('opacity', '0')
+  await panes().nth(1).hover()
+  await expect(close).toHaveCSS('opacity', '1')
+  await panes().nth(0).hover()
+  await expect(close).toHaveCSS('opacity', '0')
+  await expect(panes().nth(0).getByRole('button', { name: 'Close pane' })).toHaveCount(0)
+
+  await panes().nth(1).hover()
+  await close.click()
+  await expect(panes()).toHaveCount(1)
+  await expect(panes().nth(0).getByRole('button', { name: 'Close pane' })).toHaveCount(0)
 })
 
 /** Pane `index`'s buffer as one string without whitespace. */
@@ -249,11 +277,11 @@ async function expectNoInput(index: number, before: string, marker: string): Pro
 
 test('AC2: Split down nests, the shortcut splits without reaching the shell, 4 is the limit', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
 
-  await page.getByTestId('pane-split-down').click()
+  await splitDown(page)
   await expect(panes()).toHaveCount(3)
   const area = await box(page.getByTestId('card-terminal'))
   const [main, top, bottom] = [
@@ -281,8 +309,6 @@ test('AC2: Split down nests, the shortcut splits without reaching the shell, 4 i
   await panes().nth(2).click()
   await expectNoInput(2, bottomBefore, 'bottom')
 
-  await expect(page.getByTestId('pane-split-right')).toBeDisabled()
-  await expect(page.getByTestId('pane-split-down')).toBeDisabled()
   await run(2, 'echo limit-ready')
   await expectLine(2, 'limit-ready')
   const limitBefore = await screenText(2)
@@ -295,7 +321,7 @@ test('AC2: Split down nests, the shortcut splits without reaching the shell, 4 i
 
 test('AC5: a pane whose shell exits under an open dialog leaves the keyboard with the dialog', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
   const mainBefore = await screenText(0)
@@ -355,13 +381,13 @@ test('AC3: an extra pane of a Claude Code card is a plain shell', async () => {
   await page.getByTestId('new-card-input').fill('agent')
   await page.getByTestId('new-card-startup').selectOption({ label: 'Claude Code' })
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('agent')
+  await expectCardOpen(page, 'agent')
   await expect.poll(() => claudeLogLines(fake.log)).toHaveLength(1)
   await expect
     .poll(async () => (await bufferLines(0)).some((l) => l.startsWith('fake-claude --session-id')))
     .toBe(true)
 
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await run(1, 'echo extra-$((1+1))')
   await expectLine(1, 'extra-2')
@@ -381,7 +407,7 @@ const paneLook = (index: number): Promise<{ fontSize: number; cols: number }> =>
 
 test('AC11: font size reaches every pane, each refitted to its own columns', async () => {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   const before = [await paneLook(0), await paneLook(1)]
   expect(before.map((l) => l.fontSize)).toEqual([13, 13])
@@ -421,22 +447,22 @@ async function panePids(count: number): Promise<number[]> {
 /** `api` with `count` panes: main | (extra over extra), the newest focused. */
 async function apiWithPanes(count: 2 | 3): Promise<void> {
   await openApi()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   if (count === 3) {
-    await page.getByTestId('pane-split-down').click()
+    await splitDown(page)
     await expect(panes()).toHaveCount(3)
   }
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 test('AC6: Back keeps the panes, their output and focus; the board shows the main pane only', async () => {
@@ -478,15 +504,15 @@ test('AC7: the main shell exiting ends every pane; reopening shows only the main
   for (const pid of extras) await expect.poll(() => alive(pid)).toBe(false)
 
   await openCard('api')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'api', 'Running')
   await expect(panes()).toHaveCount(1)
   await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
 })
 
-test('AC7: Close from the header ends every pane', async () => {
+test('AC7: Close from the full-size view ends every pane', async () => {
   await apiWithPanes(2)
   const pids = await panePids(2)
-  await page.getByTestId('card-close').click()
+  await closeCard(page)
   await page.getByTestId('confirm-close').click()
 
   await expect(page.getByTestId('board')).toBeVisible()
@@ -582,7 +608,7 @@ test('AC10: panes are not kept across a restart', async () => {
 
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
   await openCard('api')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'api', 'Running')
   await expect(panes()).toHaveCount(1)
 
   const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
@@ -617,8 +643,9 @@ test('#31 AC3: the shortcuts split, close the focused extra pane, and ask before
   await page.getByTestId('confirm-cancel').click()
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
   await expect(panes()).toHaveCount(2)
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
   await expectNoInput(0, mainBefore, 'main')
+  await expectStatusOnBoard(page, 'api', 'Running')
+  await expect(panes()).toHaveCount(2)
 })
 
 test('#31 AC4: the Close card shortcut asks, then stops the card with every pane', async () => {

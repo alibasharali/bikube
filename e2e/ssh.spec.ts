@@ -15,6 +15,13 @@ import { BOARD_USAGE } from '../src/core/board-args'
 import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, sshLogLines, type FakeSshHome } from './fake-ssh'
+import {
+  backToBoard,
+  checkOnBoard,
+  expectCardOpen,
+  expectStatusOnBoard,
+  splitRight
+} from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // SSH workspaces (#12): the dialog's Location choice and Host field, the sidebar tooltip, the
@@ -126,8 +133,8 @@ async function newCard(title: string): Promise<void> {
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
-  await page.getByTestId('card-back').click()
+  await expectCardOpen(page, title)
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -365,11 +372,11 @@ function card(title: string): Locator {
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -429,7 +436,11 @@ async function output(command: string, tag: string): Promise<string> {
   return found.slice(tag.length + 1)
 }
 
-const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status-label')
+/** The open card shows no status (#31 D1): reads it on the board, then opens the card again. */
+async function expectRunning(): Promise<void> {
+  const title = await page.getByTestId('card-view').getAttribute('aria-label')
+  await expectStatusOnBoard(page, title ?? '', 'Running')
+}
 const tileStatus = (title: string): Locator => card(title).getByTestId('card-status-label')
 
 /**
@@ -437,7 +448,7 @@ const tileStatus = (title: string): Locator => card(title).getByTestId('card-sta
  * its session arrives (#25 D10), so the probe is typed again until one gets through.
  */
 async function connected(): Promise<void> {
-  await expect(viewStatus()).toHaveText('Running')
+  await expectRunning()
   await expect(async () => {
     // No quotes or spaces: whatever part of a probe gets through ends at its Enter.
     await run('echo ready:$((40+2))')
@@ -449,8 +460,9 @@ test('AC4: a card runs on its host, in the remote directory; the local ssh has n
   await launch()
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('api')
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
-  await expect(page.getByTestId('card-view-location')).toHaveText(`me@devbox:${REMOTE_DIR}`)
+  await expectCardOpen(page, 'api')
+  // The open card shows no location (#31 D1): the sidebar's tooltip tells where it runs.
+  await expect(workspaceItem('remote')).toHaveAttribute('title', `me@devbox:${REMOTE_DIR}`)
   await connected()
   await expect.poll(sshLog).toHaveLength(1)
   expect(sshLog()[0]).toMatch(
@@ -465,11 +477,11 @@ test('AC4: a card runs on its host, in the remote directory; the local ssh has n
   await expect(tileStatus('api')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).not.toContainText('drovr-ready')
 
-  // A local card shows no location line.
+  // A local workspace's tooltip has no host.
   await createLocal('/tmp', 'local')
   await createCard('sh')
-  await expect(page.getByTestId('card-view-title')).toHaveText('sh')
-  await expect(page.getByTestId('card-view-location')).toHaveCount(0)
+  await expectCardOpen(page, 'sh')
+  await expect(workspaceItem('local')).toHaveAttribute('title', '/tmp')
 })
 
 test('AC4: with directory ~ the card starts in the remote home', async () => {
@@ -478,7 +490,7 @@ test('AC4: with directory ~ the card starts in the remote home', async () => {
   await createCard('api')
   await connected()
   expect(await output('pwd', 'pwd')).toBe(fake.home)
-  await expect(page.getByTestId('card-view-location')).toHaveText('me@devbox:~')
+  await expect(workspaceItem('home')).toHaveAttribute('title', 'me@devbox:~')
 })
 
 test('AC2: editing the host changes new cards only; This computer makes them local', async () => {
@@ -509,9 +521,9 @@ test('AC2: editing the host changes new cards only; This computer makes them loc
   await page.getByTestId('workspace-directory').fill('/tmp')
   await submit()
   await createCard('c')
-  await expect(viewStatus()).toHaveText('Running')
+  await expectRunning()
   expect(await output('pwd', 'pwd')).toBe('/tmp')
-  await expect(page.getByTestId('card-view-location')).toHaveCount(0)
+  await expect(workspaceItem('remote')).toHaveAttribute('title', '/tmp')
   expect(sshLog()).toHaveLength(3)
 })
 
@@ -519,7 +531,7 @@ test('AC5: the startup command is typed once, after the ready marker', async () 
   await launch({ FAKE_SSH_DELAY: '1' })
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('agent', 'Claude Code')
-  await expect(page.getByTestId('card-view-title')).toHaveText('agent')
+  await expectCardOpen(page, 'agent')
   await expect.poll(() => claudeLogLines(fake.log), { timeout: 15_000 }).toHaveLength(1)
   const [line] = claudeLogLines(fake.log)
   expect(line).toMatch(/^--session-id [0-9a-f-]{36}$/)
@@ -540,7 +552,7 @@ test('#21 AC8: a Codex card types codex once, after the ready marker, and resume
   await launch({ FAKE_SSH_DELAY: '1' })
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('r', 'Codex')
-  await expect(page.getByTestId('card-view-title')).toHaveText('r')
+  await expectCardOpen(page, 'r')
   await expect.poll(() => agentLogLines(agentLog), { timeout: 15_000 }).toEqual(['codex'])
   await expect.poll(bufferLines).toContain('fake-codex')
   const screen = (await bufferLines()).join('\n')
@@ -674,11 +686,11 @@ test('AC8: a split pane of an SSH card connects to its host, with no startup com
   await launch()
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('api', 'Claude Code')
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
   await expect.poll(() => claudeLogLines(fake.log), { timeout: 15_000 }).toHaveLength(1)
   expect(sshLog()).toHaveLength(1)
 
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await expect.poll(sshLog).toHaveLength(2)
   expect(sshLog()[1]).toMatch(
@@ -696,18 +708,18 @@ test('AC8: a pane whose ssh fails keeps its error and SSH failed until Close pan
   await createCard('api')
   await connected()
 
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect.poll(sshLog).toHaveLength(2)
   await expect.poll(() => paneLines(1)).toContain('SSH failed')
   const lines = await paneLines(1)
   expect(lines).toContain('ssh: connect to host me@devbox port 22: Connection refused')
   await page.waitForTimeout(500)
   await expect(panes()).toHaveCount(2)
-  await expect(viewStatus()).toHaveText('Running')
+  await expectRunning()
 
   await panes().nth(1).getByRole('button', { name: 'Close pane' }).click()
   await expect(panes()).toHaveCount(1)
-  await expect(viewStatus()).toHaveText('Running')
+  await expectRunning()
 })
 
 // `board` inside SSH cards (#25): each SSH session's socket is forwarded with `ssh -R`, which the
@@ -792,8 +804,9 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   )
 
   expect(await remoteRun('board status . hi')).toEqual(ok)
-  await expect(viewStatus()).toHaveText('Running')
-  await expect(page.getByTestId('card-view').getByTestId('card-status')).toHaveText('Running · hi')
+  await checkOnBoard(page, 'api', (tile) =>
+    expect(tile.getByTestId('card-status')).toHaveText('Running · hi')
+  )
   expect(await remoteRun('board move . Done')).toEqual(ok)
   expect(await output('echo "$DROVR_CARD_ID"', 'id')).toBe(await cardId('api'))
   expect(await remoteRun('"$DROVR_BIN/board" help')).toEqual({
@@ -837,7 +850,7 @@ test('#25 AC4: an extra pane of an SSH card has board through its own forward', 
   await createSsh('me@devbox', REMOTE_DIR, 'remote')
   await createCard('api')
   await connected()
-  await page.getByTestId('pane-split-right').click()
+  await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await expect.poll(sshLog).toHaveLength(2)
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
@@ -912,5 +925,5 @@ test('#25 AC6: a host refusing the forward still runs the card; board cannot rea
   expect(await remoteRun('board status . hi')).toEqual(
     refused("board: can't reach Drovr from this host")
   )
-  await expect(viewStatus()).toHaveText('Running')
+  await expectRunning()
 })

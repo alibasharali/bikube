@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards } from './fake-ssh'
+import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Sync between machines (#13). Every instance has its own data directory and its own home
@@ -87,7 +88,7 @@ async function createCard(page: Page): Promise<void> {
   await page.getByTestId('column').first().getByTestId('new-card').click()
   await page.getByTestId('new-card-input').press('Enter')
   await expect(page.getByTestId('card-view')).toBeVisible()
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 }
 
@@ -337,8 +338,8 @@ async function newCard(
   await page.getByTestId('new-card-input').fill(title)
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
-  await page.getByTestId('card-back').click()
+  await expectCardOpen(page, title)
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -415,7 +416,7 @@ test('AC4: deletions win, but a card running on B stays and is written back to A
 
   // Start `two` on B and read its shell's pid.
   await card(b.page, 'two').getByTestId('card-open').click()
-  await expect(b.page.getByTestId('card-view-title')).toHaveText('two')
+  await expectCardOpen(b.page, 'two')
   const pidFile = join(root, 'pid-two')
   await expect
     .poll(() =>
@@ -431,7 +432,7 @@ test('AC4: deletions win, but a card running on B stays and is written back to A
     .poll(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== '')
     .toBe(true)
   const pid = Number(readFileSync(pidFile, 'utf8').trim())
-  await b.page.getByTestId('card-back').click()
+  await backToBoard(b.page)
   await expect(card(b.page, 'two').getByTestId('card-status-label')).toHaveText('Running')
 
   await deleteCard(a.page, 'one')
@@ -522,7 +523,7 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
   await expect
     .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
     .toEqual([`--session-id ${id('local')}`])
-  await b.page.getByTestId('card-back').click()
+  await backToBoard(b.page)
   await selectWorkspace(b.page, 'remote')
   await card(b.page, 'ssh').getByTestId('card-open').click()
   await expect
@@ -605,7 +606,7 @@ test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", asy
   await expect.poll(() => agentLogLines(logB), { timeout: 15_000 }).toEqual(['codex'])
   await expect.poll(() => bufferLines(b.page)).toContain('fake-codex')
   expect((await bufferLines(b.page)).join('\n')).not.toContain('resume')
-  await b.page.getByTestId('card-back').click()
+  await backToBoard(b.page)
   await selectWorkspace(b.page, 'remote')
   await card(b.page, 'ssh').getByTestId('card-open').click()
   await expect
@@ -826,7 +827,7 @@ test("#26 AC1: a stalled sync file freezes nothing, and this machine's changed b
     await b.page.keyboard.type('echo ok-$((40+3))')
     await b.page.keyboard.press('Enter')
     await expect.poll(() => bufferLines(b.page), { timeout: 5000 }).toContain('ok-43')
-    await b.page.getByTestId('card-back').click()
+    await backToBoard(b.page)
     expect(await workspaceNames(b.page)).toEqual(['api'])
     await expect(b.page.getByTestId('sync-status')).toHaveCount(0)
 

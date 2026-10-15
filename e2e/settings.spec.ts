@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // Themes and settings (#10). Each test launches with its own data directory.
@@ -30,7 +31,7 @@ async function alphaWithApi(page: Page): Promise<void> {
   await page.getByTestId('column').first().getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('api')
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
 }
 
 /** The open card's terminal buffer, one trimmed string per line. */
@@ -364,7 +365,7 @@ test('AC3: picking Light recolours the board at once, Dark restores it, and api 
   await expect(dialog(page)).toBeVisible()
   await expect.poll(() => boardColours(page)).toEqual(LIGHT)
   await expect.poll(() => terminalColours(page)).toEqual(LIGHT_TERMINAL)
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(page.getByTestId('card-view')).toBeVisible()
   expect(await bufferLines(page)).toEqual(scrollback)
 
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
@@ -372,7 +373,7 @@ test('AC3: picking Light recolours the board at once, Dark restores it, and api 
   await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
 
   await page.keyboard.press('Escape')
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'api', 'Running')
   expect(await bufferLines(page)).toEqual(scrollback)
 })
 
@@ -403,12 +404,12 @@ test('with theme System the terminals follow the OS appearance live, open or not
   await expect.poll(() => terminalColours(page)).toEqual(LIGHT_TERMINAL)
 
   // A card on the board, not shown, recolours too: switch while it is closed, then open it.
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await page.emulateMedia({ colorScheme: 'dark' })
   await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
   await expect.poll(() => terminalColours(page)).toEqual(DARK_TERMINAL)
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'api', 'Running')
 })
 
 test('AC5: font size 18 applies at once, refits the open terminal and resizes its shell', async () => {
@@ -450,9 +451,9 @@ test('AC5: font size 18 applies at once, refits the open terminal and resizes it
 
 /** Goes back to the board and opens `title` at full size. */
 async function openCard(page: Page, title: string): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await page.getByTestId('card').filter({ hasText: title }).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 test('AC6: the trimmed family applies to every terminal; clearing it restores the default', async () => {
@@ -461,11 +462,11 @@ test('AC6: the trimmed family applies to every terminal; clearing it restores th
   const { page } = launched
   await alphaWithApi(page)
   // A second card, web, left on the board while api is open.
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await page.getByTestId('column').first().getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('web')
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('web')
+  await expectCardOpen(page, 'web')
   await openCard(page, 'api')
 
   await page.keyboard.press(SHORTCUT)
@@ -610,7 +611,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   // api's terminal, started again on opening it, uses the kept look.
   await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText('api')
+  await expectCardOpen(page, 'api')
   await expect
     .poll(() => openLook(page))
     .toMatchObject({
@@ -647,7 +648,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   // The app works: a workspace and a running card.
   await page.keyboard.press('Escape')
   await alphaWithApi(page)
-  await expect(page.getByTestId('card-view').getByTestId('card-status-label')).toHaveText('Running')
+  await expectStatusOnBoard(page, 'api', 'Running')
 })
 
 test('AC8: a settings file that is not JSON gives all defaults', async () => {

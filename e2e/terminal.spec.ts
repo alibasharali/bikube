@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // Colours, copy and paste in a card's terminal (#19: #1 AC6 and AC7 ported to the board).
@@ -40,7 +41,7 @@ async function openNewCard(): Promise<void> {
     .click()
   await page.getByTestId('new-card-input').fill('term')
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('term')
+  await expectCardOpen(page, 'term')
   await expect.poll(terminalFocused).toBe(true)
   // The shell is up once it has printed a prompt.
   await expect.poll(bufferText, { timeout: 15_000 }).toMatch(/\S/)

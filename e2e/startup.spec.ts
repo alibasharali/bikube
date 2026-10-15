@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { claudeLogLines, fakeClaudeHome } from './fake-claude'
 
@@ -86,16 +87,16 @@ async function newCard(
   } else {
     await page.getByTestId('new-card-input').press('Enter')
   }
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function openCard(title: string): Promise<void> {
   await card(title).getByTestId('card-open').click()
-  await expect(page.getByTestId('card-view-title')).toHaveText(title)
+  await expectCardOpen(page, title)
 }
 
 async function back(): Promise<void> {
-  await page.getByTestId('card-back').click()
+  await backToBoard(page)
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
@@ -145,8 +146,6 @@ async function run(command: string): Promise<void> {
   await page.keyboard.press('Enter')
 }
 
-const viewStatus = (): Locator => page.getByTestId('card-view').getByTestId('card-status-label')
-
 /** Waits for the board after the open card's shell exited: it is Stopped (#5 D6). */
 async function stoppedToBoard(title: string): Promise<void> {
   await expect(page.getByTestId('board')).toBeVisible()
@@ -162,8 +161,8 @@ test('AC1: a new card is a Shell by default, nothing typed, no tag', async () =>
   await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Shell')
   await page.getByTestId('new-card-input').fill('sh')
   await page.getByTestId('new-card-input').press('Enter')
-  await expect(page.getByTestId('card-view-title')).toHaveText('sh')
-  await expect(viewStatus()).toHaveText('Running')
+  await expectCardOpen(page, 'sh')
+  await expectStatusOnBoard(page, 'sh', 'Running')
   const screen = await settledScreen()
   expect(screen.join('\n')).not.toContain('claude')
   await run('pwd')
@@ -188,7 +187,7 @@ async function stopAgent(dir: string): Promise<void> {
   await page.keyboard.press('Enter')
   await run('pwd')
   await expect.poll(bufferLines).toContain(dir)
-  await expect(viewStatus()).toHaveText('Running')
+  await expectStatusOnBoard(page, 'agent', 'Running')
   await run('exit')
   await stoppedToBoard('agent')
 }
@@ -201,8 +200,8 @@ test('AC2: a Claude Code card runs claude with a new session id and shows the Cl
     .toBe(true)
   await expect.poll(bufferLines).toContain(`fake-claude --session-id ${u}`)
   expect(logLines().at(-1)).toBe(`--session-id ${u}`)
-  await expect(viewStatus()).toHaveText('Running')
   await back()
+  await expect(card('agent').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
 })
 
@@ -221,7 +220,7 @@ test('AC3/AC4: claude quits to a shell; exit stops the card; opening it resumes'
   expect(lines).not.toContain(`fake-claude --session-id ${u}`)
   expect(lines).not.toContain(dir)
   expect(logLines().at(-1)).toBe(`--resume ${u}`)
-  await expect(viewStatus()).toHaveText('Running')
+  await expectStatusOnBoard(page, 'agent', 'Running')
   // It ran in the card's directory: quit claude and ask the shell.
   await page.keyboard.press('Enter')
   await run('pwd')
@@ -242,7 +241,8 @@ test('AC5: with nothing to resume, claude starts fresh with the same session id'
   await page.waitForTimeout(500)
   const lines = (await bufferLines()).filter((l) => l !== '')
   expect(lines.at(-1)).toBe(`fake-claude --session-id ${u}`)
-  await expect(viewStatus()).toHaveText('Running')
+  await back()
+  await expect(card('agent').getByTestId('card-status-label')).toHaveText('Running')
 })
 
 test('AC7: a Custom card runs its command on every start; an empty command is refused', async () => {
@@ -372,7 +372,7 @@ test('AC8: the workspace default presets new cards and never changes existing on
   await run('exit')
   await stoppedToBoard('sh')
   await openCard('sh')
-  await expect(viewStatus()).toHaveText('Running')
+  await expectStatusOnBoard(page, 'sh', 'Running')
   const screen = await settledScreen()
   expect(screen).toHaveLength(fresh.length)
   expect(screen.join('\n')).not.toContain('claude')

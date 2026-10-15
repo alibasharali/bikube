@@ -74,7 +74,6 @@ function App(): React.JSX.Element {
     },
     [activeId, setViews]
   )
-  const darwin = window.drovr?.platform === 'darwin'
 
   const [dialog, setDialog] = useState<
     { kind: 'create' } | { kind: 'edit'; id: string } | { kind: 'delete'; id: string } | null
@@ -122,7 +121,7 @@ function App(): React.JSX.Element {
   }, [workspaceIds, onSelectWorkspace])
 
   return (
-    <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
+    <div className="app" data-testid="app">
       <Sidebar
         workspaces={workspaces}
         activeId={activeId}

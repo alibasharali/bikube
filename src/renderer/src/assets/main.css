@@ -50,7 +50,6 @@
   --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: Menlo, Consolas, monospace;
   --transition: 120ms ease;
-  --chrome-inset: 28px;
 }
 
 /*
@@ -134,10 +133,6 @@ button {
 
 .sidebar-collapsed {
   width: 56px;
-}
-
-.app-darwin .sidebar-header {
-  padding-top: var(--chrome-inset);
 }
 
 .sidebar-header {
@@ -332,10 +327,6 @@ button {
   min-width: 0;
   display: flex;
   flex-direction: column;
-}
-
-.app-darwin .main {
-  padding-top: var(--chrome-inset);
 }
 
 .empty-state {

@@ -871,6 +871,6 @@ test('#31 AC6: a recorded shortcut works in a card, is kept across a restart, an
   await expect
     .poll(() => readSettingsFile(dataDir))
     .toBe(
-      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace"}}'
+      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
     )
 })

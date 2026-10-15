@@ -21,4 +21,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS (smoke 203, packaged 3, check.sh green), posted to the board

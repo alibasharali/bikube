@@ -1,4 +1,6 @@
+import { PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import type { Workspace } from '../../core/workspace-store'
+import { ICON, SMALL_ICON } from './icons'
 import { workspaceInitial } from './workspace-initial'
 
 interface SidebarProps {
@@ -44,7 +46,7 @@ function Sidebar({
           aria-expanded={!collapsed}
           onClick={onToggle}
         >
-          {collapsed ? '»' : '«'}
+          {collapsed ? <PanelLeftOpen {...ICON} /> : <PanelLeftClose {...ICON} />}
         </button>
         {!collapsed && <span className="sidebar-title">Workspaces</span>}
         <button
@@ -55,7 +57,7 @@ function Sidebar({
           title="Create workspace"
           onClick={onAdd}
         >
-          +
+          <Plus {...ICON} />
         </button>
       </div>
       <ul className="workspace-list">
@@ -82,6 +84,9 @@ function Sidebar({
                   {workspaceInitial(w.name)}
                 </span>
                 {!collapsed && <span className="workspace-name">{w.name}</span>}
+                {!collapsed && w.host !== undefined && (
+                  <Server className="workspace-ssh" {...SMALL_ICON} />
+                )}
               </button>
               {!collapsed && (
                 <span className="workspace-actions">
@@ -93,7 +98,7 @@ function Sidebar({
                     title="Edit workspace"
                     onClick={() => onEdit(w.id)}
                   >
-                    ✎
+                    <Pencil {...SMALL_ICON} />
                   </button>
                   <button
                     type="button"
@@ -103,7 +108,7 @@ function Sidebar({
                     title="Delete workspace"
                     onClick={() => onDelete(w.id)}
                   >
-                    ×
+                    <Trash2 {...SMALL_ICON} />
                   </button>
                 </span>
               )}
@@ -125,9 +130,7 @@ function Sidebar({
           title={collapsed ? 'Settings' : undefined}
           onClick={onSettings}
         >
-          <span className="sidebar-settings-icon" aria-hidden="true">
-            ⚙
-          </span>
+          <Settings className="sidebar-settings-icon" {...ICON} />
           {!collapsed && <span>Settings</span>}
         </button>
       </div>

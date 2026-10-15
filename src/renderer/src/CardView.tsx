@@ -1,8 +1,10 @@
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import CloseCardDialog from './CloseCardDialog'
+import { SMALL_ICON } from './icons'
 import { currentKeymap } from './settings'
 import {
   cardPanes,
@@ -71,7 +73,7 @@ function Pane({
             focusScreen(paneScreen(cardId, cardPanes().layout(cardId).focused))
           }}
         >
-          ×
+          <X {...SMALL_ICON} />
         </button>
       )}
     </div>

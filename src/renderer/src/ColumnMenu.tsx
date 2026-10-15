@@ -1,4 +1,6 @@
+import { ArrowLeft, ArrowRight, Pencil, Trash2 } from 'lucide-react'
 import { useId } from 'react'
+import { MENU_ICON } from './icons'
 import MenuButton from './MenuButton'
 
 interface ColumnMenuProps {
@@ -32,6 +34,7 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             data-testid="menu-rename"
             onClick={run(props.onRename)}
           >
+            <Pencil {...MENU_ICON} />
             Rename
           </button>
           <button
@@ -42,6 +45,7 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             disabled={!props.canMoveLeft}
             onClick={run(() => props.onMove('left'))}
           >
+            <ArrowLeft {...MENU_ICON} />
             Move left
           </button>
           <button
@@ -52,6 +56,7 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             disabled={!props.canMoveRight}
             onClick={run(() => props.onMove('right'))}
           >
+            <ArrowRight {...MENU_ICON} />
             Move right
           </button>
           <button
@@ -64,6 +69,7 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             aria-describedby={hint ? hintId : undefined}
             onClick={run(props.onDelete)}
           >
+            <Trash2 {...MENU_ICON} />
             Delete
           </button>
           {hint && (

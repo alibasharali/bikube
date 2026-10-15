@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { editKeyAction } from '../../core/inline-edit'
 import type { StartupCommand } from '../../core/startup-command'
@@ -8,6 +9,7 @@ import {
   startupDraft,
   type StartupDraft
 } from '../../core/startup-form'
+import { ICON } from './icons'
 import { StartupOptions } from './StartupField'
 import { workspaceStore } from './store'
 
@@ -35,7 +37,8 @@ function NewCard(props: NewCardProps): React.JSX.Element {
         data-testid="new-card"
         onClick={() => setAdding(true)}
       >
-        + New card
+        <Plus {...ICON} />
+        New card
       </button>
     )
   }

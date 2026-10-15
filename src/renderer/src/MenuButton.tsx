@@ -1,4 +1,6 @@
+import { Ellipsis } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { ICON } from './icons'
 
 interface MenuButtonProps {
   /** Accessible name of the ⋯ button. */
@@ -92,7 +94,7 @@ function MenuButton({
         aria-label={label}
         onClick={toggle}
       >
-        ⋯
+        <Ellipsis {...ICON} />
       </button>
       {open && (
         <div

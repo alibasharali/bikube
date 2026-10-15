@@ -1,6 +1,8 @@
+import { Server } from 'lucide-react'
 import type { Workspace } from '../../core/workspace-store'
 import AddColumn from './AddColumn'
 import BoardColumn from './BoardColumn'
+import { SMALL_ICON } from './icons'
 
 /** The workspace's board: columns as vertical lanes, scrolling horizontally. */
 function Board({
@@ -14,7 +16,15 @@ function Board({
     <section className="board" data-testid="board" aria-label={`Board for ${workspace.name}`}>
       <header className="board-header">
         <h1 data-testid="board-title">{workspace.name}</h1>
-        <span className="board-dir">{workspace.directory}</span>
+        {workspace.host === undefined ? (
+          <span className="board-dir">{workspace.directory}</span>
+        ) : (
+          // An SSH workspace is marked with lucide `Server` (#31 D17) and shows its host.
+          <span className="board-dir" title={`SSH: ${workspace.host}`}>
+            <Server {...SMALL_ICON} />
+            {workspace.host}:{workspace.directory}
+          </span>
+        )}
       </header>
       <ol className="board-columns">
         {workspace.columns.map((c, i) => (

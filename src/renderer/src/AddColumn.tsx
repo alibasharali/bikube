@@ -1,4 +1,6 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
+import { ICON } from './icons'
 import InlineInput from './InlineInput'
 import { workspaceStore } from './store'
 
@@ -12,7 +14,8 @@ function AddColumn({ workspaceId }: { workspaceId: string }): React.JSX.Element 
         data-testid="add-column"
         onClick={() => setAdding(true)}
       >
-        + Add column
+        <Plus {...ICON} />
+        Add column
       </button>
     )
   }

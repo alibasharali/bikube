@@ -1,3 +1,4 @@
+import { Pencil, Square, SquareTerminal, Trash2 } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { cardMoveKey } from '../../core/card-moves'
@@ -8,6 +9,7 @@ import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
+import { MENU_ICON } from './icons'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
 import { moveCardByKey, moveCardToColumn, removeCard, takeFocusAfterMove } from './card-actions'
@@ -195,7 +197,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             setClosing(true)
           }}
         >
-          <span aria-hidden="true">■</span>
+          <Square size={12} fill="currentColor" aria-hidden="true" />
         </button>
       )}
       <MenuButton
@@ -214,6 +216,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               data-testid="card-menu-rename"
               onClick={run(startRename)}
             >
+              <Pencil {...MENU_ICON} />
               Rename
             </button>
             {moveTargets.length > 0 && (
@@ -245,6 +248,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
                 setEditingStartup(true)
               })}
             >
+              <SquareTerminal {...MENU_ICON} />
               Startup command…
             </button>
             {running && (
@@ -258,6 +262,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
                   setClosing(true)
                 })}
               >
+                <Square {...MENU_ICON} />
                 Close
               </button>
             )}
@@ -268,6 +273,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               data-testid="card-menu-delete"
               onClick={run(onDelete)}
             >
+              <Trash2 {...MENU_ICON} />
               Delete
             </button>
           </>

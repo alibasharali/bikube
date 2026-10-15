@@ -2,7 +2,7 @@
 item: 31
 type: feature
 title: Modernize and polish
-status: draft
+status: approved
 branch: claude/31-modernize-polish
 ---
 

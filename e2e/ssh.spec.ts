@@ -929,3 +929,62 @@ test('#25 AC6: a host refusing the forward still runs the card; board cannot rea
   )
   await expectRunning()
 })
+
+/** `api`'s activity pill on the board reads `text`, or is absent for null (#31 D13). */
+async function expectPill(text: string | null): Promise<void> {
+  await checkOnBoard(page, 'api', async (tile) => {
+    await expect(tile.getByTestId('card-status-label')).toHaveText('Running')
+    if (text === null) await expect(tile.getByTestId('card-activity')).toHaveCount(0)
+    else await expect(tile.getByTestId('card-activity')).toHaveText(text)
+  })
+}
+
+test('#31 AC11: board activity works in an SSH card and its extra pane, cleared on exit', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+
+  expect(await remoteRun('board activity . working')).toEqual(ok)
+  await expectPill('Working')
+  expect(await remoteRun('board activity . waiting')).toEqual(ok)
+  await expectPill('Waiting for you')
+  expect(await remoteRun('board activity . question')).toEqual(ok)
+  await expectPill('Needs your answer')
+  expect(await remoteRun('board activity . none')).toEqual(ok)
+  await expectPill(null)
+  expect(await remoteRun('board activity . busy')).toEqual({
+    code: 2,
+    stdout: '',
+    stderr: BOARD_USAGE
+  })
+
+  await splitRight(page)
+  await expect(panes()).toHaveCount(2)
+  await expect.poll(sshLog).toHaveLength(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await run('echo "up:$(echo pane)"')
+  await expect.poll(() => paneLines(1)).toContain('up:pane')
+  expect(await remoteRun('board activity . question', () => paneLines(1))).toEqual(ok)
+  await expectPill('Needs your answer')
+  expect(await remoteRun('board activity . busy', () => paneLines(1))).toEqual({
+    code: 2,
+    stdout: '',
+    stderr: BOARD_USAGE
+  })
+  expect(await remoteRun('board activity . working', () => paneLines(1))).toEqual(ok)
+  await expectPill('Working')
+
+  // `exit` in the main pane: Stopped with no pill; reopened, it connects again with none.
+  await panes().nth(0).getByTestId('terminal').click()
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
+  await openCard('api')
+  await connected()
+  await back()
+  await expect(tileStatus('api')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
+})

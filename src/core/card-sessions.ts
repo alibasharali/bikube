@@ -5,6 +5,7 @@
  * tests), so views can come and go while a running card's screen keeps receiving output.
  */
 import type { TerminalApi, TerminalExit } from '../shared/api'
+import type { Activity } from './activity'
 import { SessionRouter } from './session-router'
 import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
 import { readyWatcher } from './ready-marker'
@@ -49,6 +50,8 @@ interface Entry<S> {
   state: CardRunState
   /** Set by `board status` (#9 D8); empty when none. Cleared whenever the state changes. */
   agentStatus: string
+  /** Set by `board activity` (#31 D12); null when none. Cleared whenever the state changes. */
+  activity: Activity | null
   status: CardStatus
   listeners: Set<() => void>
   /** Pending throttle timer; `dirty` means output landed since the last status update. */
@@ -103,6 +106,7 @@ export class CardSessions<S extends CardScreen> {
       sessionId: null,
       state,
       agentStatus: '',
+      activity: null,
       status: cardStatus(state, ''),
       listeners: new Set(),
       timer: null,
@@ -228,6 +232,18 @@ export class CardSessions<S extends CardScreen> {
   }
 
   /**
+   * Sets the running card's activity; null clears it (#31 D12). Returns false, changing nothing,
+   * for a card that isn't running.
+   */
+  setActivity(cardId: string, activity: Activity | null): boolean {
+    const entry = this.entries.get(cardId)
+    if (entry?.state.kind !== 'running') return false
+    entry.activity = activity
+    this.refresh(entry)
+    return true
+  }
+
+  /**
    * Called with a card's id each time a start of it ends: its shell stops for any reason (it
    * exits, or is Closed) and the card is Stopped, or its shell couldn't start (#5 D8); not when
    * the card is disposed. The card's extra panes end with it (#11 D1, D6).
@@ -337,8 +353,9 @@ export class CardSessions<S extends CardScreen> {
   /** A process state change shows at once, outside the output throttle. */
   private setState(entry: Entry<S>, state: CardRunState): void {
     entry.state = state
-    // A start, a stop and a failed start all clear the agent status (#9 D8).
+    // A start, a stop and a failed start all clear the agent status and activity (#9 D8, #31 D12).
     entry.agentStatus = ''
+    entry.activity = null
     if (state.kind === 'failed') entry.screen?.setReadOnly()
     this.refresh(entry)
   }
@@ -346,12 +363,18 @@ export class CardSessions<S extends CardScreen> {
   /** Recomputes the status from the screen and notifies when it changed. */
   private refresh(entry: Entry<S>): void {
     const { lines, cursorRow } = entry.screen?.screen() ?? { lines: [], cursorRow: 0 }
-    const next = cardStatus(entry.state, lastOutputLine(lines, cursorRow), entry.agentStatus)
+    const next = cardStatus(
+      entry.state,
+      lastOutputLine(lines, cursorRow),
+      entry.agentStatus,
+      entry.activity
+    )
     const prev = entry.status
     if (
       next.label === prev.label &&
       next.agentStatus === prev.agentStatus &&
-      next.lastLine === prev.lastLine
+      next.lastLine === prev.lastLine &&
+      next.activity === prev.activity
     )
       return
     entry.status = next

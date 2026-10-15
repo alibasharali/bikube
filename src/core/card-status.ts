@@ -1,3 +1,5 @@
+import type { Activity } from './activity'
+
 /**
  * Card status rules (#4 D9). Plain TS: the renderer feeds it the terminal's screen lines and
  * cursor row, and the process state it tracks per card.
@@ -56,13 +58,23 @@ export interface CardStatus {
   agentStatus: string
   /** The last output line (see `lastOutputLine`) while running; empty otherwise. */
   lastLine: string
+  /** What `board activity` set while running (#31 D12, D13); absent when none. */
+  activity?: Activity
 }
 
-/** `agentStatus` is the cleaned text `board status` set; empty when none is set (#9 D8). */
-export function cardStatus(state: CardRunState, lastLine: string, agentStatus = ''): CardStatus {
+/**
+ * `agentStatus` is the cleaned text `board status` set; empty when none is set (#9 D8).
+ * `activity` is what `board activity` set (#31 D12); null or omitted when none.
+ */
+export function cardStatus(
+  state: CardRunState,
+  lastLine: string,
+  agentStatus = '',
+  activity: Activity | null = null
+): CardStatus {
   const label = statusLabel(state)
   if (state.kind !== 'running') return { label, agentStatus: '', lastLine: '' }
-  return { label, agentStatus, lastLine }
+  return activity ? { label, agentStatus, lastLine, activity } : { label, agentStatus, lastLine }
 }
 
 const NOT_STARTED: CardRunState = { kind: 'stopped' }

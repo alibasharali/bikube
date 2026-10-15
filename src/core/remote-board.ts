@@ -5,6 +5,7 @@
  * the generated text contains a backslash, so the SSH line quotes the same under any local login
  * shell, fish included (#12 D3). Plain TS, no Node imports.
  */
+import { ACTIVITY_VALUES } from './activity'
 import { BOARD_USAGE } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { ANSWER_TIMEOUT_MS, BOARD_PROTOCOL_VERSION, NO_ANSWER } from './board-protocol'
@@ -43,6 +44,14 @@ function literal(text: string, join: string): string {
 const perlString = (text: string): string => literal(text, ' . ')
 const pythonString = (text: string): string => literal(text, ' + ')
 
+/** Each command's value field in a request; `activity` takes only `ACTIVITY_VALUES` (#31 D12). */
+const VALUE_KEYS = { move: 'column', status: 'text', activity: 'activity' } as const
+
+/** `[key, value]` pairs as `"key" => "value"` / `"key": "value"` entries joined with `, `. */
+function entries(pairs: [string, string][], arrow: string, string: (t: string) => string): string {
+  return pairs.map(([k, v]) => `${string(k)}${arrow}${string(v)}`).join(', ')
+}
+
 /** Whole seconds for perl's `alarm`, never less than the answer timeout. */
 const TIMEOUT_SECONDS = Math.ceil(ANSWER_TIMEOUT_MS / 1000)
 
@@ -58,9 +67,11 @@ my $Q = chr(34);
 my $NL = chr(10);
 my $USAGE = ${perlString(BOARD_USAGE)};
 sub fail { binmode STDERR, ":utf8"; print STDERR $_[0], $NL; exit 1 }
+my %KEY = (${entries(Object.entries(VALUE_KEYS), ' => ', perlString)});
+my %ACT = map { $_ => 1 } (${ACTIVITY_VALUES.map(perlString).join(', ')});
 my @a = @ARGV;
 if (!@a || (@a == 1 && ($a[0] eq "help" || $a[0] eq "--help"))) { print STDOUT $USAGE; exit 0 }
-if (!(@a == 3 && ($a[0] eq "move" || $a[0] eq "status"))) { print STDERR $USAGE; exit 2 }
+if (!(@a == 3 && exists $KEY{$a[0]} && ($a[0] ne "activity" || $ACT{$a[2]}))) { print STDERR $USAGE; exit 2 }
 my $id = $ENV{DROVR_CARD_ID};
 my $path = $ENV{DROVR_SOCKET};
 fail(${perlString(NOT_IN_A_CARD)}) unless defined $id && length $id && defined $path && length $path;
@@ -72,7 +83,7 @@ sub js {
 }
 my $req = "{" . join(",", js("v") . ":" . ${BOARD_PROTOCOL_VERSION}, js("cardId") . ":" . js($id),
   js("command") . ":" . js($a[0]), js("card") . ":" . js($a[1]),
-  js($a[0] eq "move" ? "column" : "text") . ":" . js($a[2])) . "}" . $NL;
+  js($KEY{$a[0]}) . ":" . js($a[2])) . "}" . $NL;
 $SIG{PIPE} = "IGNORE";
 my $got = "";
 my $connected = 0;
@@ -179,10 +190,12 @@ def fail(text):
     out(sys.stderr, text + chr(10), 1)
 def text(value):
     return os.fsencode(value).decode("utf-8", "replace")
+KEY = {${entries(Object.entries(VALUE_KEYS), ': ', pythonString)}}
+ACT = (${ACTIVITY_VALUES.map(pythonString).join(', ')})
 a = [text(arg) for arg in sys.argv[1:]]
 if not a or (len(a) == 1 and a[0] in ("help", "--help")):
     out(sys.stdout, USAGE, 0)
-if not (len(a) == 3 and a[0] in ("move", "status")):
+if not (len(a) == 3 and a[0] in KEY and (a[0] != "activity" or a[2] in ACT)):
     out(sys.stderr, USAGE, 2)
 card_id = text(os.environ.get("DROVR_CARD_ID", ""))
 path = os.environ.get("DROVR_SOCKET", "")
@@ -204,7 +217,7 @@ try:
     s.connect(path)
 except OSError:
     fail(CANT)
-key = "column" if a[0] == "move" else "text"
+key = KEY[a[0]]
 req = {"v": ${BOARD_PROTOCOL_VERSION}, "cardId": card_id, "command": a[0], "card": a[1], key: a[2]}
 got = b""
 try:

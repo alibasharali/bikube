@@ -26,6 +26,31 @@ describe('parseBoardArgs', () => {
     })
   })
 
+  it('parses an activity, each of working, waiting, question and none (#31 D12)', () => {
+    for (const activity of ['working', 'waiting', 'question', 'none'] as const) {
+      expect(parseBoardArgs(['activity', '.', activity])).toEqual({
+        kind: 'command',
+        command: { command: 'activity', card: '.', activity }
+      })
+    }
+  })
+
+  it('prints usage to stderr with exit 2 for any other activity (#31 D12)', () => {
+    for (const argv of [
+      ['activity', '.', 'busy'],
+      ['activity', '.', 'Working'],
+      ['activity', '.', ''],
+      ['activity', '.'],
+      ['activity', '.', 'working', 'x']
+    ]) {
+      expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
+    }
+  })
+
+  it('names the activity command in the usage text (#31 D12)', () => {
+    expect(BOARD_USAGE).toContain('board activity <card> working|waiting|question|none')
+  })
+
   it('prints usage to stderr with exit 2 for any other shape', () => {
     const shapes = [
       ['frob'],

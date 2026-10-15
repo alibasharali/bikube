@@ -52,6 +52,11 @@ describe('BoardRelay', () => {
     expect(sent[0].command).toEqual({ command: 'status', card: 'web', text: 'hi' })
   })
 
+  it('forwards an activity command with its value (#31 D12)', () => {
+    void relay.handle({ v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'question' })
+    expect(sent[0].command).toEqual({ command: 'activity', card: '.', activity: 'question' })
+  })
+
   it('refuses a card with no live session without asking any window (#9 D3)', async () => {
     await expect(relay.handle({ ...request, cardId: 'gone' })).resolves.toEqual({
       ok: false,

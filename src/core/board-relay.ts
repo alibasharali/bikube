@@ -43,6 +43,18 @@ function asReply(value: unknown): BoardReply | null {
   return null
 }
 
+/** The command in a request, without its version and calling card. */
+function commandOf(request: BoardRequest): BoardCommand {
+  switch (request.command) {
+    case 'move':
+      return { command: 'move', card: request.card, column: request.column }
+    case 'status':
+      return { command: 'status', card: request.card, text: request.text }
+    case 'activity':
+      return { command: 'activity', card: request.card, activity: request.activity }
+  }
+}
+
 export class BoardRelay<Owner> {
   private readonly pending = new Map<string, Pending<Owner>>()
   private nextId = 1
@@ -59,10 +71,7 @@ export class BoardRelay<Owner> {
     if (owner === undefined) return Promise.resolve({ ok: false, error: NOT_IN_A_CARD })
     if (owner === null) return Promise.resolve({ ok: false, error: NO_WINDOW })
     const { cardId } = request
-    const command: BoardCommand =
-      request.command === 'move'
-        ? { command: 'move', card: request.card, column: request.column }
-        : { command: 'status', card: request.card, text: request.text }
+    const command = commandOf(request)
     const requestId = String(this.nextId++)
     return new Promise((resolve) => {
       const timer = setTimeout(

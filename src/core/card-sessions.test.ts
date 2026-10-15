@@ -647,6 +647,56 @@ describe('agent status (#9 D8)', () => {
   })
 })
 
+describe('activity (#31 D12)', () => {
+  it('shows in the status while running, and none clears it', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitData('s1', 'first')
+    const listener = vi.fn()
+    sessions.subscribe('c1', listener)
+    expect(sessions.setActivity('c1', 'working')).toBe(true)
+    expect(sessions.status('c1')).toStrictEqual({
+      label: 'Running',
+      agentStatus: '',
+      lastLine: 'first',
+      activity: 'working'
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(sessions.setActivity('c1', 'question')).toBe(true)
+    expect(sessions.status('c1')?.activity).toBe('question')
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(sessions.setActivity('c1', null)).toBe(true)
+    expect(sessions.status('c1')?.activity).toBeUndefined()
+    expect(listener).toHaveBeenCalledTimes(3)
+  })
+
+  it('cannot be set on a Stopped, failed or unknown card', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    api.emitExit({ id: 's1', exitCode: 0 })
+    await started('c2', { ok: false, reason: 'no such directory' })
+    expect(sessions.setActivity('c1', 'working')).toBe(false)
+    expect(sessions.setActivity('c2', 'working')).toBe(false)
+    expect(sessions.setActivity('ghost', 'working')).toBe(false)
+    expect(sessions.status('c1')?.activity).toBeUndefined()
+  })
+
+  it('is cleared when the process stops, and stays cleared when it starts again', async () => {
+    await started('c1', { ok: true, id: 's1' })
+    sessions.setActivity('c1', 'waiting')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(sessions.status('c1')?.activity).toBeUndefined()
+    await started('c1', { ok: true, id: 's2' })
+    expect(sessions.status('c1')?.activity).toBeUndefined()
+  })
+
+  it('is cleared when a start fails', async () => {
+    sessions.start(card('c1'))
+    sessions.setActivity('c1', 'working')
+    api.spawns[0].resolve({ ok: false, reason: 'no such directory' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.status('c1')?.activity).toBeUndefined()
+  })
+})
+
 describe('SSH cards (#12 D5, D6, D7)', () => {
   /** An SSH card on `me@devbox`. */
   function sshCard(id: string, startup: StartupCommand = { kind: 'shell' }): StartingCard {

@@ -200,4 +200,37 @@ describe('answerBoardCommand', () => {
       ['c-api', '']
     ])
   })
+
+  it("sets and clears the card's activity, only on a running card (#31 D12)", () => {
+    const store = setup()
+    const before = store.getState()
+    const set: [string, string | null][] = []
+    const activity = (card: string, value: 'working' | 'waiting' | 'question' | 'none'): unknown =>
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'activity', card, activity: value },
+        running,
+        () => {},
+        (id, next) => {
+          set.push([id, next])
+        }
+      )
+    expect(activity('.', 'working')).toEqual({ ok: true })
+    expect(activity('web', 'waiting')).toEqual({ ok: true })
+    expect(activity('.', 'question')).toEqual({ ok: true })
+    expect(activity('.', 'none')).toEqual({ ok: true })
+    expect(activity('old', 'working')).toEqual({ ok: false, error: 'board: "old" is not running' })
+    expect(activity('other', 'working')).toEqual({
+      ok: false,
+      error: 'board: no card "other" in this workspace'
+    })
+    expect(set).toEqual([
+      ['c-api', 'working'],
+      ['c-web', 'waiting'],
+      ['c-api', 'question'],
+      ['c-api', null]
+    ])
+    expect(store.getState()).toBe(before)
+  })
 })

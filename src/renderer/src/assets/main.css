@@ -13,6 +13,13 @@
   --shadow: rgba(0, 0, 0, 0.45);
   --shadow-strong: rgba(0, 0, 0, 0.5);
   --backdrop: rgba(0, 0, 0, 0.55);
+  /* The activity pill (#31 D13): Working, Waiting for you, Needs your answer. */
+  --pill-working-bg: rgba(109, 141, 250, 0.18);
+  --pill-working-text: #9fb4ff;
+  --pill-waiting-bg: rgba(70, 167, 88, 0.2);
+  --pill-waiting-text: #7fd18e;
+  --pill-question-bg: rgba(255, 178, 36, 0.2);
+  --pill-question-text: #ffc53d;
   color-scheme: dark;
   --space-1: 4px;
   --space-2: 8px;
@@ -43,6 +50,12 @@
     --shadow: rgba(16, 24, 40, 0.14);
     --shadow-strong: rgba(16, 24, 40, 0.18);
     --backdrop: rgba(16, 24, 40, 0.35);
+    --pill-working-bg: rgba(61, 99, 221, 0.12);
+    --pill-working-text: #2f4fb8;
+    --pill-waiting-bg: rgba(48, 164, 108, 0.14);
+    --pill-waiting-text: #18794e;
+    --pill-question-bg: rgba(255, 178, 36, 0.2);
+    --pill-question-text: #9a5b00;
     color-scheme: light;
   }
 }
@@ -872,6 +885,43 @@ button {
   display: block;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The status row: the label, then the activity pill when set (#31 D11, D13). */
+.card-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.card-status-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-activity {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.card-activity-working {
+  background: var(--pill-working-bg);
+  color: var(--pill-working-text);
+}
+
+.card-activity-waiting {
+  background: var(--pill-waiting-bg);
+  color: var(--pill-waiting-text);
+}
+
+.card-activity-question {
+  background: var(--pill-question-bg);
+  color: var(--pill-question-text);
 }
 
 /* Up to 2 lines, then an ellipsis; the full text is the tooltip (#31 D11). */

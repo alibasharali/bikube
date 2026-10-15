@@ -124,6 +124,42 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     })
   })
 
+  it.skipIf(!language.path)('sends an activity with its value (#31 D12)', async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    await serve(handler)
+    for (const activity of ['working', 'waiting', 'question', 'none']) {
+      expect(await run(['activity', '.', activity], env())).toEqual({
+        code: 0,
+        stdout: '',
+        stderr: ''
+      })
+      expect(handler).toHaveBeenLastCalledWith({
+        v: 1,
+        cardId: 'card-1',
+        command: 'activity',
+        card: '.',
+        activity
+      })
+    }
+  })
+
+  it.skipIf(!language.path)(
+    'prints the usage to stderr for any other activity, exit 2, sending nothing (#31 D12)',
+    async () => {
+      const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+      await serve(handler)
+      for (const args of [
+        ['activity', '.', 'busy'],
+        ['activity', '.', 'Working'],
+        ['activity', '.', ''],
+        ['activity', '.']
+      ]) {
+        expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+      }
+      expect(handler).not.toHaveBeenCalled()
+    }
+  )
+
   it.skipIf(!language.path)('sends a quote, a backslash, a newline and é unchanged', async () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
     await serve(handler)

@@ -23,6 +23,30 @@ describe('serializeRequest / parseRequestLine', () => {
     expect(parseRequestLine(s)).toEqual({ ok: true, request: status })
   })
 
+  it('round-trips an activity, still version 1 (#31 D12)', () => {
+    const a = serializeRequest('c1', { command: 'activity', card: '.', activity: 'working' })
+    const activity = { v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'working' }
+    expect(a).toBe(`${line(activity)}\n`)
+    expect(parseRequestLine(a)).toEqual({ ok: true, request: activity })
+    const none = { ...activity, activity: 'none' }
+    expect(parseRequestLine(line(none))).toEqual({ ok: true, request: none })
+  })
+
+  it('rejects an activity request with another value or other fields (#31 D12)', () => {
+    const activity = { v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'waiting' }
+    const bad: unknown[] = [
+      { ...activity, activity: 'busy' },
+      { ...activity, activity: 'Waiting' },
+      { ...activity, activity: 1 },
+      { v: 1, cardId: 'c1', command: 'activity', card: '.' },
+      { ...activity, text: 'x' },
+      { ...status, command: 'activity' }
+    ]
+    for (const value of bad) {
+      expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+
   it('is version 1 with an 8 KB line limit', () => {
     expect(BOARD_PROTOCOL_VERSION).toBe(1)
     expect(MAX_REQUEST_LINE_BYTES).toBe(8192)

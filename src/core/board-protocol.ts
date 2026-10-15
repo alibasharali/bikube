@@ -3,6 +3,7 @@
  * from main, then the connection closes. Plain TS, importable by main, the CLI and the renderer.
  */
 
+import { isActivityValue } from './activity'
 import type { BoardCommand } from './board-args'
 
 export const BOARD_PROTOCOL_VERSION = 1
@@ -38,7 +39,8 @@ export function isOverLineLimit(line: string): boolean {
 
 const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   move: ['v', 'cardId', 'command', 'card', 'column'],
-  status: ['v', 'cardId', 'command', 'card', 'text']
+  status: ['v', 'cardId', 'command', 'card', 'text'],
+  activity: ['v', 'cardId', 'command', 'card', 'activity']
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -46,7 +48,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The request in one received line (a trailing newline is ignored), or the error reason to
- * reply with: anything but exactly a version-1 move or status with string fields is refused.
+ * reply with: anything but exactly a version-1 move, status or activity (#31 D12) with string
+ * fields, an activity's being one `board activity` takes, is refused.
  */
 export function parseRequestLine(line: string): ParsedRequest {
   const text = line.endsWith('\n') ? line.slice(0, -1) : line
@@ -61,7 +64,9 @@ export function parseRequestLine(line: string): ParsedRequest {
     return { ok: false, error: INVALID_REQUEST }
   }
   const command = value.command
-  if (command !== 'move' && command !== 'status') return { ok: false, error: INVALID_REQUEST }
+  if (command !== 'move' && command !== 'status' && command !== 'activity') {
+    return { ok: false, error: INVALID_REQUEST }
+  }
   const fields = FIELDS[command]
   const keys = Object.keys(value)
   const shaped =
@@ -69,11 +74,15 @@ export function parseRequestLine(line: string): ParsedRequest {
     fields.every((f) => f === 'v' || f === 'command' || typeof value[f] === 'string')
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
   const { cardId, card } = value as Record<string, string>
-  const request: BoardRequest =
-    command === 'move'
-      ? { v: 1, cardId, command, card, column: value.column as string }
-      : { v: 1, cardId, command, card, text: value.text as string }
-  return { ok: true, request }
+  if (command === 'move') {
+    return { ok: true, request: { v: 1, cardId, command, card, column: value.column as string } }
+  }
+  if (command === 'status') {
+    return { ok: true, request: { v: 1, cardId, command, card, text: value.text as string } }
+  }
+  const activity = value.activity
+  if (!isActivityValue(activity)) return { ok: false, error: INVALID_REQUEST }
+  return { ok: true, request: { v: 1, cardId, command, card, activity } }
 }
 
 /** The reply line main writes, newline included. */

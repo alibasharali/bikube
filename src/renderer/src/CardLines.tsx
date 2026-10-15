@@ -1,7 +1,9 @@
+import { ACTIVITY_LABELS } from '../../core/activity'
 import type { CardStatus } from '../../core/card-status'
 
 /**
- * A card's lines under its title (#31 D11): the status row with its label, then, while running,
+ * A card's lines under its title (#31 D11): the status row with its label and the activity pill
+ * when set (D13), then, while running,
  * the agent status (#9 D8) on up to 2 lines with its full text as tooltip and the last output
  * line in the terminal font. The stop button (D10) sits beside the status row, outside the
  * card's open button (see `CardItem`).
@@ -13,7 +15,15 @@ function CardLines({ status }: { status: CardStatus }): React.JSX.Element {
         <span className="card-status-label" data-testid="card-status-label">
           {status.label}
         </span>
-        {/* The activity pill (#31 D13) goes here. */}
+        {status.activity && (
+          <span
+            className={`card-activity card-activity-${status.activity}`}
+            data-testid="card-activity"
+            data-activity={status.activity}
+          >
+            {ACTIVITY_LABELS[status.activity]}
+          </span>
+        )}
       </span>
       {status.agentStatus && (
         <span

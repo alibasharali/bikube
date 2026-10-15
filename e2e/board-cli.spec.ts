@@ -12,7 +12,7 @@ import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
-import { backToBoard, expectCardOpen } from './card-view'
+import { backToBoard, checkOnBoard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 
 // The `board` command (#9): typed into a card's terminal, it reaches the app over
@@ -552,4 +552,97 @@ test("AC6: stopping clears the status; a card that isn't running can't get one",
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
   await expect(card('old').getByTestId('card-status')).toHaveText('Stopped')
+})
+
+/**
+ * Runs `command` in whichever pane of the open card has keyboard focus (its directory is `dir`):
+ * stdout, stderr and the exit code go to files, so no pane's screen needs reading.
+ */
+async function boardInFocusedPane(
+  dir: string,
+  command: string
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const tag = `p${++commands}`
+  const rc = join(dir, `${tag}.rc`)
+  await run(
+    `${command} >${tag}.out 2>${tag}.err; echo $? >${tag}.rc.tmp; mv ${tag}.rc.tmp ${tag}.rc`
+  )
+  await expect.poll(() => existsSync(rc), { timeout: 15_000 }).toBe(true)
+  return {
+    code: Number(readFileSync(rc, 'utf8').trim()),
+    stdout: readFileSync(join(dir, `${tag}.out`), 'utf8'),
+    stderr: readFileSync(join(dir, `${tag}.err`), 'utf8')
+  }
+}
+
+/** `api`'s activity pill on the board reads `text`, or is absent for null (#31 D13). */
+async function expectPill(text: string | null): Promise<void> {
+  await checkOnBoard(page, 'api', async (api) => {
+    await expect(api.getByTestId('card-status-label')).toHaveText('Running')
+    if (text === null) await expect(api.getByTestId('card-activity')).toHaveCount(0)
+    else await expect(api.getByTestId('card-activity')).toHaveText(text)
+  })
+}
+
+test('#31 AC11: board activity shows a pill until none, from the main and an extra pane, cleared on exit', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'api')
+
+  expect(await board(alpha, 'board activity . working')).toEqual(ok)
+  await expectPill('Working')
+  expect(await board(alpha, 'board activity . waiting')).toEqual(ok)
+  await expectPill('Waiting for you')
+  expect(await board(alpha, 'board activity . question')).toEqual(ok)
+  await expectPill('Needs your answer')
+  expect(await board(alpha, 'board activity . none')).toEqual(ok)
+  await expectPill(null)
+  expect(await board(alpha, 'board activity . busy')).toEqual({
+    code: 2,
+    stdout: '',
+    stderr: BOARD_USAGE
+  })
+  await expectPill(null)
+
+  // From an extra pane (#11): the same card.
+  await splitRight(page)
+  const panes = page.getByTestId('card-view').getByTestId('pane')
+  await expect(panes).toHaveCount(2)
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const pane = document.activeElement?.closest('[data-testid=card-view] [data-testid=pane]')
+        return [...document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')].indexOf(
+          pane as Element
+        )
+      })
+    )
+    .toBe(1)
+  expect(await boardInFocusedPane(alpha, 'board activity . question')).toEqual(ok)
+  await expectPill('Needs your answer')
+  expect(await boardInFocusedPane(alpha, 'board activity . busy')).toEqual({
+    code: 2,
+    stdout: '',
+    stderr: BOARD_USAGE
+  })
+  expect(await boardInFocusedPane(alpha, 'board activity . working')).toEqual(ok)
+  await expectPill('Working')
+
+  // `exit` in the main pane: Stopped, no pill; reopening starts it again with none.
+  await panes.nth(0).getByTestId('terminal').click()
+  await expect.poll(terminalFocused).toBe(true)
+  await run('exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
+
+  await openCard('api')
+  await back()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
+  await openCard('api')
+  expect(await board(alpha, 'board activity old working')).toEqual(
+    refused('board: no card "old" in this workspace')
+  )
 })

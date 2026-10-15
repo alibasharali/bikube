@@ -164,6 +164,22 @@ test('#31 AC2: the Back shortcut and the active workspace go back; the card keep
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
 
+test('the title bar names the open card, and its workspace name goes back to the board', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  const bar = page.getByTestId('titlebar')
+  await expect(bar.getByTestId('titlebar-card')).toHaveText('api')
+  await expect(page).toHaveTitle('api — alpha')
+
+  await bar.getByTestId('titlebar-workspace').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  // On the board the workspace name is the title, not a button.
+  await expect(bar.getByTestId('titlebar-workspace')).toHaveCount(0)
+  await expect(bar).toContainText('alpha')
+  await expect(page).toHaveTitle('alpha')
+})
+
 test('AC3: Back and Ctrl+Shift+B return to the board; Esc goes to the terminal', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')

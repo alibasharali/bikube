@@ -126,7 +126,12 @@ function App(): React.JSX.Element {
 
   return (
     <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
-      <TitleBar collapsed={collapsed} workspace={active} card={active ? openCard : null} />
+      <TitleBar
+        collapsed={collapsed}
+        workspace={active}
+        card={active ? openCard : null}
+        onBack={closeCard}
+      />
       <div className="app-body">
         <Sidebar
           workspaces={workspaces}

@@ -8,14 +8,18 @@ import { ICON } from './icons'
 /**
  * The app's own title bar, above the sidebar and the main area: it drags the window, leaves room
  * for the macOS window buttons over the sidebar, and names where the user is (the workspace, and
- * the open card with its startup tag). The window title follows it.
+ * the open card with its startup tag). With a card open, the workspace name goes back to its board.
+ * The window title follows it.
  */
 function TitleBar({
   collapsed,
   workspace,
-  card
+  card,
+  onBack
 }: {
   collapsed: boolean
+  /** Back to the workspace's board, as the Back shortcut does. */
+  onBack: () => void
   workspace: Workspace | null | undefined
   card: Card | null
 }): React.JSX.Element {
@@ -30,9 +34,19 @@ function TitleBar({
       <div className="titlebar-main" data-testid="titlebar-title">
         {workspace ? (
           <>
-            <span className={card ? 'titlebar-workspace' : 'titlebar-current'}>
-              {workspace.name}
-            </span>
+            {card ? (
+              <button
+                type="button"
+                className="titlebar-workspace"
+                data-testid="titlebar-workspace"
+                title={`Back to ${workspace.name}`}
+                onClick={onBack}
+              >
+                {workspace.name}
+              </button>
+            ) : (
+              <span className="titlebar-current">{workspace.name}</span>
+            )}
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />

@@ -174,7 +174,21 @@ button {
 
 .titlebar-workspace {
   flex: none;
+  padding: 2px var(--space-1);
+  margin: 0 calc(-1 * var(--space-1));
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  /* A button in the bar takes clicks instead of dragging the window. */
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-workspace:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .titlebar-separator {

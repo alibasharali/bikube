@@ -22,7 +22,7 @@ import { workspaceStore } from './store'
  * tag with its select label as tooltip, `Custom` with the command as its tooltip, nothing for
  * Shell. It follows the setting, not what is running, and takes its kind's colour (`--kind`).
  */
-function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
+export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
   if (startup.kind === 'shell') return null
   const [tag, title] =
     startup.kind === 'custom'

@@ -29,6 +29,11 @@ function createWindow(settings: MainSettings): void {
     // Off macOS the default menu bar stays hidden until Alt is pressed; its accelerators still
     // work (#14 D9). macOS keeps its app menu.
     autoHideMenuBar: process.platform !== 'darwin',
+    // On macOS Drovr draws its own title bar, with the window buttons inset over the sidebar.
+    ...(process.platform === 'darwin' && {
+      titleBarStyle: 'hiddenInset' as const,
+      trafficLightPosition: { x: 14, y: 13 }
+    }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

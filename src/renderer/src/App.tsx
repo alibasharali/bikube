@@ -22,6 +22,7 @@ import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
 import { currentKeymap } from './settings'
 import Sidebar from './Sidebar'
+import TitleBar from './TitleBar'
 import { useWorkspaceState, workspaceStore } from './store'
 import { useSyncStatus } from './sync'
 
@@ -75,6 +76,9 @@ function App(): React.JSX.Element {
     [activeId, setViews]
   )
 
+  // On macOS the title bar leaves room for the window buttons (main hides the native one).
+  const darwin = window.drovr?.platform === 'darwin'
+
   const [dialog, setDialog] = useState<
     { kind: 'create' } | { kind: 'edit'; id: string } | { kind: 'delete'; id: string } | null
   >(null)
@@ -121,28 +125,31 @@ function App(): React.JSX.Element {
   }, [workspaceIds, onSelectWorkspace])
 
   return (
-    <div className="app" data-testid="app">
-      <Sidebar
-        workspaces={workspaces}
-        activeId={activeId}
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
-        onSelect={onSelectWorkspace}
-        onAdd={onCreateWorkspace}
-        onEdit={(id) => setDialog({ kind: 'edit', id })}
-        onDelete={(id) => setDialog({ kind: 'delete', id })}
-        onSettings={() => setSettingsOpen(true)}
-        syncStatus={syncStatus}
-      />
-      <main className="main">
-        {active && openCard ? (
-          <CardView key={openCard.id} card={openCard} onBack={closeCard} />
-        ) : active ? (
-          <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
-        ) : (
-          <EmptyState onCreateWorkspace={onCreateWorkspace} />
-        )}
-      </main>
+    <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
+      <TitleBar collapsed={collapsed} workspace={active} card={active ? openCard : null} />
+      <div className="app-body">
+        <Sidebar
+          workspaces={workspaces}
+          activeId={activeId}
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+          onSelect={onSelectWorkspace}
+          onAdd={onCreateWorkspace}
+          onEdit={(id) => setDialog({ kind: 'edit', id })}
+          onDelete={(id) => setDialog({ kind: 'delete', id })}
+          onSettings={() => setSettingsOpen(true)}
+          syncStatus={syncStatus}
+        />
+        <main className="main">
+          {active && openCard ? (
+            <CardView key={openCard.id} card={openCard} onBack={closeCard} />
+          ) : active ? (
+            <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+          ) : (
+            <EmptyState onCreateWorkspace={onCreateWorkspace} />
+          )}
+        </main>
+      </div>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {dialog?.kind === 'create' && (
         <WorkspaceDialog workspace={null} workspaces={workspaces} onClose={() => setDialog(null)} />

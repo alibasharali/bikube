@@ -118,7 +118,75 @@ button {
 
 .app {
   display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/*
+ * The app's title bar: it drags the window. Its side part continues the sidebar (and holds the
+ * macOS window buttons); its main part names the workspace and the open card.
+ */
+.titlebar {
+  flex: none;
+  display: flex;
+  height: 38px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-side {
+  flex: none;
+  width: 240px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  transition: width 120ms ease;
+}
+
+.titlebar-side-collapsed {
+  width: 56px;
+}
+
+/* The collapsed rail is wide enough for the window buttons. */
+.app-darwin .titlebar-side-collapsed,
+.app-darwin .sidebar-collapsed {
+  width: 80px;
+}
+
+.titlebar-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-size: var(--text-sm);
+}
+
+.titlebar-workspace {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.titlebar-separator {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.titlebar-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
 }
 
 .sidebar {

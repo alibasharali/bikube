@@ -39,9 +39,11 @@ import {
 import { ANSI_COLOUR_NAMES, terminalPalette, withSymbols } from '../../core/terminal-appearance'
 import { terminalTheme } from '../../core/terminal-themes'
 import type { ShellChoices } from '../../shared/api'
+import { FONT_CHOICES, familyOf, fontChoiceOf } from '../../core/font-choices'
 import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import { ghosttyStore, useGhosttyTheme } from './ghostty'
+import { installedFonts } from './installed-fonts'
 import { ICON, SMALL_ICON } from './icons'
 import Modal from './Modal'
 import { settingsStore, useSettings } from './settings'
@@ -53,6 +55,13 @@ export const SYNC_FOLDER_ERROR = 'Folder not found'
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
 const THEME_ICONS: Record<Theme, LucideIcon> = { system: Monitor, dark: Moon, light: Sun }
+const CUSTOM_FONT = '__custom__'
+/** The font the default family (Menlo, Consolas, monospace) gives on this OS. */
+const DEFAULT_FONT_LABEL =
+  {
+    darwin: 'Default (Menlo)',
+    win32: 'Default (Consolas)'
+  }[window.drovr?.platform as string] ?? 'Default (monospace)'
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
@@ -228,6 +237,27 @@ function AppearanceSection({
     }
   }
 
+  // The list: installed fonts, plus the saved one when it isn't installed here (e.g. synced).
+  const installed = installedFonts()
+  const choice = fontChoiceOf(settings.fontFamily)
+  // Shown for a custom family, and kept while editing even when it becomes the default.
+  const [showCustom, setShowCustom] = useState(() => choice.kind === 'custom')
+  const fonts = FONT_CHOICES.filter(
+    (name) => installed.has(name) || (choice.kind === 'font' && choice.name === name)
+  )
+  const fontValue = showCustom ? CUSTOM_FONT : choice.kind === 'font' ? choice.name : ''
+  // Picking a font applies it at once; the custom draft follows, so closing doesn't undo it.
+  const pickFont = (value: string): void => {
+    if (value === CUSTOM_FONT) {
+      setShowCustom(true)
+      return
+    }
+    setShowCustom(false)
+    const next = value === '' ? DEFAULT_FONT_FAMILY : familyOf(value)
+    settingsStore.update({ fontFamily: next })
+    setFamily(fontFamilyField(next))
+  }
+
   const sizeId = `${id}-size`
   const sizeErrorId = `${id}-size-error`
   const familyId = `${id}-family`
@@ -313,24 +343,45 @@ function AppearanceSection({
           Font family
         </label>
         <div className="settings-control">
-          <input
+          <select
             id={familyId}
             className="settings-input"
-            data-testid="settings-font-family"
-            value={family}
-            maxLength={MAX_FONT_FAMILY_LENGTH}
-            placeholder={DEFAULT_FONT_FAMILY}
-            spellCheck={false}
-            autoComplete="off"
-            onChange={(e) => setFamily(e.target.value)}
-            onBlur={applyFamily}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter') return
-              e.preventDefault()
-              applyFamily()
-            }}
-          />
-          <p className="field-hint">Prompt icons (Nerd Font glyphs) work with any font.</p>
+            data-testid="settings-font-choice"
+            value={fontValue}
+            onChange={(e) => pickFont(e.target.value)}
+          >
+            <option value="">{DEFAULT_FONT_LABEL}</option>
+            {fonts.map((name) => (
+              <option key={name} value={name} style={{ fontFamily: familyOf(name) }}>
+                {installed.has(name) ? name : `${name} (not installed)`}
+              </option>
+            ))}
+            <option value={CUSTOM_FONT}>Custom…</option>
+          </select>
+          {showCustom && (
+            <input
+              className="settings-input"
+              data-testid="settings-font-family"
+              aria-label="Custom font family"
+              value={family}
+              maxLength={MAX_FONT_FAMILY_LENGTH}
+              placeholder={DEFAULT_FONT_FAMILY}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(e) => setFamily(e.target.value)}
+              onBlur={applyFamily}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return
+                e.preventDefault()
+                applyFamily()
+              }}
+            />
+          )}
+          <p className="field-hint">
+            {showCustom
+              ? 'Any CSS font family, e.g. "Comic Mono", monospace. Prompt icons work with any font.'
+              : 'Installed coding fonts. Prompt icons (Nerd Font glyphs) work with any font.'}
+          </p>
         </div>
       </div>
     </>

@@ -19,6 +19,12 @@ const SHORTCUT = process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma'
 
 const dialog = (page: Page): Locator => page.getByTestId('settings-dialog')
 
+/** Settings → Font family set to Custom…: its text field, where any family is typed. */
+async function customFamily(page: Page): Promise<Locator> {
+  await dialog(page).getByLabel('Font family').selectOption({ label: 'Custom…' })
+  return dialog(page).getByLabel('Custom font family')
+}
+
 /** Creates workspace `alpha` in a fresh directory and its card `api`, left open at full size. */
 async function alphaWithApi(page: Page): Promise<void> {
   const dir = join(mkdtempSync(join(tmpdir(), 'drovr-settings-')), 'alpha')
@@ -268,11 +274,9 @@ test('AC2: Settings opens from the sidebar, expanded or collapsed, and closes ea
   await expect(dialog(page).getByRole('radio', { name: 'Dark' })).not.toBeChecked()
   await expect(dialog(page).getByRole('radio', { name: 'Light' })).not.toBeChecked()
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('13')
+  // The default family: the list's first entry, no custom field.
   await expect(dialog(page).getByLabel('Font family')).toHaveValue('')
-  await expect(dialog(page).getByLabel('Font family')).toHaveAttribute(
-    'placeholder',
-    'Menlo, Consolas, monospace'
-  )
+  await expect(dialog(page).getByLabel('Custom font family')).toHaveCount(0)
   await dialog(page).getByRole('button', { name: 'Done' }).click()
   await expect(dialog(page)).toHaveCount(0)
 
@@ -475,7 +479,7 @@ test('AC6: the trimmed family applies to every terminal; clearing it restores th
   await openCard(page, 'api')
 
   await page.keyboard.press(SHORTCUT)
-  const family = dialog(page).getByLabel('Font family')
+  const family = await customFamily(page)
   await family.fill('  Courier New, monospace  ')
   await family.press('Enter')
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
@@ -503,7 +507,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await alphaWithApi(page)
 
   await page.keyboard.press(SHORTCUT)
-  const family = dialog(page).getByLabel('Font family')
+  const family = await customFamily(page)
   await expect(family).toHaveAttribute('maxlength', '200')
   await family.fill('Courier New')
   await page.keyboard.press('Escape')
@@ -531,7 +535,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   const { page, dataDir } = launched
   await page.getByTestId('settings-open').click()
   const size = dialog(page).getByLabel('Font size')
-  const family = dialog(page).getByLabel('Font family')
+  const family = dialog(page).getByLabel('Custom font family')
 
   await size.fill('18')
   await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveCount(0)
@@ -547,6 +551,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
     await expect(size).toHaveAttribute('aria-invalid', 'true')
   }
 
+  await customFamily(page)
   await family.fill('  Courier New, monospace  ')
   await family.press('Enter')
   await expect(family).toHaveValue('Courier New, monospace')
@@ -582,8 +587,9 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
   await page.keyboard.press(SHORTCUT)
   await dialog(page).getByRole('radio', { name: 'Light' }).check()
   await dialog(page).getByLabel('Font size').fill('16')
-  await dialog(page).getByLabel('Font family').fill('Courier New, monospace')
-  await dialog(page).getByLabel('Font family').press('Enter')
+  const family = await customFamily(page)
+  await family.fill('Courier New, monospace')
+  await family.press('Enter')
   await dialog(page).getByRole('button', { name: 'Done' }).click()
   await expect(dialog(page)).toHaveCount(0)
 
@@ -609,7 +615,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'Light' })).toBeChecked()
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('16')
-  await expect(dialog(page).getByLabel('Font family')).toHaveValue('Courier New, monospace')
+  await expect(dialog(page).getByLabel('Custom font family')).toHaveValue('Courier New, monospace')
   expect(readSettingsFile(dataDir)).toBe(expected)
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
@@ -643,7 +649,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'System' })).toBeChecked()
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('13')
-  await expect(dialog(page).getByLabel('Font family')).toHaveValue('Courier New')
+  await expect(dialog(page).getByLabel('Custom font family')).toHaveValue('Courier New')
 
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expectSettingsFile(
@@ -878,4 +884,31 @@ test('#31 AC6: a recorded shortcut works in a card, is kept across a restart, an
     .toBe(
       '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
     )
+})
+
+test('the Font family list offers installed fonts; a pick applies at once and is saved', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await alphaWithApi(page)
+  await page.keyboard.press(SHORTCUT)
+  const list = dialog(page).getByLabel('Font family')
+  const names = await list.locator('option').allTextContents()
+  expect(names[0]).toMatch(/^Default/)
+  expect(names.at(-1)).toBe('Custom…')
+  const installed = names.slice(1, -1)
+  test.skip(installed.length === 0, 'no listed font installed here')
+
+  const font = installed[0]!
+  await list.selectOption(font)
+  await expect(dialog(page).getByLabel('Custom font family')).toHaveCount(0)
+  await expect.poll(async () => (await openLook(page)).fontFamily).toBe(`"${font}", monospace`)
+  await expect
+    .poll(() => readSettingsFile(dataDir))
+    .toContain(`"fontFamily":"\\"${font}\\", monospace"`)
+
+  // Closing keeps the pick; reopening shows it selected.
+  await page.keyboard.press('Escape')
+  await page.keyboard.press(SHORTCUT)
+  await expect(list).toHaveValue(font)
 })

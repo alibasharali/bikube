@@ -148,6 +148,32 @@ test('AC4: switching shows independent boards', async () => {
   await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
 })
 
+test('#31 AC16: Ctrl+1…9 select the workspaces in sidebar order; a missing number does nothing', async () => {
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
+  for (const name of ['alpha', 'beta', 'gamma']) await createWorkspace(makeDir(name))
+  await page.getByTestId('workspace-item').nth(0).click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+
+  await page.keyboard.press(`${mod}+2`)
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  await page.keyboard.press(`${mod}+3`)
+  await expect(page.getByTestId('board-title')).toHaveText('gamma')
+  await page.keyboard.press(`${mod}+1`)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await page.keyboard.press(`${mod}+5`)
+  await page.waitForTimeout(300)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(page.getByTestId('workspace-item').nth(0)).toHaveAttribute('aria-current', 'true')
+
+  // A dialog owns the keyboard: the shortcut does nothing behind it.
+  await openCreateDialog()
+  await page.keyboard.press(`${mod}+2`)
+  await page.waitForTimeout(300)
+  await expect(page.getByTestId('workspace-dialog')).toBeVisible()
+  await page.getByTestId('workspace-cancel').click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+})
+
 test('AC5: edit renames, changes directory and rejects duplicates', async () => {
   await createWorkspace(makeDir('alpha'))
   await createWorkspace(makeDir('beta'))

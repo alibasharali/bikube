@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
-import { keymapAction } from '../../core/keymap'
+import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { syncStatusText } from '../../core/sync-status'
+import {
+  enterWorkspace,
+  forgetView,
+  NO_VIEWS,
+  openedCard,
+  rememberCard,
+  selectWorkspace,
+  type ViewMemory
+} from '../../core/view-memory'
 import type { Workspace } from '../../core/workspace-store'
 import { removeWorkspace, startCard } from './card-actions'
-import { useRunningCount } from './card-terminals'
+import { cardTerminals, useRunningCount } from './card-terminals'
 import CardView from './CardView'
 import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
@@ -21,25 +30,50 @@ function App(): React.JSX.Element {
   const syncStatus = syncStatusText(useSyncStatus())
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
-  // One card open at full size at a time, always one of the active workspace's (#4 D7). It is
-  // tied to the workspace it was opened in and dropped as soon as another one is active, however
-  // the switch happened (sidebar, workspace created or deleted), so it never reopens later (D8).
-  const [opened, setOpened] = useState<{ workspaceId: string; cardId: string } | null>(null)
-  const openCard =
-    opened?.workspaceId === activeId
-      ? (active?.cards.find((c) => c.id === opened.cardId) ?? null)
-      : null
-  const closeCard = useCallback(() => setOpened(null), [setOpened])
+  // One card open at full size at a time, always one of the active workspace's (#4 D7). Each
+  // workspace remembers its view for this run (#31 D19): the card open in it, or its board.
+  const [views, setViews] = useState<ViewMemory>(NO_VIEWS)
+  // However the active workspace changed (sidebar, Mod+digit, a workspace created or deleted),
+  // it comes back to its card only while that card exists and runs (D19).
+  const [entered, setEntered] = useState(activeId)
+  if (entered !== activeId) {
+    setEntered(activeId)
+    if (activeId) {
+      const cardIds = active ? active.cards.map((c) => c.id) : null
+      setViews((v) =>
+        enterWorkspace(
+          v,
+          activeId,
+          cardIds,
+          (id) => cardTerminals().runState(id)?.kind === 'running'
+        )
+      )
+    }
+  }
+  const openedId = activeId ? openedCard(views, activeId) : null
+  const openCard = openedId ? (active?.cards.find((c) => c.id === openedId) ?? null) : null
+  // Back, or the open card's shell stopping: the active workspace forgets its card (D19).
+  const closeCard = useCallback(() => {
+    if (activeId) setViews((v) => forgetView(v, activeId))
+  }, [activeId, setViews])
   // Opening a card whose shell isn't running starts it first (#5 D7).
   const onOpenCard = useCallback(
     (cardId: string) => {
       if (!activeId) return
       startCard(activeId, cardId)
-      setOpened({ workspaceId: activeId, cardId })
+      setViews((v) => rememberCard(v, activeId, cardId))
     },
-    [activeId, setOpened]
+    [activeId, setViews]
   )
-  if (opened && opened.workspaceId !== activeId) setOpened(null)
+  // Selecting a workspace (sidebar or Mod+digit, #31 D18) shows the view it was left in; the
+  // active one goes to its board (D19).
+  const onSelectWorkspace = useCallback(
+    (id: string) => {
+      setViews((v) => selectWorkspace(v, activeId, id))
+      workspaceStore.selectWorkspace(id)
+    },
+    [activeId, setViews]
+  )
   const darwin = window.drovr?.platform === 'darwin'
 
   const [dialog, setDialog] = useState<
@@ -65,6 +99,28 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
+  // Mod+1…9 select the 1st…9th workspace in sidebar order (#31 D18), anywhere no dialog owns the
+  // keyboard, swallowed whole even with no workspace at that number; once per press (D7).
+  const workspaceIds = workspaces.map((w) => w.id).join('\n')
+  useEffect(() => {
+    const ids = workspaceIds.split('\n')
+    const onKey = (event: KeyboardEvent): void => {
+      const number = workspaceShortcut(event, window.drovr?.platform ?? '')
+      if (number === null) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.type !== 'keydown' || event.repeat) return
+      const id = ids[number - 1]
+      if (id) onSelectWorkspace(id)
+    }
+    const types = ['keydown', 'keypress', 'keyup'] as const
+    for (const type of types) window.addEventListener(type, onKey, true)
+    return () => {
+      for (const type of types) window.removeEventListener(type, onKey, true)
+    }
+  }, [workspaceIds, onSelectWorkspace])
+
   return (
     <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">
       <Sidebar
@@ -72,11 +128,7 @@ function App(): React.JSX.Element {
         activeId={activeId}
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
-        onSelect={(id) => {
-          // Selecting a workspace shows its board, leaving any open card (#4 D8).
-          setOpened(null)
-          workspaceStore.selectWorkspace(id)
-        }}
+        onSelect={onSelectWorkspace}
         onAdd={onCreateWorkspace}
         onEdit={(id) => setDialog({ kind: 'edit', id })}
         onDelete={(id) => setDialog({ kind: 'delete', id })}

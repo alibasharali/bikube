@@ -7,6 +7,7 @@ import {
   resolveKeymap,
   shortcutOverrides,
   validateShortcuts,
+  workspaceShortcut,
   type KeyEventLike
 } from './keymap'
 
@@ -305,5 +306,40 @@ describe('the default split shortcuts against every modifier mix (#11 D4)', () =
     expect(keymapAction(press('b', { ctrlKey: true }), linux)).toBeNull()
     expect(keymapAction(press('c', { ctrlKey: true }), linux)).toBeNull()
     expect(keymapAction(press('d', { ctrlKey: true }), defaultKeymap('darwin'))).toBeNull()
+  })
+})
+
+describe('workspaceShortcut (#31 D18, AC16)', () => {
+  const digit = (n: number, over: Partial<KeyEventLike> = {}): KeyEventLike =>
+    press(String(n), { code: `Digit${n}`, ...over })
+
+  it('reads Ctrl+1…9 off macOS and Cmd+1…9 on macOS as the workspace number', () => {
+    for (let n = 1; n <= 9; n++) {
+      expect(workspaceShortcut(digit(n, { ctrlKey: true }), 'linux')).toBe(n)
+      expect(workspaceShortcut(digit(n, { metaKey: true }), 'darwin')).toBe(n)
+    }
+    expect(workspaceShortcut(digit(1, { metaKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(digit(1, { ctrlKey: true }), 'darwin')).toBeNull()
+  })
+
+  it('matches the physical digit key, whatever character the layout types', () => {
+    // AZERTY: the 2 key types é without Shift.
+    expect(workspaceShortcut(press('é', { code: 'Digit2', ctrlKey: true }), 'linux')).toBe(2)
+    expect(workspaceShortcut(press('2', { code: 'Numpad2', ctrlKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(press('2', { ctrlKey: true }), 'linux')).toBeNull()
+  })
+
+  it('needs no other modifier and no 0 or other key', () => {
+    expect(workspaceShortcut(digit(2), 'linux')).toBeNull()
+    expect(workspaceShortcut(digit(2, { ctrlKey: true, shiftKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(digit(2, { ctrlKey: true, altKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(digit(2, { ctrlKey: true, metaKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(digit(2, { metaKey: true, ctrlKey: true }), 'darwin')).toBeNull()
+    expect(workspaceShortcut(digit(0, { ctrlKey: true }), 'linux')).toBeNull()
+    expect(workspaceShortcut(press('a', { code: 'KeyA', ctrlKey: true }), 'linux')).toBeNull()
+  })
+
+  it('matches every event type, so the whole key is swallowed', () => {
+    expect(workspaceShortcut(digit(3, { ctrlKey: true, type: 'keyup' }), 'linux')).toBe(3)
   })
 })

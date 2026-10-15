@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
-import { keymapAction } from '../../core/keymap'
+import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
 import { SessionRouter } from '../../core/session-router'
@@ -98,8 +98,9 @@ export class XtermScreen implements CardScreen {
     const clipboard = window.drovr.clipboard
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
-      // sees any part of them (D7).
+      // sees any part of them (D7), nor of Mod+1…9 (D18).
       if (keymapAction(event, currentKeymap())) return false
+      if (workspaceShortcut(event, window.drovr.platform) !== null) return false
       const action = clipboardShortcut(event, window.drovr.platform)
       if (!action) return true
       // Stop the native paste event too, or xterm would paste twice.

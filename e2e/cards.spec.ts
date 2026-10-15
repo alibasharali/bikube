@@ -2,7 +2,13 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen, expectStatusOnBoard, SHORTCUTS } from './card-view'
+import {
+  backToBoard,
+  expectCardOpen,
+  expectStatusOnBoard,
+  SHORTCUTS,
+  splitRight
+} from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 
 // Cards as terminals (#4): creation, full-size view, status, lifetime. Linux runs drive
@@ -227,7 +233,7 @@ test('AC5: the terminal and its process outlive the view and workspace switches'
   await expect.poll(bufferLines).toContain('42')
 })
 
-test('AC5/D8: selecting a workspace in the sidebar leaves the full-size view', async () => {
+test('AC5/#31 D19: selecting another workspace leaves the full-size view; back returns to it', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await createWorkspace(makeDir('beta'), 'beta')
   await selectWorkspace('alpha')
@@ -235,8 +241,10 @@ test('AC5/D8: selecting a workspace in the sidebar leaves the full-size view', a
   await page.getByTestId('workspace-item').filter({ hasText: 'beta' }).click()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
   await expect(page.getByTestId('board-title')).toHaveText('beta')
-  await selectWorkspace('alpha')
-  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  // alpha was left with `api` open: it shows again (#31 D19), still running.
+  await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+  await expectCardOpen(page, 'api')
+  await expectStatusOnBoard(page, 'api', 'Running')
 })
 
 /** Waits for the board after the open card's shell exited: it is Stopped (#5 D6). */
@@ -569,19 +577,20 @@ test('D8/D15: the back shortcut does nothing while a dialog is over the card vie
   await expect(page.getByTestId('empty-state')).toBeVisible()
 })
 
-test('D8: an open card stays closed after a workspace switch outside the sidebar', async () => {
+test('#31 AC17: a new workspace shows its empty board; deleting it brings back the open card', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
   // Creating a workspace selects it; deleting the active one selects alpha again.
-  await createWorkspace(makeDir('beta'), 'beta')
-  await expect(page.getByTestId('board-title')).toHaveText('beta')
-  const row = page.locator('.workspace-row').filter({ hasText: 'beta' })
+  await createWorkspace(makeDir('delta'), 'delta')
+  await expect(page.getByTestId('board-title')).toHaveText('delta')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(page.getByTestId('card')).toHaveCount(0)
+  const row = page.locator('.workspace-row').filter({ hasText: 'delta' })
   await row.hover()
   await row.getByTestId('workspace-delete').click()
   await page.getByTestId('confirm-delete').click()
-  await expect(page.getByTestId('board-title')).toHaveText('alpha')
-  await expect(page.getByTestId('card-view')).toHaveCount(0)
-  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await expectCardOpen(page, 'api')
+  await expectStatusOnBoard(page, 'api', 'Running')
 })
 
 test('AC2: default titles count on per workspace; duplicate titles are allowed', async () => {
@@ -680,4 +689,109 @@ test("#5 AC11: a Stopped card isn't counted as running and is deleted without as
   await expect(page.getByTestId('confirm-dialog')).toContainText(
     '1 terminal is still running and will be stopped.'
   )
+})
+
+// Workspace switching (#31 D18, D19). Linux runs drive Ctrl+digit; Cmd+digit on macOS is
+// checked by hand.
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
+
+/** The open card's panes: whether each is marked focused and has keyboard focus. */
+function paneFocus(): Promise<{ marked: boolean; active: boolean }[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')].map((pane) => ({
+      marked: pane.getAttribute('data-focused') === 'true',
+      active: pane.contains(document.activeElement)
+    }))
+  )
+}
+
+test('#31 AC16: Ctrl+digit in a focused terminal switches workspace; the shell gets nothing', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await createWorkspace(makeDir('beta'), 'beta')
+  await selectWorkspace('alpha')
+  await newCard('Backlog', 'api')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('echo ready-$((40+2))')
+  await expect.poll(bufferLines).toContain('ready-42')
+  // Half a command line: anything the shell received would show in it or change its output.
+  await page.keyboard.type('echo ab')
+  await page.waitForTimeout(300)
+  const before = await bufferLines()
+
+  await page.keyboard.press(`${MOD}+2`)
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await page.keyboard.press(`${MOD}+1`)
+  await expectCardOpen(page, 'api')
+  await page.waitForTimeout(300)
+  expect(await bufferLines()).toEqual(before)
+  await expect.poll(terminalFocused).toBe(true)
+  await run('c')
+  await expect.poll(bufferLines).toContain('abc')
+})
+
+test('#31 AC17: each workspace comes back to its view, panes and focus; the active one goes to its board', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await createWorkspace(makeDir('beta'), 'beta')
+  await selectWorkspace('alpha')
+  await newCard('Backlog', 'api')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('echo earlier-$((40+2))')
+  await expect.poll(bufferLines).toContain('earlier-42')
+  await splitRight(page)
+  await expect.poll(paneFocus).toEqual([
+    { marked: false, active: false },
+    { marked: true, active: true }
+  ])
+
+  // Away and back by click, then by Ctrl+digit: the same view each time.
+  for (const by of ['click', 'key'] as const) {
+    if (by === 'click') await selectWorkspace('beta')
+    else await page.keyboard.press(`${MOD}+2`)
+    await expect(page.getByTestId('board-title')).toHaveText('beta')
+    await expect(page.getByTestId('card-view')).toHaveCount(0)
+    if (by === 'click')
+      await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+    else await page.keyboard.press(`${MOD}+1`)
+    await expectCardOpen(page, 'api')
+    await expect.poll(paneFocus).toEqual([
+      { marked: false, active: false },
+      { marked: true, active: true }
+    ])
+    expect(await bufferLines()).toContain('earlier-42')
+  }
+
+  // Selecting the active workspace goes to its board and forgets the card.
+  await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await selectWorkspace('beta')
+  await selectWorkspace('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  // On its board, selecting the active workspace again (by Ctrl+digit too) changes nothing.
+  await page.keyboard.press(`${MOD}+1`)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  // The Back shortcut forgets it too.
+  await openCard('api')
+  await back()
+  await selectWorkspace('beta')
+  await selectWorkspace('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test('#31 AC18: a card whose shell exits while its workspace is away is forgotten', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await createWorkspace(makeDir('beta'), 'beta')
+  await selectWorkspace('alpha')
+  await newCard('Backlog', 'api')
+  await expect.poll(terminalFocused).toBe(true)
+  await run('sleep 1; exit')
+  await selectWorkspace('beta')
+  await page.waitForTimeout(2000)
+  await selectWorkspace('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
 })

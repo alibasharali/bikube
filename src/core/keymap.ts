@@ -170,6 +170,18 @@ export function keymapAction(event: KeyEventLike, keymap: Keymap): ShortcutActio
   return SHORTCUT_ACTIONS.find((action) => matchesShortcut(event, keymap[action])) ?? null
 }
 
+/**
+ * The workspace number of a Mod+digit press (D18): Cmd+1…9 on macOS, Ctrl+1…9 elsewhere, read
+ * from the physical digit key so any layout works, with no other modifier; else null. Matches
+ * every event type, so the whole key can be swallowed.
+ */
+export function workspaceShortcut(event: KeyEventLike, platform: string): number | null {
+  const mac = platform === 'darwin'
+  if (event.metaKey !== mac || event.ctrlKey === mac || event.altKey || event.shiftKey) return null
+  const digit = /^Digit([1-9])$/.exec(event.code ?? '')
+  return digit ? Number(digit[1]) : null
+}
+
 /** Each action's name in Settings and in refusals (D5). */
 export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.freeze({
   back: 'Back to board',

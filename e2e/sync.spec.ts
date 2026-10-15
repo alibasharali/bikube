@@ -449,6 +449,45 @@ test('AC4: deletions win, but a card running on B stays and is written back to A
   await expect(card(b.page, 'two').getByTestId('card-status-label')).toHaveText('Running')
 })
 
+test('#31 AC18: a card deleted by sync while its workspace is away is forgotten there', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  makeDir('hb', 'beta')
+  await createWorkspace(a.page, makeDir('ha', 'beta'), 'beta')
+  await selectWorkspace(a.page, 'api')
+  await newCard(a.page, 'one')
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['api', 'beta'])
+  await selectWorkspace(b.page, 'api')
+  await expect(card(b.page, 'one')).toHaveCount(1)
+
+  // B opens `one` and leaves it open; a running card on B outlives a deletion on A (#13 D8), so
+  // its shell ends first.
+  await card(b.page, 'one').getByTestId('card-open').click()
+  await expectCardOpen(b.page, 'one')
+  await expect
+    .poll(() =>
+      b.page.evaluate(
+        () =>
+          document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
+      )
+    )
+    .toBe(true)
+  await b.page.keyboard.type('sleep 1; exit')
+  await b.page.keyboard.press('Enter')
+  await selectWorkspace(b.page, 'beta')
+  await b.page.waitForTimeout(2000)
+
+  await deleteCard(a.page, 'one')
+  await expect
+    .poll(() => readSyncFile(folder)?.board.workspaces.find((w) => w.name === 'api')?.cards.length)
+    .toBe(0)
+  await b.page.waitForTimeout(1000)
+  await selectWorkspace(b.page, 'api')
+  await expect(b.page.getByTestId('card-view')).toHaveCount(0)
+  await expect(b.page.getByTestId('board')).toBeVisible()
+  await expect(card(b.page, 'one')).toHaveCount(0)
+})
+
 test('AC5: a workspace created on A reaches B live under its own home; SSH unchanged', async () => {
   const folder = makeDir('F')
   const { a, b } = await twoSynced(folder)

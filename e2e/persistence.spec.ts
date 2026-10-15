@@ -457,6 +457,24 @@ test('AC8: the app opens on the board, not the card that was open', async () => 
   await expect(status('api')).toHaveText('Stopped')
 })
 
+test('#31 AC18: after a restart no workspace comes back to the card open in it', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await createWorkspace(makeDir('beta'), 'beta')
+  await selectWorkspace('alpha')
+  await newCard('Backlog', 'api')
+  await openCard('api')
+  // alpha remembers `api` while beta is active, until the app quits (#31 D19).
+  await selectWorkspace('beta')
+
+  await restart()
+
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  await selectWorkspace('alpha')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(status('api')).toHaveText('Stopped')
+})
+
 /** The Electron binary (`require('electron')` gives its path outside Electron). */
 const electronBinary = createRequire(__filename)('electron') as string
 

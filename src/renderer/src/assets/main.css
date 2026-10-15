@@ -1619,7 +1619,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding-top: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-preview .settings-label {
@@ -1815,4 +1816,94 @@ button {
 .terminal-preview-swatches > span {
   width: 28px;
   height: 16px;
+}
+
+/* The visual bell: a tint over the terminal (its canvas covers anything drawn below it). */
+.terminal-bell {
+  position: relative;
+}
+
+.terminal-bell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--accent);
+  pointer-events: none;
+  animation: terminal-bell 220ms ease-out forwards;
+}
+
+@keyframes terminal-bell {
+  from {
+    opacity: 0.22;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* An on/off switch: a real checkbox over a sliding track, for the keyboard and screen readers. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
+  width: 36px;
+  height: 20px;
+  margin-top: 4px;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch input:disabled {
+  cursor: default;
+}
+
+.switch-track {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color var(--transition);
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform var(--transition);
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(16px);
+}
+
+.switch input:disabled + .switch-track {
+  opacity: 0.4;
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-select-short {
+  align-self: flex-start;
+  min-width: 180px;
 }

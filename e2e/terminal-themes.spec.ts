@@ -212,3 +212,99 @@ test('the Shell setting: a listed shell starts new cards with $SHELL set; a miss
   await newCard(page, 'missing')
   await expectStatusOnBoard(page, 'missing', "Couldn't start: shell not found: /nonexistent/fish")
 })
+
+/** The open card's xterm options that the terminal settings set. */
+function openOptions(page: Page): Promise<Record<string, unknown>> {
+  return page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { options: Record<string, unknown> } }) | null
+    const o = host?.__xterm?.options ?? {}
+    return {
+      cursorStyle: o.cursorStyle,
+      cursorBlink: o.cursorBlink,
+      scrollback: o.scrollback,
+      lineHeight: o.lineHeight,
+      letterSpacing: o.letterSpacing,
+      drawBoldTextInBrightColors: o.drawBoldTextInBrightColors
+    }
+  })
+}
+
+test('terminal settings reach the open terminal at once and are saved only when changed', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await workspaceWithCard(page, 'api')
+  expect(await openOptions(page)).toEqual({
+    cursorStyle: 'block',
+    cursorBlink: false,
+    scrollback: 10000,
+    lineHeight: 1,
+    letterSpacing: 0,
+    drawBoldTextInBrightColors: true
+  })
+
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-line-height').selectOption('1.2')
+  await dialog(page).getByTestId('settings-section-terminal').click()
+  await dialog(page).getByTestId('settings-cursor-bar').check()
+  await dialog(page).getByTestId('settings-cursor-blink').check()
+  await dialog(page).getByTestId('settings-scrollback').selectOption('50000')
+  await expect
+    .poll(() => openOptions(page))
+    .toMatchObject({ cursorStyle: 'bar', cursorBlink: true, scrollback: 50000, lineHeight: 1.2 })
+  await expect
+    .poll(() => savedSettings(dataDir))
+    .toMatchObject({ cursorStyle: 'bar', cursorBlink: true, scrollback: 50000, lineHeight: 1.2 })
+  // Untouched preferences stay out of the file.
+  expect(savedSettings(dataDir)).not.toHaveProperty('letterSpacing')
+  expect(savedSettings(dataDir)).not.toHaveProperty('bell')
+})
+
+test('copy on select puts a selection on the clipboard', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await workspaceWithCard(page, 'api')
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-terminal').click()
+  await dialog(page).getByTestId('settings-copy-on-select').check()
+  await page.keyboard.press('Escape')
+
+  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo copy-me-please')
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => (await openTerminal(page)).lines).toContain('copy-me-please')
+  await page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { selectAll(): void } }) | null
+    host?.__xterm?.selectAll()
+  })
+  await expect
+    .poll(() => app!.evaluate(({ clipboard }) => clipboard.readText()))
+    .toContain('copy-me-please')
+})
+
+test('Claude Code status updates: new cards get DROVR_CLAUDE_STATUS 1, or 0 once turned off', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await workspaceWithCard(page, 'on')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo "status=$DROVR_CLAUDE_STATUS"')
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => (await openTerminal(page)).lines).toContain('status=1')
+
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-agents').click()
+  await dialog(page).getByTestId('settings-claude-status').uncheck()
+  await expect.poll(() => savedSettings(dataDir).claudeStatus).toBe(false)
+  await page.keyboard.press('Escape')
+  await backToBoard(page)
+  await newCard(page, 'off')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo "status=$DROVR_CLAUDE_STATUS"')
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => (await openTerminal(page)).lines).toContain('status=0')
+})

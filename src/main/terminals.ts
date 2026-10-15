@@ -47,7 +47,8 @@ export interface Terminals {
 export function registerTerminals(
   shellEnv: (cardId: string) => Record<string, string>,
   sessionSockets?: SessionSockets,
-  shellSetting: () => string = () => ''
+  shellSetting: () => string = () => '',
+  claudeStatus: () => boolean = () => true
 ): Terminals {
   const manager = new SessionManager()
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
@@ -122,7 +123,13 @@ export function registerTerminals(
       // Re-checked after the directory check: no spawn for a page that reloaded or closed meanwhile.
       // The frame check catches an old page's request that main only handled after the reload.
       const result = await spawnInDirectory(
-        { cols, rows, cwd, host, board: board?.forward },
+        {
+          cols,
+          rows,
+          cwd,
+          host,
+          board: board ? { ...board.forward, claudeStatus: claudeStatus() } : undefined
+        },
         // An SSH card's local shell gets none of the `board` variables (#12 D5, #25 D2).
         (options) => {
           const local = options.command === undefined
@@ -136,7 +143,14 @@ export function registerTerminals(
             ...options,
             shell,
             // Programs that start "your shell" (editors, agents) read `$SHELL`.
-            env: local ? { ...shellEnv(cardId), ...(shell && { SHELL: shell }) } : undefined
+            env: local
+              ? {
+                  ...shellEnv(cardId),
+                  ...(shell && { SHELL: shell }),
+                  // Read by the Claude Code session start hook (claude-hooks.ts).
+                  DROVR_CLAUDE_STATUS: claudeStatus() ? '1' : '0'
+                }
+              : undefined
           })
           board?.attach(info.id)
           return info

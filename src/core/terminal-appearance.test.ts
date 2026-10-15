@@ -70,7 +70,38 @@ describe('terminalAppearance (#10 D3, D4)', () => {
     expect(terminalAppearance(DEFAULT_SETTINGS, true)).toEqual({
       fontSize: 13,
       fontFamily: 'Menlo, Consolas, monospace, "Symbols Nerd Font Mono"',
-      theme: TERMINAL_PALETTES.dark
+      theme: TERMINAL_PALETTES.dark,
+      behaviour: {
+        cursorStyle: 'block',
+        cursorBlink: false,
+        scrollback: 10000,
+        macOptionIsMeta: false,
+        lineHeight: 1,
+        letterSpacing: 0,
+        drawBoldTextInBrightColors: true
+      }
+    })
+  })
+
+  it('passes the terminal preferences on as xterm options', () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      cursorStyle: 'underline',
+      cursorBlink: true,
+      scrollback: 50000,
+      optionAsMeta: true,
+      lineHeight: 1.3,
+      letterSpacing: 2,
+      boldBright: false
+    } as const
+    expect(terminalAppearance(settings, true).behaviour).toEqual({
+      cursorStyle: 'underline',
+      cursorBlink: true,
+      scrollback: 50000,
+      macOptionIsMeta: true,
+      lineHeight: 1.3,
+      letterSpacing: 2,
+      drawBoldTextInBrightColors: false
     })
   })
 

@@ -111,6 +111,17 @@ describe('remoteCommand (#12 D5)', () => {
   })
 })
 
+describe('remoteCommand and the Claude Code status updates setting', () => {
+  const board = { cardId: 'k1', remoteSocket: '/tmp/drovr-none.sock' }
+
+  it('exports DROVR_CLAUDE_STATUS=0 only when the setting is off', () => {
+    const off = 'DROVR_CLAUDE_STATUS=0; export DROVR_CLAUDE_STATUS; '
+    expect(remoteCommand('/srv/api', { ...board, claudeStatus: false })).toContain(off)
+    expect(remoteCommand('/srv/api', { ...board, claudeStatus: true })).not.toContain(off)
+    expect(remoteCommand('/srv/api', board)).not.toContain(off)
+  })
+})
+
 describe('sshShellLine (#12 D5)', () => {
   it('builds `exec ssh -t -- <host> <remote command>` as the local shell reads it', () => {
     const result = sshShellLine('me@devbox', `/tmp/it's a $dir`)

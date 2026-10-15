@@ -694,6 +694,21 @@ describe('activity (#31 D12)', () => {
     expect(sessions.status('c1')?.activity).toBeUndefined()
   })
 
+  it('tells activity listeners about every change of any card, a clear by stopping included', async () => {
+    const changes: [string, string | null][] = []
+    sessions.onActivity((cardId, activity) => changes.push([cardId, activity]))
+    await started('c1', { ok: true, id: 's1' })
+    sessions.setActivity('c1', 'working')
+    sessions.setActivity('c1', 'working')
+    sessions.setActivity('c1', 'waiting')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(changes).toEqual([
+      ['c1', 'working'],
+      ['c1', 'waiting'],
+      ['c1', null]
+    ])
+  })
+
   it('is cleared when a start fails', async () => {
     sessions.start(card('c1'))
     sessions.setActivity('c1', 'working')

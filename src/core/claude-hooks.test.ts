@@ -192,6 +192,18 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
         stderr: ''
       })
     })
+
+    it(`prints nothing at session start with status updates off (${shell})`, () => {
+      const input = { ...base, hook_event_name: 'SessionStart', source: 'startup' }
+      expect(run(shell, 'SessionStart', input, { DROVR_CLAUDE_STATUS: '0' })).toEqual({
+        status: 0,
+        stdout: '',
+        stderr: ''
+      })
+      expect(run(shell, 'SessionStart', input, { DROVR_CLAUDE_STATUS: '1' }).stdout).toBe(
+        `${CLAUDE_INSTRUCTION}\n`
+      )
+    })
   }
 
   it('reads a question only from the tool name, not from what a tool is given', () => {

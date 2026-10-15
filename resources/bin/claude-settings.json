@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
+            "command": "[ \"$DROVR_CLAUDE_STATUS\" = 0 ] || cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
             "timeout": 5
           }
         ]

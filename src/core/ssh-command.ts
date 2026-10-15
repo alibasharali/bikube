@@ -38,6 +38,8 @@ export interface RemoteBoard {
   cardId: string
   /** The remote end of the forward, `/tmp/drovr-<32 hex>.sock` (D3). */
   remoteSocket: string
+  /** False when Claude Code cards shouldn't keep a status line (the setting); true by default. */
+  claudeStatus?: boolean
 }
 
 /** What an SSH session needs for `board` (#25 D1, D7); `localSocket` null means no forward. */
@@ -93,6 +95,9 @@ function claudeSetup(): string {
  */
 const NO_CLAUDE_SETTINGS = "DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETTINGS; "
 
+/** The Claude Code status updates setting off: the session start hook prints nothing. */
+const NO_CLAUDE_STATUS = 'DROVR_CLAUDE_STATUS=0; export DROVR_CLAUDE_STATUS; '
+
 /**
  * The command a POSIX remote login shell runs: `cd` to the directory (or exit 255, which shows
  * as SSH failed, D7), print the ready marker, then run the remote user's login shell. The shell
@@ -102,7 +107,8 @@ const NO_CLAUDE_SETTINGS = "DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETT
  */
 export function remoteCommand(directory: string, board?: RemoteBoard): string {
   const cd = board
-    ? `cd ${remoteDirectory(directory, shellQuote)} || exit 255; ${NO_CLAUDE_SETTINGS}${boardSetup(board)}`
+    ? `cd ${remoteDirectory(directory, shellQuote)} || exit 255; ${NO_CLAUDE_SETTINGS}` +
+      `${board.claudeStatus === false ? NO_CLAUDE_STATUS : ''}${boardSetup(board)}`
     : `cd ${remoteDirectory(directory)} || exit 255; ${NO_CLAUDE_SETTINGS}`
   return (
     cd +

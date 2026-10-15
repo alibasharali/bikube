@@ -42,6 +42,11 @@ const api: DrovrApi = {
       return () => ipcRenderer.removeListener(IPC.syncBoard, handler)
     }
   },
+  app: {
+    setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count),
+    focus: () => ipcRenderer.send(IPC.appFocus),
+    requestAttention: () => ipcRenderer.send(IPC.appRequestAttention)
+  },
   terminal: {
     spawn: (cols, rows, cwd, cardId, host = null) =>
       ipcRenderer.invoke(IPC.spawn, cols, rows, cwd, cardId, host),

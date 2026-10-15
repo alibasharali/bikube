@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from './settings'
+import { DEFAULT_SETTINGS, PREFERENCE_DEFAULTS } from './settings'
 import { SETTINGS_SAVE_INTERVAL_MS, SettingsFile } from './settings-file'
 import type { StateFileFs } from './state-file'
 
 /** The settings after #10's three, at their defaults. */
 const NEW_FIELDS = {
+  shell: '',
+  terminalThemeDark: 'Drovr Dark',
+  terminalThemeLight: 'Drovr Light',
+  useGhosttyTheme: false,
+  ...PREFERENCE_DEFAULTS
+}
+
+/** The same fields as the file holds them: preferences at their defaults are left out. */
+const FILE_FIELDS = {
   shell: '',
   terminalThemeDark: 'Drovr Dark',
   terminalThemeLight: 'Drovr Light',
@@ -152,7 +161,7 @@ describe('SettingsFile.save (#10 D6)', () => {
         theme: 'dark',
         fontSize: 20,
         fontFamily: 'Menlo, Consolas, monospace',
-        ...NEW_FIELDS
+        ...FILE_FIELDS
       }
     })
   })
@@ -251,7 +260,7 @@ describe('SettingsFile sync folder (#13 D10, AC12)', () => {
       theme: 'light',
       fontSize: 13,
       fontFamily: 'Menlo',
-      ...NEW_FIELDS,
+      ...FILE_FIELDS,
       syncFolder: '/sync'
     })
     expect(file.syncFolder()).toBe('/sync')

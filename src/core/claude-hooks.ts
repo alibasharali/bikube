@@ -39,8 +39,13 @@ const PRE_TOOL_USE =
   `a=working; case $(cat) in *'"tool_name":"AskUserQuestion"'*|*'"tool_name": "AskUserQuestion"'*) ` +
   `a=question;; esac; "$DROVR_BIN/board" activity . $a </dev/null >/dev/null 2>&1 & exit 0`
 
-/** Prints the instruction, which Claude adds to its context; sets nothing. */
-const SESSION_START = `cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; exit 0`
+/**
+ * Prints the instruction, which Claude adds to its context, unless the card was started with
+ * `DROVR_CLAUDE_STATUS=0` (the Claude Code status updates setting off); sets nothing.
+ */
+const SESSION_START =
+  `[ "$DROVR_CLAUDE_STATUS" = 0 ] || cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
+  'exit 0'
 
 const group = (command: string, matcher?: string): object => ({
   ...(matcher === undefined ? {} : { matcher }),

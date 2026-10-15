@@ -4,6 +4,7 @@ import { boundedWait } from '../core/bounded-wait'
 import { killAtQuit, quitHold } from '../core/quit-hold'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
+import { registerAttention } from './attention'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { installAppMenu } from './menu'
@@ -76,11 +77,15 @@ function startApp(): void {
   const socketPath = boardSocketPath()
   // Each SSH session's own `board` socket (#25 D2), relaying once `registerBoard` runs.
   const sshBoard = sshBoardSockets(socketPath)
-  const terminals = registerTerminals(boardShellEnvFor(socketPath), sshBoard.sockets, () =>
-    settings.shell()
+  const terminals = registerTerminals(
+    boardShellEnvFor(socketPath),
+    sshBoard.sockets,
+    () => settings.shell(),
+    () => settings.claudeStatus()
   )
   registerClipboard()
   registerDirectories()
+  registerAttention()
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.
   // `about:blank` never fires `will-navigate`; the preload cancels it (#20).

@@ -1,4 +1,5 @@
 import {
+  Bot,
   ChevronRight,
   FolderSync,
   Keyboard,
@@ -29,10 +30,14 @@ import {
   DEFAULT_FONT_FAMILY,
   MAX_FONT_FAMILY_LENGTH,
   MAX_FONT_SIZE,
+  MAX_LETTER_SPACING,
   MIN_FONT_SIZE,
+  SCROLLBACK_CHOICES,
   THEMES,
   isShellSetting,
   resolveTheme,
+  type Bell,
+  type CursorStyle,
   type ResolvedTheme,
   type Theme
 } from '../../core/settings'
@@ -65,12 +70,13 @@ const DEFAULT_FONT_LABEL =
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
-type Section = 'appearance' | 'terminal' | 'shell' | 'shortcuts' | 'sync'
+type Section = 'appearance' | 'terminal' | 'shell' | 'agents' | 'shortcuts' | 'sync'
 
 const SECTIONS: { key: Section; label: string; icon: LucideIcon }[] = [
   { key: 'appearance', label: 'Appearance', icon: Palette },
   { key: 'terminal', label: 'Terminal', icon: SquareTerminal },
   { key: 'shell', label: 'Shell', icon: TerminalIcon },
+  { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
   { key: 'sync', label: 'Sync', icon: FolderSync }
 ]
@@ -184,6 +190,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           {section === 'appearance' && <AppearanceSection family={family} setFamily={setFamily} />}
           {section === 'terminal' && <TerminalColoursField onPick={setPicking} />}
           {section === 'shell' && <ShellField />}
+          {section === 'agents' && <AgentsSection />}
           {section === 'shortcuts' && (
             <ShortcutsSection keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)} />
           )}
@@ -384,11 +391,243 @@ function AppearanceSection({
           </p>
         </div>
       </div>
+      <SelectRow
+        label="Line height"
+        testId="settings-line-height"
+        value={String(settings.lineHeight)}
+        options={LINE_HEIGHTS.map((h) => [String(h), h === 1 ? '1.0 (default)' : h.toFixed(1)])}
+        onChange={(v) => settingsStore.update({ lineHeight: Number(v) })}
+      />
+      <SelectRow
+        label="Letter spacing"
+        testId="settings-letter-spacing"
+        value={String(settings.letterSpacing)}
+        options={LETTER_SPACINGS.map((n) => [String(n), n === 0 ? '0 px (default)' : `${n} px`])}
+        onChange={(v) => settingsStore.update({ letterSpacing: Number(v) })}
+      />
     </>
   )
 }
 
 const OTHER_SHELL = '__other__'
+
+const LINE_HEIGHTS = Array.from({ length: 11 }, (_, i) => Math.round((1 + i / 10) * 10) / 10)
+const LETTER_SPACINGS = Array.from({ length: MAX_LETTER_SPACING + 1 }, (_, i) => i)
+const CURSOR_LABELS: Record<CursorStyle, string> = {
+  block: 'Block',
+  bar: 'Bar',
+  underline: 'Underline'
+}
+const BELL_LABELS: Record<Bell, string> = { none: 'None', flash: 'Flash', sound: 'Sound' }
+
+/** A setting with its label on the left and an on/off switch on the right. */
+function SwitchRow({
+  label,
+  hint,
+  testId,
+  checked,
+  disabled,
+  onChange
+}: {
+  label: string
+  hint?: string
+  testId: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  const id = useId()
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="settings-control">
+        <span className="switch">
+          <input
+            id={id}
+            type="checkbox"
+            role="switch"
+            data-testid={testId}
+            checked={checked}
+            disabled={disabled}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          <span className="switch-track" aria-hidden="true" />
+        </span>
+        {hint && <p className="field-hint">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+/** A setting chosen from a short list, as a select. */
+function SelectRow({
+  label,
+  hint,
+  testId,
+  value,
+  options,
+  onChange
+}: {
+  label: string
+  hint?: string
+  testId: string
+  value: string
+  options: [value: string, label: string][]
+  onChange: (value: string) => void
+}): React.JSX.Element {
+  const id = useId()
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="settings-control">
+        <select
+          id={id}
+          className="settings-input settings-select-short"
+          data-testid={testId}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {options.map(([v, text]) => (
+            <option key={v} value={v}>
+              {text}
+            </option>
+          ))}
+        </select>
+        {hint && <p className="field-hint">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+/** A setting with a few choices side by side, as a segmented control. */
+function SegmentedRow<T extends string>({
+  label,
+  testId,
+  value,
+  labels,
+  onChange
+}: {
+  label: string
+  testId: string
+  value: T
+  labels: Record<T, string>
+  onChange: (value: T) => void
+}): React.JSX.Element {
+  const id = useId()
+  return (
+    <fieldset className="settings-row">
+      <legend className="settings-label">{label}</legend>
+      <div className="segmented">
+        {(Object.keys(labels) as T[]).map((key) => (
+          <label key={key} className="radio">
+            <input
+              type="radio"
+              name={`${id}-${testId}`}
+              data-testid={`${testId}-${key}`}
+              checked={value === key}
+              onChange={() => onChange(key)}
+            />
+            {labels[key]}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+/** The terminal's behaviour: cursor, bold colours, scrollback, bell and input. */
+function TerminalBehaviourRows(): React.JSX.Element {
+  const settings = useSettings()
+  return (
+    <>
+      <SegmentedRow
+        label="Cursor"
+        testId="settings-cursor"
+        value={settings.cursorStyle}
+        labels={CURSOR_LABELS}
+        onChange={(cursorStyle) => settingsStore.update({ cursorStyle })}
+      />
+      <SwitchRow
+        label="Blinking cursor"
+        testId="settings-cursor-blink"
+        checked={settings.cursorBlink}
+        onChange={(cursorBlink) => settingsStore.update({ cursorBlink })}
+      />
+      <SwitchRow
+        label="Bold in bright colours"
+        hint="Bold text uses the bright ANSI colours, as most terminals do."
+        testId="settings-bold-bright"
+        checked={settings.boldBright}
+        onChange={(boldBright) => settingsStore.update({ boldBright })}
+      />
+      <SelectRow
+        label="Scrollback"
+        hint="Lines each terminal keeps above the screen; more use more memory per card."
+        testId="settings-scrollback"
+        value={String(settings.scrollback)}
+        options={SCROLLBACK_CHOICES.map((n) => [String(n), `${n.toLocaleString('en-US')} lines`])}
+        onChange={(v) => settingsStore.update({ scrollback: Number(v) })}
+      />
+      <SegmentedRow
+        label="Bell"
+        testId="settings-bell"
+        value={settings.bell}
+        labels={BELL_LABELS}
+        onChange={(bell) => settingsStore.update({ bell })}
+      />
+      <SwitchRow
+        label="Copy on select"
+        hint="Selecting text in a terminal copies it."
+        testId="settings-copy-on-select"
+        checked={settings.copyOnSelect}
+        onChange={(copyOnSelect) => settingsStore.update({ copyOnSelect })}
+      />
+      {window.drovr.platform === 'darwin' && (
+        <SwitchRow
+          label="Option as Meta"
+          hint="Option+B, Option+F and Alt shortcuts reach the shell instead of typing ∫ or ƒ."
+          testId="settings-option-meta"
+          checked={settings.optionAsMeta}
+          onChange={(optionAsMeta) => settingsStore.update({ optionAsMeta })}
+        />
+      )}
+    </>
+  )
+}
+
+/** Agents: being told when one needs you, and Claude Code's status line. */
+function AgentsSection(): React.JSX.Element {
+  const settings = useSettings()
+  return (
+    <>
+      <SwitchRow
+        label="Notifications"
+        hint="When an agent is waiting for you or needs your answer, unless its card is in view. The Dock shows how many are waiting."
+        testId="settings-notifications"
+        checked={settings.notifications}
+        onChange={(notifications) => settingsStore.update({ notifications })}
+      />
+      <SwitchRow
+        label="Notification sound"
+        testId="settings-notification-sound"
+        checked={settings.notificationSound}
+        disabled={!settings.notifications}
+        onChange={(notificationSound) => settingsStore.update({ notificationSound })}
+      />
+      <SwitchRow
+        label="Claude Code status"
+        hint="Claude Code cards write a one-line status after every turn. Applies to cards started from now on."
+        testId="settings-claude-status"
+        checked={settings.claudeStatus}
+        onChange={(claudeStatus) => settingsStore.update({ claudeStatus })}
+      />
+    </>
+  )
+}
 
 /** A shell's name and where it is: `fish — /opt/homebrew/bin/fish`. */
 function shellLabel(path: string): string {
@@ -640,6 +879,7 @@ function TerminalColoursField({
           fontSize={settings.fontSize}
         />
       </div>
+      <TerminalBehaviourRows />
     </>
   )
 }

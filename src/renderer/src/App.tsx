@@ -12,6 +12,7 @@ import {
   type ViewMemory
 } from '../../core/view-memory'
 import type { Workspace } from '../../core/workspace-store'
+import { onOpenRequest, setLookingAt } from './attention'
 import { removeWorkspace, startCard } from './card-actions'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import CardView from './CardView'
@@ -73,6 +74,17 @@ function App(): React.JSX.Element {
       setViews((v) => selectWorkspace(v, activeId, id))
       workspaceStore.selectWorkspace(id)
     },
+    [activeId, setViews]
+  )
+
+  // Notifications skip the card in view, and a clicked one opens its card in its workspace.
+  useEffect(() => setLookingAt(openedId), [openedId])
+  useEffect(
+    () =>
+      onOpenRequest((workspaceId, cardId) => {
+        setViews((v) => rememberCard(v, workspaceId, cardId))
+        if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
+      }),
     [activeId, setViews]
   )
 

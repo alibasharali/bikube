@@ -5,7 +5,9 @@ import {
   parseSettingsFile,
   resolveTheme,
   serializeSettings,
-  validateSettings
+  validateSettings,
+  PREFERENCE_DEFAULTS,
+  type Settings
 } from './settings'
 
 /** The settings after #10's three, at their defaults. */
@@ -13,7 +15,8 @@ const NEW_FIELDS = {
   shell: '',
   terminalThemeDark: 'Drovr Dark',
   terminalThemeLight: 'Drovr Light',
-  useGhosttyTheme: false
+  useGhosttyTheme: false,
+  ...PREFERENCE_DEFAULTS
 }
 
 describe('parseSettingsFile (#10 D7, AC8)', () => {
@@ -310,7 +313,8 @@ describe('shell and terminal colours in the settings file', () => {
     }
     expect(parseSettingsFile(file({ ...base, ...fields }), 'linux').settings).toEqual({
       ...base,
-      ...fields
+      ...fields,
+      ...PREFERENCE_DEFAULTS
     })
   })
 
@@ -415,5 +419,56 @@ describe('shortcuts in the settings file (#31 D9, AC8)', () => {
     expect(
       validateSettings({ ...base, shortcuts: { back: 'Ctrl+K', closeCard: 'Ctrl+K' } }, 'linux')
     ).toBeNull()
+  })
+})
+
+describe('terminal and notification preferences in the settings file', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('writes only the preferences that differ from their defaults, in a fixed order', () => {
+    const settings: Settings = {
+      ...base,
+      cursorStyle: 'bar',
+      lineHeight: 1.2,
+      notifications: false
+    }
+    const written = JSON.parse(serializeSettings(settings)).settings
+    expect(Object.keys(written).slice(7)).toEqual(['cursorStyle', 'lineHeight', 'notifications'])
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('cursorStyle')
+  })
+
+  it('reads written preferences back, and missing ones as their defaults', () => {
+    const parsed = parseSettingsFile(file({ ...base, scrollback: 50000, bell: 'flash' }), 'linux')
+    expect(parsed.settings).toMatchObject({ scrollback: 50000, bell: 'flash', cursorBlink: false })
+    expect(parsed.replaced).toEqual([])
+  })
+
+  it('replaces invalid preferences with their defaults', () => {
+    const parsed = parseSettingsFile(
+      file({ ...base, scrollback: 7, lineHeight: 1.25, letterSpacing: 9, cursorStyle: 'beam' }),
+      'linux'
+    )
+    expect(parsed.settings).toMatchObject({
+      scrollback: 10000,
+      lineHeight: 1,
+      letterSpacing: 0,
+      cursorStyle: 'block'
+    })
+    expect(parsed.replaced).toEqual(['cursorStyle', 'scrollback', 'lineHeight', 'letterSpacing'])
+  })
+
+  it('accepts line heights in tenths from 1 to 2', () => {
+    for (const lineHeight of [1, 1.1, 1.5, 2]) {
+      expect(validateSettings({ ...base, lineHeight }, 'linux')?.lineHeight).toBe(lineHeight)
+    }
+    for (const lineHeight of [0.9, 2.1, 1.05]) {
+      expect(validateSettings({ ...base, lineHeight }, 'linux')).toBeNull()
+    }
+  })
+
+  it('refuses a save with an invalid preference, and fills missing ones with defaults', () => {
+    expect(validateSettings({ ...base, bell: 'loud' }, 'linux')).toBeNull()
+    expect(validateSettings(base, 'linux')).toMatchObject(PREFERENCE_DEFAULTS)
   })
 })

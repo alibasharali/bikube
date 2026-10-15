@@ -30,7 +30,10 @@ export const IPC = {
   syncStatusChanged: 'sync:statusChanged',
   syncSetFolder: 'sync:setFolder',
   syncPickFolder: 'sync:pickFolder',
-  syncBoard: 'sync:board'
+  syncBoard: 'sync:board',
+  appSetBadge: 'app:setBadge',
+  appFocus: 'app:focus',
+  appRequestAttention: 'app:requestAttention'
 } as const
 
 export interface TerminalExit {
@@ -163,6 +166,16 @@ export interface SyncApi {
   onBoard(listener: (workspaces: Workspace[]) => void): () => void
 }
 
+/** The app's place on the desktop, for notifications. */
+export interface AppApi {
+  /** The Dock (or launcher) badge: how many cards wait for the user; 0 clears it. */
+  setBadge(count: number): void
+  /** Brings this window forward, e.g. when a notification is clicked. */
+  focus(): void
+  /** While the window isn't focused: a Dock bounce on macOS, a flashing taskbar entry elsewhere. */
+  requestAttention(): void
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
@@ -174,4 +187,5 @@ export interface DrovrApi {
   settings: SettingsApi
   board: BoardApi
   sync: SyncApi
+  app: AppApi
 }

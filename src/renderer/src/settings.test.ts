@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS, type Settings } from '../../core/settings'
+import { DEFAULT_SETTINGS, type Settings, PREFERENCE_DEFAULTS } from '../../core/settings'
 import { createSettingsStore } from './settings'
 
 /** The settings after #10's three, at their defaults. */
@@ -7,7 +7,8 @@ const NEW_FIELDS = {
   shell: '',
   terminalThemeDark: 'Drovr Dark',
   terminalThemeLight: 'Drovr Light',
-  useGhosttyTheme: false
+  useGhosttyTheme: false,
+  ...PREFERENCE_DEFAULTS
 }
 
 describe('createSettingsStore (#10 D6)', () => {

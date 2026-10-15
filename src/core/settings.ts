@@ -27,7 +27,7 @@ export type Theme = (typeof THEMES)[number]
 /** The theme a window shows once `system` is resolved against the OS appearance. */
 export type ResolvedTheme = 'dark' | 'light'
 
-export interface Settings {
+export interface Settings extends Preferences {
   theme: Theme
   fontSize: number
   fontFamily: string
@@ -42,6 +42,86 @@ export interface Settings {
   shortcuts?: ShortcutOverrides
 }
 
+export const CURSOR_STYLES = ['block', 'bar', 'underline'] as const
+export type CursorStyle = (typeof CURSOR_STYLES)[number]
+export const BELLS = ['none', 'flash', 'sound'] as const
+export type Bell = (typeof BELLS)[number]
+export const SCROLLBACK_CHOICES = [1000, 5000, 10000, 50000] as const
+export const MIN_LINE_HEIGHT = 1
+export const MAX_LINE_HEIGHT = 2
+export const MAX_LETTER_SPACING = 4
+
+/**
+ * The terminal and notification preferences. Each is written to the file only when it differs
+ * from its default, and a missing one reads as its default, so older files load unchanged.
+ */
+export interface Preferences {
+  cursorStyle: CursorStyle
+  cursorBlink: boolean
+  /** Lines each terminal keeps above the screen. */
+  scrollback: number
+  /** macOS: Option sends Meta (Esc-prefixed keys) instead of typing special characters. */
+  optionAsMeta: boolean
+  /** Selecting text copies it. */
+  copyOnSelect: boolean
+  /** A multiple of the font size, 1 to 2 in steps of 0.1. */
+  lineHeight: number
+  /** Extra pixels between characters, 0 to 4. */
+  letterSpacing: number
+  bell: Bell
+  /** Bold text in the bright ANSI colours, as most terminals do. */
+  boldBright: boolean
+  /** A notification when an agent waits for the user or asks a question. */
+  notifications: boolean
+  notificationSound: boolean
+  /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
+  claudeStatus: boolean
+}
+
+export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
+  cursorStyle: 'block',
+  cursorBlink: false,
+  scrollback: 10000,
+  optionAsMeta: false,
+  copyOnSelect: false,
+  lineHeight: 1,
+  letterSpacing: 0,
+  bell: 'none',
+  boldBright: true,
+  notifications: true,
+  notificationSound: true,
+  claudeStatus: true
+})
+
+const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
+const oneOf =
+  <T>(values: readonly T[]) =>
+  (v: unknown): v is T =>
+    (values as readonly unknown[]).includes(v)
+
+/** Each preference's check, in the order the file lists them. */
+const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Preferences[K] } = {
+  cursorStyle: oneOf(CURSOR_STYLES),
+  cursorBlink: isBoolean,
+  scrollback: oneOf(SCROLLBACK_CHOICES as readonly number[]),
+  optionAsMeta: isBoolean,
+  copyOnSelect: isBoolean,
+  lineHeight: (v): v is number =>
+    typeof v === 'number' &&
+    v >= MIN_LINE_HEIGHT &&
+    v <= MAX_LINE_HEIGHT &&
+    Math.abs(Math.round(v * 10) - v * 10) < 1e-9,
+  letterSpacing: (v): v is number =>
+    typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_LETTER_SPACING,
+  bell: oneOf(BELLS),
+  boldBright: isBoolean,
+  notifications: isBoolean,
+  notificationSound: isBoolean,
+  claudeStatus: isBoolean
+}
+
+export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]
+
 export const MIN_FONT_SIZE = 8
 export const MAX_FONT_SIZE = 32
 export const MAX_FONT_FAMILY_LENGTH = 200
@@ -54,7 +134,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   shell: '',
   terminalThemeDark: DROVR_DARK,
   terminalThemeLight: DROVR_LIGHT,
-  useGhosttyTheme: false
+  useGhosttyTheme: false,
+  ...PREFERENCE_DEFAULTS
 })
 
 export const MAX_SHELL_LENGTH = 4096
@@ -124,6 +205,13 @@ export function validateSettings(value: unknown, platform: string): Settings | n
   }
   const shortcuts = validateShortcuts(value.shortcuts, platform)
   if (shortcuts === null) return null
+  // A missing preference is its default; an invalid one rejects the whole save (D6).
+  const preferences = { ...PREFERENCE_DEFAULTS } as Record<keyof Preferences, unknown>
+  for (const key of PREFERENCE_KEYS) {
+    if (value[key] === undefined) continue
+    if (!PREFERENCE_CHECKS[key](value[key])) return null
+    preferences[key] = value[key]
+  }
   return withShortcuts(
     {
       theme: value.theme,
@@ -132,7 +220,8 @@ export function validateSettings(value: unknown, platform: string): Settings | n
       shell: value.shell,
       terminalThemeDark: value.terminalThemeDark,
       terminalThemeLight: value.terminalThemeLight,
-      useGhosttyTheme: value.useGhosttyTheme
+      useGhosttyTheme: value.useGhosttyTheme,
+      ...(preferences as Preferences)
     },
     shortcuts
   )
@@ -194,6 +283,11 @@ export function parseSettingsFile(text: string, platform: string): ParsedSetting
   check('terminalThemeDark', isTerminalThemeName)
   check('terminalThemeLight', isTerminalThemeName)
   check('useGhosttyTheme', (v): v is boolean => typeof v === 'boolean')
+  for (const key of PREFERENCE_KEYS) {
+    const raw_ = raw[key]
+    if (PREFERENCE_CHECKS[key](raw_)) (settings as unknown as Record<string, unknown>)[key] = raw_
+    else if (key in raw) replaced.push(key)
+  }
   const { shortcuts, dropped } = readShortcuts(raw.shortcuts, platform)
   settings = withShortcuts(settings, shortcuts)
   if (dropped.length > 0) replaced.push('shortcuts')
@@ -218,6 +312,12 @@ export function serializeSettings(settings: Settings, syncFolder: string | null 
       terminalThemeDark,
       terminalThemeLight,
       useGhosttyTheme: settings.useGhosttyTheme,
+      ...Object.fromEntries(
+        PREFERENCE_KEYS.filter((key) => settings[key] !== PREFERENCE_DEFAULTS[key]).map((key) => [
+          key,
+          settings[key]
+        ])
+      ),
       ...(shortcuts !== undefined && Object.keys(shortcuts).length > 0 && { shortcuts }),
       ...(syncFolder !== null && { syncFolder })
     }

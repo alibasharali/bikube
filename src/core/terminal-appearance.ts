@@ -23,10 +23,22 @@ export {
 /** The icon font Drovr bundles, so prompts like starship show their Nerd Font glyphs. */
 export const SYMBOLS_FONT_FAMILY = 'Symbols Nerd Font Mono'
 
+/** The xterm.js options the terminal preferences set (names as xterm's `ITerminalOptions`). */
+export interface TerminalBehaviour {
+  cursorStyle: Settings['cursorStyle']
+  cursorBlink: boolean
+  scrollback: number
+  macOptionIsMeta: boolean
+  lineHeight: number
+  letterSpacing: number
+  drawBoldTextInBrightColors: boolean
+}
+
 export interface TerminalAppearance {
   fontSize: number
   fontFamily: string
   theme: Readonly<TerminalPalette>
+  behaviour: TerminalBehaviour
 }
 
 /** The Ghostty colours for each appearance, once read; null while not read or not in use. */
@@ -46,7 +58,16 @@ export function terminalAppearance(
   return {
     fontSize: settings.fontSize,
     fontFamily: withSymbols(normalizeFontFamily(settings.fontFamily) ?? DEFAULT_FONT_FAMILY),
-    theme: terminalPalette(settings, resolved, ghostty)
+    theme: terminalPalette(settings, resolved, ghostty),
+    behaviour: {
+      cursorStyle: settings.cursorStyle,
+      cursorBlink: settings.cursorBlink,
+      scrollback: settings.scrollback,
+      macOptionIsMeta: settings.optionAsMeta,
+      lineHeight: settings.lineHeight,
+      letterSpacing: settings.letterSpacing,
+      drawBoldTextInBrightColors: settings.boldBright
+    }
   }
 }
 

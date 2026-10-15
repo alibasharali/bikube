@@ -17,6 +17,7 @@ import {
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
 import { isSoftwareRenderer } from '../../core/webgl-support'
+import { ringBell } from './bell'
 import { ghosttyStore } from './ghostty'
 import { currentKeymap, settingsStore } from './settings'
 import '@xterm/xterm/css/xterm.css'
@@ -86,11 +87,14 @@ export class XtermScreen implements CardScreen {
   private readonly fit = new FitAddon()
   private opened = false
   private webgl: WebglAddon | undefined
+  /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
+  private cell = ''
 
   constructor() {
-    const { fontFamily, fontSize, theme } = currentAppearance()
+    const { fontFamily, fontSize, theme, behaviour } = currentAppearance()
     this.palette = theme
-    this.term = new XTerm({ fontFamily, fontSize, theme: { ...theme } })
+    this.term = new XTerm({ fontFamily, fontSize, theme: { ...theme }, ...behaviour })
+    this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
     followAppearance()
     liveScreens.add(this)
     this.host.className = 'terminal'
@@ -98,6 +102,13 @@ export class XtermScreen implements CardScreen {
     this.host.__xterm = this.term
     this.term.loadAddon(this.fit)
     const clipboard = window.drovr.clipboard
+    // Copy on select: a finished selection goes to the clipboard as it is made.
+    this.term.onSelectionChange(() => {
+      if (!settingsStore.get().copyOnSelect || !this.term.hasSelection()) return
+      void clipboard.write(this.term.getSelection())
+    })
+    this.term.onBell(() => ringBell(this.host))
+    this.host.addEventListener('animationend', () => this.host.classList.remove('terminal-bell'))
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18).
@@ -174,15 +185,25 @@ export class XtermScreen implements CardScreen {
    * screen refits, so new columns and rows reach its PTY as a resize; a detached one refits when
    * next attached.
    */
-  applyAppearance({ fontFamily, fontSize, theme }: TerminalAppearance): void {
+  applyAppearance({ fontFamily, fontSize, theme, behaviour }: TerminalAppearance): void {
     const options = this.term.options
     if (this.palette !== theme) {
       this.palette = theme
       options.theme = { ...theme }
     }
-    if (options.fontFamily === fontFamily && options.fontSize === fontSize) return
+    // Only what changed: setting an option, even to its value, makes xterm redraw.
+    for (const key of Object.keys(behaviour) as (keyof typeof behaviour)[]) {
+      if (options[key] !== behaviour[key])
+        (options as Record<string, unknown>)[key] = behaviour[key]
+    }
+    const cellChanged =
+      options.fontFamily !== fontFamily ||
+      options.fontSize !== fontSize ||
+      this.cell !== `${behaviour.lineHeight}/${behaviour.letterSpacing}`
+    if (!cellChanged) return
     options.fontFamily = fontFamily
     options.fontSize = fontSize
+    this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
     this.fitNow()
   }
 

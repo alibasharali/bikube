@@ -44,6 +44,7 @@ export const STATUS_INTERVAL_MS = 250
 export const MAX_TYPEAHEAD_CHARS = 64 * 1024
 
 interface Entry<S> {
+  cardId: string
   /** Null once the shell has exited: a Stopped card has no screen (#5 D6). */
   screen: S | null
   sessionId: string | null
@@ -71,6 +72,7 @@ interface Entry<S> {
 export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
   private readonly endedListeners: ((cardId: string) => void)[] = []
+  private readonly activityListeners: ((cardId: string, activity: Activity | null) => void)[] = []
 
   /**
    * `router` is shared with the cards' extra panes (#11), or a new one over `api`. `defer` runs
@@ -102,6 +104,7 @@ export class CardSessions<S extends CardScreen> {
     const screen = this.createScreen(card.id)
     const state: CardRunState = { kind: 'running' }
     const entry: Entry<S> = existing ?? {
+      cardId: card.id,
       screen,
       sessionId: null,
       state,
@@ -252,6 +255,14 @@ export class CardSessions<S extends CardScreen> {
     this.endedListeners.push(listener)
   }
 
+  /**
+   * Called with a card's id and new activity each time any card's activity changes, cleared
+   * (null) included: for notifications, which watch every card.
+   */
+  onActivity(listener: (cardId: string, activity: Activity | null) => void): void {
+    this.activityListeners.push(listener)
+  }
+
   /** Called when the card's status changes. Returns an unsubscribe function. */
   subscribe(cardId: string, listener: () => void): () => void {
     const entry = this.entries.get(cardId)
@@ -379,5 +390,8 @@ export class CardSessions<S extends CardScreen> {
       return
     entry.status = next
     entry.listeners.forEach((l) => l())
+    if (next.activity !== prev.activity) {
+      for (const listener of this.activityListeners) listener(entry.cardId, next.activity ?? null)
+    }
   }
 }

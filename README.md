@@ -10,12 +10,13 @@ A kanban board for macOS and Linux where every card is a live terminal, for runn
 - **Cards as terminals**: each card is a real login shell. Open one to use it at full size; on the board it shows its title and status. Drag cards between columns or move them from the keyboard or the card menu; moving never stops the process. Close stops a card's process after asking, and the card can be opened again later.
 - **Startup commands and agent resume**: a card can start `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, a custom command or a plain shell, and reopening an agent card resumes the agent's session (for Codex, Gemini CLI and OpenCode, the latest one in the card's directory). The board survives a restart, with every card stopped until opened.
 - **Split panes**: up to 4 terminals side by side or stacked inside a card.
-- **Settings and themes**: System, Dark or Light theme; the terminals' font size and family; the shell new cards start (the login shell, one from `/etc/shells` or any path); a terminal colour theme for the dark and the light theme, picked from 463 Ghostty themes with a live preview, or the colours of your own Ghostty config. Prompt icons (Nerd Font glyphs) work out of the box.
+- **Settings and themes**: System, Dark or Light theme; the terminals' font size and family; the shell new cards start (the login shell, one from `/etc/shells` or any path); a terminal colour theme for the dark and the light theme, picked from 463 Ghostty themes with a live preview, or the colours of your own Ghostty config; the shortcuts of an open card (back to the board, split, close pane, close card) and of Settings. Prompt icons (Nerd Font glyphs) work out of the box.
 - **SSH workspaces**: cards run on another machine through your own `ssh`, in a directory on that host.
 - **Sync folder**: pick a folder your own sync tool (iCloud Drive, Dropbox, Syncthing…) carries between machines, and the board follows you.
 - **The `board` command**: inside a card's terminal, the agent (or you) can update the board:
   - `board move <card> <column>` moves a card to the bottom of a column, e.g. `board move . Done`.
   - `board status <card> <text>` shows a short status line on a running card; `""` clears it.
+  - `board activity <card> working|waiting|question|none` shows a Working, Waiting for you or Needs your answer pill on a running card; `none` clears it. Claude Code cards set it, and their status line, by themselves.
 
   `<card>` is a card's title or id in the same workspace, or `.` for the card you are in. `board` works only inside a Drovr card: Drovr puts it on the card's PATH, so there is nothing to install. If a shell profile reorders PATH (macOS `path_helper` in a login shell), `"$DROVR_BIN/board"` calls it whatever PATH says. `board help` prints the usage.
 

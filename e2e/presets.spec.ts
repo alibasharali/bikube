@@ -6,6 +6,7 @@ import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Agent resume presets (#21): Codex, Gemini CLI and OpenCode in every startup command select, the
 // plain command on a card's first start and `<resume> || <plain>` after, kept across a restart.
@@ -21,7 +22,7 @@ let claudeLog: string
 let env: Record<string, string>
 let dataDir: string
 
-type Choice = 'Shell' | 'Claude Code' | 'Codex' | 'Gemini CLI' | 'OpenCode' | 'Custom…'
+type Choice = 'Claude Code' | 'Codex' | 'Gemini CLI' | 'OpenCode' | 'Custom…'
 
 const PRESETS = [
   { title: 'cx', label: 'Codex', tag: 'Codex', plain: 'codex', resume: 'codex resume --last' },
@@ -77,6 +78,7 @@ const logLines = (): string[] => agentLogLines(agentLog)
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -181,9 +183,11 @@ async function openStartupDialog(title: string): Promise<Locator> {
   return dialog
 }
 
+/** Sets the card's startup command; Custom… is the do-nothing `:` (a plain prompt). */
 async function setStartup(title: string, startup: Choice): Promise<void> {
   const dialog = await openStartupDialog(title)
   await dialog.getByTestId('startup-dialog-startup').selectOption({ label: startup })
+  if (startup === 'Custom…') await dialog.getByTestId('startup-dialog-command').fill(':')
   await dialog.getByTestId('startup-dialog-save').click()
   await expect(dialog).toHaveCount(0)
 }
@@ -211,7 +215,6 @@ test('AC1: the select lists the presets; their cards show tags and run the plain
   await createWorkspace(dir, 'alpha')
   await column('Backlog').getByTestId('new-card').click()
   await expect(page.getByTestId('new-card-startup').locator('option')).toHaveText([
-    'Shell',
     'Claude Code',
     'Codex',
     'Gemini CLI',
@@ -279,7 +282,8 @@ test('AC4: switching a card away from a preset and back keeps it started', async
   await expect.poll(logLines).toEqual(['codex'])
   await stopAgent('sh', dir)
 
-  await setStartup('sh', 'Shell')
+  // Away to a plain prompt (Custom `:`) and back.
+  await setStartup('sh', 'Custom…')
   await openCard('sh')
   await run('pwd')
   await expect.poll(bufferLines).toContain(dir)
@@ -306,7 +310,7 @@ test('AC5: a preset shows the same-directory hint in the card and workspace dial
   await expect(hint).toHaveText("Resumes the latest Gemini CLI session in the card's directory.")
   await select.selectOption({ label: 'Claude Code' })
   await expect(hint).toHaveCount(0)
-  await select.selectOption({ label: 'Shell' })
+  await select.selectOption({ label: 'Custom…' })
   await expect(hint).toHaveCount(0)
   await dialog.getByTestId('startup-dialog-cancel').click()
   await expect(dialog).toHaveCount(0)
@@ -336,7 +340,7 @@ test('AC6: a preset as the workspace default presets new cards only', async () =
   await column('Backlog').getByTestId('new-card').click()
   await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Codex')
   await page.getByTestId('new-card-input').press('Escape')
-  await expect(card('sh').getByTestId('card-tag')).toHaveCount(0)
+  await expect(card('sh').getByTestId('card-tag')).toHaveText('Custom')
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
 
   await editWorkspace(0)
@@ -406,9 +410,12 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
   writeFileSync(join(dataDir, 'drovr-state.json'), JSON.stringify(old))
   await launch()
 
-  for (const title of ['sh', 'agent', 'custom']) {
+  for (const title of ['agent', 'custom']) {
     await expect(card(title).getByTestId('card-status-label')).toHaveText('Stopped')
   }
+  // The Shell card is one of the workspace's shells now, not a card.
+  await expect(card('sh')).toHaveCount(0)
+  await expect(page.getByTestId('shell').filter({ hasText: 'sh' })).toHaveCount(1)
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
   await expect(card('custom').getByTestId('card-tag')).toHaveText('Custom')
   await openCard('agent')

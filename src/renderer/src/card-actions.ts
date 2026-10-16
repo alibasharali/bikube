@@ -1,5 +1,6 @@
 import { keyMoveTarget, type CardMoveDirection } from '../../core/card-moves'
 import type { Workspace, Card } from '../../core/workspace-store'
+import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
 
@@ -8,10 +9,10 @@ import { workspaceStore } from './store'
  * a running card is left as it is. Opening a card, and creating one, goes through here.
  */
 export function startCard(workspaceId: string, cardId: string): void {
-  const card = workspaceStore
-    .getState()
-    .workspaces.find((w) => w.id === workspaceId)
-    ?.cards.find((c) => c.id === cardId)
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  // A shell (the Default one included) starts like a card: in the workspace's folder.
+  const card =
+    workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return
   cardTerminals().start(card, (kind) => {
     if (kind === 'claude') workspaceStore.markClaudeStarted(workspaceId, cardId)
@@ -57,9 +58,33 @@ export function removeWorktreeCard(
   })
 }
 
-/** Deletes a workspace and stops every one of its cards' processes (#4 D15, #11 D6). */
+/** Deletes a shell, stopping its processes. */
+export function removeShell(workspaceId: string, shellId: string): void {
+  disposeCard(shellId)
+  workspaceStore.deleteShell(workspaceId, shellId)
+}
+
+/**
+ * Restarts a shell (or card): a running one is closed, then started again once it has stopped,
+ * so a dev server's command runs anew; a stopped one just starts.
+ */
+export function restartCard(workspaceId: string, cardId: string): void {
+  if (cardTerminals().runState(cardId)?.kind !== 'running') {
+    startCard(workspaceId, cardId)
+    return
+  }
+  const stop = cardTerminals().subscribe(cardId, () => {
+    if (cardTerminals().runState(cardId)?.kind === 'running') return
+    stop()
+    startCard(workspaceId, cardId)
+  })
+  closeCard(cardId)
+}
+
+/** Deletes a workspace and stops every one of its cards' and shells' processes (#4 D15, #11 D6). */
 export function removeWorkspace(workspace: Workspace): void {
   workspace.cards.forEach((card) => disposeCard(card.id))
+  shellCards(workspace).forEach((shell) => disposeCard(shell.id))
   workspaceStore.deleteWorkspace(workspace.id)
 }
 

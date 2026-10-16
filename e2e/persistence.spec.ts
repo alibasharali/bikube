@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS, claudeResumeLine } from './fake-claude'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Persistence (#8): the board survives a restart. Each test launches with its own data directory
 // and "restarts" by closing the app and launching it again with the same one (spec: AC intro).
@@ -73,6 +74,7 @@ const shellStarts = (): number =>
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -202,9 +204,9 @@ test('AC1: workspaces, columns and card order survive a restart', async () => {
   await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 800))
   await createWorkspace(makeDir('alpha'), 'alpha')
   await renameColumn('Backlog', 'Todo')
-  await renameColumn('Running', 'Doing')
+  await renameColumn('In Progress', 'Doing')
   await columnAction('Done', 'menu-move-left')
-  await columnAction('Needs me', 'menu-delete')
+  await columnAction('Review', 'menu-delete')
   await expect.poll(columnNames).toEqual(['Todo', 'Doing', 'Done'])
   await newCard('Doing', 'api')
   await newCard('Todo', 'web')
@@ -364,11 +366,11 @@ test('AC5: default titles continue and new items work alongside restored ones', 
   await page.getByTestId('card-rename-input').fill('three')
   await page.getByTestId('card-rename-input').press('Enter')
   await card('three').getByTestId('card-menu').click()
-  await page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await page.getByTestId('card-menu-move-to').getByText('In Progress', { exact: true }).click()
   await card('Terminal 2').getByTestId('card-menu').click()
-  await page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await page.getByTestId('card-menu-move-to').getByText('In Progress', { exact: true }).click()
   await expect(titles('Backlog')).toHaveText(['one'])
-  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await expect(titles('In Progress')).toHaveText(['three', 'Terminal 2'])
   await cardAction('one', 'card-menu-delete')
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
   await expect(titles('Backlog')).toHaveCount(0)
@@ -382,14 +384,14 @@ test('AC5: default titles continue and new items work alongside restored ones', 
   await newCard('Backlog', '')
   await expect(titles('Backlog')).toHaveText(['Terminal 1'])
   await selectWorkspace('alpha')
-  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await expect(titles('In Progress')).toHaveText(['three', 'Terminal 2'])
   await expect(titles('Later')).toHaveText(['later'])
 
   await restart()
 
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done', 'Later'])
-  await expect(titles('Running')).toHaveText(['three', 'Terminal 2'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'In Progress', 'Review', 'Done', 'Later'])
+  await expect(titles('In Progress')).toHaveText(['three', 'Terminal 2'])
   await expect(titles('Later')).toHaveText(['later'])
   await selectWorkspace('beta')
   await expect(titles('Backlog')).toHaveText(['Terminal 1'])

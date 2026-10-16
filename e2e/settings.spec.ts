@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Themes and settings (#10). Each test launches with its own data directory.
 
@@ -30,6 +31,7 @@ async function alphaWithApi(page: Page): Promise<void> {
   const dir = join(mkdtempSync(join(tmpdir(), 'drovr-settings-')), 'alpha')
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()
@@ -310,6 +312,7 @@ test('AC2: the shortcut opens Settings from the board and the full-size view, ne
 
   // With the workspace dialog open, the shortcut does nothing.
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
   await page.keyboard.press(SHORTCUT)
   await page.waitForTimeout(200)
@@ -738,11 +741,11 @@ test('#31 D8: Reset is refused while another action holds the default; the value
 
   await page.getByTestId('settings-open').click()
   await dialog(page).getByTestId('settings-section-shortcuts').click()
-  const defaultText = await shortcutField(page, 'closeCard').innerText()
+  const defaultText = (await shortcutField(page, 'closeCard').textContent()) ?? ''
   // Close card moves away, then Split right takes Close card's default, free by then.
   await shortcutField(page, 'closeCard').click()
   await page.keyboard.press('Control+Alt+X')
-  const movedText = await shortcutField(page, 'closeCard').innerText()
+  const movedText = (await shortcutField(page, 'closeCard').textContent()) ?? ''
   expect(movedText).not.toBe(defaultText)
   await shortcutField(page, 'splitRight').click()
   await page.keyboard.press(closeCardDefault)
@@ -904,7 +907,7 @@ test('the Font family list offers installed fonts; a pick applies at once and is
   await expect(dialog(page).getByLabel('Custom font family')).toHaveCount(0)
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe(`"${font}", monospace`)
   await expect
-    .poll(() => readSettingsFile(dataDir))
+    .poll(() => (existsSync(join(dataDir, 'drovr-settings.json')) ? readSettingsFile(dataDir) : ''))
     .toContain(`"fontFamily":"\\"${font}\\", monospace"`)
 
   // Closing keeps the pick; reopening shows it selected.

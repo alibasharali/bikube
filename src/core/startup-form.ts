@@ -9,8 +9,8 @@ import type { StartupCommand } from './startup-command'
 export type StartupChoice = StartupCommand['kind']
 
 /** Every select's options, in order (#5 D9, #21 D5). */
+/** A card's choices: agents and Custom…; plain shells are the workspace's Shells, not cards. */
 export const STARTUP_CHOICES: readonly { choice: StartupChoice; label: string }[] = [
-  { choice: 'shell', label: 'Shell' },
   { choice: 'claude', label: 'Claude Code' },
   ...AGENT_KINDS.map((kind) => ({ choice: kind, label: AGENT_PRESETS[kind].label })),
   { choice: 'custom', label: 'Custom…' }

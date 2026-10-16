@@ -13,7 +13,8 @@ function workspace(id: string, over: Partial<Workspace> = {}): Workspace {
     ],
     cards: [],
     nextCardNumber: 1,
-    defaultStartup: { kind: 'shell' },
+    defaultStartup: { kind: 'claude' },
+    shells: [],
     ...over
   }
 }

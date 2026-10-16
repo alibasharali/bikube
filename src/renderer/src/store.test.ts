@@ -24,7 +24,8 @@ const saved: WorkspaceState = {
         }
       ],
       nextCardNumber: 2,
-      defaultStartup: { kind: 'shell' }
+      defaultStartup: { kind: 'claude' },
+      shells: []
     }
   ],
   activeId: 'w-saved'

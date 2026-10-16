@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Colours, copy and paste in a card's terminal (#19: #1 AC6 and AC7 ported to the board).
 // Linux runs drive Ctrl+Shift+C/V; Cmd+C/V on macOS is checked by hand.
@@ -29,6 +30,7 @@ test.afterEach(async () => {
 /** Creates a workspace on `root` and a card in it; the card's full-size view opens on it. */
 async function openNewCard(): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(root)
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()

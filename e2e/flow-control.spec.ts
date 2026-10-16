@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, closeCard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Terminal output flow control (#16): a stalled renderer doesn't build a backlog, a paused card
 // still stops and deletes, and ordinary output is unchanged.
@@ -18,6 +19,7 @@ test.beforeEach(async () => {
   const dir = join(root, 'alpha')
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()
@@ -44,9 +46,9 @@ function card(title: string): Locator {
 
 const status = (title: string): Locator => card(title).getByTestId('card-status-label')
 
-/** Creates a card in `Running` through `+ New card`; its full-size view opens. */
+/** Creates a card in `In Progress` through `+ New card`; its full-size view opens. */
 async function newCard(title: string): Promise<void> {
-  await column('Running').getByTestId('new-card').click()
+  await column('In Progress').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, title)

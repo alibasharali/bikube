@@ -21,6 +21,7 @@ import { claudeLogLines, REMOTE_SETTINGS_ARGS, SETTINGS_ARGS } from './fake-clau
 import { fakeSshHome, removeRemoteForwards } from './fake-ssh'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Sync between machines (#13). Every instance has its own data directory and its own home
 // (`DROVR_HOME_DIR`, D15); a test's instances share one temp sync folder.
@@ -77,6 +78,7 @@ async function quit(instance: Instance): Promise<void> {
 
 async function createWorkspace(page: Page, dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -168,7 +170,7 @@ test('AC1: turning sync on with an empty folder writes the board and shows Synce
   expect(file.board.workspaces).toHaveLength(1)
   const [api] = file.board.workspaces
   expect(api.name).toBe('api')
-  expect(api.columns.map((c) => c.name)).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+  expect(api.columns.map((c) => c.name)).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
   expect(api.cards.map((c) => c.title)).toEqual(['Terminal 1'])
   expect(api.cards[0].columnId).toBe(api.columns[0].id)
 
@@ -217,6 +219,7 @@ test('AC5: local directories under home are written as ~ and read under the othe
   await closeSettings(a.page)
   await createWorkspace(a.page, makeDir('ha', 'proj'), 'proj')
   await a.page.getByTestId('workspace-add').click()
+  await plainCards(a.page)
   await a.page.getByTestId('workspace-location-ssh').click()
   await a.page.getByTestId('workspace-host').fill('devbox')
   await a.page.getByTestId('workspace-directory').fill('~/srv')
@@ -404,11 +407,11 @@ test('AC2: a rename and move on A reach B live, Stopped, with no process started
 
   await renameCard(a.page, 'Terminal 1', 'server')
   await card(a.page, 'server').getByTestId('card-menu').click()
-  await a.page.getByTestId('card-menu-move-to').getByText('Running', { exact: true }).click()
+  await a.page.getByTestId('card-menu-move-to').getByText('In Progress', { exact: true }).click()
   await expect(card(a.page, 'server')).toHaveCount(1)
 
   await expect
-    .poll(() => cardTitles(column(b.page, 'Running')), { timeout: 5000 })
+    .poll(() => cardTitles(column(b.page, 'In Progress')), { timeout: 5000 })
     .toEqual(['server'])
   await expect(card(b.page, 'Terminal 1')).toHaveCount(0)
   await expect(card(b.page, 'server').getByTestId('card-status-label')).toHaveText('Stopped')
@@ -501,6 +504,7 @@ test('AC5: a workspace created on A reaches B live under its own home; SSH uncha
   const { a, b } = await twoSynced(folder)
   await createWorkspace(a.page, makeDir('ha', 'proj'), 'proj')
   await a.page.getByTestId('workspace-add').click()
+  await plainCards(a.page)
   await a.page.getByTestId('workspace-location-ssh').click()
   await a.page.getByTestId('workspace-host').fill('devbox')
   await a.page.getByTestId('workspace-directory').fill('~/srv')
@@ -543,6 +547,7 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
 
   await newCard(a.page, 'local', 'Claude Code')
   await a.page.getByTestId('workspace-add').click()
+  await plainCards(a.page)
   await a.page.getByTestId('workspace-location-ssh').click()
   await a.page.getByTestId('workspace-host').fill('me@devbox')
   await a.page.getByTestId('workspace-directory').fill(remote)
@@ -630,6 +635,7 @@ test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", asy
 
   await newCard(a.page, 'local', 'Codex')
   await a.page.getByTestId('workspace-add').click()
+  await plainCards(a.page)
   await a.page.getByTestId('workspace-location-ssh').click()
   await a.page.getByTestId('workspace-host').fill('me@devbox')
   await a.page.getByTestId('workspace-directory').fill(remote)

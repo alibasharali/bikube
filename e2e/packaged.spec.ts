@@ -14,6 +14,7 @@ import { join, resolve } from 'node:path'
 import { CLAUDE_INSTRUCTION, claudeSettings } from '../src/core/claude-hooks'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // The packaged Linux app (#14 AC4, D8): `npm run test:packaged` packs it (`npm run pack`), then
 // this checks the unpacked app's files and launches its executable once, under xvfb, with a
@@ -76,6 +77,8 @@ test('AC4: the packaged app opens, makes a workspace and a card, and board statu
   const page = launched.page
 
   await page.getByTestId('workspace-add').click()
+
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()

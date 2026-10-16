@@ -45,6 +45,17 @@ export function checkStartup(startup: StartupCommand): Result<StartupCommand> {
   return { ok: true, value: { kind: 'custom', command } }
 }
 
+export const CLAUDE_STARTUP: StartupCommand = { kind: 'claude' }
+
+/**
+ * `checkStartup` for a card or a workspace's default for new cards: a card is an agent session,
+ * so `shell` is refused (plain shells are the workspace's Shells).
+ */
+export function checkCardStartup(startup: StartupCommand): Result<StartupCommand> {
+  if (startup.kind === 'shell') return fail('Choose an agent or a custom command')
+  return checkStartup(startup)
+}
+
 /**
  * The line to type into a freshly started shell, without the trailing Enter (`\r`, #5 D3),
  * or null when nothing is typed (Shell, or Claude Code with an agent session id that is not a

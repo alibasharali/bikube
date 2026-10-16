@@ -11,7 +11,8 @@ export const SHORTCUT_ACTIONS = [
   'splitDown',
   'closePane',
   'closeCard',
-  'settings'
+  'settings',
+  'openShell'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 
@@ -30,7 +31,8 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   splitDown: 'Shift+Cmd+D',
   closePane: 'Cmd+W',
   closeCard: 'Shift+Cmd+W',
-  settings: 'Cmd+,'
+  settings: 'Cmd+,',
+  openShell: 'Cmd+T'
 })
 
 const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
@@ -39,7 +41,8 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   splitDown: 'Ctrl+Shift+E',
   closePane: 'Ctrl+Shift+W',
   closeCard: 'Ctrl+Shift+Q',
-  settings: 'Ctrl+,'
+  settings: 'Ctrl+,',
+  openShell: 'Ctrl+Shift+T'
 })
 
 /** This OS's default shortcuts (D6). */
@@ -189,7 +192,8 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   splitDown: 'Split down',
   closePane: 'Close pane',
   closeCard: 'Close card',
-  settings: 'Open Settings'
+  settings: 'Open Settings',
+  openShell: 'Open Default shell'
 })
 
 /** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */

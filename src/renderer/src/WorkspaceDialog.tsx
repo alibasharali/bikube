@@ -11,7 +11,7 @@ import {
   type WorkspaceDraft,
   type WorkspaceLocation
 } from '../../core/workspace-form'
-import { SHELL_STARTUP, checkStartup } from '../../core/startup-command'
+import { CLAUDE_STARTUP, checkCardStartup } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
 import type { Workspace } from '../../core/workspace-store'
 import { SMALL_ICON } from './icons'
@@ -53,7 +53,7 @@ function WorkspaceDialog({
   const [errors, setErrors] = useState<DraftErrors>({})
   // The default startup command for new cards (#5 D10); Shell for a new workspace.
   const [startup, setStartup] = useState<StartupDraft>(() =>
-    startupDraft(workspace?.defaultStartup ?? SHELL_STARTUP)
+    startupDraft(workspace?.defaultStartup ?? CLAUDE_STARTUP)
   )
   const [commandError, setCommandError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
@@ -75,7 +75,7 @@ function WorkspaceDialog({
         existingNames: workspaces.filter((w) => w.id !== workspace?.id).map((w) => w.name),
         isDirectory: (p) => window.drovr.fs.isDirectory(p)
       })
-      const command = checkStartup(draftStartup(startup))
+      const command = checkCardStartup(draftStartup(startup))
       setCommandError(command.ok ? undefined : command.error.message)
       if (!result.ok) {
         setErrors(result.errors)

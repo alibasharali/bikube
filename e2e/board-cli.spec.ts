@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
 import { backToBoard, checkOnBoard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // The `board` command (#9): typed into a card's terminal, it reaches the app over
 // `<userData>/board/board.sock`. Each command's stdout and stderr go to files in the workspace
@@ -49,6 +50,7 @@ async function launch(): Promise<void> {
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -216,16 +218,16 @@ test('AC2: a card moves a sibling by title, then by id, and stays where it is', 
   await back()
   await newCard('Backlog', 'api')
 
-  expect(await board(alpha, 'board move web "Needs me"')).toEqual(ok)
+  expect(await board(alpha, 'board move web Review')).toEqual(ok)
   await back()
-  await expect(titlesIn('Needs me')).toHaveText(['web'])
+  await expect(titlesIn('Review')).toHaveText(['web'])
   await expect(titlesIn('Backlog')).toHaveText(['api'])
 
   await openCard('api')
-  expect(await board(alpha, 'board move "$(cat web-id)" Running')).toEqual(ok)
+  expect(await board(alpha, 'board move "$(cat web-id)" "In Progress"')).toEqual(ok)
   await back()
-  await expect(titlesIn('Running')).toHaveText(['web'])
-  await expect(titlesIn('Needs me')).toHaveCount(0)
+  await expect(titlesIn('In Progress')).toHaveText(['web'])
+  await expect(titlesIn('Review')).toHaveCount(0)
   await expect(titlesIn('Backlog')).toHaveText(['api'])
 })
 
@@ -265,8 +267,8 @@ test('AC3: an unknown column, an unknown card and an ambiguous title are refused
   await back()
   await newCard('Backlog', 'api')
 
-  expect(await board(alpha, 'board move . Review')).toEqual(
-    refused('board: no column "Review"; columns are: Backlog, Running, Needs me, Done')
+  expect(await board(alpha, 'board move . QA')).toEqual(
+    refused('board: no column "QA"; columns are: Backlog, In Progress, Review, Done')
   )
   expect(await board(alpha, 'board move ghost Done')).toEqual(
     refused('board: no card "ghost" in this workspace')
@@ -372,7 +374,7 @@ test('AC9: the socket is user-only, replaces a stale file, and is gone after qui
     code: 0,
     stdout: expect.stringMatching(/^srw------- /)
   })
-  expect(await board(alpha, 'board move . Running')).toEqual(ok)
+  expect(await board(alpha, 'board move . Review')).toEqual(ok)
 
   await app!.close()
   app = undefined

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, checkOnBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 import {
   claudeLogLines,
   fakeClaudeHome,
@@ -57,6 +58,7 @@ const logLines = (): string[] => claudeLogLines(log)
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -155,6 +157,12 @@ async function run(command: string): Promise<void> {
 }
 
 /** Waits for the board after the open card's shell exited: it is Stopped (#5 D6). */
+/** A click on the board's empty space, below its columns: focus leaves any form. */
+async function clickBoardBackground(): Promise<void> {
+  const box = (await page.getByTestId('board').boundingBox())!
+  await page.mouse.click(box.x + box.width - 20, box.y + box.height - 20)
+}
+
 async function stoppedToBoard(title: string): Promise<void> {
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
@@ -162,21 +170,20 @@ async function stoppedToBoard(title: string): Promise<void> {
   await expect(card(title).getByTestId('card-status-line')).toHaveCount(0)
 }
 
-test('AC1: a new card is a Shell by default, nothing typed, no tag', async () => {
-  const dir = makeDir('alpha')
-  await createWorkspace(dir, 'alpha')
+test('AC1: a new workspace presets Claude Code for new cards; Shell is no card choice', async () => {
+  // Plain shells are the workspace's shells (e2e/shells.spec.ts); a card is an agent session.
+  await page.getByTestId('workspace-add').click()
+  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Claude Code')
+  await expect(page.getByTestId('workspace-startup').locator('option')).not.toContainText(['Shell'])
+  await page.getByTestId('workspace-directory').fill(makeDir('alpha'))
+  await page.getByTestId('workspace-name').fill('alpha')
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
   await column('Backlog').getByTestId('new-card').click()
-  await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Shell')
-  await page.getByTestId('new-card-input').fill('sh')
-  await page.getByTestId('new-card-input').press('Enter')
-  await expectCardOpen(page, 'sh')
-  await expectStatusOnBoard(page, 'sh', 'Running')
-  const screen = await settledScreen()
-  expect(screen.join('\n')).not.toContain('claude')
-  await run('pwd')
-  await expect.poll(bufferLines).toContain(dir)
-  await back()
-  await expect(card('sh').getByTestId('card-tag')).toHaveCount(0)
+  await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Claude Code')
+  const choices = await page.getByTestId('new-card-startup').locator('option').allTextContents()
+  expect(choices).not.toContain('Shell')
+  await page.getByTestId('new-card-input').press('Escape')
   expect(logLines()).toEqual([])
 })
 
@@ -346,6 +353,7 @@ test('AC7: a Custom card runs its command on every start; an empty command is re
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('empty')
   await page.getByTestId('new-card-startup').selectOption({ label: 'Custom…' })
+  await page.getByTestId('new-card-command').fill('')
   await page.getByTestId('new-card-command').press('Enter')
   await expect(page.getByTestId('new-card-error-command')).toHaveText('Command is required')
   await page.getByTestId('new-card-input').press('Enter')
@@ -442,7 +450,7 @@ async function editWorkspace(index: number): Promise<void> {
 
 test('AC8: the workspace default presets new cards and never changes existing ones', async () => {
   await page.getByTestId('workspace-add').click()
-  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Shell')
+  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Claude Code')
   await expect(page.getByTestId('workspace-command')).toHaveCount(0)
   await page.getByTestId('workspace-cancel').click()
 
@@ -453,7 +461,7 @@ test('AC8: the workspace default presets new cards and never changes existing on
   await back()
 
   await editWorkspace(0)
-  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Shell')
+  await expect(selected(page.getByTestId('workspace-startup'))).toHaveText('Custom…')
   await page.getByTestId('workspace-startup').selectOption({ label: 'Claude Code' })
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
@@ -461,7 +469,7 @@ test('AC8: the workspace default presets new cards and never changes existing on
   await column('Backlog').getByTestId('new-card').click()
   await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Claude Code')
   await page.getByTestId('new-card-input').press('Escape')
-  await expect(card('sh').getByTestId('card-tag')).toHaveCount(0)
+  await expect(card('sh').getByTestId('card-tag')).toHaveText('Custom')
 
   await openCard('sh')
   await run('exit')
@@ -491,7 +499,7 @@ test('AC8: the workspace default presets new cards and never changes existing on
 /** Sets a card's startup command from its menu (#5 D11); `save: false` cancels instead. */
 async function setStartup(
   title: string,
-  startup: 'Shell' | 'Claude Code' | 'Custom…',
+  startup: 'Claude Code' | 'Codex' | 'Custom…',
   { save = true, current }: { save?: boolean; current?: string } = {}
 ): Promise<void> {
   await card(title).getByTestId('card-menu').click()
@@ -532,10 +540,10 @@ test("AC9: changing a card's command applies at its next start, keeping its sess
   await back()
 
   // Cancel changes nothing.
-  await setStartup('sh', 'Claude Code', { save: false, current: 'Shell' })
-  await expect(card('sh').getByTestId('card-tag')).toHaveCount(0)
+  await setStartup('sh', 'Claude Code', { save: false, current: 'Custom…' })
+  await expect(card('sh').getByTestId('card-tag')).toHaveText('Custom')
 
-  await setStartup('sh', 'Claude Code', { current: 'Shell' })
+  await setStartup('sh', 'Claude Code', { current: 'Custom…' })
   await expect(card('sh').getByTestId('card-tag')).toHaveText('Claude')
   await expect(card('sh').getByTestId('card-status-label')).toHaveText('Running')
   // The running shell is untouched: nothing typed into it.
@@ -564,15 +572,15 @@ test("AC9: changing a card's command applies at its next start, keeping its sess
   await run('exit')
   await stoppedToBoard('sh')
 
-  // Away to Shell and back: the same conversation resumes.
-  await setStartup('sh', 'Shell', { current: 'Claude Code' })
-  await expect(card('sh').getByTestId('card-tag')).toHaveCount(0)
+  // Away to another agent and back: the same conversation resumes.
+  await setStartup('sh', 'Codex', { current: 'Claude Code' })
+  await expect(card('sh').getByTestId('card-tag')).toHaveText('Codex')
   await openCard('sh')
   const shell = await settledScreen()
   expect(shell.join('\n')).not.toContain('claude')
   await run('exit')
   await stoppedToBoard('sh')
-  await setStartup('sh', 'Claude Code', { current: 'Shell' })
+  await setStartup('sh', 'Claude Code', { current: 'Codex' })
   await restartAndStop(dir, claudeResumeLine(u))
   expect(logLines()).toEqual([
     `${SETTINGS_ARGS} --session-id ${u}`,
@@ -588,6 +596,7 @@ test('AC9/D2: a Custom command set from the menu is required and shown in the ta
   await page.getByTestId('card-menu-startup').click()
   const dialog = page.getByTestId('startup-dialog')
   await dialog.getByTestId('startup-dialog-startup').selectOption({ label: 'Custom…' })
+  await dialog.getByTestId('startup-dialog-command').fill('')
   await dialog.getByTestId('startup-dialog-save').click()
   await expect(dialog.getByTestId('startup-dialog-error-command')).toHaveText('Command is required')
   await dialog.getByTestId('startup-dialog-command').fill('  echo drovr-menu  ')
@@ -609,7 +618,7 @@ test('D9: moving between the new-card fields keeps the form; leaving it unchange
 
   // Leaving with an empty title and the default command cancels (as #4 D4).
   await column('Backlog').getByTestId('new-card').click()
-  await page.getByTestId('board-title').click()
+  await clickBoardBackground()
   await expect(form).toHaveCount(0)
 
   // Tabbing between the title, select and command keeps the form open.
@@ -622,7 +631,8 @@ test('D9: moving between the new-card fields keeps the form; leaving it unchange
   await expect(page.getByTestId('new-card-command')).toBeFocused()
   await expect(form).toHaveCount(1)
   // A changed command survives a click elsewhere; Esc from any field cancels.
-  await page.getByTestId('board-title').click()
+  await page.keyboard.type(' && echo changed')
+  await clickBoardBackground()
   await expect(form).toHaveCount(1)
   await page.getByTestId('new-card-startup').press('Escape')
   await expect(form).toHaveCount(0)

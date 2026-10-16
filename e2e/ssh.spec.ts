@@ -24,6 +24,7 @@ import {
   splitRight
 } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // SSH workspaces (#12): the dialog's Location choice and Host field, the sidebar tooltip, the
 // host in the saved-state file, and SSH cards connecting. Each test has its own data directory
@@ -79,6 +80,7 @@ const dialog = (): Locator => page.getByTestId('workspace-dialog')
 
 async function openCreateDialog(): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await expect(dialog()).toBeVisible()
 }
 
@@ -301,7 +303,7 @@ function oldFile(cardHost?: string): string {
     columnId: 'col-1',
     title: 'api',
     directory: REMOTE_DIR,
-    startup: { kind: 'shell' },
+    startup: { kind: 'custom', command: ':' },
     agentSessionId: '00000000-0000-4000-8000-000000000001',
     claudeStarted: false
   }
@@ -853,7 +855,7 @@ test('#25 AC2, AC3: the same errors as a local card, and only its own card', asy
   await connected()
 
   expect(await remoteRun('board move . Nope')).toEqual(
-    refused('board: no column "Nope"; columns are: Backlog, Running, Needs me, Done')
+    refused('board: no column "Nope"; columns are: Backlog, In Progress, Review, Done')
   )
   expect(await remoteRun('board move')).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
   expect(await remoteRun('board status web hey')).toEqual(ok)

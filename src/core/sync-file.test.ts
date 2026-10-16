@@ -36,7 +36,8 @@ function workspace(id: string, name: string, over: Partial<Workspace> = {}): Wor
     ],
     cards: [],
     nextCardNumber: 2,
-    defaultStartup: { kind: 'shell' },
+    defaultStartup: { kind: 'claude' },
+    shells: [],
     ...over
   }
 }
@@ -131,6 +132,7 @@ describe('the board written to the sync file (#13 D2, D3, D5, D6, AC1, AC5)', ()
 
   it('writes the same text for the same board whatever the key order in memory', () => {
     const reordered: Workspace = {
+      shells: api.shells,
       defaultStartup: api.defaultStartup,
       nextCardNumber: api.nextCardNumber,
       cards: api.cards.map((c) => ({

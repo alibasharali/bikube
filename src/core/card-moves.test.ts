@@ -23,7 +23,8 @@ const ws = (cards: Record<string, string[]>): Workspace => {
       }))
     ),
     nextCardNumber: 1,
-    defaultStartup: { kind: 'shell' }
+    defaultStartup: { kind: 'claude' },
+    shells: []
   }
 }
 

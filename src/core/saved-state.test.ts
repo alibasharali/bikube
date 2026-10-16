@@ -326,7 +326,7 @@ describe('saved worktree cards', () => {
                 columnId: 'c',
                 title: 'fix',
                 directory: '/data/wt/fix',
-                startup: { kind: 'shell' },
+                startup: { kind: 'claude' },
                 agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
                 claudeStarted: false,
                 startedAgents: [],
@@ -351,5 +351,56 @@ describe('saved worktree cards', () => {
   it('rejects a bad worktree, and one on an SSH card', () => {
     expect(parseSavedState(state({ worktree: { path: '/x' } })).ok).toBe(false)
     expect(parseSavedState(state({ worktree, host: 'devbox', directory: '~/api' })).ok).toBe(false)
+  })
+})
+
+describe('shells and the move away from Shell cards', () => {
+  const file = (workspace: Record<string, unknown>): string =>
+    JSON.stringify({
+      version: 1,
+      state: {
+        activeId: 'w',
+        workspaces: [
+          {
+            id: 'w',
+            name: 'alpha',
+            directory: '/tmp/repo',
+            columns: [{ id: 'c', name: 'Backlog' }],
+            cards: [],
+            nextCardNumber: 1,
+            defaultStartup: { kind: 'shell' },
+            ...workspace
+          }
+        ]
+      }
+    })
+  const card = (id: string, title: string, kind: string): object => ({
+    id,
+    columnId: 'c',
+    title,
+    directory: '/tmp/repo',
+    startup: { kind },
+    agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
+    claudeStarted: false,
+    startedAgents: []
+  })
+
+  it('turns Shell cards into shells, keeps agent cards, and defaults new cards to Claude Code', () => {
+    const parsed = parseSavedState(
+      file({ cards: [card('k1', 'Scratch', 'shell'), card('k2', 'Fix login', 'claude')] })
+    )
+    if (!parsed.ok) throw new Error(parsed.reason)
+    const [w] = parsed.value.workspaces
+    expect(w!.cards.map((c) => c.title)).toEqual(['Fix login'])
+    expect(w!.shells).toEqual([{ id: 'k1', name: 'Scratch', command: '', autostart: false }])
+    expect(w!.defaultStartup).toEqual({ kind: 'claude' })
+  })
+
+  it('reads saved shells, and rejects a bad one', () => {
+    const shells = [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }]
+    const parsed = parseSavedState(file({ shells }))
+    expect(parsed.ok && parsed.value.workspaces[0]!.shells).toEqual(shells)
+    expect(parseSavedState(file({ shells: [{ id: 's1', name: '' }] })).ok).toBe(false)
+    expect(parseSavedState(file({ shells: 'nope' })).ok).toBe(false)
   })
 })

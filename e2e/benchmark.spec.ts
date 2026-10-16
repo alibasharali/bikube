@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { HIGH_WATERMARK } from '../src/core/flow-control'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // D8 benchmark, on cards (#4 D17): 10 cards in one workspace, each running a continuous-output
 // command, one open at full size. Not part of the default smoke run (see playwright.config.ts);
@@ -81,6 +82,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
 
     // One workspace on a temp directory.
     await page.getByTestId('workspace-add').click()
+    await plainCards(page)
     await page.getByTestId('workspace-directory').fill(root)
     await page.getByTestId('workspace-name').fill('bench')
     await page.getByTestId('workspace-submit').click()

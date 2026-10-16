@@ -71,6 +71,8 @@ interface Entry<S> {
 
 export class CardSessions<S extends CardScreen> {
   private readonly entries = new Map<string, Entry<S>>()
+  /** Listeners subscribed to a card not started yet, attached at its first start. */
+  private readonly early = new Map<string, Set<() => void>>()
   private readonly endedListeners: ((cardId: string) => void)[] = []
   private readonly activityListeners: ((cardId: string, activity: Activity | null) => void)[] = []
 
@@ -126,6 +128,13 @@ export class CardSessions<S extends CardScreen> {
       existing.screen = screen
     } else {
       this.entries.set(card.id, entry)
+      // Subscribed before its first start (a shell's chip, shown before it autostarts): told now.
+      const early = this.early.get(card.id)
+      if (early) {
+        this.early.delete(card.id)
+        early.forEach((l) => entry.listeners.add(l))
+        early.forEach((l) => l())
+      }
     }
     // Typed while a local shell is starting: written once its session arrives, null after that
     // (#25 D10). An SSH card keeps none: early input could answer ssh's own prompts (#12 D6).
@@ -263,10 +272,21 @@ export class CardSessions<S extends CardScreen> {
     this.activityListeners.push(listener)
   }
 
-  /** Called when the card's status changes. Returns an unsubscribe function. */
+  /**
+   * Called when the card's status changes, from its first start on even when subscribed before
+   * it. Returns an unsubscribe function.
+   */
   subscribe(cardId: string, listener: () => void): () => void {
     const entry = this.entries.get(cardId)
-    if (!entry) return () => {}
+    if (!entry) {
+      const early = this.early.get(cardId) ?? new Set()
+      early.add(listener)
+      this.early.set(cardId, early)
+      return () => {
+        early.delete(listener)
+        this.entries.get(cardId)?.listeners.delete(listener)
+      }
+    }
     entry.listeners.add(listener)
     return () => entry.listeners.delete(listener)
   }

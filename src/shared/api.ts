@@ -35,6 +35,8 @@ export const IPC = {
   appSetBadge: 'app:setBadge',
   appFocus: 'app:focus',
   appRequestAttention: 'app:requestAttention',
+  appHome: 'app:home',
+  appReveal: 'app:reveal',
   worktreeInfo: 'worktree:info',
   worktreeCreate: 'worktree:create',
   worktreeDirty: 'worktree:dirty',
@@ -206,6 +208,10 @@ export interface AppApi {
   focus(): void
   /** While the window isn't focused: a Dock bounce on macOS, a flashing taskbar entry elsewhere. */
   requestAttention(): void
+  /** The user's home folder, for showing paths with `~`. */
+  home(): Promise<string>
+  /** Opens a local folder in Finder or the file manager; anything but an existing folder is ignored. */
+  reveal(path: string): void
 }
 
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */

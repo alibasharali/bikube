@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // The Shell setting, the terminal theme pickers and "Use Ghostty theme". Each test launches with
 // its own data directory.
@@ -23,6 +24,7 @@ async function workspaceWithCard(page: Page, title: string): Promise<void> {
   const dir = join(mkdtempSync(join(tmpdir(), 'drovr-themes-')), 'alpha')
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()

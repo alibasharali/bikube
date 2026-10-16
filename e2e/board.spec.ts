@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Board and workspaces smoke tests. The native folder picker can't be driven
 // headlessly, so the dialog is filled by typing the path (spec: test seams).
@@ -30,6 +31,7 @@ test.afterEach(async () => {
 
 async function openCreateDialog(): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
 }
 
@@ -85,6 +87,7 @@ test('AC1/AC10: opens to the empty state, spike UI is gone', async () => {
 test('AC2: create via dialog defaults the name and shows the default columns', async () => {
   const dir = makeDir('alpha')
   await page.getByTestId('create-workspace').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await expect(page.getByTestId('workspace-name')).toHaveValue('alpha')
   await page.getByTestId('workspace-submit').click()
@@ -95,7 +98,7 @@ test('AC2: create via dialog defaults the name and shows the default columns', a
   await expect(items.first()).toContainText('alpha')
   await expect(items.first()).toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
 })
 
 test('AC3: validation errors are inline and block creation', async () => {
@@ -138,14 +141,14 @@ test('AC4: switching shows independent boards', async () => {
   await items.nth(0).click()
   await expect(items.nth(0)).toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
-  await addColumn('Review')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done', 'Review'])
+  await addColumn('QA')
+  await expect.poll(columnNames).toEqual(['Backlog', 'In Progress', 'Review', 'Done', 'QA'])
 
   await items.nth(1).click()
   await expect(items.nth(1)).toHaveAttribute('aria-current', 'true')
   await expect(items.nth(0)).not.toHaveAttribute('aria-current', 'true')
   await expect(page.getByTestId('board-title')).toHaveText('beta')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
 })
 
 test('#31 AC16: Ctrl+1…9 select the workspaces in sidebar order; a missing number does nothing', async () => {
@@ -192,7 +195,11 @@ test('AC5: edit renames, changes directory and rejects duplicates', async () => 
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
   await expect(items.nth(0)).toContainText('gamma')
   await expect(page.getByTestId('board-title')).toHaveText('gamma')
-  await expect(page.getByTestId('board')).toContainText(newDir)
+  // The folder is in the title bar now (full path in its tooltip).
+  await expect(page.getByTestId('board-location')).toHaveAttribute(
+    'title',
+    new RegExp(`^${newDir}\\n`)
+  )
 
   // An invalid new directory is rejected the same way.
   await rowAction(0, 'workspace-edit')
@@ -229,18 +236,18 @@ test('AC6: delete with cancel and confirm, then the empty state', async () => {
 test('AC7: column add, rename, move, delete and validation', async () => {
   await createWorkspace(makeDir('alpha'))
 
-  await addColumn('Review')
+  await addColumn('QA')
   await expect(page.getByTestId('column')).toHaveCount(5)
 
-  // Rename Running -> Doing via the menu.
-  await columnAction('Running', 'menu-rename')
+  // Rename In Progress -> Doing via the menu.
+  await columnAction('In Progress', 'menu-rename')
   await page.getByTestId('column-rename-input').fill('Doing')
   await page.getByTestId('column-rename-input').press('Enter')
 
-  // Move Done left, delete Needs me.
+  // Move Done left, delete Review.
   await columnAction('Done', 'menu-move-left')
-  await columnAction('Needs me', 'menu-delete')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+  await columnAction('Review', 'menu-delete')
+  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'QA'])
 
   // Duplicate (case-insensitive) and empty names are rejected.
   await page.getByTestId('add-column').click()
@@ -251,18 +258,18 @@ test('AC7: column add, rename, move, delete and validation', async () => {
   await page.getByTestId('add-column-input').press('Enter')
   await expect(page.getByTestId('column-error')).toBeVisible()
   await page.getByTestId('add-column-input').press('Escape')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'QA'])
 
   // Double-click renames inline; a duplicate is rejected.
-  await page.getByRole('heading', { name: 'Review', exact: true }).dblclick()
+  await page.getByRole('heading', { name: 'QA', exact: true }).dblclick()
   await page.getByTestId('column-rename-input').fill('Backlog')
   await page.getByTestId('column-rename-input').press('Enter')
   await expect(page.getByTestId('column-error')).toBeVisible()
   await page.getByTestId('column-rename-input').press('Escape')
-  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+  await expect.poll(columnNames).toEqual(['Backlog', 'Doing', 'Done', 'QA'])
 
   // The last remaining column cannot be deleted.
-  await columnAction('Review', 'menu-delete')
+  await columnAction('QA', 'menu-delete')
   await columnAction('Done', 'menu-delete')
   await columnAction('Doing', 'menu-delete')
   await expect(page.getByTestId('column')).toHaveCount(1)
@@ -292,12 +299,16 @@ test('AC9: Esc cancels and Enter submits dialogs and inline edits', async () => 
   const dir = makeDir('alpha')
 
   await page.getByTestId('create-workspace').click()
+
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
   await expect(page.getByTestId('workspace-item')).toHaveCount(0)
 
   await page.getByTestId('create-workspace').click()
+
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').press('Enter')
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)

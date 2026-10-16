@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Moving cards with the keyboard, the card menu and drag and drop (#6 D4, D5, D6, D7, D8,
 // D10).
@@ -30,6 +31,7 @@ test.afterEach(async () => {
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -154,9 +156,9 @@ test('AC7: Alt+arrows move the focused card and keep it focused', async () => {
 
   await page.keyboard.press('Alt+ArrowRight')
   await expect(titles('Backlog')).toHaveText(['a'])
-  await expect(titles('Running')).toHaveText(['b'])
+  await expect(titles('In Progress')).toHaveText(['b'])
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('1')
-  await expect(column('Running').getByTestId('column-count')).toHaveText('1')
+  await expect(column('In Progress').getByTestId('column-count')).toHaveText('1')
   await expect.poll(focusedCard).toBe('b')
 
   // Alt+Left from the first column changes nothing.
@@ -167,13 +169,13 @@ test('AC7: Alt+arrows move the focused card and keep it focused', async () => {
 
   // Alt+Right lands at the bottom of the next column.
   await page.keyboard.press('Alt+ArrowRight')
-  await expect(titles('Running')).toHaveText(['b', 'a'])
+  await expect(titles('In Progress')).toHaveText(['b', 'a'])
   await expect(column('Backlog').getByTestId('card')).toHaveCount(0)
   await expect.poll(focusedCard).toBe('a')
 
   // Plain arrows don't move; Enter still opens.
   await page.keyboard.press('ArrowUp')
-  await expect(titles('Running')).toHaveText(['b', 'a'])
+  await expect(titles('In Progress')).toHaveText(['b', 'a'])
   await page.keyboard.press('Enter')
   await expectCardOpen(page, 'a')
 })
@@ -188,12 +190,12 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
   await card('a').getByTestId('card-menu').click()
   const menu = page.getByRole('menu', { name: 'a actions' })
   const group = menu.getByRole('group', { name: 'Move to' })
-  await expect(group.getByRole('menuitem')).toHaveText(['Running', 'Needs me', 'Done'])
+  await expect(group.getByRole('menuitem')).toHaveText(['In Progress', 'Review', 'Done'])
   // Between Rename and Startup command…, keyboard-reachable like every other item.
   await expect(menu.getByRole('menuitem')).toHaveText([
     'Rename',
-    'Running',
-    'Needs me',
+    'In Progress',
+    'Review',
     'Done',
     'Startup command…',
     'Close',
@@ -201,7 +203,7 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
   ])
   await expect(page.getByTestId('card-menu-rename')).toBeFocused()
   await page.keyboard.press('ArrowDown')
-  await expect(group.getByRole('menuitem', { name: 'Running' })).toBeFocused()
+  await expect(group.getByRole('menuitem', { name: 'In Progress' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
 
@@ -215,7 +217,7 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
 
 test('D8: with one column the card menu has no Move to group', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  for (const name of ['Running', 'Needs me', 'Done']) {
+  for (const name of ['In Progress', 'Review', 'Done']) {
     await column(name).getByTestId('column-menu').click()
     await column(name).getByTestId('menu-delete').click()
     await expect(column(name)).toHaveCount(0)
@@ -239,17 +241,17 @@ test('AC1/D4: a moved running card keeps its process, output and status', async 
   await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
   await back()
 
-  await menuMove('api', 'Running')
-  await expect(titles('Running')).toHaveText(['api'])
+  await menuMove('api', 'In Progress')
+  await expect(titles('In Progress')).toHaveText(['api'])
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
-  await expect(column('Running').getByTestId('column-count')).toHaveText('1')
+  await expect(column('In Progress').getByTestId('column-count')).toHaveText('1')
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
 
   // The keyboard moves it on without touching the terminal either.
   await card('api').getByTestId('card-open').focus()
   await page.keyboard.press('Alt+ArrowRight')
-  await expect(titles('Needs me')).toHaveText(['api'])
+  await expect(titles('Review')).toHaveText(['api'])
   await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
 
   await openCard('api')
@@ -308,12 +310,12 @@ test('AC10: a column can be deleted once its cards are moved out', async () => {
   )
   await page.keyboard.press('Escape')
 
-  await menuMove('api', 'Running')
+  await menuMove('api', 'In Progress')
   await column('Backlog').getByTestId('column-menu').click()
   await expect(column('Backlog').getByTestId('menu-delete-hint')).toHaveCount(0)
   await column('Backlog').getByTestId('menu-delete').click()
   await expect(column('Backlog')).toHaveCount(0)
-  await expect(titles('Running')).toHaveText(['api'])
+  await expect(titles('In Progress')).toHaveText(['api'])
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
 })
 
@@ -406,10 +408,10 @@ test('AC1/AC6: a running card dragged to another column keeps its terminal and s
   await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
   await back()
 
-  await drag('api', column('Running'))
-  await expect(titles('Running')).toHaveText(['api'])
+  await drag('api', column('In Progress'))
+  await expect(titles('In Progress')).toHaveText(['api'])
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
-  await expect(column('Running').getByTestId('column-count')).toHaveText('1')
+  await expect(column('In Progress').getByTestId('column-count')).toHaveText('1')
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
   await page.waitForTimeout(400)
@@ -427,15 +429,15 @@ test('AC1/AC6: a running card dragged to another column keeps its terminal and s
 
 test('AC3: dragging onto the bottom half of a card in another column lands below it', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Running', 'x')
+  await newCard('In Progress', 'x')
   await back()
-  await newCard('Running', 'y')
+  await newCard('In Progress', 'y')
   await back()
   await newCard('Backlog', 'a')
   await back()
 
   await drag('a', card('x'), 0.75)
-  await expect(titles('Running')).toHaveText(['x', 'a', 'y'])
+  await expect(titles('In Progress')).toHaveText(['x', 'a', 'y'])
   await expect(column('Backlog').getByTestId('card')).toHaveCount(0)
   await expect(column('Backlog').getByText('No cards yet')).toBeVisible()
 })
@@ -474,14 +476,14 @@ test('D5/D6: while dragging, the card is dimmed and a line shows where it would 
   await expect(card('a')).not.toHaveAttribute('data-drop')
   await expect(card('b')).toHaveAttribute('data-drop', 'after')
 
-  const header = await column('Running').getByTestId('column-name').boundingBox()
+  const header = await column('In Progress').getByTestId('column-name').boundingBox()
   if (!header) throw new Error('no header')
   await page.mouse.move(header.x + 5, header.y + 5, { steps: 5 })
-  await expect(column('Running').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
+  await expect(column('In Progress').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
   await expect(page.locator('[data-drop]')).toHaveCount(1)
 
   await page.mouse.up()
-  await expect(titles('Running')).toHaveText(['b'])
+  await expect(titles('In Progress')).toHaveText(['b'])
   await expect(page.locator('[data-drop]')).toHaveCount(0)
   await expect(card('b')).not.toHaveClass(/card-dragging/)
 })
@@ -498,12 +500,12 @@ test('AC5: releasing outside every column, or Esc, cancels the drag', async () =
   await expect(page.locator('[data-drop]')).toHaveCount(0)
   await expect(card('a')).not.toHaveClass(/card-dragging/)
 
-  await dragOver('a', column('Running'))
-  await expect(column('Running').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
+  await dragOver('a', column('In Progress'))
+  await expect(column('In Progress').locator('.column-empty')).toHaveAttribute('data-drop', 'into')
   await page.keyboard.press('Escape')
   await page.mouse.up()
   await expect(titles('Backlog')).toHaveText(['a', 'b'])
-  await expect(column('Running').getByTestId('card')).toHaveCount(0)
+  await expect(column('In Progress').getByTestId('card')).toHaveCount(0)
   await expect(page.locator('[data-drop]')).toHaveCount(0)
 
   await page.waitForTimeout(400)

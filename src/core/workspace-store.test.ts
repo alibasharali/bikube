@@ -51,8 +51,8 @@ describe('create workspace (AC2)', () => {
   it('starts with the default columns in order', () => {
     const s = make()
     const w = create(s, 'alpha')
-    expect(names(w)).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
-    expect(DEFAULT_COLUMN_NAMES).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+    expect(names(w)).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
+    expect(DEFAULT_COLUMN_NAMES).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
   })
 
   it('makes the first workspace active and leaves it active when more are added', () => {
@@ -132,9 +132,9 @@ describe('update workspace (AC5)', () => {
   it('keeps the board when editing', () => {
     const s = make()
     const a = create(s, 'alpha')
-    ok(s.addColumn(a.id, 'Review'))
+    ok(s.addColumn(a.id, 'QA'))
     ok(s.updateWorkspace(a.id, { name: 'gamma' }))
-    expect(names(s.getState().workspaces[0])).toContain('Review')
+    expect(names(s.getState().workspaces[0])).toContain('QA')
   })
 
   it('rejects a duplicate name but allows keeping or re-casing its own', () => {
@@ -233,19 +233,19 @@ describe('columns (AC7 logic)', () => {
     const s = make()
     const w = create(s, 'alpha')
     const col = (n: string): Column => s.getState().workspaces[0].columns.find((c) => c.name === n)!
-    ok(s.addColumn(w.id, 'Review'))
-    ok(s.renameColumn(w.id, col('Running').id, 'Doing'))
+    ok(s.addColumn(w.id, 'QA'))
+    ok(s.renameColumn(w.id, col('In Progress').id, 'Doing'))
     ok(s.moveColumn(w.id, col('Done').id, 'left'))
-    ok(s.deleteColumn(w.id, col('Needs me').id))
-    expect(names(s.getState().workspaces[0])).toEqual(['Backlog', 'Doing', 'Done', 'Review'])
+    ok(s.deleteColumn(w.id, col('Review').id))
+    expect(names(s.getState().workspaces[0])).toEqual(['Backlog', 'Doing', 'Done', 'QA'])
   })
 
   it('trims names and rejects empty or duplicate (case-insensitive) names on add', () => {
     const s = make()
     const w = create(s, 'alpha')
-    const added = ok(s.addColumn(w.id, '  Review  '))
-    expect(added.name).toBe('Review')
-    for (const bad of ['', '  ', 'backlog', 'REVIEW']) {
+    const added = ok(s.addColumn(w.id, '  QA  '))
+    expect(added.name).toBe('QA')
+    for (const bad of ['', '  ', 'backlog', 'qa']) {
       expect(s.addColumn(w.id, bad)).toMatchObject({ ok: false, error: { field: 'column' } })
     }
     expect(s.getState().workspaces[0].columns).toHaveLength(5)
@@ -272,11 +272,11 @@ describe('columns (AC7 logic)', () => {
     const w = create(s, 'alpha')
     const cols = s.getState().workspaces[0].columns
     ok(s.moveColumn(w.id, cols[0].id, 'right'))
-    expect(names(s.getState().workspaces[0])).toEqual(['Running', 'Backlog', 'Needs me', 'Done'])
+    expect(names(s.getState().workspaces[0])).toEqual(['In Progress', 'Backlog', 'Review', 'Done'])
     ok(s.moveColumn(w.id, cols[3].id, 'right'))
     ok(s.moveColumn(w.id, cols[0].id, 'left'))
     ok(s.moveColumn(w.id, cols[0].id, 'left'))
-    expect(names(s.getState().workspaces[0])).toEqual(['Backlog', 'Running', 'Needs me', 'Done'])
+    expect(names(s.getState().workspaces[0])).toEqual(['Backlog', 'In Progress', 'Review', 'Done'])
   })
 
   it('cannot delete the last remaining column', () => {
@@ -292,9 +292,9 @@ describe('columns (AC7 logic)', () => {
     const s = make()
     const a = create(s, 'alpha')
     const b = create(s, 'beta')
-    ok(s.addColumn(a.id, 'Review'))
+    ok(s.addColumn(a.id, 'QA'))
     expect(names(s.getState().workspaces[1])).toEqual([...DEFAULT_COLUMN_NAMES])
-    expect(s.addColumn(b.id, 'Review').ok).toBe(true)
+    expect(s.addColumn(b.id, 'QA').ok).toBe(true)
   })
 
   it('reports unknown workspace or column', () => {
@@ -329,7 +329,7 @@ describe('subscription and immutability', () => {
     const w = create(s, 'alpha')
     const before = s.getState()
     expect(s.getState()).toBe(before)
-    ok(s.addColumn(w.id, 'Review'))
+    ok(s.addColumn(w.id, 'QA'))
     expect(s.getState()).not.toBe(before)
     expect(before.workspaces[0].columns).toHaveLength(4)
   })
@@ -464,7 +464,7 @@ describe('cards: delete column with cards (AC11 logic)', () => {
     expect(names(s.getState().workspaces[0])).toContain('Backlog')
     ok(s.deleteCard(w.id, api.id))
     ok(s.deleteColumn(w.id, backlog))
-    expect(names(s.getState().workspaces[0])).toEqual(['Running', 'Needs me', 'Done'])
+    expect(names(s.getState().workspaces[0])).toEqual(['In Progress', 'Review', 'Done'])
   })
 })
 
@@ -486,17 +486,33 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     return new InMemoryWorkspaceStore({ generateSessionId: () => `uuid-${++n}` })
   }
 
-  it('gives a new workspace the Shell default and keeps a chosen one', () => {
+  it('gives a new workspace the Claude Code default and keeps a chosen one', () => {
     const s = makeWithIds()
-    expect(create(s, 'alpha').defaultStartup).toEqual({ kind: 'shell' })
+    expect(create(s, 'alpha').defaultStartup).toEqual({ kind: 'claude' })
     const b = ok(
       s.createWorkspace({
         name: 'beta',
         directory: '/tmp/beta',
-        defaultStartup: { kind: 'claude' }
+        defaultStartup: { kind: 'codex' }
       })
     )
-    expect(b.defaultStartup).toEqual({ kind: 'claude' })
+    expect(b.defaultStartup).toEqual({ kind: 'codex' })
+  })
+
+  it('refuses Shell for a card or a workspace default: cards are agent sessions', () => {
+    const s = makeWithIds()
+    const refused = {
+      ok: false,
+      error: { field: 'command', message: 'Choose an agent or a custom command' }
+    }
+    expect(
+      s.createWorkspace({ name: 'a', directory: '/tmp/a', defaultStartup: { kind: 'shell' } })
+    ).toEqual(refused)
+    const w = create(s, 'alpha')
+    expect(s.updateWorkspace(w.id, { defaultStartup: { kind: 'shell' } })).toEqual(refused)
+    expect(s.createCard(w.id, w.columns[0].id, 'x', { kind: 'shell' })).toEqual(refused)
+    const c = card(s, w, 'c')
+    expect(s.setCardStartup(w.id, c.id, { kind: 'shell' })).toEqual(refused)
   })
 
   it('validates and trims a Custom workspace default', () => {
@@ -524,7 +540,7 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     const w = create(s, 'alpha')
     const one = card(s, w, 'one')
     const two = card(s, w, 'two')
-    expect(one).toMatchObject({ startup: { kind: 'shell' }, claudeStarted: false })
+    expect(one).toMatchObject({ startup: { kind: 'claude' }, claudeStarted: false })
     expect(one.agentSessionId).toBe('uuid-1')
     expect(two.agentSessionId).toBe('uuid-2')
   })
@@ -581,7 +597,7 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     const claude = ok(s.setCardStartup(w.id, sh.id, { kind: 'claude' }))
     expect(claude).toEqual({ ...sh, startup: { kind: 'claude' } })
     ok(s.markClaudeStarted(w.id, sh.id))
-    ok(s.setCardStartup(w.id, sh.id, { kind: 'shell' }))
+    ok(s.setCardStartup(w.id, sh.id, { kind: 'custom', command: 'npm run dev' }))
     const back = ok(s.setCardStartup(w.id, sh.id, { kind: 'claude' }))
     expect(back).toMatchObject({ agentSessionId: sh.agentSessionId, claudeStarted: true })
     expect(s.getState().workspaces[0].cards[0]).toEqual(back)
@@ -661,7 +677,7 @@ describe('agent presets (#21 D3, D5)', () => {
     const sh = card(s, w, 'sh')
     ok(s.setCardStartup(w.id, sh.id, { kind: 'codex' }))
     ok(s.markAgentStarted(w.id, sh.id, 'codex'))
-    ok(s.setCardStartup(w.id, sh.id, { kind: 'shell' }))
+    ok(s.setCardStartup(w.id, sh.id, { kind: 'claude' }))
     expect(ok(s.setCardStartup(w.id, sh.id, { kind: 'codex' }))).toMatchObject({
       startup: { kind: 'codex' },
       startedAgents: ['codex'],
@@ -819,7 +835,7 @@ describe('cards: move (#6 D3, D4)', () => {
     })
     ok(s.moveCard(w.id, a.id, w.columns[1].id, 0))
     ok(s.deleteColumn(w.id, backlog))
-    expect(names(s.getState().workspaces[0])).toEqual(['Running', 'Needs me', 'Done'])
+    expect(names(s.getState().workspaces[0])).toEqual(['In Progress', 'Review', 'Done'])
     expect(column(s, w, 0)).toEqual(['a'])
   })
 })
@@ -989,5 +1005,40 @@ describe('cards with their own worktree', () => {
     const c = ok(s.createCard(w.id, w.columns[0].id, 'x', undefined, worktree))
     expect(c.directory).toBe('~/api')
     expect(c).not.toHaveProperty('worktree')
+  })
+})
+
+describe('shells', () => {
+  it("adds, edits and deletes a workspace's shells, trimming and checking their fields", () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    expect(w.shells).toEqual([])
+    const dev = ok(
+      s.createShell(w.id, { name: ' Dev server ', command: ' npm run dev ', autostart: true })
+    )
+    expect(dev).toMatchObject({ name: 'Dev server', command: 'npm run dev', autostart: true })
+    const plain = ok(s.createShell(w.id, { name: 'Scratch', command: '', autostart: false }))
+    expect(s.getState().workspaces[0].shells.map((sh) => sh.name)).toEqual([
+      'Dev server',
+      'Scratch'
+    ])
+
+    expect(s.createShell(w.id, { name: ' ', command: '', autostart: false })).toMatchObject({
+      ok: false,
+      error: { field: 'name' }
+    })
+    expect(
+      s.createShell(w.id, { name: 'Two lines', command: 'a\nb', autostart: false })
+    ).toMatchObject({ ok: false, error: { field: 'command' } })
+
+    ok(s.updateShell(w.id, dev.id, { name: 'Web', command: 'npm start', autostart: false }))
+    expect(s.getState().workspaces[0].shells[0]).toEqual({
+      id: dev.id,
+      name: 'Web',
+      command: 'npm start',
+      autostart: false
+    })
+    ok(s.deleteShell(w.id, plain.id))
+    expect(s.getState().workspaces[0].shells.map((sh) => sh.id)).toEqual([dev.id])
   })
 })

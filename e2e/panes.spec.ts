@@ -12,6 +12,7 @@ import {
   splitRight
 } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Split panes inside a card (#11): the full-size view splits into panes, each a live shell in
 // the card's directory; extra panes close from their own button or when their shell exits.
@@ -38,6 +39,7 @@ test.afterEach(async () => {
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -126,7 +128,7 @@ async function box(
 /** Workspace `alpha` in /tmp/drovr-alpha with card `api` open, its shell ready. */
 async function openApi(): Promise<void> {
   await createWorkspace(ALPHA, 'alpha')
-  await newCard('Running', 'api')
+  await newCard('In Progress', 'api')
   await run(0, 'echo main-$((40+2))')
   await expectLine(0, 'main-42')
 }
@@ -377,7 +379,7 @@ test('AC3: an extra pane of a Claude Code card is a plain shell', async () => {
   const fake = fakeClaudeHome(root)
   ;({ app, page } = await launchApp({ env: fake.env }))
   await createWorkspace(ALPHA, 'alpha')
-  await column('Running').getByTestId('new-card').click()
+  await column('In Progress').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('agent')
   await page.getByTestId('new-card-startup').selectOption({ label: 'Claude Code' })
   await page.getByTestId('new-card-input').press('Enter')

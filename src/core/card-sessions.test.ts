@@ -694,6 +694,18 @@ describe('activity (#31 D12)', () => {
     expect(sessions.status('c1')?.activity).toBeUndefined()
   })
 
+  it('tells a listener subscribed before the first start, from that start on', async () => {
+    const listener = vi.fn()
+    const unsubscribe = sessions.subscribe('c1', listener)
+    await started('c1', { ok: true, id: 's1' })
+    expect(listener).toHaveBeenCalled()
+    expect(sessions.runState('c1')?.kind).toBe('running')
+    const calls = listener.mock.calls.length
+    unsubscribe()
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(listener).toHaveBeenCalledTimes(calls)
+  })
+
   it('tells activity listeners about every change of any card, a clear by stopping included', async () => {
     const changes: [string, string | null][] = []
     sessions.onActivity((cardId, activity) => changes.push([cardId, activity]))

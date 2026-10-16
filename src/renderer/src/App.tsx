@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { syncStatusText } from '../../core/sync-status'
@@ -11,9 +11,10 @@ import {
   selectWorkspace,
   type ViewMemory
 } from '../../core/view-memory'
-import type { Workspace } from '../../core/workspace-store'
 import { onOpenRequest, setLookingAt } from './attention'
 import { removeWorkspace, startCard } from './card-actions'
+import { findShellCard, shellCards } from '../../core/workspace-shells'
+import { defaultShellId, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import CardView from './CardView'
 import ConfirmDialog from './ConfirmDialog'
@@ -41,7 +42,9 @@ function App(): React.JSX.Element {
   if (entered !== activeId) {
     setEntered(activeId)
     if (activeId) {
-      const cardIds = active ? active.cards.map((c) => c.id) : null
+      const cardIds = active
+        ? [...active.cards.map((c) => c.id), ...shellCards(active).map((s) => s.id)]
+        : null
       setViews((v) =>
         enterWorkspace(
           v,
@@ -53,7 +56,13 @@ function App(): React.JSX.Element {
     }
   }
   const openedId = activeId ? openedCard(views, activeId) : null
-  const openCard = openedId ? (active?.cards.find((c) => c.id === openedId) ?? null) : null
+  // The open terminal: one of the board's cards, or one of the workspace's shells.
+  const openCard = openedId
+    ? (active?.cards.find((c) => c.id === openedId) ??
+      (active && findShellCard(active, openedId)) ??
+      null)
+    : null
+  const openIsShell = openCard !== null && !active?.cards.some((c) => c.id === openCard.id)
   // Back, or the open card's shell stopping: the active workspace forgets its card (D19).
   const closeCard = useCallback(() => {
     if (activeId) setViews((v) => forgetView(v, activeId))
@@ -88,6 +97,26 @@ function App(): React.JSX.Element {
     [activeId, setViews]
   )
 
+  // The Default shell's shortcut opens the active workspace's, starting it when stopped.
+  const openDefaultShell = useRef(() => {})
+  useEffect(() => {
+    openDefaultShell.current = () => {
+      if (activeId) onOpenCard(defaultShellId(activeId))
+    }
+  })
+
+  // A workspace's autostart shells start the first time it is opened in this run of the app.
+  const autostarted = useRef(new Set<string>())
+  useEffect(() => {
+    if (!active || autostarted.current.has(active.id)) return
+    autostarted.current.add(active.id)
+    for (const shell of active.shells) {
+      if (shell.autostart && cardTerminals().runState(shell.id)?.kind !== 'running') {
+        startCard(active.id, shell.id)
+      }
+    }
+  }, [active])
+
   // On macOS the title bar leaves room for the window buttons (main hides the native one).
   const darwin = window.drovr?.platform === 'darwin'
 
@@ -103,12 +132,14 @@ function App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (keymapAction(event, currentKeymap()) !== 'settings') return
+      const action = keymapAction(event, currentKeymap())
+      if (action !== 'settings' && action !== 'openShell') return
       // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
       event.stopPropagation()
-      setSettingsOpen(true)
+      if (action === 'settings') setSettingsOpen(true)
+      else openDefaultShell.current()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -142,6 +173,7 @@ function App(): React.JSX.Element {
         collapsed={collapsed}
         workspace={active}
         card={active ? openCard : null}
+        isShell={openIsShell}
         onBack={closeCard}
       />
       <div className="app-body">

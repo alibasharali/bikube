@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 
 // Cards with their own git worktree. Each test launches with its own data directory, so its
 // worktrees live in that directory's `worktrees` folder.
@@ -40,6 +41,7 @@ test.beforeEach(async () => {
   writeFileSync(join(repo, 'local.conf'), 'port=4000\n')
   ;({ app, page, dataDir } = await launchApp())
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(repo)
   await page.getByTestId('workspace-name').fill('repo')
   await page.getByTestId('workspace-submit').click()
@@ -178,6 +180,7 @@ test('no worktree option outside a git repository', async () => {
   const plain = join(root, 'plain')
   mkdirSync(plain)
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(plain)
   await page.getByTestId('workspace-name').fill('plain')
   await page.getByTestId('workspace-submit').click()

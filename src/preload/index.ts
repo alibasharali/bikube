@@ -51,7 +51,9 @@ const api: DrovrApi = {
   app: {
     setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count),
     focus: () => ipcRenderer.send(IPC.appFocus),
-    requestAttention: () => ipcRenderer.send(IPC.appRequestAttention)
+    requestAttention: () => ipcRenderer.send(IPC.appRequestAttention),
+    home: () => ipcRenderer.invoke(IPC.appHome),
+    reveal: (path) => ipcRenderer.send(IPC.appReveal, path)
   },
   terminal: {
     spawn: (cols, rows, cwd, cardId, host = null) =>

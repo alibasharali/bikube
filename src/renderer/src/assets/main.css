@@ -2000,3 +2000,133 @@ button {
   margin-top: 0;
   -webkit-app-region: drag;
 }
+
+/* The workspace's folder (or SSH location) in the title bar, before its branch. */
+.titlebar-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-left: var(--space-2);
+  padding: 2px var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.titlebar-location svg {
+  flex: none;
+}
+
+.titlebar-location-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-location-button {
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-location-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.titlebar .card-branch {
+  margin-left: var(--space-2);
+}
+
+/* The workspace's shells, above the board. */
+.shells {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shells-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shell-chip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.shell-chip-wrap:hover {
+  border-color: var(--border-strong);
+}
+
+.shell-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  padding: 4px 4px 4px var(--space-3);
+  border: 0;
+  border-radius: 999px 0 0 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.shell-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.shell-chip[data-running='true'] .shell-dot {
+  background: #3fb950;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
+}
+
+.shell-name {
+  white-space: nowrap;
+}
+
+.shell-command {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-menu-wrap .icon-btn {
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  border-radius: 999px;
+}
+
+.shells-add {
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+}
+
+.card-tag-shell {
+  color: var(--text-muted);
+}
+
+.shell-autostart {
+  margin-top: var(--space-1);
+}

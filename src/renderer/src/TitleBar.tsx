@@ -1,10 +1,12 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Folder, Server } from 'lucide-react'
 import { useEffect } from 'react'
+import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
 import type { Card, Workspace } from '../../core/workspace-store'
 import { StartupTag, WorktreeBranch } from './CardItem'
 import { useBranch } from './branches'
-import { ICON } from './icons'
+import { homeDir } from './home'
+import { ICON, SMALL_ICON } from './icons'
 
 /**
  * The app's own title bar, above the sidebar and the main area: it drags the window, leaves room
@@ -16,8 +18,11 @@ function TitleBar({
   collapsed,
   workspace,
   card,
+  isShell = false,
   onBack
 }: {
+  /** The open terminal is one of the workspace's shells, not a card. */
+  isShell?: boolean
   collapsed: boolean
   /** Back to the workspace's board, as the Back shortcut does. */
   onBack: () => void
@@ -48,8 +53,11 @@ function TitleBar({
                 {workspace.name}
               </button>
             ) : (
-              <span className="titlebar-current">{workspace.name}</span>
+              <span className="titlebar-current" data-testid="board-title">
+                {workspace.name}
+              </span>
             )}
+            {!card && <WorkspaceLocation workspace={workspace} />}
             {!card && branch && <WorktreeBranch branch={branch} />}
             {card && (
               <>
@@ -57,7 +65,13 @@ function TitleBar({
                 <span className="titlebar-current" data-testid="titlebar-card">
                   {card.title}
                 </span>
-                <StartupTag startup={card.startup} />
+                {isShell ? (
+                  <span className="card-tag card-tag-shell" data-testid="titlebar-shell-tag">
+                    Shell
+                  </span>
+                ) : (
+                  <StartupTag startup={card.startup} />
+                )}
                 {card.worktree ? (
                   <WorktreeBranch branch={card.worktree.branch} worktree />
                 ) : (
@@ -71,6 +85,39 @@ function TitleBar({
         )}
       </div>
     </header>
+  )
+}
+
+/**
+ * Where the workspace is: a local folder (with `~` for the home folder) that opens in the file
+ * manager when clicked, or an SSH workspace's `host:path` with the server icon.
+ */
+function WorkspaceLocation({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  if (workspace.host !== undefined) {
+    return (
+      <span
+        className="titlebar-location"
+        title={`SSH: ${workspace.host}`}
+        data-testid="board-location"
+      >
+        <Server {...SMALL_ICON} />
+        <span className="titlebar-location-text">
+          {workspace.host}:{workspace.directory}
+        </span>
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className="titlebar-location titlebar-location-button"
+      data-testid="board-location"
+      title={`${workspace.directory}\nOpen in ${window.drovr.platform === 'darwin' ? 'Finder' : 'the file manager'}`}
+      onClick={() => window.drovr.app.reveal(workspace.directory)}
+    >
+      <Folder {...SMALL_ICON} />
+      <span className="titlebar-location-text">{displayPath(workspace.directory, homeDir())}</span>
+    </button>
   )
 }
 

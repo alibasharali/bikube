@@ -5,6 +5,14 @@ import { join } from 'node:path'
 
 const dataDirs: string[] = []
 
+let zdotdir: string | undefined
+
+/** One empty folder for every launch's `ZDOTDIR`, kept for the whole run. */
+function emptyZdotdir(): string {
+  zdotdir ??= mkdtempSync(join(tmpdir(), 'drovr-zdotdir-'))
+  return zdotdir
+}
+
 /** A fresh, empty data directory for one test's saved board (#8 D11); see `removeDataDirs`. */
 export function newDataDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'drovr-data-'))
@@ -82,7 +90,17 @@ async function launchOnce(options: LaunchOptions, dataDir: string): Promise<Laun
   const app = await electron.launch({
     ...(options.executablePath ? { executablePath: options.executablePath } : {}),
     args: [...(options.executablePath ? [] : ['.']), '--no-sandbox', ...(options.args ?? [])],
-    env: { ...base, DROVR_USER_DATA_DIR: dataDir },
+    env: {
+      ...base,
+      DROVR_USER_DATA_DIR: dataDir,
+      // zsh reads its user files from here: an empty folder, so a developer's ~/.zshrc (prompts,
+      // fastfetch…) never slows or fills the test terminals. bash and sh ignore it.
+      ZDOTDIR: emptyZdotdir(),
+      // On macOS the window stays hidden so a run doesn't take over the screen;
+      // DROVR_E2E_SHOW=1 shows it again. Linux runs under xvfb, so nothing changes there.
+      ...(process.platform === 'darwin' &&
+        base['DROVR_E2E_SHOW'] !== '1' && { DROVR_E2E_HIDDEN: '1' })
+    },
     timeout: WINDOW_TIMEOUT_MS
   })
   // `onStderr` hears only the launch that is kept: what came before the window is replayed then.

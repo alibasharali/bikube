@@ -101,7 +101,8 @@ function workspace(id: string, name: string, over: Partial<Workspace> = {}): Wor
     columns: [{ id: `${id}-backlog`, name: 'Backlog' }],
     cards: [],
     nextCardNumber: 1,
-    defaultStartup: { kind: 'shell' },
+    defaultStartup: { kind: 'claude' },
+    shells: [],
     ...over
   }
 }

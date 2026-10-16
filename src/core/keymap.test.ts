@@ -31,7 +31,8 @@ describe('defaultKeymap (#31 D6)', () => {
       splitDown: 'Shift+Cmd+D',
       closePane: 'Cmd+W',
       closeCard: 'Shift+Cmd+W',
-      settings: 'Cmd+,'
+      settings: 'Cmd+,',
+      openShell: 'Cmd+T'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -40,7 +41,8 @@ describe('defaultKeymap (#31 D6)', () => {
         splitDown: 'Ctrl+Shift+E',
         closePane: 'Ctrl+Shift+W',
         closeCard: 'Ctrl+Shift+Q',
-        settings: 'Ctrl+,'
+        settings: 'Ctrl+,',
+        openShell: 'Ctrl+Shift+T'
       })
     }
   })

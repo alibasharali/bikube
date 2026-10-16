@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, closeCard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
 import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS, claudeResumeLine } from './fake-claude'
 
 // Close card (#7): from the card menu and the full-size view (its shortcut, #31), with a
@@ -40,6 +41,7 @@ const CLOSE_MESSAGE =
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
   await page.getByTestId('workspace-add').click()
+  await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -151,14 +153,14 @@ async function confirmClose(): Promise<void> {
 
 test('AC1: Close from the menu asks, stops the shell, and keeps the card in place as Stopped', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Running', 'first')
+  await newCard('In Progress', 'first')
   await back()
-  await newCard('Running', 'api')
+  await newCard('In Progress', 'api')
   const pid = await shellPid()
   await back()
-  await newCard('Running', 'third')
+  await newCard('In Progress', 'third')
   await back()
-  const titles = column('Running').getByTestId('card-title')
+  const titles = column('In Progress').getByTestId('card-title')
   await expect(titles).toHaveText(['first', 'api', 'third'])
 
   // The menu offers Close between Startup command… and Delete.
@@ -166,7 +168,7 @@ test('AC1: Close from the menu asks, stops the shell, and keeps the card in plac
   await expect(page.getByRole('menuitem')).toHaveText([
     'Rename',
     'Backlog',
-    'Needs me',
+    'Review',
     'Done',
     'Startup command…',
     'Close',
@@ -189,7 +191,7 @@ test('AC1: Close from the menu asks, stops the shell, and keeps the card in plac
 
 test('AC2: Cancel or Esc in the Close dialog changes nothing', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Running', 'api')
+  await newCard('In Progress', 'api')
   const pid = await shellPid()
   await back()
 
@@ -208,7 +210,7 @@ test('AC2: Cancel or Esc in the Close dialog changes nothing', async () => {
 
 test('AC3: Close from the full-size view goes back to the board with the card Stopped', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Running', 'api')
+  await newCard('In Progress', 'api')
   const pid = await shellPid()
 
   const view = page.getByTestId('card-view')
@@ -236,7 +238,7 @@ test('AC3: Close from the full-size view goes back to the board with the card St
 
 test('#31 AC9: the stop button on the board asks, closes the card, and never opens it', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
-  await newCard('Running', 'api')
+  await newCard('In Progress', 'api')
   const pid = await shellPid()
   await back()
 

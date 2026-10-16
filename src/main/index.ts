@@ -20,6 +20,14 @@ import { registerWorktrees } from './worktrees'
  */
 const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
 
+/**
+ * Smoke tests on macOS run with the window never shown and no Dock icon (`DROVR_E2E_HIDDEN=1`, set
+ * by `e2e/launch.ts`), so a run doesn't take over the screen; Chromium's throttling of hidden
+ * windows is off then, so timers and drawing run as in a shown one. Only the development build
+ * the tests launch honours it: a packaged app always shows its window.
+ */
+const hiddenForTests = !app.isPackaged && process.env['DROVR_E2E_HIDDEN'] === '1'
+
 function createWindow(settings: MainSettings): void {
   const mainWindow = new BrowserWindow({
     width: 1100,
@@ -40,11 +48,14 @@ function createWindow(settings: MainSettings): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      ...(hiddenForTests && { backgroundThrottling: false })
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => {
+    if (!hiddenForTests) mainWindow.show()
+  })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (!app.isPackaged && devUrl) {
@@ -151,6 +162,7 @@ function startApp(): void {
     app.on('will-quit', closeBoard)
     settings.applyTheme()
     installAppMenu()
+    if (hiddenForTests) app.dock?.hide()
     createWindow(settings)
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(settings)

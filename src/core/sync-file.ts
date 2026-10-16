@@ -80,7 +80,14 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         startedAgents: c.host === undefined ? [] : [...c.startedAgents]
       })),
       nextCardNumber: w.nextCardNumber,
-      defaultStartup: startupCopy(w.defaultStartup)
+      defaultStartup: startupCopy(w.defaultStartup),
+      // Shells sync like cards: their definitions travel, their processes stay on each machine.
+      shells: w.shells.map((sh) => ({
+        id: sh.id,
+        name: sh.name,
+        command: sh.command,
+        autostart: sh.autostart
+      }))
     }))
   }
 }

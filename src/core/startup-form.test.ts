@@ -49,8 +49,8 @@ describe('startup command field (D9, D10, D11)', () => {
 
 describe('agent presets in the field (#21 D4, D5)', () => {
   it('lists every choice in select order with its label (AC1)', () => {
+    // No Shell: a card is an agent session; plain shells are the workspace's Shells.
     expect(STARTUP_CHOICES.map((c) => c.label)).toEqual([
-      'Shell',
       'Claude Code',
       'Codex',
       'Gemini CLI',

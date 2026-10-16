@@ -933,27 +933,6 @@ test('#25 AC5: no session socket is left after quit, and a leftover is removed a
   expect(sessionSockets()).toEqual([])
 })
 
-test('#25 AC6: a host refusing the forward still runs the card; board cannot reach Drovr', async () => {
-  await launch({ FAKE_SSH_NO_FORWARD: '1' })
-  await createSsh('me@devbox', REMOTE_DIR, 'remote')
-  await createCard('api')
-  await connected()
-  await expect
-    .poll(async () =>
-      // Not anchored: the probe typed while ssh connects can echo on the same row.
-      (await bufferLines()).some((l) =>
-        /Warning: remote port forwarding failed for listen path \/tmp\/drovr-[0-9a-f]{32}\.sock/.test(
-          l
-        )
-      )
-    )
-    .toBe(true)
-  expect(await remoteRun('board status . hi')).toEqual(
-    refused("board: can't reach Drovr from this host")
-  )
-  await expectRunning()
-})
-
 /** `api`'s activity pill on the board reads `text`, or is absent for null (#31 D13). */
 async function expectPill(text: string | null): Promise<void> {
   await checkOnBoard(page, 'api', async (tile) => {

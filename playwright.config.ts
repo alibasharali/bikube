@@ -6,9 +6,9 @@ export default defineConfig({
   // benchmark: slow, run with `npm run benchmark`; packaged: needs a pack, `npm run test:packaged`.
   testIgnore: ['benchmark.spec.ts', 'packaged.spec.ts'],
   timeout: 60_000,
-  // Every test launches its own app with its own data folder, so files run side by side: 4 locally
-  // (more makes shell-timing tests flaky under load), 2 in CI (a private repository's runner has 2
-  // cores). Tests in a file stay in order.
-  workers: process.env['CI'] ? 2 : 4,
+  // Files run side by side locally, each app in its own data folder (more than 4 makes shell-timing
+  // tests flaky). CI runs one: xvfb-run gives every app one display, and another app's window
+  // mapping over a test's moves the real pointer there, dropping the hover a click relies on.
+  workers: process.env['CI'] ? 1 : 4,
   reporter: 'list'
 })

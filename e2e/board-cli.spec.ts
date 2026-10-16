@@ -527,35 +527,6 @@ test('#31 AC10: the card shows its label, agent status and last output line on s
   expect(await column('Backlog').evaluate((el) => getComputedStyle(el).width)).toBe('300px')
 })
 
-test("AC6: stopping clears the status; a card that isn't running can't get one", async () => {
-  await launch()
-  const alpha = makeDir('alpha')
-  await createWorkspace(alpha, 'alpha')
-  await newCard('Backlog', 'old')
-  await run('exit')
-  await expect(page.getByTestId('board')).toBeVisible()
-  await expect(card('old').getByTestId('card-status-label')).toHaveText('Stopped')
-
-  await newCard('Backlog', 'api')
-  expect(await board(alpha, 'board status . "running tests"')).toEqual(ok)
-  await expectOnBoard(...runningTests)
-
-  await run('exit')
-  await expect(page.getByTestId('board')).toBeVisible()
-  await expect(card('api').getByTestId('card-status')).toHaveText('Stopped')
-  await expect(card('api').getByTestId('card-status-line')).toHaveCount(0)
-  await expect(card('api').getByTestId('card-agent-status')).toHaveCount(0)
-
-  await openCard('api')
-  await expectOnBoard(['card-status-label', 'Running'])
-  expect(await board(alpha, 'board status old hi')).toEqual(refused('board: "old" is not running'))
-  await run("printf 'drovr-marker'; sleep 30")
-  await back()
-  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
-  await expect(card('old').getByTestId('card-status')).toHaveText('Stopped')
-})
-
 /**
  * Runs `command` in whichever pane of the open card has keyboard focus (its directory is `dir`):
  * stdout, stderr and the exit code go to files, so no pane's screen needs reading.

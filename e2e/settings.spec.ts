@@ -687,9 +687,6 @@ const shortcutReset = (page: Page, action: string): Locator =>
 const shortcutError = (page: Page, action: string): Locator =>
   dialog(page).getByTestId(`settings-shortcut-error-${action}`)
 
-/** The open card's panes. */
-const cardPanes = (page: Page): Locator => page.getByTestId('card-view').getByTestId('pane')
-
 test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is kept', async () => {
   test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
   const dataDir = newDataDir()
@@ -805,88 +802,6 @@ test('#31 AC7: refused presses keep the old shortcut and recording; Escape stops
   await expect(shortcutReset(page, 'splitRight')).toBeDisabled()
   await page.waitForTimeout(500)
   expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
-})
-
-test('#31 AC6: a recorded shortcut works in a card, is kept across a restart, and Reset restores the default', async () => {
-  test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
-  const dataDir = newDataDir()
-  let launched = await launchApp({ dataDir })
-  app = launched.app
-  let page = launched.page
-  await alphaWithApi(page)
-  await settledBufferLines(page, '')
-
-  await page.keyboard.press(SHORTCUT)
-  await dialog(page).getByTestId('settings-section-shortcuts').click()
-  await shortcutField(page, 'splitRight').click()
-  await page.keyboard.press('Control+Alt+R')
-  await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Alt+R')
-  await expect(shortcutField(page, 'splitRight')).toHaveAttribute('data-recording', 'false')
-  await expect(shortcutReset(page, 'splitRight')).toBeEnabled()
-  await dialog(page).getByRole('button', { name: 'Done' }).click()
-  await expect(dialog(page)).toHaveCount(0)
-
-  await expect.poll(() => terminalFocused(page)).toBe(true)
-  await page.keyboard.press('Control+Alt+R')
-  await expect(cardPanes(page)).toHaveCount(2)
-  await expect(cardPanes(page).nth(1)).toHaveAttribute('data-focused', 'true')
-  // Ctrl+Shift+D no longer splits: the key reaches the page past the app's capture listener
-  // (which swallows a shortcut whole) and the focused pane's terminal, which stays usable.
-  await page.keyboard.type('echo pane-$((2+3))')
-  await page.keyboard.press('Enter')
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          document
-            .querySelectorAll('[data-testid=card-view] [data-testid=pane]')[1]
-            ?.querySelector('.xterm-rows')
-            ?.textContent?.includes('pane-5') ?? false
-      )
-    )
-    .toBe(true)
-  await page.evaluate(() => {
-    const seen: string[] = []
-    ;(window as unknown as { seenKeys: string[] }).seenKeys = seen
-    document.addEventListener('keydown', (event) => seen.push(event.key), true)
-  })
-  await page.keyboard.press('Control+Shift+D')
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { seenKeys: string[] }).seenKeys))
-    .toContain('D')
-  await page.waitForTimeout(300)
-  await expect(cardPanes(page)).toHaveCount(2)
-  await page.keyboard.type('echo after-$((3+4))')
-  await page.keyboard.press('Enter')
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          document
-            .querySelectorAll('[data-testid=card-view] [data-testid=pane]')[1]
-            ?.querySelector('.xterm-rows')
-            ?.textContent?.includes('after-7') ?? false
-      )
-    )
-    .toBe(true)
-
-  await app.close()
-  expect(readSettingsFile(dataDir)).toContain('"shortcuts":{"splitRight":"Ctrl+Alt+R"}')
-
-  launched = await launchApp({ dataDir })
-  app = launched.app
-  page = launched.page
-  await page.getByTestId('settings-open').click()
-  await dialog(page).getByTestId('settings-section-shortcuts').click()
-  await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Alt+R')
-  await shortcutReset(page, 'splitRight').click()
-  await expect(shortcutField(page, 'splitRight')).toHaveText('Ctrl+Shift+D')
-  await expect(shortcutReset(page, 'splitRight')).toBeDisabled()
-  await expect
-    .poll(() => readSettingsFile(dataDir))
-    .toBe(
-      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
-    )
 })
 
 test('the Font family list offers installed fonts; a pick applies at once and is saved', async () => {

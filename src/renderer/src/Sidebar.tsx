@@ -1,5 +1,15 @@
-import { PanelLeftClose, PanelLeftOpen, Pencil, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import {
+  GitBranch,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Plus,
+  Server,
+  Settings,
+  Trash2
+} from 'lucide-react'
 import type { Workspace } from '../../core/workspace-store'
+import { useBranch } from './branches'
 import { ICON, SMALL_ICON } from './icons'
 import { workspaceInitial } from './workspace-initial'
 
@@ -83,7 +93,7 @@ function Sidebar({
                 <span className="workspace-badge" aria-hidden="true">
                   {workspaceInitial(w.name)}
                 </span>
-                {!collapsed && <span className="workspace-name">{w.name}</span>}
+                {!collapsed && <WorkspaceName workspace={w} />}
                 {!collapsed && w.host !== undefined && (
                   <Server className="workspace-ssh" {...SMALL_ICON} />
                 )}
@@ -135,6 +145,22 @@ function Sidebar({
         </button>
       </div>
     </nav>
+  )
+}
+
+/** A workspace's name, and under it the branch its folder is on (local git repositories only). */
+function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const branch = useBranch(workspace.host === undefined ? workspace.directory : null)
+  return (
+    <span className="workspace-text">
+      <span className="workspace-name">{workspace.name}</span>
+      {branch && (
+        <span className="workspace-branch" data-testid="workspace-branch">
+          <GitBranch {...SMALL_ICON} />
+          <span>{branch}</span>
+        </span>
+      )}
+    </span>
   )
 }
 

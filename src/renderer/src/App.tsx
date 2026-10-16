@@ -206,7 +206,11 @@ function DeleteWorkspaceDialog({
   return (
     <ConfirmDialog
       title="Delete workspace"
-      message={workspaceDeleteMessage(workspace.name, running)}
+      message={workspaceDeleteMessage(
+        workspace.name,
+        running,
+        workspace.cards.filter((c) => c.worktree).length
+      )}
       confirmLabel="Delete"
       onCancel={onCancel}
       onConfirm={onConfirm}

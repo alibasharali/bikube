@@ -12,6 +12,7 @@ import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
+import { registerWorktrees } from './worktrees'
 
 /**
  * The longest one quit hold waits for the shells to exit (#18 D2) and the sync folder's flush
@@ -86,6 +87,7 @@ function startApp(): void {
   registerClipboard()
   registerDirectories()
   registerAttention()
+  registerWorktrees()
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.
   // `about:blank` never fires `will-navigate`; the preload cancels it (#20).

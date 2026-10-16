@@ -960,3 +960,34 @@ describe('replacing the whole board (#13 D7, D14)', () => {
     expect(s.getState()).toEqual({ workspaces: [api], activeId: api.id })
   })
 })
+
+describe('cards with their own worktree', () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix-login/app',
+    worktree: {
+      path: '/data/worktrees/repo-abc123/fix-login',
+      branch: 'drovr/fix-login',
+      repo: '/tmp/repo'
+    }
+  }
+
+  it('runs a local card in its worktree and keeps where the worktree is', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/repo' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'fix login', undefined, worktree))
+    expect(c.directory).toBe(worktree.directory)
+    expect(c.worktree).toEqual(worktree.worktree)
+    // An ordinary card is unchanged.
+    const plain = ok(s.createCard(w.id, w.columns[0].id, 'plain'))
+    expect(plain.directory).toBe('/tmp/repo')
+    expect(plain).not.toHaveProperty('worktree')
+  })
+
+  it('ignores a worktree for an SSH workspace', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'remote', directory: '~/api', host: 'devbox' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'x', undefined, worktree))
+    expect(c.directory).toBe('~/api')
+    expect(c).not.toHaveProperty('worktree')
+  })
+})

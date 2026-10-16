@@ -12,6 +12,9 @@ import {
 import { ICON } from './icons'
 import { StartupOptions } from './StartupField'
 import { workspaceStore } from './store'
+import { branchProblem, suggestBranch } from '../../core/worktree-names'
+import type { NewCardWorktree } from '../../core/workspace-store'
+import type { WorktreeInfo } from '../../shared/api'
 
 interface NewCardProps {
   workspaceId: string
@@ -58,13 +61,66 @@ function NewCardForm({
   const [titleError, setTitleError] = useState<string | null>(null)
   const [commandError, setCommandError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+
+  // A local workspace in a git repository offers the card its own worktree.
+  const [repo, setRepo] = useState<WorktreeInfo | null>(null)
+  const [ownWorktree, setOwnWorktree] = useState(false)
+  // The branch follows the title until it is edited.
+  const [typedBranch, setTypedBranch] = useState<string | null>(null)
+  const [branchError, setBranchError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const cardTitle = title.trim() || `Terminal ${workspace?.nextCardNumber ?? 1}`
+  const branch = typedBranch ?? suggestBranch(cardTitle, new Set(repo?.branches ?? []))
 
   useEffect(() => {
     titleRef.current?.focus()
   }, [])
+  useEffect(() => {
+    if (!workspace || workspace.host !== undefined) return
+    let live = true
+    void window.drovr.worktree.info(workspace.directory).then((info) => live && setRepo(info))
+    return () => {
+      live = false
+    }
+    // The workspace's folder is fixed while the form is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId])
 
+  /** Makes the card's worktree first, when asked for; the card is only created once it exists. */
   const submit = (): void => {
-    const created = workspaceStore.createCard(workspaceId, columnId, title, draftStartup(draft))
+    if (creating) return
+    if (!ownWorktree || !repo || !workspace) {
+      create()
+      return
+    }
+    const problem = branchProblem(branch)
+    if (problem) {
+      setBranchError(problem)
+      return
+    }
+    setCreating(true)
+    void window.drovr.worktree.create(workspace.directory, branch).then((made) => {
+      setCreating(false)
+      if (!made.ok) {
+        setBranchError(made.reason)
+        return
+      }
+      create({
+        directory: made.directory,
+        worktree: { path: made.path, branch: made.branch, repo: workspace.directory }
+      })
+    })
+  }
+
+  const create = (worktree?: NewCardWorktree): void => {
+    const created = workspaceStore.createCard(
+      workspaceId,
+      columnId,
+      title,
+      draftStartup(draft),
+      worktree
+    )
     if (created.ok) {
       onCreated(created.value.id)
       onDone()
@@ -89,9 +145,15 @@ function NewCardForm({
     <div
       className="inline-edit new-card-form"
       data-testid="new-card-form"
+      // A press on the form's text (the Own worktree label) keeps the focus where it is, so it
+      // never counts as leaving the form; the label's click still toggles its checkbox.
+      onMouseDown={(e) => {
+        if (!(e.target as HTMLElement).closest('input, select, button, textarea'))
+          e.preventDefault()
+      }}
       onBlur={(e) => {
         if (e.currentTarget.contains(e.relatedTarget)) return
-        if (title.trim() === '' && sameDraft(draft, initial)) onDone()
+        if (title.trim() === '' && sameDraft(draft, initial) && !ownWorktree && !creating) onDone()
       }}
     >
       <div className="inline-edit-row">
@@ -129,6 +191,59 @@ function NewCardForm({
           {titleError}
         </p>
       )}
+      {repo && (
+        <div className="new-card-worktree">
+          <label className="new-card-check">
+            <input
+              type="checkbox"
+              data-testid="new-card-worktree"
+              checked={ownWorktree}
+              disabled={creating}
+              onChange={(e) => {
+                setOwnWorktree(e.target.checked)
+                setBranchError(null)
+              }}
+              onKeyDown={onKeyDown}
+            />
+            Own worktree
+          </label>
+          {ownWorktree && (
+            <input
+              className="inline-input new-card-branch"
+              data-testid="new-card-branch"
+              aria-label="Branch"
+              value={branch}
+              disabled={creating}
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={branchError ? true : undefined}
+              aria-describedby={branchError ? 'new-card-branch-err' : undefined}
+              onChange={(e) => {
+                setTypedBranch(e.target.value)
+                setBranchError(null)
+              }}
+              onKeyDown={onKeyDown}
+            />
+          )}
+          {ownWorktree && !branchError && (
+            <p className="field-hint" data-testid="new-card-worktree-hint">
+              {creating
+                ? 'Creating worktree…'
+                : `A new branch from ${repo.branch ?? 'HEAD'}, with ignored files copied.`}
+            </p>
+          )}
+          {branchError && (
+            <p
+              className="field-error"
+              id="new-card-branch-err"
+              role="alert"
+              data-testid="new-card-error-branch"
+            >
+              {branchError}
+            </p>
+          )}
+        </div>
+      )}{' '}
       {draft.choice === 'custom' && (
         <input
           className="inline-input new-card-command"

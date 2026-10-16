@@ -24,9 +24,11 @@ export interface Card {
   title: string
   /**
    * Copied from the workspace at creation and never changed (#4 D2): an absolute local path, or
-   * for an SSH card a path on its host (#12 D3).
+   * for an SSH card a path on its host (#12 D3). A worktree card's is in its worktree.
    */
   directory: string
+  /** The card's own git worktree, when it was created with one; absent otherwise. */
+  worktree?: CardWorktree
   /** The SSH host, copied from the workspace at creation and never changed; absent when local (#12 D1). */
   host?: string
   /** What is typed into the shell on every start (#5 D2); changed only per card (#5 D11). */
@@ -40,6 +42,21 @@ export interface Card {
    * the startup command.
    */
   startedAgents: AgentKind[]
+}
+
+/** Where a card's own git worktree is, and how to remove it. */
+export interface CardWorktree {
+  /** The worktree's top folder (the card's directory is it, or a folder inside it). */
+  path: string
+  branch: string
+  /** The workspace folder it was made from, which git removes it through. */
+  repo: string
+}
+
+/** A card created in its own worktree instead of the workspace's folder. */
+export interface NewCardWorktree {
+  directory: string
+  worktree: CardWorktree
 }
 
 export interface Workspace {
@@ -116,13 +133,15 @@ export interface WorkspaceStore {
   deleteColumn(workspaceId: string, columnId: string): Result<void>
   /**
    * Adds a card at the bottom of the column; an empty title becomes `Terminal N`. `startup`
-   * defaults to the workspace's default startup command (#5 D9, D10).
+   * defaults to the workspace's default startup command (#5 D9, D10). With `worktree` (a local
+   * workspace only) the card runs in that worktree instead of the workspace's folder.
    */
   createCard(
     workspaceId: string,
     columnId: string,
     title: string,
-    startup?: StartupCommand
+    startup?: StartupCommand,
+    worktree?: NewCardWorktree
   ): Result<Card>
   renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
   deleteCard(workspaceId: string, cardId: string): Result<void>
@@ -345,7 +364,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     workspaceId: string,
     columnId: string,
     title: string,
-    startup?: StartupCommand
+    startup?: StartupCommand,
+    worktree?: NewCardWorktree
   ): Result<Card> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
@@ -357,8 +377,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       id: this.generateId(),
       columnId,
       title: trimmed || `Terminal ${ws.nextCardNumber}`,
-      directory: ws.directory,
+      directory: worktree && ws.host === undefined ? worktree.directory : ws.directory,
       ...(ws.host !== undefined && { host: ws.host }),
+      ...(worktree && ws.host === undefined && { worktree: { ...worktree.worktree } }),
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
       claudeStarted: false,

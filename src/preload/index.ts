@@ -42,6 +42,12 @@ const api: DrovrApi = {
       return () => ipcRenderer.removeListener(IPC.syncBoard, handler)
     }
   },
+  worktree: {
+    info: (dir) => ipcRenderer.invoke(IPC.worktreeInfo, dir),
+    create: (dir, branch) => ipcRenderer.invoke(IPC.worktreeCreate, dir, branch),
+    dirty: (path) => ipcRenderer.invoke(IPC.worktreeDirty, path),
+    remove: (repo, path, force) => ipcRenderer.invoke(IPC.worktreeRemove, repo, path, force)
+  },
   app: {
     setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count),
     focus: () => ipcRenderer.send(IPC.appFocus),

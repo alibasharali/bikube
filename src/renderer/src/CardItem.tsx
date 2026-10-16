@@ -1,4 +1,4 @@
-import { Pencil, Square, SquareTerminal, Trash2 } from 'lucide-react'
+import { GitBranch, Pencil, Square, SquareTerminal, Trash2, TreePine } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { cardMoveKey } from '../../core/card-moves'
@@ -9,10 +9,17 @@ import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
-import { MENU_ICON } from './icons'
+import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
-import { moveCardByKey, moveCardToColumn, removeCard, takeFocusAfterMove } from './card-actions'
+import {
+  moveCardByKey,
+  moveCardToColumn,
+  removeCard,
+  removeWorktreeCard,
+  takeFocusAfterMove
+} from './card-actions'
+import DeleteWorktreeCardDialog from './DeleteWorktreeCardDialog'
 import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
 import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
@@ -33,6 +40,31 @@ export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.
   return (
     <span className="card-tag" data-testid="card-tag" data-kind={startup.kind} title={title}>
       {tag}
+    </span>
+  )
+}
+
+/**
+ * A branch: a tree for a card's own worktree (under its title, and in the title bar), the plain
+ * branch icon for the workspace's folder.
+ */
+export function WorktreeBranch({
+  branch,
+  worktree = false
+}: {
+  branch: string
+  worktree?: boolean
+}): React.JSX.Element {
+  const Icon = worktree ? TreePine : GitBranch
+  return (
+    <span
+      className={worktree ? 'card-branch card-branch-worktree' : 'card-branch'}
+      data-testid="card-branch"
+      data-worktree={worktree || undefined}
+      title={worktree ? `Own worktree on ${branch}` : `On ${branch}`}
+    >
+      <Icon {...SMALL_ICON} />
+      <span className="card-branch-name">{branch}</span>
     </span>
   )
 }
@@ -129,7 +161,12 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
     setRenaming(true)
   }
 
+  const [deletingWorktree, setDeletingWorktree] = useState(false)
   const onDelete = (): void => {
+    if (card.worktree) {
+      setDeletingWorktree(true)
+      return
+    }
     const message = cardDeleteConfirmation(card.title, cardTerminals().runState(card.id))
     if (message) setConfirm(message)
     else removeCard(workspaceId, card.id)
@@ -169,17 +206,20 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           onClick={onClick}
           onKeyDown={onKeyDown}
         >
-          <span className="card-title-row">
-            <span
-              ref={titleRef}
-              className="card-title"
-              data-testid="card-title"
-              title={card.title}
-              onDoubleClick={startRename}
-            >
-              {card.title}
+          <span className="card-head">
+            <span className="card-title-row">
+              <span
+                ref={titleRef}
+                className="card-title"
+                data-testid="card-title"
+                title={card.title}
+                onDoubleClick={startRename}
+              >
+                {card.title}
+              </span>
+              <StartupTag startup={card.startup} />
             </span>
-            <StartupTag startup={card.startup} />
+            {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>
           <CardLines status={status} />
         </button>
@@ -299,6 +339,17 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           onConfirm={() => {
             setConfirm(null)
             removeCard(workspaceId, card.id)
+          }}
+        />
+      )}
+      {deletingWorktree && card.worktree && (
+        <DeleteWorktreeCardDialog
+          card={{ ...card, worktree: card.worktree }}
+          running={running}
+          onCancel={() => setDeletingWorktree(false)}
+          onDelete={(remove, force) => {
+            setDeletingWorktree(false)
+            removeWorktreeCard(workspaceId, card, remove, force)
           }}
         />
       )}

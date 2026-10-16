@@ -42,9 +42,14 @@ export function runningCount(
 }
 
 /** The workspace delete confirmation; it names the running terminals when there are any. */
-export function workspaceDeleteMessage(name: string, running: number): string {
+export function workspaceDeleteMessage(name: string, running: number, worktrees = 0): string {
   const base = `Delete "${name}"? This removes its board.`
-  if (running === 0) return base
   const terminals = running === 1 ? '1 terminal is' : `${running} terminals are`
-  return `${base} ${terminals} still running and will be stopped.`
+  const stopped = running === 0 ? '' : ` ${terminals} still running and will be stopped.`
+  // A workspace's cards' worktrees are never removed with it: they may hold uncommitted work.
+  const kept =
+    worktrees === 0
+      ? ''
+      : ` ${worktrees === 1 ? "Its card's worktree is" : `Its cards' ${worktrees} worktrees are`} kept.`
+  return `${base}${stopped}${kept}`
 }

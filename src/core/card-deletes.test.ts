@@ -100,3 +100,15 @@ describe('workspace delete message (AC12, D15)', () => {
     )
   })
 })
+
+describe('workspaceDeleteMessage with worktree cards', () => {
+  it('says the worktrees are kept', () => {
+    expect(workspaceDeleteMessage('api', 0, 1)).toBe(
+      'Delete "api"? This removes its board. Its card\'s worktree is kept.'
+    )
+    expect(workspaceDeleteMessage('api', 2, 3)).toBe(
+      'Delete "api"? This removes its board. 2 terminals are still running and will be stopped. ' +
+        "Its cards' 3 worktrees are kept."
+    )
+  })
+})

@@ -307,3 +307,49 @@ describe('agent presets in the saved state (#21 D6)', () => {
     expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startup = { kind: 'amp' })))
   })
 })
+
+describe('saved worktree cards', () => {
+  const state = (cardOver: Record<string, unknown>): string =>
+    JSON.stringify({
+      version: 1,
+      state: {
+        activeId: 'w',
+        workspaces: [
+          {
+            id: 'w',
+            name: 'alpha',
+            directory: '/tmp/repo',
+            columns: [{ id: 'c', name: 'Backlog' }],
+            cards: [
+              {
+                id: 'k',
+                columnId: 'c',
+                title: 'fix',
+                directory: '/data/wt/fix',
+                startup: { kind: 'shell' },
+                agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
+                claudeStarted: false,
+                startedAgents: [],
+                ...cardOver
+              }
+            ],
+            nextCardNumber: 1,
+            defaultStartup: { kind: 'shell' }
+          }
+        ]
+      }
+    })
+  const worktree = { path: '/data/wt/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+
+  it('keeps a valid worktree, and reads a card without one as before', () => {
+    const parsed = parseSavedState(state({ worktree }))
+    expect(parsed.ok && parsed.value.workspaces[0]!.cards[0]!.worktree).toEqual(worktree)
+    const plain = parseSavedState(state({}))
+    expect(plain.ok && plain.value.workspaces[0]!.cards[0]).not.toHaveProperty('worktree')
+  })
+
+  it('rejects a bad worktree, and one on an SSH card', () => {
+    expect(parseSavedState(state({ worktree: { path: '/x' } })).ok).toBe(false)
+    expect(parseSavedState(state({ worktree, host: 'devbox', directory: '~/api' })).ok).toBe(false)
+  })
+})

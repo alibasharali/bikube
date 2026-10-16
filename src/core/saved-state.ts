@@ -5,7 +5,7 @@
 import { isAgentKind, type AgentKind } from './agent-presets'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
-import type { Card, Column, Workspace, WorkspaceState } from './workspace-store'
+import type { Card, CardWorktree, Column, Workspace, WorkspaceState } from './workspace-store'
 
 export const STATE_FILE_NAME = 'drovr-state.json'
 export const SAVED_STATE_VERSION = 1
@@ -113,17 +113,32 @@ function readCard(raw: unknown): Card | string {
   if (!startup) return 'bad startup command'
   const startedAgents = readStartedAgents(raw.startedAgents)
   if (!startedAgents) return 'bad started agents'
+  const worktree = readWorktree(raw.worktree, host.host)
+  if (typeof worktree !== 'object') return worktree
   return {
     id,
     columnId,
     title,
     directory,
     ...host,
+    ...worktree,
     startup,
     agentSessionId,
     claudeStarted,
     startedAgents
   }
+}
+
+/** `{}` without a worktree; `{ worktree }` for a local card's valid one; else why it is rejected. */
+function readWorktree(
+  raw: unknown,
+  host: string | undefined
+): { worktree?: CardWorktree } | string {
+  if (raw === undefined || raw === null) return {}
+  if (!isObject(raw) || host !== undefined) return 'bad worktree'
+  const { path, branch, repo } = raw
+  if (!isText(path) || !isText(branch) || !isText(repo)) return 'bad worktree'
+  return { worktree: { path, branch, repo } }
 }
 
 /** Distinct preset kinds (#21 D6); missing, as in files from before #21, is none. Null otherwise. */

@@ -1,5 +1,5 @@
 import { keyMoveTarget, type CardMoveDirection } from '../../core/card-moves'
-import type { Workspace } from '../../core/workspace-store'
+import type { Workspace, Card } from '../../core/workspace-store'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
 
@@ -37,6 +37,24 @@ export function disposeCard(cardId: string): void {
 export function removeCard(workspaceId: string, cardId: string): void {
   disposeCard(cardId)
   workspaceStore.deleteCard(workspaceId, cardId)
+}
+
+/**
+ * Deletes a card with its own worktree, removing the worktree too when asked (`force` with
+ * uncommitted changes); its branch stays. The card goes at once; the worktree follows.
+ */
+export function removeWorktreeCard(
+  workspaceId: string,
+  card: Card,
+  removeWorktree: boolean,
+  force: boolean
+): void {
+  removeCard(workspaceId, card.id)
+  if (!removeWorktree || !card.worktree) return
+  const { repo, path } = card.worktree
+  void window.drovr.worktree.remove(repo, path, force).then((result) => {
+    if (!result.ok) console.error(`worktree not removed (${path}): ${result.reason}`)
+  })
 }
 
 /** Deletes a workspace and stops every one of its cards' processes (#4 D15, #11 D6). */

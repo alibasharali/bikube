@@ -1,6 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
+import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
 import type { SyncStatus } from '../core/sync-status'
 import type { Workspace, WorkspaceState } from '../core/workspace-store'
@@ -33,7 +34,11 @@ export const IPC = {
   syncBoard: 'sync:board',
   appSetBadge: 'app:setBadge',
   appFocus: 'app:focus',
-  appRequestAttention: 'app:requestAttention'
+  appRequestAttention: 'app:requestAttention',
+  worktreeInfo: 'worktree:info',
+  worktreeCreate: 'worktree:create',
+  worktreeDirty: 'worktree:dirty',
+  worktreeRemove: 'worktree:remove'
 } as const
 
 export interface TerminalExit {
@@ -166,6 +171,33 @@ export interface SyncApi {
   onBoard(listener: (workspaces: Workspace[]) => void): () => void
 }
 
+/** A local folder's git repository, for offering a card its own worktree. */
+export interface WorktreeInfo {
+  /** The checked-out branch; null on a detached HEAD. */
+  branch: string | null
+  /** Every local branch, so a new card's branch name is free. */
+  branches: string[]
+}
+
+/** Cards' own git worktrees, made and removed by main in `<userData>/worktrees`. */
+export interface WorktreeApi {
+  /** The repository `dir` is in, or null when it isn't in one (or git is missing). */
+  info(dir: string): Promise<WorktreeInfo | null>
+  /**
+   * Makes a worktree on the new `branch` from the repository's HEAD, with its git-ignored files
+   * copied in; the result gives the card's directory inside it.
+   */
+  create(dir: string, branch: string): Promise<CreateResult>
+  /** Whether the worktree has uncommitted changes; null when it can't tell. */
+  dirty(path: string): Promise<boolean | null>
+  /** Removes the worktree (its branch stays); `force` even with uncommitted changes. */
+  remove(
+    repo: string,
+    path: string,
+    force: boolean
+  ): Promise<{ ok: true } | { ok: false; reason: string }>
+}
+
 /** The app's place on the desktop, for notifications. */
 export interface AppApi {
   /** The Dock (or launcher) badge: how many cards wait for the user; 0 clears it. */
@@ -188,4 +220,5 @@ export interface DrovrApi {
   board: BoardApi
   sync: SyncApi
   app: AppApi
+  worktree: WorktreeApi
 }

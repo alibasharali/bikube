@@ -316,6 +316,34 @@ button {
   color: var(--accent-text);
 }
 
+/* The name, and the folder's branch under it. */
+.workspace-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.workspace-branch svg {
+  flex: none;
+}
+
+.workspace-branch > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace-name {
   flex: 1;
   min-width: 0;
@@ -1031,6 +1059,13 @@ button {
 .card-body > * {
   grid-column: 1;
   min-width: 0;
+}
+
+/* The title (and a worktree card's branch under it) keep the first row. */
+.card-body > .card-head {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-body > .card-status {
@@ -1906,4 +1941,62 @@ button {
 .settings-select-short {
   align-self: flex-start;
   min-width: 180px;
+}
+
+/* A card's own git worktree: the option when creating it, and its branch on the card. */
+.new-card-worktree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.new-card-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.new-card-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.new-card-branch {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.card-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.card-branch svg {
+  flex: none;
+}
+
+/* A card's own worktree: its tree in the accent colour. */
+.card-branch-worktree svg {
+  color: var(--accent);
+}
+
+.card-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar .card-branch {
+  margin-top: 0;
+  -webkit-app-region: drag;
 }

@@ -281,3 +281,25 @@ describe('joining the boards when sync is turned on (#13 D9, AC3)', () => {
     expect(joinBoards([], [localWeb])).toEqual([localWeb])
   })
 })
+
+describe('worktree cards in the sync file', () => {
+  it('writes the worktree with home as ~ and reads it back expanded', () => {
+    const worktree = { path: `${HOME}/wt/fix`, branch: 'drovr/fix', repo: `${HOME}/proj` }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('k', 'w-backlog', { directory: `${HOME}/wt/fix`, worktree })]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.worktree).toEqual({
+      path: '~/wt/fix',
+      branch: 'drovr/fix',
+      repo: '~/proj'
+    })
+    const read = parseSyncFile(serializeSyncFile(board, new Date(0)), HOME)
+    expect(read.ok && read.workspaces[0]!.cards[0]!.worktree).toEqual(worktree)
+  })
+})

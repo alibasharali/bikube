@@ -2,7 +2,8 @@ import { ChevronRight } from 'lucide-react'
 import { useEffect } from 'react'
 import { windowTitle } from '../../core/window-title'
 import type { Card, Workspace } from '../../core/workspace-store'
-import { StartupTag } from './CardItem'
+import { StartupTag, WorktreeBranch } from './CardItem'
+import { useBranch } from './branches'
 import { ICON } from './icons'
 
 /**
@@ -24,6 +25,8 @@ function TitleBar({
   card: Card | null
 }): React.JSX.Element {
   const title = windowTitle(workspace, card)
+  // The branch where what is shown runs: the workspace's folder (a worktree card has its own).
+  const branch = useBranch(workspace && workspace.host === undefined ? workspace.directory : null)
   useEffect(() => {
     document.title = title
   }, [title])
@@ -47,6 +50,7 @@ function TitleBar({
             ) : (
               <span className="titlebar-current">{workspace.name}</span>
             )}
+            {!card && branch && <WorktreeBranch branch={branch} />}
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />
@@ -54,6 +58,11 @@ function TitleBar({
                   {card.title}
                 </span>
                 <StartupTag startup={card.startup} />
+                {card.worktree ? (
+                  <WorktreeBranch branch={card.worktree.branch} worktree />
+                ) : (
+                  branch && <WorktreeBranch branch={branch} />
+                )}
               </>
             )}
           </>

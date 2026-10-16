@@ -4,6 +4,7 @@
  */
 
 import { isActivityValue } from './activity'
+import { isSessionId } from './board-args'
 import type { BoardCommand } from './board-args'
 
 export const BOARD_PROTOCOL_VERSION = 1
@@ -40,7 +41,8 @@ export function isOverLineLimit(line: string): boolean {
 const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   move: ['v', 'cardId', 'command', 'card', 'column'],
   status: ['v', 'cardId', 'command', 'card', 'text'],
-  activity: ['v', 'cardId', 'command', 'card', 'activity']
+  activity: ['v', 'cardId', 'command', 'card', 'activity'],
+  session: ['v', 'cardId', 'command', 'card', 'session']
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -64,7 +66,12 @@ export function parseRequestLine(line: string): ParsedRequest {
     return { ok: false, error: INVALID_REQUEST }
   }
   const command = value.command
-  if (command !== 'move' && command !== 'status' && command !== 'activity') {
+  if (
+    command !== 'move' &&
+    command !== 'status' &&
+    command !== 'activity' &&
+    command !== 'session'
+  ) {
     return { ok: false, error: INVALID_REQUEST }
   }
   const fields = FIELDS[command]
@@ -79,6 +86,11 @@ export function parseRequestLine(line: string): ParsedRequest {
   }
   if (command === 'status') {
     return { ok: true, request: { v: 1, cardId, command, card, text: value.text as string } }
+  }
+  if (command === 'session') {
+    const session = value.session
+    if (!isSessionId(session)) return { ok: false, error: INVALID_REQUEST }
+    return { ok: true, request: { v: 1, cardId, command, card, session } }
   }
   const activity = value.activity
   if (!isActivityValue(activity)) return { ok: false, error: INVALID_REQUEST }

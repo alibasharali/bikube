@@ -10,10 +10,13 @@ describe('startLine (D2, D5)', () => {
     ).toBeNull()
   })
 
-  it("starts Claude Code with Drovr's settings and the session id the first time (AC2, #31 D14)", () => {
+  it("starts Claude Code with Drovr's settings and the session id, resuming it if it exists", () => {
     expect(
       startLine({ startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: false })
-    ).toBe(`claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${U}`)
+    ).toBe(
+      `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${U} || ` +
+        `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${U}`
+    )
   })
 
   it('resumes, falling back to the same session id, once Claude was started (AC4, AC9, #31 D14)', () => {
@@ -35,7 +38,7 @@ describe('startLine (D2, D5)', () => {
         agentSessionId: U.toUpperCase(),
         claudeStarted: false
       })
-    ).toBe(`claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${U.toUpperCase()}`)
+    ).toContain(`--session-id ${U.toUpperCase()} ||`)
   })
 
   it('types a Custom command as written (AC7)', () => {

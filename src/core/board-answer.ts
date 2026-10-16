@@ -22,7 +22,7 @@ import type { WorkspaceStore } from './workspace-store'
  * `activity` likewise hands its value to `setActivity`, null for `none` (#31 D12).
  */
 export function answerBoardCommand(
-  store: Pick<WorkspaceStore, 'getState' | 'moveCard'>,
+  store: Pick<WorkspaceStore, 'getState' | 'moveCard' | 'setAgentSession'>,
   callingCardId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
@@ -38,6 +38,11 @@ export function answerBoardCommand(
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
     setAgentStatus(card.value.id, cleanAgentStatus(command.text))
     return { ok: true }
+  }
+  if (command.command === 'session') {
+    // Drovr's Claude hooks: the session this card resumes from now on (a message sent, a /resume).
+    const set = store.setAgentSession(ws.id, card.value.id, command.session.toLowerCase())
+    return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
   }
   if (command.command === 'activity') {
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }

@@ -191,6 +191,11 @@ export interface WorkspaceStore {
   deleteShell(workspaceId: string, shellId: string): Result<void>
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
+  /**
+   * The Claude Code session the card resumes from now on, reported by Drovr's hooks once it has
+   * a conversation (a message sent, a `/resume`): its agent session id, and started.
+   */
+  setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card>
   /** Records that the preset's first-start line was typed for this card (#21 D3). */
   markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card>
   /**
@@ -507,6 +512,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return this.updateCard(workspaceId, cardId, (card) =>
       checked.ok ? { ok: true, value: { ...card, startup: checked.value } } : checked
     )
+  }
+
+  setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => ({
+      ok: true,
+      value: { ...card, agentSessionId: sessionId, claudeStarted: true }
+    }))
   }
 
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card> {

@@ -327,6 +327,13 @@ test('AC4: opening restored cards starts them; Claude Code resumes its session',
   const [first] = claudeLogLines(claudeLog)
   expect(first.startsWith(`${SETTINGS_ARGS} --session-id `)).toBe(true)
   const u = first.slice(`${SETTINGS_ARGS} --session-id `.length)
+  // A message sent: the fake reports its session, as the hook does, so there is one to resume.
+  await openCard('agent')
+  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
+  await page.keyboard.press('Enter')
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(alpha)
+  await back()
 
   await restart()
 

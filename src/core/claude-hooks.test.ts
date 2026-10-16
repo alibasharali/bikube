@@ -64,10 +64,11 @@ describe('the Claude settings file (#31 D15)', () => {
   it('gives Claude the D16 instruction, with no backslash so the SSH copy stays fish-safe', () => {
     expect(CLAUDE_INSTRUCTION).toBe(
       'You are running inside a Drovr card, a kanban board card that shows your status. ' +
-        `At the end of every turn, run: "$DROVR_BIN/board" status . '<one line>' — one short line, ` +
-        'at most 80 characters, saying what you did or what you are waiting for, for example: ' +
-        "Tests green, PR ready for review. Do it silently: don't mention it to the user. " +
-        'If the command fails, ignore it.'
+        `At the end of every turn, run exactly: "$DROVR_BIN/board" status . '<one line>' — one ` +
+        'short line, at most 80 characters, saying what you did or what you are waiting for, for ' +
+        'example: Tests green, PR ready for review. Run that command alone, as written: add ' +
+        'nothing before or after it (no redirection, no || true, no ; or true). Do it silently: ' +
+        "don't mention it to the user. If it fails, ignore it and move on."
     )
     expect(CLAUDE_INSTRUCTION).not.toContain('\\')
   })
@@ -160,11 +161,33 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
 
   for (const shell of ['/bin/sh', '/bin/bash']) {
     it(`sets the calling card's activity, silently, exit 0 (${shell})`, () => {
-      samples.forEach(([event, input, activity], index) => {
+      let lines = 0
+      for (const [event, input, activity] of samples) {
         expect(run(shell, event, input)).toEqual({ status: 0, stdout: '', stderr: '' })
-        expect(loggedLines(index + 1).at(-1)).toBe(`activity . ${activity}`)
-      })
-      expect(logged()).toHaveLength(samples.length)
+        // A message sent also reports the session (below), first.
+        lines += event === 'UserPromptSubmit' ? 2 : 1
+        expect(loggedLines(lines).at(-1)).toBe(`activity . ${activity}`)
+      }
+      expect(logged()).toHaveLength(lines)
+    })
+
+    it(`reports the session on a message and on a /resume, not on a fresh start (${shell})`, () => {
+      const id = '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'
+      run(shell, 'UserPromptSubmit', { ...base, session_id: id, prompt: 'hi' })
+      expect(loggedLines(2)).toEqual([`session . ${id}`, 'activity . working'])
+      run(shell, 'SessionStart', { ...base, session_id: id, source: 'startup' })
+      expect(logged()).toHaveLength(2)
+      // A /resume, in Claude's spaced JSON too.
+      const resumed = 'aaaaaaaa-2f0e-4a59-9a43-0d6c4b0f1a11'
+      const spaced = JSON.stringify({ ...base, session_id: resumed, source: 'resume' }, null, 1)
+      expect(
+        spawnSync(shell, ['-c', command('SessionStart')], {
+          input: spaced,
+          encoding: 'utf8',
+          env: { PATH: '/usr/bin:/bin', DROVR_BIN: bin }
+        }).status
+      ).toBe(0)
+      expect(loggedLines(3).at(-1)).toBe(`session . ${resumed}`)
     })
 
     it(`exits 0 when board fails or is missing (${shell})`, () => {

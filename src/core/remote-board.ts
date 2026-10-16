@@ -45,7 +45,12 @@ const perlString = (text: string): string => literal(text, ' . ')
 const pythonString = (text: string): string => literal(text, ' + ')
 
 /** Each command's value field in a request; `activity` takes only `ACTIVITY_VALUES` (#31 D12). */
-const VALUE_KEYS = { move: 'column', status: 'text', activity: 'activity' } as const
+const VALUE_KEYS = {
+  move: 'column',
+  status: 'text',
+  activity: 'activity',
+  session: 'session'
+} as const
 
 /** `[key, value]` pairs as `"key" => "value"` / `"key": "value"` entries joined with `, `. */
 function entries(pairs: [string, string][], arrow: string, string: (t: string) => string): string {

@@ -276,6 +276,10 @@ test('AC4: a closed card resumes with its startup command when opened again', as
   expect(first.startsWith(`${SETTINGS_ARGS} --session-id `)).toBe(true)
   const u = first.slice(`${SETTINGS_ARGS} --session-id `.length)
   await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
+  // A message sent: the fake reports its session, as the hook does, so there is one to resume.
+  await page.keyboard.press('Enter')
+  await run('pwd')
+  await expect.poll(bufferLines).toContain(dir)
   await back()
 
   await menuClose('agent')

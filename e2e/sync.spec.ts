@@ -354,6 +354,19 @@ async function newCard(
   await expect(page.getByTestId('board')).toBeVisible()
 }
 
+/** Sends the fake claude in `title` a message: it reports its session, as the hook does. */
+async function sendMessage(page: Page, title: string): Promise<void> {
+  await card(page, title).getByTestId('card-open').click()
+  await expectCardOpen(page, title)
+  await expect
+    .poll(async () => (await bufferLines(page)).some((l) => l.startsWith('fake-claude ')), {
+      timeout: 15_000
+    })
+    .toBe(true)
+  await page.keyboard.press('Enter')
+  await backToBoard(page)
+}
+
 async function renameCard(page: Page, from: string, to: string): Promise<void> {
   await card(page, from).getByTestId('card-menu').click()
   await page.getByTestId('card-menu-rename').click()
@@ -556,6 +569,9 @@ test("AC6: B starts A's local Claude Code card with --session-id and its SSH one
   await expect(a.page.getByTestId('workspace-dialog')).toHaveCount(0)
   await newCard(a.page, 'ssh', 'Claude Code')
   await expect.poll(() => claudeLogLines(fakeA.log), { timeout: 15_000 }).toHaveLength(2)
+  await sendMessage(a.page, 'ssh')
+  await selectWorkspace(a.page, 'api')
+  await sendMessage(a.page, 'local')
 
   // A's file: the SSH card started, the local one written as not started (D6).
   type FileCard = { title: string; agentSessionId: string; claudeStarted: boolean }

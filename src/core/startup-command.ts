@@ -72,9 +72,12 @@ export function startLine(card: StartupState): string | null {
       const id = card.agentSessionId
       if (!UUID.test(id)) return null
       const claude = `claude --settings "$DROVR_CLAUDE_SETTINGS"`
+      // Started once its hooks reported a conversation (`board session`): resume it, or start that
+      // id fresh when it is gone. Before that, start the id fresh, or resume it when a conversation
+      // exists that the hooks couldn't report (no Drovr to reach, an older card).
       return card.claudeStarted
         ? `${claude} --resume ${id} || ${claude} --session-id ${id}`
-        : `${claude} --session-id ${id}`
+        : `${claude} --session-id ${id} || ${claude} --resume ${id}`
     }
     case 'custom':
       return card.startup.command
@@ -99,7 +102,8 @@ export function firstStart(card: StartupState): FirstStart | null {
     case 'custom':
       return null
     case 'claude':
-      return card.claudeStarted ? null : 'claude'
+      // Claude Code is started by its hooks' `board session`, once it has a conversation.
+      return null
     default:
       return card.startedAgents?.includes(card.startup.kind) ? null : card.startup.kind
   }

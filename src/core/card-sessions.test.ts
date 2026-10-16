@@ -249,7 +249,7 @@ describe('CardSessions', () => {
     expect(sessions.screen('c1')!.text).toBe('kept')
   })
 
-  it('types claude --session-id right after the spawn, before any keystroke (#5 D3, D5)', async () => {
+  it('types claude --session-id right after the spawn, before any keystroke, marking nothing yet', async () => {
     const claudeStarted = vi.fn()
     sessions.start(card('c1', '/tmp/a', { kind: 'claude' }), claudeStarted)
     screens.get('c1')!.type('x')
@@ -259,11 +259,15 @@ describe('CardSessions', () => {
     await vi.advanceTimersByTimeAsync(0)
     screens.get('c1')!.type('y')
     expect(api.writes).toEqual([
-      ['s1', `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`],
+      [
+        's1',
+        `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID}\r`
+      ],
       ['s1', 'x'],
       ['s1', 'y']
     ])
-    expect(claudeStarted).toHaveBeenCalledTimes(1)
+    // Started is what Claude's hooks report once it has a conversation (`board session`).
+    expect(claudeStarted).not.toHaveBeenCalled()
   })
 
   it('types the resume line on later Claude Code starts without marking again (#5 D5)', async () => {
@@ -764,12 +768,15 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     expect(claudeStarted).not.toHaveBeenCalled()
     api.emitData('s1', '-ready\x07$ ')
     expect(api.writes).toEqual([
-      ['s1', `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`]
+      [
+        's1',
+        `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID}\r`
+      ]
     ])
-    expect(claudeStarted).toHaveBeenCalledTimes(1)
+    expect(claudeStarted).not.toHaveBeenCalled()
     api.emitData('s1', READY_MARKER)
     expect(api.writes).toHaveLength(1)
-    expect(claudeStarted).toHaveBeenCalledTimes(1)
+    expect(claudeStarted).not.toHaveBeenCalled()
   })
 
   it("types a preset's plain command and records its first start only at the marker (#21 D3)", async () => {

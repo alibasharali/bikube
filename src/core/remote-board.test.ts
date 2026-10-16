@@ -124,6 +124,23 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     })
   })
 
+  it.skipIf(!language.path)("sends a session, which Drovr's Claude hooks report", async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    await serve(handler)
+    expect(await run(['session', '.', '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'], env())).toEqual({
+      code: 0,
+      stdout: '',
+      stderr: ''
+    })
+    expect(handler).toHaveBeenLastCalledWith({
+      v: 1,
+      cardId: 'card-1',
+      command: 'session',
+      card: '.',
+      session: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'
+    })
+  })
+
   it.skipIf(!language.path)('sends an activity with its value (#31 D12)', async () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
     await serve(handler)

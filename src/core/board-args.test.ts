@@ -26,6 +26,19 @@ describe('parseBoardArgs', () => {
     })
   })
 
+  it('parses a session with a UUID, any case; anything else is usage', () => {
+    expect(parseBoardArgs(['session', '.', '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'])).toEqual({
+      kind: 'command',
+      command: { command: 'session', card: '.', session: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11' }
+    })
+    expect(parseBoardArgs(['session', '.', '6F1C1B1E-2F0E-4A59-9A43-0D6C4B0F1A11']).kind).toBe(
+      'command'
+    )
+    for (const bad of ['x', '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11; rm -rf ~', '']) {
+      expect(parseBoardArgs(['session', '.', bad]).kind).toBe('usage')
+    }
+  })
+
   it('parses an activity, each of working, waiting, question and none (#31 D12)', () => {
     for (const activity of ['working', 'waiting', 'question', 'none'] as const) {
       expect(parseBoardArgs(['activity', '.', activity])).toEqual({

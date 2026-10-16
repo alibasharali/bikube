@@ -202,6 +202,23 @@ describe('answerBoardCommand', () => {
     ])
   })
 
+  it('sets the session the card resumes, and marks it started', () => {
+    const store = setup()
+    const reply = answerBoardCommand(
+      store,
+      'c-api',
+      { command: 'session', card: '.', session: '6F1C1B1E-2F0E-4A59-9A43-0D6C4B0F1A11' },
+      running,
+      () => {}
+    )
+    expect(reply).toEqual({ ok: true })
+    const card = store.getState().workspaces[0]!.cards.find((c) => c.id === 'c-api')!
+    expect(card).toMatchObject({
+      agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
+      claudeStarted: true
+    })
+  })
+
   it("sets and clears the card's activity, only on a running card (#31 D12)", () => {
     const store = setup()
     const before = store.getState()

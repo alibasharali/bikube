@@ -23,6 +23,24 @@ describe('serializeRequest / parseRequestLine', () => {
     expect(parseRequestLine(s)).toEqual({ ok: true, request: status })
   })
 
+  it('round-trips a session, and rejects one that is not a UUID', () => {
+    const s = serializeRequest('c1', {
+      command: 'session',
+      card: '.',
+      session: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'
+    })
+    const session = {
+      v: 1,
+      cardId: 'c1',
+      command: 'session',
+      card: '.',
+      session: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'
+    }
+    expect(s).toBe(`${line(session)}\n`)
+    expect(parseRequestLine(s)).toEqual({ ok: true, request: session })
+    expect(parseRequestLine(line({ ...session, session: 'x' })).ok).toBe(false)
+  })
+
   it('round-trips an activity, still version 1 (#31 D12)', () => {
     const a = serializeRequest('c1', { command: 'activity', card: '.', activity: 'working' })
     const activity = { v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'working' }

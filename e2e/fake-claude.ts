@@ -19,21 +19,36 @@ export const SETTINGS_ARGS = `--settings ${LOCAL_CLAUDE_SETTINGS}`
  */
 export const REMOTE_SETTINGS_ARGS = String.raw`--settings /\S*/drovr\.[A-Za-z0-9]{8}/claude-settings\.json`
 
-/** The line a Claude Code card types the first time (#31 D14). */
-export const claudeFirstLine = (id: string): string =>
+const sessionIdLine = (id: string): string =>
   `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${id}`
+const resumeIdLine = (id: string): string =>
+  `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${id}`
 
-/** The line a Claude Code card types once started (#5 D5, #31 D14). */
+/**
+ * The line a Claude Code card types until it has a conversation: the session id fresh, resumed
+ * when it already exists (#31 D14).
+ */
+export const claudeFirstLine = (id: string): string => `${sessionIdLine(id)} || ${resumeIdLine(id)}`
+
+/** The line a Claude Code card types once its hooks reported a conversation (#5 D5, #31 D14). */
 export const claudeResumeLine = (id: string): string =>
-  `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${id} || ${claudeFirstLine(id)}`
+  `${resumeIdLine(id)} || ${sessionIdLine(id)}`
 
 // The fake `claude` of #5's smoke tests: it logs its arguments to $DROVR_CLAUDE_LOG, prints
 // them, and waits on stdin. With FAKE_CLAUDE_RESUME_FAILS=1 a `--resume` run fails at once.
+// A line on stdin is a message sent: like Drovr's real hook, it reports its session with
+// `board session`, so the card resumes it next time.
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$*" >> "$DROVR_CLAUDE_LOG"
 echo "fake-claude $*"
 case " $* " in *" --resume "*) [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ] && exit 1 ;; esac
+id=
+while [ $# -gt 0 ]; do
+  case "$1" in --session-id|--resume) id=$2 ;; esac
+  shift
+done
 read -r _
+[ -n "$id" ] && "$DROVR_BIN/board" session . "$id" >/dev/null 2>&1
 exit 0
 `
 

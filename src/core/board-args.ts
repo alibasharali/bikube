@@ -8,17 +8,20 @@ import { isActivityValue, type ActivityValue } from './activity'
 export const BOARD_USAGE = `usage: board move <card> <column>
        board status <card> <text>
        board activity <card> working|waiting|question|none
+       board session <card> <session-id>
 
   <card>    . for this card, or a card's id or title in this workspace
   <column>  a column title of this workspace (any case)
   <text>    the card's status text; "" clears it
   activity  working, waiting for you, or a question for you; none clears it
+  session   the Claude Code session the card resumes (Drovr's Claude hooks set it)
 `
 
 export type BoardCommand =
   | { command: 'move'; card: string; column: string }
   | { command: 'status'; card: string; text: string }
   | { command: 'activity'; card: string; activity: ActivityValue }
+  | { command: 'session'; card: string; session: string }
 
 export type BoardArgs =
   | { kind: 'help'; stdout: string; exitCode: 0 }
@@ -38,6 +41,16 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
       return { kind: 'command', command: { command: 'status', card, text: value } }
     if (name === 'activity' && isActivityValue(value))
       return { kind: 'command', command: { command: 'activity', card, activity: value } }
+    if (name === 'session' && isSessionId(value))
+      return { kind: 'command', command: { command: 'session', card, session: value } }
   }
   return { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
+}
+
+/** A Claude Code session id: a UUID, any case. */
+export function isSessionId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  )
 }

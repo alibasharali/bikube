@@ -410,12 +410,9 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
   writeFileSync(join(dataDir, 'drovr-state.json'), JSON.stringify(old))
   await launch()
 
-  for (const title of ['agent', 'custom']) {
+  for (const title of ['sh', 'agent', 'custom']) {
     await expect(card(title).getByTestId('card-status-label')).toHaveText('Stopped')
   }
-  // The Shell card is one of the workspace's shells now, not a card.
-  await expect(card('sh')).toHaveCount(0)
-  await expect(page.getByTestId('shell').filter({ hasText: 'sh' })).toHaveCount(1)
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
   await expect(card('custom').getByTestId('card-tag')).toHaveText('Custom')
   await openCard('agent')

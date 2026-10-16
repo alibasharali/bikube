@@ -354,7 +354,7 @@ describe('saved worktree cards', () => {
   })
 })
 
-describe('shells and the move away from Shell cards', () => {
+describe('shells, and a workspace defaulting to Shell', () => {
   const file = (workspace: Record<string, unknown>): string =>
     JSON.stringify({
       version: 1,
@@ -385,14 +385,14 @@ describe('shells and the move away from Shell cards', () => {
     startedAgents: []
   })
 
-  it('turns Shell cards into shells, keeps agent cards, and defaults new cards to Claude Code', () => {
+  it('keeps every card, adds no shells, and defaults new cards to Claude Code', () => {
     const parsed = parseSavedState(
       file({ cards: [card('k1', 'Scratch', 'shell'), card('k2', 'Fix login', 'claude')] })
     )
     if (!parsed.ok) throw new Error(parsed.reason)
     const [w] = parsed.value.workspaces
-    expect(w!.cards.map((c) => c.title)).toEqual(['Fix login'])
-    expect(w!.shells).toEqual([{ id: 'k1', name: 'Scratch', command: '', autostart: false }])
+    expect(w!.cards.map((c) => c.title)).toEqual(['Scratch', 'Fix login'])
+    expect(w!.shells).toEqual([])
     expect(w!.defaultStartup).toEqual({ kind: 'claude' })
   })
 

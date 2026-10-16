@@ -99,11 +99,6 @@ function readWorkspace(raw: unknown): Workspace | string {
     const card = readCard(c)
     if (typeof card === 'string') return card
     if (!columns.some((col) => col.id === card.columnId)) return 'card in unknown column'
-    // A plain Shell card (from before shells had their own place) becomes one of the shells.
-    if (card.startup.kind === 'shell' && !card.worktree) {
-      shells.push({ id: card.id, name: card.title, command: '', autostart: false })
-      continue
-    }
     cards.push(card)
   }
   return {

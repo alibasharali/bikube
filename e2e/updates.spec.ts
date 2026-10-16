@@ -250,6 +250,24 @@ test('Skip hides that version across a restart, never installs it, and a newer o
   await expect(button()).toHaveText('Update Available: 0.4.0')
 })
 
+test('a version skipped after its download offers Install and Relaunch when checked, never Download', async () => {
+  await launch()
+  await openPopup()
+  await expect(install()).toHaveText('Install and Relaunch')
+  await popup().getByTestId('update-skip').click()
+  await expect(button()).toHaveCount(0)
+
+  await checkFromSettings()
+  await expect(popup().getByTestId('update-version')).toHaveText('0.3.0')
+  await expect(install()).toHaveText('Install and Relaunch')
+  // Skipped: it no longer installs at quit, so the popup doesn't say it does.
+  await expect(popup()).not.toContainText('Or it installs when you quit Drovr.')
+  await page.keyboard.press('Escape')
+  await app!.close()
+  app = undefined
+  expect(readFileSync(marker(), 'utf8')).toBe('old')
+})
+
 test('a check from Settings says up to date, or that it failed', async () => {
   await launch({ current: '0.3.0' })
   await expect(button()).toHaveCount(0)

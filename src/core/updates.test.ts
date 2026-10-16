@@ -72,6 +72,14 @@ describe('versions', () => {
     expect(isNewer('1.0.0-beta', '0.1.0')).toBe(false)
   })
 
+  it('offers the release to a pre-release build of it or earlier', () => {
+    expect(isNewer('0.2.0', '0.2.0-rc.1')).toBe(true)
+    expect(isNewer('0.2.1', '0.2.0-beta.2')).toBe(true)
+    expect(isNewer('0.1.9', '0.2.0-rc.1')).toBe(false)
+    expect(isNewer('0.2.0', '0.2.0-')).toBe(false)
+    expect(isNewer('0.2.0', '0.2.0-rc 1')).toBe(false)
+  })
+
   it('names the file each platform installs from', () => {
     expect(assetName('1.0.0', 'darwin', 'arm64')).toBe('drovr-1.0.0-arm64-mac.zip')
     expect(assetName('1.0.0', 'linux', 'x64')).toBe('drovr-1.0.0-x86_64.AppImage')

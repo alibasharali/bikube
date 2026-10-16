@@ -44,6 +44,8 @@ export interface Release {
 }
 
 const VERSION = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})$/
+/** A pre-release build's version, `1.2.3-rc.1`, as the release workflow accepts its tag. */
+const PRE_RELEASE = /^(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})\.(0|[1-9]\d{0,5})-[0-9A-Za-z.-]+$/
 
 /** `1.2.3` (an optional leading `v`) as numbers; null for anything else, pre-releases included. */
 export function parseVersion(text: string): [number, number, number] | null {
@@ -51,13 +53,19 @@ export function parseVersion(text: string): [number, number, number] | null {
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
 }
 
-/** Whether `candidate` is a later version than `current`; false when either isn't `x.y.z`. */
+/**
+ * Whether the release `candidate` (`x.y.z`) is later than the running `current`, which may be a
+ * pre-release build (`x.y.z-rc.1`): `1.2.0` is later than `1.2.0-rc.1`. False for anything else.
+ */
 export function isNewer(candidate: string, current: string): boolean {
   const a = parseVersion(candidate)
-  const b = parseVersion(current)
+  const pre = PRE_RELEASE.exec(current)
+  const b = pre
+    ? ([Number(pre[1]), Number(pre[2]), Number(pre[3])] as const)
+    : parseVersion(current)
   if (!a || !b) return false
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! > b[i]!
-  return false
+  return pre !== null
 }
 
 /** The release file this platform installs from, as the release workflow names it. */

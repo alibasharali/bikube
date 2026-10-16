@@ -147,14 +147,16 @@ function AvailableBody({
 }): React.JSX.Element {
   const { release, install, progress, error, skipped } = update
   const manual = install === 'manual' || error !== undefined
+  const ready = !manual && progress === 1
   const downloading = !manual && !skipped && progress < 1
+  // Readiness first: a version skipped after its download is already there to install.
   const label = manual
     ? 'Download'
-    : skipped
-      ? 'Download Update'
-      : downloading
-        ? `Downloading… ${Math.round(progress * 100)}%`
-        : 'Install and Relaunch'
+    : ready
+      ? 'Install and Relaunch'
+      : skipped
+        ? 'Download Update'
+        : `Downloading… ${Math.round(progress * 100)}%`
   const released = release.publishedAt
     ? new Date(release.publishedAt).toLocaleDateString(undefined, {
         day: 'numeric',
@@ -211,9 +213,7 @@ function AvailableBody({
             {label}
           </button>
         </div>
-        {!manual && progress === 1 && (
-          <p className="update-note">Or it installs when you quit Drovr.</p>
-        )}
+        {ready && !skipped && <p className="update-note">Or it installs when you quit Drovr.</p>}
       </div>
       <button
         type="button"

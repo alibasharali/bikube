@@ -20,8 +20,12 @@ extraResources:
     to: THIRD_PARTY_NOTICES
 mac:
   category: public.app-category.developer-tools
+  # The .dmg for a first install; the zip is what the in-app updater downloads (src/core/updates.ts
+  # names it). The dmg keeps its own name below.
   target:
     - dmg
+    - zip
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
   identity: null
   notarize: false
 dmg:

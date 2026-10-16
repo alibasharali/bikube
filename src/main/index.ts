@@ -12,6 +12,7 @@ import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
+import { registerUpdates } from './updates'
 import { registerWorktrees } from './worktrees'
 
 /**
@@ -99,6 +100,7 @@ function startApp(): void {
   registerDirectories()
   registerAttention()
   registerWorktrees()
+  const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.
   // `about:blank` never fires `will-navigate`; the preload cancels it (#20).
@@ -137,6 +139,8 @@ function startApp(): void {
   // and every shell killed, so it ends itself (#26 D5). Busy counts only what was queued before
   // that quit's own flush, which does no fs call when nothing was pending.
   app.on('quit', () => {
+    // A downloaded update goes in once this process ends; started before any SIGKILL below.
+    updates.installAtQuit()
     const syncBusy = busyAtLastQuit && sync.busy()
     if (!killAtQuit({ syncBusy, platform: process.platform })) return
     console.error('sync folder still busy at quit; ending the process')
@@ -161,9 +165,10 @@ function startApp(): void {
     const closeBoard = registerBoard(socketPath, terminals, sshBoard)
     app.on('will-quit', closeBoard)
     settings.applyTheme()
-    installAppMenu()
+    installAppMenu(() => updates.check())
     if (hiddenForTests) app.dock?.hide()
     createWindow(settings)
+    updates.start()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow(settings)
     })

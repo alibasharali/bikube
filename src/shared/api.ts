@@ -4,6 +4,7 @@ import type { GhosttyTheme } from '../core/ghostty-config'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
 import type { SyncStatus } from '../core/sync-status'
+import type { UpdateState } from '../core/updates'
 import type { Workspace, WorkspaceState } from '../core/workspace-store'
 
 /** IPC channel names shared by main and preload. */
@@ -40,7 +41,15 @@ export const IPC = {
   worktreeInfo: 'worktree:info',
   worktreeCreate: 'worktree:create',
   worktreeDirty: 'worktree:dirty',
-  worktreeRemove: 'worktree:remove'
+  worktreeRemove: 'worktree:remove',
+  updateState: 'update:state',
+  updateStateChanged: 'update:stateChanged',
+  updateShow: 'update:show',
+  updateCheck: 'update:check',
+  updateSkip: 'update:skip',
+  updateInstall: 'update:install',
+  updateOpenPage: 'update:openPage',
+  updateRunning: 'update:running'
 } as const
 
 export interface TerminalExit {
@@ -214,6 +223,30 @@ export interface AppApi {
   reveal(path: string): void
 }
 
+/** App updates from GitHub Releases, run by main (`src/main/updates.ts`). */
+export interface UpdateApi {
+  /** What the updater is doing, and the version running. */
+  state(): Promise<{ state: UpdateState; current: string }>
+  /** `listener` gets every change. Returns an unsubscribe function. */
+  onState(listener: (state: UpdateState) => void): () => void
+  /** `listener` is called when the app menu's Check for Updates… asks to show the popup. */
+  onShow(listener: () => void): () => void
+  /** A check the user asked for. */
+  check(): void
+  /** Skips the available version: no download, no install at quit, no button until a newer one. */
+  skip(): void
+  /**
+   * Installs the downloaded update: Drovr quits, the app is swapped and opened again. Opens the
+   * release page instead where Drovr can't replace itself (or the download failed); starts the
+   * download of a skipped version.
+   */
+  install(): void
+  /** Opens the release's page (its notes) in the browser. */
+  openPage(): void
+  /** How many terminals are running, for the install confirmation. */
+  running(): Promise<number>
+}
+
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
@@ -227,4 +260,5 @@ export interface DrovrApi {
   sync: SyncApi
   app: AppApi
   worktree: WorktreeApi
+  update: UpdateApi
 }

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { BoardCommand } from '../core/board-args'
 import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import type { SyncStatus } from '../core/sync-status'
+import type { UpdateState } from '../core/updates'
 import type { Workspace } from '../core/workspace-store'
 import { IPC, type DrovrApi, type TerminalExit } from '../shared/api'
 
@@ -47,6 +48,24 @@ const api: DrovrApi = {
     create: (dir, branch) => ipcRenderer.invoke(IPC.worktreeCreate, dir, branch),
     dirty: (path) => ipcRenderer.invoke(IPC.worktreeDirty, path),
     remove: (repo, path, force) => ipcRenderer.invoke(IPC.worktreeRemove, repo, path, force)
+  },
+  update: {
+    state: () => ipcRenderer.invoke(IPC.updateState),
+    onState: (listener) => {
+      const handler = (_: unknown, state: UpdateState): void => listener(state)
+      ipcRenderer.on(IPC.updateStateChanged, handler)
+      return () => ipcRenderer.removeListener(IPC.updateStateChanged, handler)
+    },
+    onShow: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on(IPC.updateShow, handler)
+      return () => ipcRenderer.removeListener(IPC.updateShow, handler)
+    },
+    check: () => ipcRenderer.send(IPC.updateCheck),
+    skip: () => ipcRenderer.send(IPC.updateSkip),
+    install: () => ipcRenderer.send(IPC.updateInstall),
+    openPage: () => ipcRenderer.send(IPC.updateOpenPage),
+    running: () => ipcRenderer.invoke(IPC.updateRunning)
   },
   app: {
     setBadge: (count) => ipcRenderer.send(IPC.appSetBadge, count),

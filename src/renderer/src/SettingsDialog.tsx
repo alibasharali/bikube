@@ -2,6 +2,7 @@ import {
   Bot,
   ChevronRight,
   FolderSync,
+  Info,
   Keyboard,
   Minus,
   Monitor,
@@ -70,7 +71,7 @@ const DEFAULT_FONT_LABEL =
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
-type Section = 'appearance' | 'terminal' | 'shell' | 'agents' | 'shortcuts' | 'sync'
+type Section = 'appearance' | 'terminal' | 'shell' | 'agents' | 'shortcuts' | 'sync' | 'about'
 
 const SECTIONS: { key: Section; label: string; icon: LucideIcon }[] = [
   { key: 'appearance', label: 'Appearance', icon: Palette },
@@ -78,11 +79,13 @@ const SECTIONS: { key: Section; label: string; icon: LucideIcon }[] = [
   { key: 'shell', label: 'Shell', icon: TerminalIcon },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-  { key: 'sync', label: 'Sync', icon: FolderSync }
+  { key: 'sync', label: 'Sync', icon: FolderSync },
+  { key: 'about', label: 'About', icon: Info }
 ]
 
 /**
- * The Settings dialog (#10 D5): a list of sections (Appearance, Terminal, Shell, Shortcuts, Sync)
+ * The Settings dialog (#10 D5): a list of sections (Appearance, Terminal, Shell, Shortcuts, Sync,
+ * About)
  * beside the chosen one, which scrolls on its own while the title and Done stay put. It opens on
  * Appearance. Every valid change applies and saves at once; closing applies a typed family, keeps
  * what was applied and drops an invalid font size. Picking a terminal theme swaps the dialog's
@@ -195,6 +198,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
             <ShortcutsSection keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)} />
           )}
           {section === 'sync' && <SyncFolderField id={`${id}-sync`} errorId={`${id}-sync-error`} />}
+          {section === 'about' && <AboutSection onCheck={close} />}
         </div>
       </div>
       <div className="modal-actions settings-footer">
@@ -456,6 +460,42 @@ function SwitchRow({
           <span className="switch-track" aria-hidden="true" />
         </span>
         {hint && <p className="field-hint">{hint}</p>}
+      </div>
+    </div>
+  )
+}
+
+/** The version running, and Check for Updates, which closes Settings for the update popup. */
+function AboutSection({ onCheck }: { onCheck: () => void }): React.JSX.Element {
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    let live = true
+    void window.drovr.update.state().then(({ current }) => {
+      if (live) setVersion(current)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+  return (
+    <div className="settings-row">
+      <span className="settings-label">Version</span>
+      <div className="settings-control">
+        <span data-testid="settings-version">{version}</span>
+        <button
+          type="button"
+          className="btn btn-small"
+          data-testid="settings-check-updates"
+          onClick={() => {
+            onCheck()
+            window.drovr.update.check()
+          }}
+        >
+          Check for Updates
+        </button>
+        <p className="field-hint">
+          Drovr checks GitHub for a new version at launch and every few hours.
+        </p>
       </div>
     </div>
   )

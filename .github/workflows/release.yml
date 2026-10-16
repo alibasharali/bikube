@@ -17,13 +17,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The release tag (v1.2.3) is the app's version: the updater compares it with the running one.
+      - name: Version from the tag
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag $TAG is not v<x.y.z>"; exit 1 ;; esac
+          npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
       # Unsigned build: signing and notarization are out of scope (idea #15).
       - name: Build unsigned .dmg
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Attach .dmg to the release
-        run: gh release upload "$TAG" dist/*.dmg --clobber
+      - name: Attach .dmg and the updater's zip to the release
+        run: gh release upload "$TAG" dist/*.dmg dist/*-mac.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -39,6 +46,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Version from the tag
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "tag $TAG is not v<x.y.z>"; exit 1 ;; esac
+          npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
       - name: Build AppImage and .deb
         run: npm run dist
       - name: Attach AppImage and .deb to the release

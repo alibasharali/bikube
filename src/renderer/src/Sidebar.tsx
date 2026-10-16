@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import type { Workspace } from '../../core/workspace-store'
 import { useBranch } from './branches'
+import UpdateButton from './UpdateButton'
 import { ICON, SMALL_ICON } from './icons'
 import { workspaceInitial } from './workspace-initial'
 
@@ -127,6 +128,7 @@ function Sidebar({
         })}
       </ul>
       <div className="sidebar-footer">
+        <UpdateButton collapsed={collapsed} />
         {!collapsed && syncStatus !== null && (
           <p className="sidebar-sync" data-testid="sync-status">
             {syncStatus}

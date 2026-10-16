@@ -1,0 +1,260 @@
+import { spawn, spawnSync } from 'node:child_process'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  assetName,
+  formatSize,
+  INSTALL_SCRIPT,
+  installMessage,
+  installTarget,
+  isNewer,
+  MAX_ASSET_BYTES,
+  newerRelease,
+  parseVersion,
+  RELEASES_URL
+} from './updates'
+
+const DIGEST = 'a'.repeat(64)
+
+function release(over: Record<string, unknown> = {}, asset: Record<string, unknown> = {}): unknown {
+  return {
+    tag_name: 'v0.3.0',
+    draft: false,
+    prerelease: false,
+    published_at: '2026-10-13T09:00:00Z',
+    html_url: `${RELEASES_URL}tag/v0.3.0`,
+    assets: [
+      {
+        name: 'drovr-0.3.0.dmg',
+        browser_download_url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0.dmg`,
+        size: 10,
+        digest: `sha256:${'b'.repeat(64)}`
+      },
+      {
+        name: 'drovr-0.3.0-arm64-mac.zip',
+        browser_download_url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0-arm64-mac.zip`,
+        size: 81_474_355,
+        digest: `sha256:${DIGEST.toUpperCase()}`,
+        ...asset
+      }
+    ],
+    ...over
+  }
+}
+
+const MAC = { current: '0.2.0', platform: 'darwin', arch: 'arm64' }
+
+describe('versions', () => {
+  it('reads x.y.z with or without a v, nothing else', () => {
+    expect(parseVersion('1.2.3')).toEqual([1, 2, 3])
+    expect(parseVersion('v0.10.0')).toEqual([0, 10, 0])
+    for (const bad of ['1.2', '1.2.3-beta.1', '01.2.3', 'v', '', '1.2.3.4', ' 1.2.3'])
+      expect(parseVersion(bad)).toBeNull()
+  })
+
+  it('compares numerically, part by part', () => {
+    expect(isNewer('0.10.0', '0.9.9')).toBe(true)
+    expect(isNewer('1.0.0', '0.99.99')).toBe(true)
+    expect(isNewer('0.2.1', '0.2.0')).toBe(true)
+    expect(isNewer('0.2.0', '0.2.0')).toBe(false)
+    expect(isNewer('0.1.9', '0.2.0')).toBe(false)
+    expect(isNewer('1.0.0-beta', '0.1.0')).toBe(false)
+  })
+
+  it('names the file each platform installs from', () => {
+    expect(assetName('1.0.0', 'darwin', 'arm64')).toBe('drovr-1.0.0-arm64-mac.zip')
+    expect(assetName('1.0.0', 'linux', 'x64')).toBe('drovr-1.0.0-x86_64.AppImage')
+    expect(assetName('1.0.0', 'darwin', 'x64')).toBeNull()
+    expect(assetName('1.0.0', 'win32', 'x64')).toBeNull()
+  })
+})
+
+describe('the latest release', () => {
+  it('gives a newer release with its page and this platform’s file', () => {
+    expect(newerRelease(release(), MAC)).toEqual({
+      version: '0.3.0',
+      publishedAt: '2026-10-13T09:00:00Z',
+      pageUrl: `${RELEASES_URL}tag/v0.3.0`,
+      asset: {
+        name: 'drovr-0.3.0-arm64-mac.zip',
+        url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0-arm64-mac.zip`,
+        size: 81_474_355,
+        sha256: DIGEST
+      }
+    })
+  })
+
+  it('ignores the same or an older version, drafts and pre-releases', () => {
+    expect(newerRelease(release(), { ...MAC, current: '0.3.0' })).toBeNull()
+    expect(newerRelease(release(), { ...MAC, current: '1.0.0' })).toBeNull()
+    expect(newerRelease(release({ draft: true }), MAC)).toBeNull()
+    expect(newerRelease(release({ prerelease: true }), MAC)).toBeNull()
+    expect(newerRelease(release({ tag_name: 'v0.3.0-rc.1' }), MAC)).toBeNull()
+    expect(newerRelease(null, MAC)).toBeNull()
+    expect(newerRelease('nope', MAC)).toBeNull()
+  })
+
+  it('refuses a page outside this repository’s releases', () => {
+    expect(newerRelease(release({ html_url: 'https://evil.example/tag/v0.3.0' }), MAC)).toBeNull()
+    expect(
+      newerRelease(
+        release({ html_url: 'https://github.com/someone/drovr/releases/tag/v0.3.0' }),
+        MAC
+      )
+    ).toBeNull()
+  })
+
+  it('gives no file when it is missing, elsewhere, unverifiable or too large', () => {
+    const fileOf = (asset: Record<string, unknown>): unknown =>
+      newerRelease(release({}, asset), MAC)?.asset
+    expect(newerRelease(release(), { ...MAC, platform: 'linux', arch: 'x64' })?.asset).toBeNull()
+    expect(fileOf({ browser_download_url: 'https://evil.example/drovr.zip' })).toBeNull()
+    expect(fileOf({ digest: undefined })).toBeNull()
+    expect(fileOf({ digest: 'md5:abc' })).toBeNull()
+    expect(fileOf({ size: 0 })).toBeNull()
+    expect(fileOf({ size: MAX_ASSET_BYTES + 1 })).toBeNull()
+  })
+
+  it('takes another base for a test feed', () => {
+    const base = 'http://127.0.0.1:4000/'
+    const r = newerRelease(
+      release({ html_url: `${base}tag/v0.3.0` }, { browser_download_url: `${base}f.zip` }),
+      { ...MAC, base }
+    )
+    expect(r?.asset?.url).toBe(`${base}f.zip`)
+  })
+})
+
+describe('what an install replaces', () => {
+  it('is the .app bundle on macOS, unless macOS runs a translocated copy', () => {
+    expect(
+      installTarget({ platform: 'darwin', exePath: '/Applications/Drovr.app/Contents/MacOS/Drovr' })
+    ).toEqual({ kind: 'mac', path: '/Applications/Drovr.app' })
+    expect(
+      installTarget({
+        platform: 'darwin',
+        exePath: '/private/var/folders/x/AppTranslocation/ABC/d/Drovr.app/Contents/MacOS/Drovr'
+      })
+    ).toBeNull()
+    expect(
+      installTarget({ platform: 'darwin', exePath: '/repo/node_modules/electron/dist/Electron' })
+    ).toBeNull()
+  })
+
+  it('is the AppImage on Linux, nothing for the .deb', () => {
+    expect(
+      installTarget({
+        platform: 'linux',
+        exePath: '/tmp/.mount_x/drovr',
+        appImage: '/home/me/Drovr.AppImage'
+      })
+    ).toEqual({ kind: 'appimage', path: '/home/me/Drovr.AppImage' })
+    expect(installTarget({ platform: 'linux', exePath: '/opt/Drovr/drovr' })).toBeNull()
+    expect(
+      installTarget({ platform: 'linux', exePath: '/x', appImage: 'rel/x.AppImage' })
+    ).toBeNull()
+  })
+})
+
+describe('the install script', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'drovr-update-'))
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  /** A pid that has already exited. */
+  const gonePid = (): number => spawnSync('true').pid!
+
+  const failed = (): string => join(dir, 'install-failed')
+  const install = (pid: number, from: string, to: string): Promise<number> =>
+    new Promise((resolve) => {
+      const args = ['-c', INSTALL_SCRIPT, 'sh', String(pid), from, to, 'none', failed()]
+      const child = spawn('/bin/sh', args)
+      child.on('exit', (code) => resolve(code ?? -1))
+    })
+
+  it('swaps a bundle folder and removes the old one', async () => {
+    mkdirSync(join(dir, 'Drovr.app/Contents'), { recursive: true })
+    writeFileSync(join(dir, 'Drovr.app/Contents/v'), 'old')
+    mkdirSync(join(dir, 'new/Drovr.app/Contents'), { recursive: true })
+    writeFileSync(join(dir, 'new/Drovr.app/Contents/v'), 'new')
+    expect(await install(gonePid(), join(dir, 'new/Drovr.app'), join(dir, 'Drovr.app'))).toBe(0)
+    expect(readFileSync(join(dir, 'Drovr.app/Contents/v'), 'utf8')).toBe('new')
+    expect(readdirSync(dir).sort()).toEqual(['Drovr.app', 'new'])
+    expect(existsSync(failed())).toBe(false)
+  })
+
+  it('swaps a file, in a path with spaces', async () => {
+    const target = join(dir, 'my apps', 'Drovr.AppImage')
+    mkdirSync(join(dir, 'my apps'))
+    writeFileSync(target, 'old')
+    writeFileSync(join(dir, 'next'), 'new')
+    expect(await install(gonePid(), join(dir, 'next'), target)).toBe(0)
+    expect(readFileSync(target, 'utf8')).toBe('new')
+    expect(readdirSync(join(dir, 'my apps'))).toEqual(['Drovr.AppImage'])
+  })
+
+  it('waits for the process to end before touching anything', async () => {
+    const target = join(dir, 'Drovr.AppImage')
+    writeFileSync(target, 'old')
+    writeFileSync(join(dir, 'next'), 'new')
+    const app = spawn('sleep', ['1'])
+    const done = install(app.pid!, join(dir, 'next'), target)
+    await new Promise((r) => setTimeout(r, 400))
+    expect(readFileSync(target, 'utf8')).toBe('old')
+    expect(await done).toBe(0)
+    expect(readFileSync(target, 'utf8')).toBe('new')
+  })
+
+  it('keeps the old app when the new one is missing, and says why', async () => {
+    const target = join(dir, 'Drovr.AppImage')
+    writeFileSync(target, 'old')
+    expect(await install(gonePid(), join(dir, 'missing'), target)).toBe(1)
+    expect(readFileSync(target, 'utf8')).toBe('old')
+    expect(readdirSync(dir).sort()).toEqual(['Drovr.AppImage', 'install-failed'])
+    expect(readFileSync(failed(), 'utf8')).toContain('missing')
+  })
+
+  it('keeps the old app when its folder can’t be written, and says why', async () => {
+    const apps = join(dir, 'apps')
+    mkdirSync(apps)
+    writeFileSync(join(apps, 'Drovr.AppImage'), 'old')
+    writeFileSync(join(dir, 'next'), 'new')
+    chmodSync(apps, 0o555)
+    try {
+      expect(await install(gonePid(), join(dir, 'next'), join(apps, 'Drovr.AppImage'))).toBe(1)
+    } finally {
+      chmodSync(apps, 0o755)
+    }
+    expect(readFileSync(join(apps, 'Drovr.AppImage'), 'utf8')).toBe('old')
+    expect(readFileSync(failed(), 'utf8')).toMatch(/denied/i)
+  })
+})
+
+describe('the popup’s words', () => {
+  it('formats sizes', () => {
+    expect(formatSize(81_474_355)).toBe('77.7 MB')
+    expect(formatSize(2048)).toBe('2 KB')
+    expect(formatSize(10)).toBe('1 KB')
+  })
+
+  it('names the terminals an install stops', () => {
+    expect(installMessage(0)).toBe('Drovr quits, installs the update and opens again.')
+    expect(installMessage(1)).toBe(
+      'Drovr quits, installs the update and opens again. 1 terminal is running and will be stopped.'
+    )
+    expect(installMessage(3)).toContain('3 terminals are running')
+  })
+})

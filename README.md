@@ -28,10 +28,14 @@ A kanban board for macOS and Linux where every card is a live terminal, for runn
 
 Download the files from the [latest release](https://github.com/alibasharali/drovr/releases).
 
-- **macOS:** `drovr-<version>.dmg`. It is unsigned, so macOS blocks the first launch: allow it under System Settings, Privacy & Security, Open Anyway.
+- **macOS (Apple silicon):** `drovr-<version>.dmg`. Drag Drovr to Applications. It is unsigned, so macOS blocks the first launch: allow it under System Settings, Privacy & Security, Open Anyway.
 - **Linux (x64):** a .deb or an AppImage.
   - `drovr-<version>-amd64.deb` (Debian, Ubuntu): `sudo apt install ./drovr-<version>-amd64.deb`. It installs Drovr in the app menu and the `drovr` command, and sets up Chromium's sandbox (an AppArmor profile where user namespaces are restricted). On Ubuntu 23.10 and later, the .deb is the way to run Drovr sandboxed.
   - `drovr-<version>-x86_64.AppImage` (any distribution): `chmod +x` it and run it. Where unprivileged user namespaces are restricted (Ubuntu 23.10 and later), the AppImage's launcher starts Drovr without Chromium's sandbox; use the .deb there to keep it. The AppImage needs FUSE 2: `sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
+
+### Updates
+
+Drovr checks the latest release at launch and every few hours (Settings, About, Check for Updates, or Drovr › Check for Updates… on macOS). When there is a newer one, **Update Available** shows above Settings: on macOS and with the AppImage, Drovr downloads it, checks it against the checksum GitHub publishes, and **Install and Relaunch** replaces the app and opens it again (running terminals are stopped first; it asks). **Later** installs it the next time you quit Drovr; **Skip** ignores that version. Drovr must be able to write to the folder it runs from, such as Applications. The .deb, and a copy Drovr can't replace, link to the release to download it instead.
 
 ## Running it locally
 

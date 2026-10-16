@@ -26,8 +26,8 @@ jobs:
           npm version "${TAG#v}" --no-git-tag-version --allow-same-version
         env:
           TAG: ${{ github.event.release.tag_name }}
-      # Unsigned build: signing and notarization are out of scope (idea #15).
-      - name: Build unsigned .dmg
+      # No Developer ID: signed ad hoc (electron-builder.yml), not notarized (idea #15).
+      - name: Build ad-hoc signed .dmg
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

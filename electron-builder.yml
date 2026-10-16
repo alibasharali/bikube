@@ -26,7 +26,11 @@ mac:
     - dmg
     - zip
   artifactName: ${name}-${version}-${arch}-mac.${ext}
-  identity: null
+  # No Developer ID: signed ad hoc, so the whole bundle is sealed. Skipping signing leaves only
+  # Electron's linker signature, which a downloaded copy fails as "damaged", with no Open Anyway.
+  # Hardened runtime would refuse Electron's own frameworks under an ad-hoc signature.
+  identity: '-'
+  hardenedRuntime: false
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}

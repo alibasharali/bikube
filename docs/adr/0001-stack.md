@@ -19,7 +19,7 @@ Drovr is a macOS kanban board where every card is a live terminal. The premise r
 - node-pty is a native module: `postinstall` runs `electron-builder install-app-deps` to rebuild it for Electron, and `electron-builder.yml` unpacks it from the asar. node-pty 1.x is built on N-API (`napi.h`), which is ABI-stable across Node and Electron, so the copy built for Node loads in Electron too and Vitest with real PTYs and the Electron app share one binary; there is no ABI mismatch to work around. The rebuild for Electron stays for packaging. If node-pty ever stops using N-API, Vitest needs its own Node build of the module.
 - Electron behaviour is covered by a Playwright-Electron smoke test (`npm run test:smoke`, `e2e/`) run under `xvfb-run` after `check.sh` in CI; it is not part of `check.sh` because it needs a display.
 - Persistence was left to its own item; see the addendum below.
-- The .dmg is unsigned until an Apple Developer account exists.
+- The .dmg is signed ad hoc and not notarized until an Apple Developer account exists.
 
 ## Addendum: persistence (item 8)
 

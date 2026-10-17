@@ -4,13 +4,14 @@ import { createHash } from 'node:crypto'
 import { createWriteStream, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { access, chmod, mkdir, readdir, rm } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { IPC } from '../shared/api'
 import {
   CHECK_INTERVAL_MS,
   INSTALL_SCRIPT,
+  installPaths,
   installTarget,
   LATEST_RELEASE_URL,
   newerRelease,
@@ -126,8 +127,9 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
   async function installKind(release: Release): Promise<InstallKind> {
     if (!target || !release.asset) return 'manual'
     try {
-      await access(dirname(target.path), constants.W_OK)
-      await access(target.path, constants.W_OK)
+      // `access` alone: a standard account owns its `Drovr.app` but can't write `/Applications`.
+      for (const path of installPaths(target.kind, '', target.path).writable)
+        await access(path, constants.W_OK)
       return target.kind
     } catch {
       return 'manual'
@@ -167,7 +169,7 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
     const skipped = skips.read() === release.version
     const install = await installKind(release)
     const ready = prepared?.version === release.version
-    if (lastFailure !== null && install !== 'manual') {
+    if (lastFailure !== null) {
       // Trying again would fail the same way: the release page instead.
       const error = `The last install failed (${lastFailure}).`
       publish({ kind: 'available', release, install, progress: 0, skipped, error })
@@ -237,18 +239,10 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
     if (state.release.version !== prepared.version) return false
     installing = true
     const how = !relaunch || test ? 'none' : target.kind === 'mac' ? 'open' : 'exec'
+    const { from, to, app: reopen } = installPaths(target.kind, prepared.path, target.path)
     const child = spawn(
       '/bin/sh',
-      [
-        '-c',
-        INSTALL_SCRIPT,
-        'sh',
-        String(process.pid),
-        prepared.path,
-        target.path,
-        how,
-        failedFile
-      ],
+      ['-c', INSTALL_SCRIPT, 'sh', String(process.pid), from, to, how, failedFile, reopen],
       { detached: true, stdio: 'ignore' }
     )
     child.on('error', (err) => console.error(`update install not started: ${String(err)}`))

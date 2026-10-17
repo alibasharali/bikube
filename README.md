@@ -35,7 +35,7 @@ Download the files from the [latest release](https://github.com/alibasharali/dro
 
 ### Updates
 
-Drovr checks the latest release at launch and every few hours (Settings, About, Check for Updates, or Drovr › Check for Updates… on macOS). When there is a newer one, **Update Available** shows above Settings: on macOS and with the AppImage, Drovr downloads it, checks it against the checksum GitHub publishes, and **Install and Relaunch** replaces the app and opens it again (running terminals are stopped first; it asks). **Later** installs it the next time you quit Drovr; **Skip** ignores that version. Drovr must be able to write to the folder it runs from, such as Applications. The .deb, and a copy Drovr can't replace, link to the release to download it instead.
+Drovr checks the latest release at launch and every few hours (Settings, About, Check for Updates, or Drovr › Check for Updates… on macOS). When there is a newer one, **Update Available** shows above Settings: on macOS and with the AppImage, Drovr downloads it, checks it against the checksum GitHub publishes, and **Install and Relaunch** replaces the app and opens it again (running terminals are stopped first; it asks). **Later** installs it the next time you quit Drovr; **Skip** ignores that version. On macOS Drovr replaces the inside of its own `Drovr.app`, so it updates in Applications on a standard (non-admin) account too; an AppImage needs a folder you can write. The .deb, and a copy Drovr can't replace, link to the release to download it instead.
 
 ## Running it locally
 

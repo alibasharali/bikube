@@ -268,6 +268,22 @@ test('a version skipped after its download offers Install and Relaunch when chec
   expect(readFileSync(marker(), 'utf8')).toBe('old')
 })
 
+test('macOS: installs into a folder the user can’t write, as /Applications for a standard account', async () => {
+  test.skip(!MAC, 'an AppImage is swapped in its folder, which must be writable')
+  chmodSync(join(root, 'apps'), 0o555)
+  try {
+    await launch()
+    await openPopup()
+    await expect(install()).toHaveText('Install and Relaunch')
+    await install().click()
+    await exited()
+    await expect.poll(() => readFileSync(marker(), 'utf8')).toBe('new 0.3.0')
+  } finally {
+    chmodSync(join(root, 'apps'), 0o755)
+  }
+  expect(readdirSync(target())).toEqual(['Contents'])
+})
+
 test('a check from Settings says up to date, or that it failed', async () => {
   await launch({ current: '0.3.0' })
   await expect(button()).toHaveCount(0)
@@ -297,8 +313,10 @@ test('an install that can’t swap the app keeps the old one and says so at the 
   const dataDir = await launch()
   await openPopup()
   await expect(install()).toHaveText('Install and Relaunch')
-  // The folder turns read-only after the download: the script can't move the app.
-  chmodSync(join(root, 'apps'), 0o555)
+  // What the install moves turns read-only after the download: the bundle (whose Contents macOS
+  // swaps), or the AppImage's folder.
+  const locked = MAC ? target() : join(root, 'apps')
+  chmodSync(locked, 0o555)
   try {
     await install().click()
     await exited()
@@ -306,7 +324,7 @@ test('an install that can’t swap the app keeps the old one and says so at the 
       .poll(() => existsSync(join(dataDir, 'update-install-failed')), { timeout: 10_000 })
       .toBe(true)
   } finally {
-    chmodSync(join(root, 'apps'), 0o755)
+    chmodSync(locked, 0o755)
   }
   expect(readFileSync(marker(), 'utf8')).toBe('old')
 

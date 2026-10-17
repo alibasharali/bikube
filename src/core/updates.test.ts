@@ -17,6 +17,7 @@ import {
   formatSize,
   INSTALL_SCRIPT,
   installMessage,
+  installPaths,
   installTarget,
   isNewer,
   MAX_ASSET_BYTES,
@@ -175,6 +176,29 @@ describe('what an install replaces', () => {
   })
 })
 
+describe('what an install swaps', () => {
+  it('is the bundle’s Contents on macOS, needing only the bundle writable', () => {
+    expect(installPaths('mac', '/data/updates/app/Drovr.app', '/Applications/Drovr.app')).toEqual({
+      from: '/data/updates/app/Drovr.app/Contents',
+      to: '/Applications/Drovr.app/Contents',
+      app: '/Applications/Drovr.app',
+      writable: ['/Applications/Drovr.app', '/Applications/Drovr.app/Contents']
+    })
+  })
+
+  it('is the AppImage file, needing its folder writable', () => {
+    expect(
+      installPaths('appimage', '/data/updates/new.AppImage', '/home/me/Drovr.AppImage')
+    ).toEqual({
+      from: '/data/updates/new.AppImage',
+      to: '/home/me/Drovr.AppImage',
+      app: '/home/me/Drovr.AppImage',
+      writable: ['/home/me', '/home/me/Drovr.AppImage']
+    })
+    expect(installPaths('appimage', '/n', '/Drovr.AppImage').writable[0]).toBe('/')
+  })
+})
+
 describe('the install script', () => {
   let dir: string
   beforeEach(() => {
@@ -188,19 +212,27 @@ describe('the install script', () => {
   const failed = (): string => join(dir, 'install-failed')
   const install = (pid: number, from: string, to: string): Promise<number> =>
     new Promise((resolve) => {
-      const args = ['-c', INSTALL_SCRIPT, 'sh', String(pid), from, to, 'none', failed()]
+      const args = ['-c', INSTALL_SCRIPT, 'sh', String(pid), from, to, 'none', failed(), to]
       const child = spawn('/bin/sh', args)
       child.on('exit', (code) => resolve(code ?? -1))
     })
 
-  it('swaps a bundle folder and removes the old one', async () => {
-    mkdirSync(join(dir, 'Drovr.app/Contents'), { recursive: true })
-    writeFileSync(join(dir, 'Drovr.app/Contents/v'), 'old')
+  it('swaps a bundle’s Contents in a folder the user can’t write, as /Applications for a standard account', async () => {
+    const apps = join(dir, 'Applications')
+    mkdirSync(join(apps, 'Drovr.app/Contents'), { recursive: true })
+    writeFileSync(join(apps, 'Drovr.app/Contents/v'), 'old')
     mkdirSync(join(dir, 'new/Drovr.app/Contents'), { recursive: true })
     writeFileSync(join(dir, 'new/Drovr.app/Contents/v'), 'new')
-    expect(await install(gonePid(), join(dir, 'new/Drovr.app'), join(dir, 'Drovr.app'))).toBe(0)
-    expect(readFileSync(join(dir, 'Drovr.app/Contents/v'), 'utf8')).toBe('new')
-    expect(readdirSync(dir).sort()).toEqual(['Drovr.app', 'new'])
+    const { from, to } = installPaths('mac', join(dir, 'new/Drovr.app'), join(apps, 'Drovr.app'))
+    chmodSync(apps, 0o555)
+    try {
+      expect(await install(gonePid(), from, to)).toBe(0)
+    } finally {
+      chmodSync(apps, 0o755)
+    }
+    expect(readFileSync(join(apps, 'Drovr.app/Contents/v'), 'utf8')).toBe('new')
+    expect(readdirSync(join(apps, 'Drovr.app'))).toEqual(['Contents'])
+    expect(readdirSync(join(dir, 'new/Drovr.app'))).toEqual([])
     expect(existsSync(failed())).toBe(false)
   })
 

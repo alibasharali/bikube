@@ -138,30 +138,54 @@ export function installTarget(opts: {
 }
 
 /**
- * The detached script that installs a downloaded update: `sh -c SCRIPT sh <pid> <new> <target>
- * <relaunch> <failed>`. It waits (at most 60 s) for Drovr's process `pid` to end, moves `target`
- * aside, moves `new` into its place (putting the old one back if that fails) and removes the old
- * one. When it can't, it writes why to the file `failed`, for the next launch to say, and the old
- * app stays. Either way it relaunches: `open` (macOS), `exec` (an AppImage) or `none`. Every
- * value is a positional parameter, so nothing from outside is parsed as shell.
+ * The paths an install swaps, and the app it reopens. On macOS it replaces the bundle's
+ * `Contents` folder (its code, resources and signature) rather than the bundle: a standard
+ * account can't rename anything in `/Applications`, but owns the `Drovr.app` it copied there.
+ * An AppImage is one file, swapped in its folder.
+ */
+export function installPaths(
+  kind: 'mac' | 'appimage',
+  prepared: string,
+  target: string
+): { from: string; to: string; app: string; writable: string[] } {
+  if (kind === 'mac') {
+    return {
+      from: `${prepared}/Contents`,
+      to: `${target}/Contents`,
+      app: target,
+      writable: [target, `${target}/Contents`]
+    }
+  }
+  const folder = target.slice(0, target.lastIndexOf('/')) || '/'
+  return { from: prepared, to: target, app: target, writable: [folder, target] }
+}
+
+/**
+ * The detached script that installs a downloaded update: `sh -c SCRIPT sh <pid> <from> <to>
+ * <relaunch> <failed> <app>`. It waits (at most 60 s) for Drovr's process `pid` to end, moves
+ * `to` aside, moves `from` into its place (putting the old one back if that fails) and removes
+ * the old one. When it can't, it writes why to the file `failed`, for the next launch to say, and
+ * the old app stays. Either way it reopens `app`: `open` (macOS, after touching the bundle so
+ * macOS reads its new version), `exec` (an AppImage) or `none`. Every value is a positional
+ * parameter, so nothing from outside is parsed as shell.
  */
 export const INSTALL_SCRIPT = [
-  'pid=$1 new=$2 target=$3 relaunch=$4 failed=$5',
+  'pid=$1 from=$2 to=$3 relaunch=$4 failed=$5 app=$6',
   'i=0',
   'while kill -0 "$pid" 2>/dev/null; do',
   '  i=$((i + 1))',
   '  [ "$i" -gt 600 ] && { echo "Drovr did not quit" > "$failed"; exit 1; }',
   '  sleep 0.1',
   'done',
-  'old="$target.drovr-old-$$"',
+  'old="$to.drovr-old-$$"',
   'ok=0',
-  'if err=$(mv "$target" "$old" 2>&1); then',
-  '  if err=$(mv "$new" "$target" 2>&1); then ok=1; rm -rf "$old"; else mv "$old" "$target"; fi',
+  'if err=$(mv "$to" "$old" 2>&1); then',
+  '  if err=$(mv "$from" "$to" 2>&1); then ok=1; rm -rf "$old"; else mv "$old" "$to"; fi',
   'fi',
   '[ "$ok" = 1 ] || printf %s "$err" > "$failed"',
   'case $relaunch in',
-  '  open) open "$target" ;;',
-  '  exec) nohup "$target" >/dev/null 2>&1 & ;;',
+  '  open) touch "$app"; open "$app" ;;',
+  '  exec) nohup "$app" >/dev/null 2>&1 & ;;',
   'esac',
   '[ "$ok" = 1 ]'
 ].join('\n')

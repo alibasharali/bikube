@@ -336,6 +336,18 @@ test('an install that can’t swap the app keeps the old one and says so at the 
   expect(existsSync(join(dataDir, 'update-install-failed'))).toBe(false)
 })
 
+test('a failed install’s reason shows at the next launch also where Drovr can only link to the release', async () => {
+  const dataDir = newDataDir()
+  writeFileSync(join(dataDir, 'update-install-failed'), 'mv: Permission denied')
+  await launch({ dataDir, withTarget: false })
+  await openPopup()
+  await expect(popup().getByTestId('update-error')).toContainText(
+    'The last install failed (mv: Permission denied).'
+  )
+  await expect(install()).toHaveText('Download')
+  expect(existsSync(join(dataDir, 'update-install-failed'))).toBe(false)
+})
+
 test('a copy Drovr cannot replace offers the release page instead', async () => {
   await launch({ withTarget: false })
   await openPopup()

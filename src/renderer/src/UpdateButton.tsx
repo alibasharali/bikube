@@ -146,17 +146,20 @@ function AvailableBody({
   onInstall: () => void
 }): React.JSX.Element {
   const { release, install, progress, error, skipped } = update
-  const manual = install === 'manual' || error !== undefined
-  const ready = !manual && progress === 1
-  const downloading = !manual && !skipped && progress < 1
+  const waiting = release.waiting && error === undefined
+  const manual = !waiting && (install === 'manual' || error !== undefined)
+  const ready = !waiting && !manual && progress === 1
+  const downloading = !waiting && !manual && !skipped && progress < 1
   // Readiness first: a version skipped after its download is already there to install.
-  const label = manual
-    ? 'Download'
-    : ready
-      ? 'Install and Relaunch'
-      : skipped
-        ? 'Download Update'
-        : `Downloading… ${Math.round(progress * 100)}%`
+  const label = waiting
+    ? 'Not Ready Yet'
+    : manual
+      ? 'Download'
+      : ready
+        ? 'Install and Relaunch'
+        : skipped
+          ? 'Download Update'
+          : `Downloading… ${Math.round(progress * 100)}%`
   const released = release.publishedAt
     ? new Date(release.publishedAt).toLocaleDateString(undefined, {
         day: 'numeric',
@@ -189,7 +192,12 @@ function AvailableBody({
             {error} Download it from the release page instead.
           </p>
         )}
-        {install === 'manual' && error === undefined && (
+        {waiting && (
+          <p className="update-note" data-testid="update-waiting">
+            The download for {release.version} isn’t ready yet. Drovr checks again in a few minutes.
+          </p>
+        )}
+        {!waiting && install === 'manual' && error === undefined && (
           <p className="update-note">
             This copy of Drovr can’t replace itself: download the new version from the release page.
           </p>
@@ -207,7 +215,7 @@ function AvailableBody({
             type="button"
             className="btn btn-primary update-install"
             data-testid="update-install"
-            disabled={downloading}
+            disabled={downloading || waiting}
             onClick={onInstall}
           >
             {label}

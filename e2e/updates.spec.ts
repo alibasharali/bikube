@@ -32,8 +32,11 @@ const MAC = process.platform === 'darwin'
 let root: string
 let server: Server
 let base: string
-/** What the feed answers: the latest release's version, an HTTP status, a damaged checksum. */
-let feed: { version: string; status: number; badDigest: boolean }
+/**
+ * What the feed answers: the latest release's version, an HTTP status, a damaged checksum, and
+ * whether its file is attached yet.
+ */
+let feed: { version: string; status: number; badDigest: boolean; fileMissing: boolean }
 let files: Map<string, Buffer>
 let app: ElectronApplication | undefined
 let page: Page
@@ -65,20 +68,22 @@ function latest(): unknown {
     prerelease: false,
     published_at: '2026-10-13T09:00:00Z',
     html_url: `${base}tag/v${version}`,
-    assets: [
-      {
-        name,
-        browser_download_url: `${base}download/${name}`,
-        size: file.length,
-        digest: `sha256:${digest}`
-      }
-    ]
+    assets: feed.fileMissing
+      ? []
+      : [
+          {
+            name,
+            browser_download_url: `${base}download/${name}`,
+            size: file.length,
+            digest: `sha256:${digest}`
+          }
+        ]
   }
 }
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-updates-'))
-  feed = { version: '0.3.0', status: 200, badDigest: false }
+  feed = { version: '0.3.0', status: 200, badDigest: false, fileMissing: false }
   files = new Map()
   mkdirSync(join(root, 'apps'))
   if (MAC) {
@@ -121,7 +126,9 @@ async function launch(
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     DROVR_UPDATE_FEED: `${base}latest`,
-    DROVR_UPDATE_CURRENT: options.current ?? '0.2.0'
+    DROVR_UPDATE_CURRENT: options.current ?? '0.2.0',
+    // A release whose file isn't up yet is checked again this soon (2 minutes in the app).
+    DROVR_UPDATE_WAITING_MS: '300'
   }
   if (options.withTarget !== false) env['DROVR_UPDATE_TARGET'] = target()
   const launched = await launchApp({ dataDir: options.dataDir, env })
@@ -282,6 +289,25 @@ test('macOS: installs into a folder the user can’t write, as /Applications for
     chmodSync(join(root, 'apps'), 0o755)
   }
   expect(readdirSync(target())).toEqual(['Contents'])
+})
+
+test('a release found before its file is up says so, then installs once the file appears', async () => {
+  feed.fileMissing = true
+  await launch()
+  await openPopup()
+  await expect(popup().getByTestId('update-waiting')).toHaveText(
+    'The download for 0.3.0 isn’t ready yet. Drovr checks again in a few minutes.'
+  )
+  await expect(install()).toHaveText('Not Ready Yet')
+  await expect(install()).toBeDisabled()
+  await expect(popup().getByTestId('update-size')).toHaveCount(0)
+  await expect(popup()).not.toContainText('can’t replace itself')
+
+  // The release workflow attaches the file: the next check finds it, with no click.
+  feed.fileMissing = false
+  await expect(popup().getByTestId('update-size')).toBeVisible()
+  await expect(install()).toHaveText('Install and Relaunch')
+  await expect(popup().getByTestId('update-waiting')).toHaveCount(0)
 })
 
 test('a check from Settings says up to date, or that it failed', async () => {

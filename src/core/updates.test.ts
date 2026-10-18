@@ -100,7 +100,26 @@ describe('the latest release', () => {
         url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0-arm64-mac.zip`,
         size: 81_474_355,
         sha256: DIGEST
-      }
+      },
+      waiting: false
+    })
+  })
+
+  it('waits for this platform’s file while it is missing, uploading or without its checksum', () => {
+    const waiting = (asset: Record<string, unknown>): unknown => {
+      const r = newerRelease(release({}, asset), MAC)
+      return { asset: r?.asset, waiting: r?.waiting }
+    }
+    expect(waiting({ name: 'something-else.zip' })).toEqual({ asset: null, waiting: true })
+    expect(waiting({ state: 'starter' })).toEqual({ asset: null, waiting: true })
+    expect(waiting({ digest: null })).toEqual({ asset: null, waiting: true })
+    expect(waiting({ digest: undefined })).toEqual({ asset: null, waiting: true })
+    expect(waiting({ state: 'uploaded' })).toMatchObject({ waiting: false })
+    expect(newerRelease(release({ assets: [] }), MAC)?.waiting).toBe(true)
+    // A platform with no file of its own never waits: it can only download from the page.
+    expect(newerRelease(release(), { ...MAC, arch: 'x64' })).toMatchObject({
+      asset: null,
+      waiting: false
     })
   })
 
@@ -129,8 +148,8 @@ describe('the latest release', () => {
       newerRelease(release({}, asset), MAC)?.asset
     expect(newerRelease(release(), { ...MAC, platform: 'linux', arch: 'x64' })?.asset).toBeNull()
     expect(fileOf({ browser_download_url: 'https://evil.example/drovr.zip' })).toBeNull()
-    expect(fileOf({ digest: undefined })).toBeNull()
     expect(fileOf({ digest: 'md5:abc' })).toBeNull()
+    expect(newerRelease(release({}, { digest: 'md5:abc' }), MAC)?.waiting).toBe(false)
     expect(fileOf({ size: 0 })).toBeNull()
     expect(fileOf({ size: MAX_ASSET_BYTES + 1 })).toBeNull()
   })

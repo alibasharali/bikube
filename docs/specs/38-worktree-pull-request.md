@@ -2,7 +2,7 @@
 item: 38
 type: feature
 title: 'Open a pull request from a worktree card'
-status: draft
+status: approved
 branch: claude/38-worktree-pull-request
 ---
 

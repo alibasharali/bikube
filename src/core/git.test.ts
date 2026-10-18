@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  gitEnv,
   gitError,
   gitIn,
   listBranches,
@@ -210,18 +209,45 @@ describe('gitError', () => {
   })
 })
 
+/** A runner that records every call and answers `git config --get core.sshCommand` with `config`. */
+function recording(config = ''): { calls: GitCall[]; runner: GitRunner } {
+  const calls: GitCall[] = []
+  return {
+    calls,
+    runner: async (call) => {
+      calls.push(call)
+      const lookup = call.args.join(' ') === 'config --get core.sshCommand'
+      if (lookup) {
+        return config
+          ? { code: 0, stdout: `${config}\n`, stderr: '' }
+          : { code: 1, stdout: '', stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    }
+  }
+}
+
+/** The environment `base` gives the command `switch feature`, with `config` as core.sshCommand. */
+async function commandEnv(
+  base: Record<string, string | undefined>,
+  config = ''
+): Promise<Record<string, string>> {
+  const { calls, runner } = recording(config)
+  await gitIn(runner, base)('/repo', ['switch', 'feature'])
+  return calls.find((call) => call.args[0] === 'switch')!.env
+}
+
 describe('gitIn', () => {
   it('runs every command without prompts, in batch mode, with a two-minute limit', async () => {
-    const calls: GitCall[] = []
-    const git = gitIn(
-      async (call) => {
-        calls.push(call)
-        return { code: 0, stdout: '', stderr: '' }
-      },
-      { PATH: '/usr/bin', HOME: '/home/me', GIT_ASKPASS: '/usr/bin/ksshaskpass', UNSET: undefined }
-    )
+    const { calls, runner } = recording()
+    const git = gitIn(runner, {
+      PATH: '/usr/bin',
+      HOME: '/home/me',
+      GIT_ASKPASS: '/usr/bin/ksshaskpass',
+      UNSET: undefined
+    })
     await git('/repo', ['switch', 'feature'])
-    expect(calls).toEqual([
+    expect(calls.filter((call) => call.args[0] === 'switch')).toEqual([
       {
         args: ['switch', 'feature'],
         cwd: '/repo',
@@ -240,9 +266,35 @@ describe('gitIn', () => {
     ])
   })
 
-  it("keeps the user's own ssh command, in batch mode", () => {
-    expect(gitEnv({ GIT_SSH_COMMAND: 'ssh -i ~/.ssh/work' }).GIT_SSH_COMMAND).toBe(
-      'ssh -i ~/.ssh/work -o BatchMode=yes'
-    )
+  it("keeps the user's GIT_SSH_COMMAND, in batch mode, before any core.sshCommand", async () => {
+    const env = await commandEnv({ GIT_SSH_COMMAND: 'ssh -i ~/.ssh/work' }, 'ssh -i ~/.ssh/other')
+    expect(env.GIT_SSH_COMMAND).toBe('ssh -i ~/.ssh/work -o BatchMode=yes')
+  })
+
+  it("keeps the folder's core.sshCommand, in batch mode, before GIT_SSH", async () => {
+    const env = await commandEnv({ GIT_SSH: '/usr/bin/plink' }, 'ssh -i ~/.ssh/work')
+    expect(env.GIT_SSH_COMMAND).toBe('ssh -i ~/.ssh/work -o BatchMode=yes')
+  })
+
+  it("leaves the user's GIT_SSH alone, still without prompts", async () => {
+    const env = await commandEnv({ GIT_SSH: '/usr/local/bin/my-ssh' })
+    expect(env).not.toHaveProperty('GIT_SSH_COMMAND')
+    expect(env).toMatchObject({
+      GIT_SSH: '/usr/local/bin/my-ssh',
+      GIT_TERMINAL_PROMPT: '0',
+      SSH_ASKPASS_REQUIRE: 'never'
+    })
+  })
+
+  it('reads core.sshCommand in the folder the command runs in', async () => {
+    git(repo, 'config', 'core.sshCommand', 'ssh -i /keys/repo')
+    const calls: GitCall[] = []
+    const base = { PATH: process.env.PATH, HOME: process.env.HOME }
+    await gitIn(async (call) => {
+      calls.push(call)
+      return runner(call)
+    }, base)(repo, ['status'])
+    const status = calls.find((call) => call.args[0] === 'status')!
+    expect(status.env.GIT_SSH_COMMAND).toBe('ssh -i /keys/repo -o BatchMode=yes')
   })
 })

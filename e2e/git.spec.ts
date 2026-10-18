@@ -225,3 +225,22 @@ test('switching from the menu leaves a running card running, its output kept', a
   await expectStatusOnBoard(page, 'Runner', 'Running')
   await expect.poll(terminalText).toMatch(/^drovr-marker$/m)
 })
+
+test("switching workspace with the menu open drops the old workspace's menu", async () => {
+  const other = join(root, 'other')
+  mkdirSync(other)
+  git(other, 'init', '-q', '-b', 'trunk')
+  git(other, 'config', 'user.email', 'test@example.com')
+  git(other, 'config', 'user.name', 'Test')
+  commit(other, 'b.txt', 'two\n', 'first')
+  await addWorkspace('other', other)
+  await page.getByTestId('workspace-item').filter({ hasText: 'repo' }).click()
+  await expect(chip()).toHaveText('main')
+  await chip().click()
+  await expect(section('Local')).toHaveText(['main', 'feature'])
+
+  await page.keyboard.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+2`)
+  await expect(page.getByTestId('board-title')).toHaveText('other')
+  await expect(chip()).toHaveText('trunk')
+  await expect(menu()).toHaveCount(0)
+})

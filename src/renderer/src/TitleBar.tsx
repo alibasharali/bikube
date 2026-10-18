@@ -65,7 +65,7 @@ function TitleBar({
               </span>
             )}
             {!card && <WorkspaceLocation workspace={workspace} />}
-            {!card && dir && branch && <BranchChip dir={dir} branch={branch} />}
+            {!card && dir && branch && <BranchChip key={dir} dir={dir} branch={branch} />}
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />

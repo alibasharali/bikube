@@ -34,13 +34,19 @@ const MESSAGE_MAX = 400
 
 /**
  * `base` (main's environment) with every way git or ssh could ask for input turned off (D12): no
- * terminal prompt, no askpass program (an empty one counts as none), ssh in batch mode. Keys in an
- * agent and credential helpers still work.
+ * terminal prompt, no askpass program (an empty one counts as none), ssh in batch mode. The user's
+ * own ssh is kept, in git's order: `GIT_SSH_COMMAND`, else the folder's `core.sshCommand`
+ * (`sshCommand`), each with `-o BatchMode=yes` added; else `GIT_SSH` is left alone; else plain
+ * `ssh`. Keys in an agent and credential helpers still work.
  */
-export function gitEnv(base: Record<string, string | undefined>): Record<string, string> {
+export function gitEnv(
+  base: Record<string, string | undefined>,
+  sshCommand: string | null = null
+): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(base)) if (value !== undefined) env[key] = value
-  const ssh = base.GIT_SSH_COMMAND?.trim() || 'ssh'
+  const ssh =
+    base.GIT_SSH_COMMAND?.trim() || sshCommand?.trim() || (base.GIT_SSH?.trim() ? null : 'ssh')
   return {
     ...env,
     GIT_TERMINAL_PROMPT: '0',
@@ -48,17 +54,27 @@ export function gitEnv(base: Record<string, string | undefined>): Record<string,
     SSH_ASKPASS: '',
     SSH_ASKPASS_REQUIRE: 'never',
     GCM_INTERACTIVE: 'never',
-    GIT_SSH_COMMAND: `${ssh} -o BatchMode=yes`
+    ...(ssh ? { GIT_SSH_COMMAND: `${ssh} -o BatchMode=yes` } : {})
   }
 }
 
 /** Runs one git command in `dir` with the no-prompt environment and the timeout. */
 export type Git = (dir: string, args: string[]) => Promise<GitOutput>
 
-/** A `Git` over `runner`, with `base` as the environment to start from. */
+/**
+ * A `Git` over `runner`, with `base` as the environment to start from. Without `GIT_SSH_COMMAND`
+ * in `base`, each command first reads `core.sshCommand` in its folder (with no ssh involved).
+ */
 export function gitIn(runner: GitRunner, base: Record<string, string | undefined> = {}): Git {
-  const env = gitEnv(base)
-  return (cwd, args) => runner({ args, cwd, env, timeoutMs: GIT_TIMEOUT_MS })
+  const plain = gitEnv(base)
+  const call = (cwd: string, args: string[], env: Record<string, string>): Promise<GitOutput> =>
+    runner({ args, cwd, env, timeoutMs: GIT_TIMEOUT_MS })
+  return async (cwd, args) => {
+    if (base.GIT_SSH_COMMAND?.trim()) return call(cwd, args, plain)
+    const config = await call(cwd, ['config', '--get', 'core.sshCommand'], plain)
+    const sshCommand = config.code === 0 ? config.stdout.trim() || null : null
+    return call(cwd, args, sshCommand ? gitEnv(base, sshCommand) : plain)
+  }
 }
 
 export interface RemoteBranches {

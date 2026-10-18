@@ -17,4 +17,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS (12/12 palette e2e, 114/114 regression)

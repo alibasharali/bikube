@@ -2,7 +2,7 @@
 item: 40
 type: feature
 title: 'Command palette and quick card switcher'
-status: draft
+status: approved
 branch: claude/40-command-palette
 ---
 

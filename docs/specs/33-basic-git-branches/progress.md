@@ -16,4 +16,4 @@ None yet.
 
 ## Verification
 
-- todo
+- done (10ec43c): AC1–AC15 PASS on the running app via e2e/git.spec.ts and Vitest; AC16 typecheck, lint, build, check-stack green, Vitest and smoke green except the root-only updater tests (CI confirms)

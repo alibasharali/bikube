@@ -23,6 +23,11 @@ export interface StartupState {
   claudeStarted: boolean
   /** The presets this card has started (#21 D3); missing means none. */
   startedAgents?: readonly AgentKind[]
+  /**
+   * The card's pending setup (#39 D2): typed instead of the start line until it succeeds; absent
+   * (or empty) means none.
+   */
+  setup?: string
 }
 
 /** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */
@@ -107,4 +112,12 @@ export function firstStart(card: StartupState): FirstStart | null {
     default:
       return card.startedAgents?.includes(card.startup.kind) ? null : card.startup.kind
   }
+}
+
+/**
+ * The line typed instead of the start line while a card has a pending setup (#39 D3), without the
+ * trailing Enter: the setup, then `board setup . ok` when it succeeded, else `board setup . failed`.
+ */
+export function setupLine(setup: string): string {
+  return `${setup} && "$DROVR_BIN/board" setup . ok || "$DROVR_BIN/board" setup . failed`
 }

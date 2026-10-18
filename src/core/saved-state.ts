@@ -7,6 +7,7 @@ import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import {
   checkShell,
+  checkWorktreeSetup,
   type Card,
   type CardWorktree,
   type Column,
@@ -93,6 +94,11 @@ function readWorkspace(raw: unknown): Workspace | string {
   }
   const shells = readShells(raw.shells)
   if (typeof shells === 'string') return shells
+  // Missing, as in files from before #39, is none.
+  const rawSetup = raw.worktreeSetup ?? ''
+  if (typeof rawSetup !== 'string') return 'bad worktree setup'
+  const setup = checkWorktreeSetup(rawSetup)
+  if (!setup.ok || setup.value !== rawSetup) return 'bad worktree setup'
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
   for (const c of raw.cards) {
@@ -110,7 +116,8 @@ function readWorkspace(raw: unknown): Workspace | string {
     cards,
     nextCardNumber: nextCardNumber as number,
     defaultStartup,
-    shells
+    shells,
+    worktreeSetup: setup.value
   }
 }
 
@@ -147,6 +154,8 @@ function readCard(raw: unknown): Card | string {
   if (!startedAgents) return 'bad started agents'
   const worktree = readWorktree(raw.worktree, host.host)
   if (typeof worktree !== 'object') return worktree
+  const setup = readCardSetup(raw.setup)
+  if (typeof setup !== 'object') return setup
   return {
     id,
     columnId,
@@ -157,8 +166,18 @@ function readCard(raw: unknown): Card | string {
     startup,
     agentSessionId,
     claudeStarted,
-    startedAgents
+    startedAgents,
+    ...setup
   }
+}
+
+/** `{}` without a pending setup; `{ setup }` for one trimmed, non-empty line (#39 D2, D8). */
+function readCardSetup(raw: unknown): { setup?: string } | string {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw !== 'string' || !raw) return 'bad card setup'
+  const checked = checkWorktreeSetup(raw)
+  if (!checked.ok || checked.value !== raw) return 'bad card setup'
+  return { setup: raw }
 }
 
 /** `{}` without a worktree; `{ worktree }` for a local card's valid one; else why it is rejected. */

@@ -1116,3 +1116,93 @@ describe('shells', () => {
     expect(s.getState().workspaces[0].shells.map((sh) => sh.id)).toEqual([dev.id])
   })
 })
+
+describe('worktree setup (#39 D1)', () => {
+  it('is empty for a new workspace, set trimmed on create and edit, and kept by other edits', () => {
+    const s = make()
+    expect(create(s, 'alpha').worktreeSetup).toBe('')
+    const w = ok(s.createWorkspace({ name: 'b', directory: '/tmp/b', worktreeSetup: ' npm ci ' }))
+    expect(w.worktreeSetup).toBe('npm ci')
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).worktreeSetup).toBe('npm ci')
+    expect(ok(s.updateWorkspace(w.id, { worktreeSetup: ' uv sync ' })).worktreeSetup).toBe(
+      'uv sync'
+    )
+    expect(ok(s.updateWorkspace(w.id, { worktreeSetup: '  ' })).worktreeSetup).toBe('')
+  })
+
+  it('refuses more than one line under its own field, saving nothing', () => {
+    const s = make()
+    const refused = { ok: false, error: { field: 'setup', message: 'Command must be one line' } }
+    expect(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: 'a\nb' })).toEqual(
+      refused
+    )
+    expect(s.getState().workspaces).toEqual([])
+    const w = create(s, 'alpha')
+    expect(s.updateWorkspace(w.id, { name: 'beta', worktreeSetup: 'a\rb' })).toEqual(refused)
+    expect(s.getState().workspaces[0]).toBe(w)
+  })
+
+  it('refuses a setup ending in ; & or |, which would never report back (D1)', () => {
+    const s = make()
+    const refused = {
+      ok: false,
+      error: { field: 'setup', message: "Command can't end with ; & or |" }
+    }
+    for (const setup of ['npm ci;', 'npm ci &', 'npm ci |', ' npm ci; ', 'a && b &&']) {
+      expect(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: setup })).toEqual(
+        refused
+      )
+    }
+    expect(s.getState().workspaces).toEqual([])
+    const w = create(s, 'alpha')
+    expect(s.updateWorkspace(w.id, { worktreeSetup: 'npm ci ||' })).toEqual(refused)
+    expect(s.getState().workspaces[0]).toBe(w)
+    expect(
+      ok(s.updateWorkspace(w.id, { worktreeSetup: 'echo "a;b" && cp x y' })).worktreeSetup
+    ).toBe('echo "a;b" && cp x y')
+  })
+
+  it('is kept when the workspace becomes SSH', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: 'npm ci' }))
+    const ssh = ok(s.updateWorkspace(w.id, { host: 'devbox', directory: '~/a' }))
+    expect(ssh.worktreeSetup).toBe('npm ci')
+  })
+})
+
+describe("a card's pending setup (#39 D2)", () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix',
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+  }
+
+  it('is copied from the workspace to a card created with its own worktree only', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const col = w.columns[0].id
+    expect(ok(s.createCard(w.id, col, 'wt', undefined, worktree)).setup).toBe('npm ci')
+    expect(ok(s.createCard(w.id, col, 'plain'))).not.toHaveProperty('setup')
+    ok(s.updateWorkspace(w.id, { worktreeSetup: '' }))
+    expect(ok(s.createCard(w.id, col, 'none', undefined, worktree))).not.toHaveProperty('setup')
+  })
+
+  it('is never given to an SSH card', () => {
+    const s = make()
+    const w = ok(
+      s.createWorkspace({ name: 'r', directory: '~/a', host: 'devbox', worktreeSetup: 'npm ci' })
+    )
+    expect(ok(s.createCard(w.id, w.columns[0].id, 'x', undefined, worktree))).not.toHaveProperty(
+      'setup'
+    )
+  })
+
+  it('is cleared for good once it succeeded or was skipped (D4, D6)', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'wt', undefined, worktree))
+    const cleared = ok(s.clearCardSetup(w.id, c.id))
+    expect(cleared).not.toHaveProperty('setup')
+    expect(s.getState().workspaces[0].cards[0]).toEqual(cleared)
+    expect(ok(s.clearCardSetup(w.id, c.id))).toEqual(cleared)
+  })
+})

@@ -7,9 +7,21 @@
 import type { TerminalApi, TerminalExit } from '../shared/api'
 import type { Activity } from './activity'
 import { SessionRouter } from './session-router'
-import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
+import {
+  cardStatus,
+  lastOutputLine,
+  type CardRunState,
+  type CardStatus,
+  type SetupState
+} from './card-status'
 import { readyWatcher } from './ready-marker'
-import { firstStart, startLine, type FirstStart, type StartupState } from './startup-command'
+import {
+  firstStart,
+  setupLine,
+  startLine,
+  type FirstStart,
+  type StartupState
+} from './startup-command'
 
 /** What the registry needs from a terminal emulator. */
 export interface CardScreen {
@@ -37,6 +49,8 @@ export interface CardRef {
 /** A card as it is when it starts: its startup command is read then (#5 D7). */
 export interface StartingCard extends CardRef, StartupState {}
 
+export type { SetupState }
+
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
 
@@ -53,6 +67,8 @@ interface Entry<S> {
   agentStatus: string
   /** Set by `board activity` (#31 D12); null when none. Cleared whenever the state changes. */
   activity: Activity | null
+  /** The setup's state in this start (#39 D5); null when none. Cleared whenever the state changes. */
+  setup: SetupState | null
   status: CardStatus
   listeners: Set<() => void>
   /** Pending throttle timer; `dirty` means output landed since the last status update. */
@@ -96,7 +112,8 @@ export class CardSessions<S extends CardScreen> {
    *
    * Right after a successful spawn it types the card's start line and Enter, before any
    * keystroke (#5 D3); `onFirstStart` runs with Claude Code's or the preset's kind when that was
-   * its first start on this card (#5 D5, #21 D3).
+   * its first start on this card (#5 D5, #21 D3). A local card with a pending setup (#39 D3) gets
+   * the setup line instead, records no first start, and its setup is `running`.
    * An SSH card (#12 D5) spawns with its host, and its start line is typed once, when the ready
    * marker first appears in its output (#12 D6); never if its session ends before.
    */
@@ -112,6 +129,7 @@ export class CardSessions<S extends CardScreen> {
       state,
       agentStatus: '',
       activity: null,
+      setup: null,
       status: cardStatus(state, ''),
       listeners: new Set(),
       timer: null,
@@ -150,8 +168,9 @@ export class CardSessions<S extends CardScreen> {
     screen.onResize(({ cols, rows }) => {
       if (entry.screen === screen && entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
     })
-    const line = startLine(card)
-    const first = firstStart(card)
+    const setup = card.host === undefined && card.setup ? card.setup : null
+    const line = setup !== null ? setupLine(setup) : startLine(card)
+    const first = setup !== null ? null : firstStart(card)
     // Each start owns its screen; a reply for an older start, or after dispose, is stale.
     const current = (): boolean => !entry.disposed && entry.screen === screen
     const failed = (reason: string): void => {
@@ -165,6 +184,7 @@ export class CardSessions<S extends CardScreen> {
     entry.host = card.host
     entry.watch = null
     this.setState(entry, state)
+    if (setup !== null) this.setSetup(entry, 'running')
     const sessionStarted = (id: string): void => {
       if (line === null) return
       this.api.write(id, `${line}\r`)
@@ -252,6 +272,48 @@ export class CardSessions<S extends CardScreen> {
     if (entry?.state.kind !== 'running') return false
     entry.activity = activity
     this.refresh(entry)
+    return true
+  }
+
+  /**
+   * Types the setup line into the running card's main pane again (a retry, #39 D6) and sets its
+   * setup `running`. Returns false, changing nothing, for a card that isn't running or whose shell
+   * hasn't started yet.
+   */
+  typeSetup(cardId: string, setup: string): boolean {
+    const entry = this.entries.get(cardId)
+    if (entry?.state.kind !== 'running' || !entry.sessionId) return false
+    this.api.write(entry.sessionId, `${setupLine(setup)}\r`)
+    this.setSetup(entry, 'running')
+    return true
+  }
+
+  /**
+   * `board setup . failed` (#39 D4): the running card's setup is `failed`; nothing is typed.
+   * Returns false, changing nothing, for a card that isn't running.
+   */
+  setupFailed(cardId: string): boolean {
+    const entry = this.entries.get(cardId)
+    if (entry?.state.kind !== 'running') return false
+    this.setSetup(entry, 'failed')
+    return true
+  }
+
+  /**
+   * After the setup succeeded or was skipped (#39 D4, D6): clears the running card's setup state
+   * and types its start line into the main pane as `start` does, running `onFirstStart` for a
+   * first start (#5 D5, #21 D3). `card` is the card as it is now, its pending setup cleared.
+   * Returns false, changing nothing, for a card that isn't running or whose shell hasn't started.
+   */
+  continueAfterSetup(card: StartingCard, onFirstStart?: (kind: FirstStart) => void): boolean {
+    const entry = this.entries.get(card.id)
+    if (entry?.state.kind !== 'running' || !entry.sessionId) return false
+    this.setSetup(entry, null)
+    const line = startLine(card)
+    if (line === null) return true
+    this.api.write(entry.sessionId, `${line}\r`)
+    const first = firstStart(card)
+    if (first !== null) onFirstStart?.(first)
     return true
   }
 
@@ -387,7 +449,14 @@ export class CardSessions<S extends CardScreen> {
     // A start, a stop and a failed start all clear the agent status and activity (#9 D8, #31 D12).
     entry.agentStatus = ''
     entry.activity = null
+    this.setSetup(entry, null)
     if (state.kind === 'failed') entry.screen?.setReadOnly()
+    this.refresh(entry)
+  }
+
+  private setSetup(entry: Entry<S>, setup: SetupState | null): void {
+    if (entry.setup === setup) return
+    entry.setup = setup
     this.refresh(entry)
   }
 
@@ -398,14 +467,16 @@ export class CardSessions<S extends CardScreen> {
       entry.state,
       lastOutputLine(lines, cursorRow),
       entry.agentStatus,
-      entry.activity
+      entry.activity,
+      entry.setup
     )
     const prev = entry.status
     if (
       next.label === prev.label &&
       next.agentStatus === prev.agentStatus &&
       next.lastLine === prev.lastLine &&
-      next.activity === prev.activity
+      next.activity === prev.activity &&
+      next.setup === prev.setup
     )
       return
     entry.status = next

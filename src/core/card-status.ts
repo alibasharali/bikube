@@ -1,4 +1,4 @@
-import type { Activity } from './activity'
+import { ACTIVITY_LABELS, type Activity } from './activity'
 
 /**
  * Card status rules (#4 D9). Plain TS: the renderer feeds it the terminal's screen lines and
@@ -72,21 +72,51 @@ export interface CardStatus {
   lastLine: string
   /** What `board activity` set while running (#31 D12, D13); absent when none. */
   activity?: Activity
+  /** The setup's state in this start while running (#39 D5); absent when none. */
+  setup?: SetupState
+}
+
+/**
+ * A card's setup in this start (#39 D5): `running` once its setup line is typed until `board
+ * setup` answers, `failed` after `board setup . failed`. Runtime only.
+ */
+export type SetupState = 'running' | 'failed'
+
+/** The pill on a card's status row: its setup state, else its activity (#39 D5, #31 D13). */
+export interface CardPill {
+  kind: Activity | 'setup-running' | 'setup-failed'
+  label: string
+}
+
+/** The status row's pill: the setup state takes precedence over any activity; null for none. */
+export function cardPill(status: CardStatus): CardPill | null {
+  if (status.setup === 'running') return { kind: 'setup-running', label: 'Setting up' }
+  if (status.setup === 'failed') return { kind: 'setup-failed', label: 'Setup failed' }
+  if (status.activity) return { kind: status.activity, label: ACTIVITY_LABELS[status.activity] }
+  return null
 }
 
 /**
  * `agentStatus` is the cleaned text `board status` set; empty when none is set (#9 D8).
- * `activity` is what `board activity` set (#31 D12); null or omitted when none.
+ * `activity` is what `board activity` set (#31 D12); `setup` the setup's state (#39 D5); null or
+ * omitted when none.
  */
 export function cardStatus(
   state: CardRunState,
   lastLine: string,
   agentStatus = '',
-  activity: Activity | null = null
+  activity: Activity | null = null,
+  setup: SetupState | null = null
 ): CardStatus {
   const label = statusLabel(state)
   if (state.kind !== 'running') return { label, agentStatus: '', lastLine: '' }
-  return activity ? { label, agentStatus, lastLine, activity } : { label, agentStatus, lastLine }
+  return {
+    label,
+    agentStatus,
+    lastLine,
+    ...(activity && { activity }),
+    ...(setup && { setup })
+  }
 }
 
 const NOT_STARTED: CardRunState = { kind: 'stopped' }

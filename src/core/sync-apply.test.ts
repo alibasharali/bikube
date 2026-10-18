@@ -15,6 +15,7 @@ function workspace(id: string, over: Partial<Workspace> = {}): Workspace {
     nextCardNumber: 1,
     defaultStartup: { kind: 'claude' },
     shells: [],
+    worktreeSetup: '',
     ...over
   }
 }
@@ -131,5 +132,19 @@ describe('keeping cards running here when their column or workspace is gone (#13
     const incoming = workspace('api', { cards: [card('two', 'api-running', { title: 'new' })] })
     const [api] = applySyncBoard([incoming], [local], () => true)
     expect(api.cards).toEqual([card('two', 'api-running', { title: 'new' })])
+  })
+})
+
+describe("keeping this machine's pending setups (#39 D8)", () => {
+  it('keeps the local pending setup of a card this machine has, none for new ones', () => {
+    const local = workspace('api', { cards: [card('known', 'api-backlog', { setup: 'npm ci' })] })
+    const incoming = workspace('api', {
+      cards: [card('known', 'api-backlog'), card('fresh', 'api-backlog')]
+    })
+    const [api] = applySyncBoard([incoming], [local], none)
+    expect(api.cards.map((c) => [c.id, c.setup])).toEqual([
+      ['known', 'npm ci'],
+      ['fresh', undefined]
+    ])
   })
 })

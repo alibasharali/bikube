@@ -41,6 +41,17 @@ describe('serializeRequest / parseRequestLine', () => {
     expect(parseRequestLine(line({ ...session, session: 'x' })).ok).toBe(false)
   })
 
+  it('round-trips a setup ok and failed, and rejects any other result (#39 D4)', () => {
+    for (const result of ['ok', 'failed'] as const) {
+      const s = serializeRequest('c1', { command: 'setup', card: '.', result })
+      const setup = { v: 1, cardId: 'c1', command: 'setup', card: '.', result }
+      expect(s).toBe(`${line(setup)}\n`)
+      expect(parseRequestLine(s)).toEqual({ ok: true, request: setup })
+    }
+    const bad = { v: 1, cardId: 'c1', command: 'setup', card: '.', result: 'done' }
+    expect(parseRequestLine(line(bad))).toEqual({ ok: false, error: INVALID_REQUEST })
+  })
+
   it('round-trips an activity, still version 1 (#31 D12)', () => {
     const a = serializeRequest('c1', { command: 'activity', card: '.', activity: 'working' })
     const activity = { v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'working' }

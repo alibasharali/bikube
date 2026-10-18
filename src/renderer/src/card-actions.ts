@@ -1,5 +1,6 @@
 import { keyMoveTarget, type CardMoveDirection } from '../../core/card-moves'
 import type { Workspace, Card } from '../../core/workspace-store'
+import type { FirstStart } from '../../core/startup-command'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
@@ -14,10 +15,39 @@ export function startCard(workspaceId: string, cardId: string): void {
   const card =
     workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return
-  cardTerminals().start(card, (kind) => {
+  cardTerminals().start(card, recordFirstStart(workspaceId, cardId))
+}
+
+/** Records a first start of Claude Code or a preset on the card (#5 D5, #21 D3). */
+function recordFirstStart(workspaceId: string, cardId: string): (kind: FirstStart) => void {
+  return (kind) => {
     if (kind === 'claude') workspaceStore.markClaudeStarted(workspaceId, cardId)
     else workspaceStore.markAgentStarted(workspaceId, cardId, kind)
-  })
+  }
+}
+
+/**
+ * The card's setup succeeded or was skipped, its pending setup already cleared in the store (#39
+ * D4, D6): its start line is typed into the main pane as a start would type it.
+ */
+export function continueAfterSetup(workspaceId: string, card: Card): void {
+  cardTerminals().continueAfterSetup(card, recordFirstStart(workspaceId, card.id))
+}
+
+/** Retry setup (#39 D6): types the card's pending setup line again; it is `Setting up` again. */
+export function retrySetup(workspaceId: string, cardId: string): void {
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  const setup = workspace?.cards.find((c) => c.id === cardId)?.setup
+  if (setup) cardTerminals().typeSetup(cardId, setup)
+}
+
+/** Skip setup (#39 D6): clears the card's pending setup (saved), then types its start line. */
+export function skipSetup(workspaceId: string, cardId: string): void {
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  // A stale Skip, its setup already answered, types nothing.
+  if (!workspace?.cards.find((c) => c.id === cardId)?.setup) return
+  const cleared = workspaceStore.clearCardSetup(workspaceId, cardId)
+  if (cleared.ok) continueAfterSetup(workspaceId, cleared.value)
 }
 
 /**

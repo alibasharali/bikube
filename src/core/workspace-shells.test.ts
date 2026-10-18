@@ -10,7 +10,8 @@ const workspace: Workspace = {
   cards: [],
   nextCardNumber: 1,
   defaultStartup: { kind: 'claude' },
-  shells: [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }]
+  shells: [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }],
+  worktreeSetup: ''
 }
 
 describe('workspace shells as cards', () => {

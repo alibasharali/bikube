@@ -8,7 +8,7 @@ import type { Card, Workspace } from './workspace-store'
 
 /**
  * The board this machine takes from `incoming` (D7): the file's workspaces, columns, cards and
- * order, with this machine's `claudeStarted` and `startedAgents` (#21 D7) for local cards it
+ * order, with this machine's `claudeStarted`, `startedAgents` (#21 D7) and pending setup (#39 D8) for local cards it
  * already has, else false and empty (D6), and every card running here (`isRunning`) kept (D8): a
  * running card the file lacks goes to the bottom of its column, or of its workspace's first column
  * when that column is gone; a workspace the file lacks that has a running card stays as this
@@ -19,11 +19,16 @@ export function applySyncBoard(
   local: Workspace[],
   isRunning: (cardId: string) => boolean
 ): Workspace[] {
-  const localStarted = new Map<string, Pick<Card, 'claudeStarted' | 'startedAgents'>>()
+  const localStarted = new Map<string, Pick<Card, 'claudeStarted' | 'startedAgents' | 'setup'>>()
   for (const w of local)
     for (const c of w.cards)
       if (c.host === undefined)
-        localStarted.set(c.id, { claudeStarted: c.claudeStarted, startedAgents: c.startedAgents })
+        localStarted.set(c.id, {
+          claudeStarted: c.claudeStarted,
+          startedAgents: c.startedAgents,
+          // A pending setup is this machine's (#39 D8): the file never has it.
+          ...(c.setup !== undefined && { setup: c.setup })
+        })
   const incomingCards = new Set(incoming.flatMap((w) => w.cards.map((c) => c.id)))
   const incomingIds = new Set(incoming.map((w) => w.id))
   const localById = new Map(local.map((w) => [w.id, w]))

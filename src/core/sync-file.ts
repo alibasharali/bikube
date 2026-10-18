@@ -6,7 +6,7 @@
 
 import { validateWorkspaceState } from './saved-state'
 import type { StartupCommand } from './startup-command'
-import type { Workspace, WorkspaceState } from './workspace-store'
+import type { Card, Workspace, WorkspaceState } from './workspace-store'
 
 export const SYNC_FILE_NAME = 'drovr-board.json'
 
@@ -87,7 +87,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         name: sh.name,
         command: sh.command,
         autostart: sh.autostart
-      }))
+      })),
+      // Like the shells, the setup's definition travels (#39 D1); a card's pending one doesn't (D8).
+      worktreeSetup: w.worktreeSetup
     }))
   }
 }
@@ -106,7 +108,8 @@ export type SyncFileResult = { ok: true; workspaces: Workspace[] } | { ok: false
  * Reads the file's contents (D3): valid when it is JSON, `version` is 1, `savedAt` a valid date and
  * `board` passes the saved-state validation (#8 D3) once local directories are expanded under
  * `home` (D5); anything else is unreadable. Local cards come back with `claudeStarted` false and
- * `startedAgents` empty, as a card new to this machine gets them (D6, #21 D7).
+ * `startedAgents` empty, as a card new to this machine gets them (D6, #21 D7), and no card has a
+ * pending setup (#39 D8).
  */
 export function parseSyncFile(text: string, home: string): SyncFileResult {
   let file: unknown
@@ -134,9 +137,11 @@ export function parseSyncFile(text: string, home: string): SyncFileResult {
     ok: true,
     workspaces: checked.value.workspaces.map((w) => ({
       ...w,
-      cards: w.cards.map((c) =>
-        c.host === undefined ? { ...c, claudeStarted: false, startedAgents: [] } : c
-      )
+      cards: w.cards.map((c) => {
+        const read: Card = { ...c }
+        delete read.setup
+        return c.host === undefined ? { ...read, claudeStarted: false, startedAgents: [] } : read
+      })
     }))
   }
 }

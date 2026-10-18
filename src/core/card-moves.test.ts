@@ -24,7 +24,8 @@ const ws = (cards: Record<string, string[]>): Workspace => {
     ),
     nextCardNumber: 1,
     defaultStartup: { kind: 'claude' },
-    shells: []
+    shells: [],
+    worktreeSetup: ''
   }
 }
 

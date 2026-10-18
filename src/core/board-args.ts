@@ -22,6 +22,14 @@ export type BoardCommand =
   | { command: 'status'; card: string; text: string }
   | { command: 'activity'; card: string; activity: ActivityValue }
   | { command: 'session'; card: string; session: string }
+  /** Typed by a worktree card's setup line (#39 D3, D4); not in the usage text. */
+  | { command: 'setup'; card: string; result: SetupResult }
+
+/** What a setup line reports (#39 D4). */
+export type SetupResult = 'ok' | 'failed'
+
+export const isSetupResult = (value: unknown): value is SetupResult =>
+  value === 'ok' || value === 'failed'
 
 export type BoardArgs =
   | { kind: 'help'; stdout: string; exitCode: 0 }
@@ -43,6 +51,8 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
       return { kind: 'command', command: { command: 'activity', card, activity: value } }
     if (name === 'session' && isSessionId(value))
       return { kind: 'command', command: { command: 'session', card, session: value } }
+    if (name === 'setup' && isSetupResult(value))
+      return { kind: 'command', command: { command: 'setup', card, result: value } }
   }
   return { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
 }

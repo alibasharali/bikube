@@ -352,6 +352,21 @@ describe('saved worktree cards', () => {
     expect(parseSavedState(state({ worktree: { path: '/x' } })).ok).toBe(false)
     expect(parseSavedState(state({ worktree, host: 'devbox', directory: '~/api' })).ok).toBe(false)
   })
+
+  it("keeps a card's pending setup, reads a card without one as none (#39 D8)", () => {
+    const parsed = parseSavedState(state({ worktree, setup: 'npm ci' }))
+    expect(parsed.ok && parsed.value.workspaces[0]!.cards[0]!.setup).toBe('npm ci')
+    const round = parsed.ok && parseSavedState(serializeSavedState(parsed.value))
+    expect(round && round.ok && round.value.workspaces[0]!.cards[0]!.setup).toBe('npm ci')
+    const none = parseSavedState(state({ worktree }))
+    expect(none.ok && none.value.workspaces[0]!.cards[0]).not.toHaveProperty('setup')
+  })
+
+  it('rejects a pending setup that is not one trimmed, non-empty line', () => {
+    for (const setup of ['a\nb', ' npm ci', '', 3]) {
+      expect(parseSavedState(state({ worktree, setup })).ok).toBe(false)
+    }
+  })
 })
 
 describe('shells, and a workspace defaulting to Shell', () => {
@@ -402,5 +417,24 @@ describe('shells, and a workspace defaulting to Shell', () => {
     expect(parsed.ok && parsed.value.workspaces[0]!.shells).toEqual(shells)
     expect(parseSavedState(file({ shells: [{ id: 's1', name: '' }] })).ok).toBe(false)
     expect(parseSavedState(file({ shells: 'nope' })).ok).toBe(false)
+  })
+})
+
+describe('worktree setup in the saved state (#39 D1)', () => {
+  it('round trips, reads a file without it as none, and rejects a bad one', () => {
+    const s = new InMemoryWorkspaceStore()
+    ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/a', worktreeSetup: 'npm ci' }))
+    const text = serializeSavedState(s.getState())
+    const parsed = parseSavedState(text)
+    expect(parsed.ok && parsed.value.workspaces[0]!.worktreeSetup).toBe('npm ci')
+    const without = parseSavedState(
+      fileWith((state) => {
+        for (const w of state.workspaces) delete w.worktreeSetup
+      })
+    )
+    expect(without.ok && without.value.workspaces.map((w) => w.worktreeSetup)).toEqual(['', ''])
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'a\nb')))
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 3)))
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'npm ci;')))
   })
 })

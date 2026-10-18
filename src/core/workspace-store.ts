@@ -47,6 +47,12 @@ export interface Card {
    * the startup command.
    */
   startedAgents: AgentKind[]
+  /**
+   * Its pending setup (#39 D2): the workspace's Worktree setup, copied when the card was created
+   * with its own worktree, typed before its startup command until it succeeds or is skipped (D7).
+   * Absent when none. Saved, never synced (D8).
+   */
+  setup?: string
 }
 
 /** Where a card's own git worktree is, and how to remove it. */
@@ -90,6 +96,11 @@ export interface Workspace {
    * the board, not on it. The Default shell isn't stored: every workspace has it.
    */
   shells: WorkspaceShell[]
+  /**
+   * One line typed in a new worktree card's terminal before its startup command (#39 D1); '' for
+   * none. Local workspaces only use it; an SSH workspace keeps whatever it has.
+   */
+  worktreeSetup: string
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -122,7 +133,16 @@ export interface WorkspaceState {
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
 export type ErrorField =
-  'name' | 'directory' | 'host' | 'column' | 'workspace' | 'title' | 'card' | 'command' | 'shell'
+  | 'name'
+  | 'directory'
+  | 'host'
+  | 'column'
+  | 'workspace'
+  | 'title'
+  | 'card'
+  | 'command'
+  | 'shell'
+  | 'setup'
 
 export interface FieldError {
   field: ErrorField
@@ -139,6 +159,8 @@ export interface WorkspaceInput {
   host?: string | null
   /** Defaults to Shell (#5 D10). */
   defaultStartup?: StartupCommand
+  /** One line or '' (#39 D1); defaults to ''. */
+  worktreeSetup?: string
 }
 
 export interface WorkspacePatch {
@@ -148,6 +170,8 @@ export interface WorkspacePatch {
   host?: string | null
   /** Changes the preset for new cards only; existing cards keep theirs (#5 D10). */
   defaultStartup?: StartupCommand
+  /** Changes the setup for new worktree cards only (#39 D1, D2). */
+  worktreeSetup?: string
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -204,6 +228,8 @@ export interface WorkspaceStore {
   setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card>
   /** Records that the preset's first-start line was typed for this card (#21 D3). */
   markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card>
+  /** The card's pending setup succeeded or was skipped (#39 D4, D6): it has none from now on. */
+  clearCardSetup(workspaceId: string, cardId: string): Result<Card>
   /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
@@ -296,6 +322,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!name.ok) return name
     const startup = checkCardStartup(input.defaultStartup ?? CLAUDE_STARTUP)
     if (!startup.ok) return startup
+    const setup = checkWorktreeSetup(input.worktreeSetup ?? '')
+    if (!setup.ok) return setup
     const workspace: Workspace = {
       id: this.generateId(),
       name: name.value,
@@ -305,7 +333,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       cards: [],
       nextCardNumber: 1,
       defaultStartup: startup.value,
-      shells: []
+      shells: [],
+      worktreeSetup: setup.value
     }
     this.set({
       workspaces: [...this.state.workspaces, workspace],
@@ -339,7 +368,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       defaultStartup = checked.value
     }
-    const updated: Workspace = { ...current, name, directory, defaultStartup }
+    let worktreeSetup = current.worktreeSetup
+    if (patch.worktreeSetup !== undefined) {
+      const checked = checkWorktreeSetup(patch.worktreeSetup)
+      if (!checked.ok) return checked
+      worktreeSetup = checked.value
+    }
+    const updated: Workspace = { ...current, name, directory, defaultStartup, worktreeSetup }
     // A local workspace has no `host` key at all, so the saved file never gets one (#12 D10).
     if (host === null) delete updated.host
     else updated.host = host
@@ -446,7 +481,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
       claudeStarted: false,
-      startedAgents: []
+      startedAgents: [],
+      // Its worktree is new: the workspace's setup runs first, until it succeeds (#39 D2, D7).
+      ...(worktree && ws.host === undefined && ws.worktreeSetup && { setup: ws.worktreeSetup })
     }
     this.replace({
       ...ws,
@@ -558,6 +595,15 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     }))
   }
 
+  clearCardSetup(workspaceId: string, cardId: string): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => {
+      if (card.setup === undefined) return { ok: true, value: card }
+      const cleared: Card = { ...card }
+      delete cleared.setup
+      return { ok: true, value: cleared }
+    })
+  }
+
   replaceBoard(workspaces: Workspace[]): void {
     this.set(withBoard(this.state, workspaces))
   }
@@ -658,4 +704,20 @@ export function checkShell(input: ShellInput): Result<ShellInput> {
     if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'command' } }
   }
   return { ok: true, value: { name, command, autostart: input.autostart === true } }
+}
+
+/**
+ * A workspace's Worktree setup, trimmed and checked like a Custom command; '' is none (#39 D1).
+ * It may not end with `;`, `&` or `|`: the setup line appends `&& …` to it, which would then
+ * never report back.
+ */
+export function checkWorktreeSetup(raw: string): Result<string> {
+  const command = raw.trim()
+  if (!command) return { ok: true, value: '' }
+  const checked = checkStartup({ kind: 'custom', command })
+  if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'setup' } }
+  if (/[;&|]$/.test(command)) {
+    return { ok: false, error: { field: 'setup', message: "Command can't end with ; & or |" } }
+  }
+  return { ok: true, value: command }
 }

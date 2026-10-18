@@ -352,6 +352,21 @@ describe('saved worktree cards', () => {
     expect(parseSavedState(state({ worktree: { path: '/x' } })).ok).toBe(false)
     expect(parseSavedState(state({ worktree, host: 'devbox', directory: '~/api' })).ok).toBe(false)
   })
+
+  it("keeps a card's pending setup, reads a card without one as none (#39 D8)", () => {
+    const parsed = parseSavedState(state({ worktree, setup: 'npm ci' }))
+    expect(parsed.ok && parsed.value.workspaces[0]!.cards[0]!.setup).toBe('npm ci')
+    const round = parsed.ok && parseSavedState(serializeSavedState(parsed.value))
+    expect(round && round.ok && round.value.workspaces[0]!.cards[0]!.setup).toBe('npm ci')
+    const none = parseSavedState(state({ worktree }))
+    expect(none.ok && none.value.workspaces[0]!.cards[0]).not.toHaveProperty('setup')
+  })
+
+  it('rejects a pending setup that is not one trimmed, non-empty line', () => {
+    for (const setup of ['a\nb', ' npm ci', '', 3]) {
+      expect(parseSavedState(state({ worktree, setup })).ok).toBe(false)
+    }
+  })
 })
 
 describe('shells, and a workspace defaulting to Shell', () => {

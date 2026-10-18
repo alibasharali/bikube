@@ -4,7 +4,7 @@
  */
 
 import { isActivityValue } from './activity'
-import { isSessionId } from './board-args'
+import { isSessionId, isSetupResult } from './board-args'
 import type { BoardCommand } from './board-args'
 
 export const BOARD_PROTOCOL_VERSION = 1
@@ -42,7 +42,8 @@ const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   move: ['v', 'cardId', 'command', 'card', 'column'],
   status: ['v', 'cardId', 'command', 'card', 'text'],
   activity: ['v', 'cardId', 'command', 'card', 'activity'],
-  session: ['v', 'cardId', 'command', 'card', 'session']
+  session: ['v', 'cardId', 'command', 'card', 'session'],
+  setup: ['v', 'cardId', 'command', 'card', 'result']
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -50,8 +51,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The request in one received line (a trailing newline is ignored), or the error reason to
- * reply with: anything but exactly a version-1 move, status or activity (#31 D12) with string
- * fields, an activity's being one `board activity` takes, is refused.
+ * reply with: anything but exactly a version-1 move, status, activity (#31 D12), session or setup
+ * (#39 D4) with string fields, an activity's or a setup's value being one `board` takes, is refused.
  */
 export function parseRequestLine(line: string): ParsedRequest {
   const text = line.endsWith('\n') ? line.slice(0, -1) : line
@@ -70,7 +71,8 @@ export function parseRequestLine(line: string): ParsedRequest {
     command !== 'move' &&
     command !== 'status' &&
     command !== 'activity' &&
-    command !== 'session'
+    command !== 'session' &&
+    command !== 'setup'
   ) {
     return { ok: false, error: INVALID_REQUEST }
   }
@@ -91,6 +93,11 @@ export function parseRequestLine(line: string): ParsedRequest {
     const session = value.session
     if (!isSessionId(session)) return { ok: false, error: INVALID_REQUEST }
     return { ok: true, request: { v: 1, cardId, command, card, session } }
+  }
+  if (command === 'setup') {
+    const result = value.result
+    if (!isSetupResult(result)) return { ok: false, error: INVALID_REQUEST }
+    return { ok: true, request: { v: 1, cardId, command, card, result } }
   }
   const activity = value.activity
   if (!isActivityValue(activity)) return { ok: false, error: INVALID_REQUEST }

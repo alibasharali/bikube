@@ -320,3 +320,23 @@ describe('worktree setup in the sync file (#39 D1, AC12)', () => {
     expect(read.ok && read.workspaces[0]!.worktreeSetup).toBe('npm ci')
   })
 })
+
+describe("a card's pending setup is not synced (#39 D8, AC12)", () => {
+  it('writes no setup on any card, and reads a card the file gives one as having none', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          worktreeSetup: 'npm ci',
+          cards: [card('k', 'w-backlog', { setup: 'npm ci' })]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]).not.toHaveProperty('setup')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    file.board.workspaces[0].cards[0].setup = 'npm ci'
+    const read = parseSyncFile(JSON.stringify(file), HOME)
+    expect(read.ok && read.workspaces[0]!.cards[0]).not.toHaveProperty('setup')
+  })
+})

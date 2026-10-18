@@ -229,7 +229,10 @@ function NewCardForm({
             <p className="field-hint" data-testid="new-card-worktree-hint">
               {creating
                 ? 'Creating worktree…'
-                : `A new branch from ${repo.branch ?? 'HEAD'}, with ignored files copied.`}
+                : `A new branch from ${repo.branch ?? 'HEAD'}, with ignored files copied.${
+                    // The workspace's setup runs before the agent starts (#39 D9).
+                    workspace?.worktreeSetup ? ` Runs ${workspace.worktreeSetup} first.` : ''
+                  }`}
             </p>
           )}
           {branchError && (

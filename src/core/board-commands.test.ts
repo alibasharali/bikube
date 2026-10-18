@@ -4,6 +4,7 @@ import {
   boardMoveTarget,
   cleanAgentStatus,
   findCallingWorkspace,
+  noSetupError,
   notRunningError,
   resolveCard,
   resolveColumn,
@@ -165,5 +166,13 @@ describe('cleanAgentStatus', () => {
 describe('notRunningError', () => {
   it('names the card title', () => {
     expect(notRunningError(card('c-old', 'backlog', 'old'))).toBe('board: "old" is not running')
+  })
+})
+
+describe('noSetupError (#39 D4)', () => {
+  it('names the card title as written', () => {
+    expect(noSetupError(card('c-api', 'backlog', 'api fix'))).toBe(
+      'board: api fix has no setup running'
+    )
   })
 })

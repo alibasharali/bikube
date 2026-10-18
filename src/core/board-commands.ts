@@ -93,3 +93,8 @@ export function cleanAgentStatus(text: string): string {
 export function notRunningError(card: Card): string {
   return `board: "${card.title}" is not running`
 }
+
+/** The refusal for `board setup` on a card that isn't running or has no pending setup (#39 D4). */
+export function noSetupError(card: Card): string {
+  return `board: ${card.title} has no setup running`
+}

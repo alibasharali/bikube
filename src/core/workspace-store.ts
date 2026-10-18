@@ -47,6 +47,12 @@ export interface Card {
    * the startup command.
    */
   startedAgents: AgentKind[]
+  /**
+   * Its pending setup (#39 D2): the workspace's Worktree setup, copied when the card was created
+   * with its own worktree, typed before its startup command until it succeeds or is skipped (D7).
+   * Absent when none. Saved, never synced (D8).
+   */
+  setup?: string
 }
 
 /** Where a card's own git worktree is, and how to remove it. */
@@ -222,6 +228,8 @@ export interface WorkspaceStore {
   setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card>
   /** Records that the preset's first-start line was typed for this card (#21 D3). */
   markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card>
+  /** The card's pending setup succeeded or was skipped (#39 D4, D6): it has none from now on. */
+  clearCardSetup(workspaceId: string, cardId: string): Result<Card>
   /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
@@ -473,7 +481,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
       claudeStarted: false,
-      startedAgents: []
+      startedAgents: [],
+      // Its worktree is new: the workspace's setup runs first, until it succeeds (#39 D2, D7).
+      ...(worktree && ws.host === undefined && ws.worktreeSetup && { setup: ws.worktreeSetup })
     }
     this.replace({
       ...ws,
@@ -583,6 +593,15 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
         ? card
         : { ...card, startedAgents: [...card.startedAgents, kind] }
     }))
+  }
+
+  clearCardSetup(workspaceId: string, cardId: string): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => {
+      if (card.setup === undefined) return { ok: true, value: card }
+      const cleared: Card = { ...card }
+      delete cleared.setup
+      return { ok: true, value: cleared }
+    })
   }
 
   replaceBoard(workspaces: Workspace[]): void {

@@ -1,12 +1,23 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, boardCard, closeCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Worktree setup (#39): the workspace's command typed in each new worktree card before its
-// startup command. S1: the workspace field, its one-line check, restart and sync.
+// startup command. S1: the workspace field, its one-line check, restart and sync. S2: the
+// card's pending setup, the setup line before the startup command, `board setup`, the hint.
 
 const apps: ElectronApplication[] = []
 let root: string
@@ -159,4 +170,210 @@ test('AC12: Worktree setup set on one instance shows in the other instance’s d
       { timeout: 10000 }
     )
     .toBe('npm ci')
+})
+
+// S2: worktree cards in a throwaway repository, whose startup command prints AGENT-STARTED.
+
+const AGENT = 'AGENT-STARTED'
+
+/** A git repository with one commit, on main. */
+function makeRepo(): string {
+  const repo = makeDir('repo')
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: repo })
+  }
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'test@example.com')
+  git('config', 'user.name', 'Test')
+  writeFileSync(join(repo, 'README.md'), '# repo\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'first')
+  return repo
+}
+
+/** A workspace on `dir` whose cards run `echo AGENT-STARTED`, with Worktree setup `setup`. */
+async function createSetupWorkspace(page: Page, dir: string, setup: string): Promise<void> {
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  await page.getByTestId('workspace-command').fill(`echo ${AGENT}`)
+  await page.getByTestId('workspace-directory').fill(dir)
+  await page.getByTestId('workspace-name').fill('repo')
+  await setupField(page).fill(setup)
+  await saveDialog(page)
+}
+
+/** Creates card `title` in the first column, with its own worktree when `worktree`. */
+async function newCard(page: Page, title: string, worktree: boolean): Promise<void> {
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill(title)
+  if (worktree) await page.getByTestId('new-card-worktree').check()
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, title)
+}
+
+/** The worktree folder of the only worktree card in `dataDir`. */
+function onlyWorktree(dataDir: string): string {
+  const worktrees = join(dataDir, 'worktrees')
+  const [repoFolder] = readdirSync(worktrees)
+  const [folder] = readdirSync(join(worktrees, repoFolder!))
+  return join(worktrees, repoFolder!, folder!)
+}
+
+/** The open card's terminal buffer, one trimmed string per line. */
+function lines(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: {
+            buffer: {
+              active: {
+                length: number
+                getLine(i: number): { translateToString(trim: boolean): string } | undefined
+              }
+            }
+          }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const out: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      out.push(buffer.getLine(i)?.translateToString(true).trim() ?? '')
+    }
+    return out
+  })
+}
+
+const screenText = async (page: Page): Promise<string> => (await lines(page)).join('\n')
+
+/** The cards' pending setups in the saved state file, by title. */
+function savedSetups(dataDir: string): Record<string, string | undefined> {
+  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')) as {
+    state: { workspaces: { cards: { title: string; setup?: string }[] }[] }
+  }
+  return Object.fromEntries(saved.state.workspaces[0]!.cards.map((c) => [c.title, c.setup]))
+}
+
+/** Closes the open card (its shortcut, confirmed) and waits for it to stop on the board. */
+async function closeOpenCard(page: Page, title: string): Promise<void> {
+  await closeCard(page)
+  await page.getByTestId('confirm-close').click()
+  await backToBoard(page)
+  await expect(boardCard(page, title).getByTestId('card-status-label')).toHaveText('Stopped')
+}
+
+async function openOnBoard(page: Page, title: string): Promise<void> {
+  await boardCard(page, title).getByTestId('card-open').click()
+  await expectCardOpen(page, title)
+}
+
+test('AC3, AC8: the setup runs first, then the startup command; once only, across Close and a restart', async () => {
+  const dataDir = newDataDir()
+  const repo = makeRepo()
+  const first = await launch(dataDir)
+  let page = first.page
+  await createSetupWorkspace(page, repo, 'echo SETUP-RAN > setup.txt')
+  await newCard(page, 'fix', true)
+
+  await expect.poll(() => lines(page), { timeout: 15_000 }).toContain(AGENT)
+  const shown = await lines(page)
+  const typed = shown.findIndex((l) => l.includes('echo SETUP-RAN > setup.txt'))
+  expect(typed).toBeGreaterThanOrEqual(0)
+  expect(typed).toBeLessThan(shown.indexOf(AGENT))
+  expect(readFileSync(join(onlyWorktree(dataDir), 'setup.txt'), 'utf8')).toBe('SETUP-RAN\n')
+  // It succeeded: the card has no pending setup any more, saved.
+  await expect.poll(() => savedSetups(dataDir)).toEqual({ fix: undefined })
+
+  // AC8: closed and opened again, only the startup command is typed.
+  await closeOpenCard(page, 'fix')
+  await openOnBoard(page, 'fix')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  expect(await screenText(page)).not.toContain('SETUP-RAN')
+
+  // And after a restart.
+  await quit(first.app)
+  ;({ page } = await launch(dataDir))
+  await openOnBoard(page, 'fix')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  expect(await screenText(page)).not.toContain('SETUP-RAN')
+})
+
+test('AC9: a setup that failed runs again after a restart, and the startup command never runs', async () => {
+  const dataDir = newDataDir()
+  const repo = makeRepo()
+  const first = await launch(dataDir)
+  let page = first.page
+  await createSetupWorkspace(page, repo, 'false')
+  await newCard(page, 'broken', true)
+  await expect.poll(() => screenText(page)).toContain('setup . failed')
+  // The shell is at a prompt again: the setup answered, and nothing else was typed.
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo still-$((20+1))')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => lines(page)).toContain('still-21')
+  expect(await lines(page)).not.toContain(AGENT)
+  expect(savedSetups(dataDir)).toEqual({ broken: 'false' })
+
+  await quit(first.app)
+  ;({ page } = await launch(dataDir))
+  await openOnBoard(page, 'broken')
+  await expect.poll(() => screenText(page)).toContain('setup . failed')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo again-$((20+2))')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => lines(page)).toContain('again-22')
+  expect(await lines(page)).not.toContain(AGENT)
+})
+
+test('AC10: no setup line for a card without Own worktree or the Default shell; an empty setup types only the startup', async () => {
+  const dataDir = newDataDir()
+  const repo = makeRepo()
+  const { page } = await launch(dataDir)
+  await createSetupWorkspace(page, repo, 'echo SETUP-RAN')
+
+  await newCard(page, 'plain', false)
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  expect(await screenText(page)).not.toContain('SETUP-RAN')
+  await backToBoard(page)
+
+  await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Default')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('echo shell-$((30+3))')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => lines(page)).toContain('shell-33')
+  expect(await screenText(page)).not.toContain('SETUP-RAN')
+  await backToBoard(page)
+
+  await editWorkspace(page, 0)
+  await setupField(page).fill('')
+  await saveDialog(page)
+  await newCard(page, 'worktree', true)
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  expect(await screenText(page)).not.toContain('setup . ok')
+  expect(savedSetups(dataDir)).toEqual({ plain: undefined, worktree: undefined })
+})
+
+test('AC11: board setup in a card with no pending setup says so and exits 1; help does not list it', async () => {
+  const dir = makeDir('api')
+  const { page } = await launch(newDataDir())
+  await createSetupWorkspace(page, dir, '')
+  await newCard(page, 'api', false)
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type('board setup . ok 2>err.txt; echo "rc=$?"; board help >help.txt')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => lines(page), { timeout: 15_000 }).toContain('rc=1')
+  expect(readFileSync(join(dir, 'err.txt'), 'utf8')).toBe('board: api has no setup running\n')
+  await expect.poll(() => existsSync(join(dir, 'help.txt'))).toBe(true)
+  await expect.poll(() => readFileSync(join(dir, 'help.txt'), 'utf8')).toContain('board move')
+  expect(readFileSync(join(dir, 'help.txt'), 'utf8')).not.toContain('setup')
+})
+
+test('AC13: with Own worktree checked, the hint names the workspace setup', async () => {
+  const repo = makeRepo()
+  const { page } = await launch(newDataDir())
+  await createSetupWorkspace(page, repo, 'npm ci')
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-worktree').check()
+  await expect(page.getByTestId('new-card-worktree-hint')).toContainText('Runs npm ci first')
 })

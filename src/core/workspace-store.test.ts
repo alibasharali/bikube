@@ -1149,3 +1149,40 @@ describe('worktree setup (#39 D1)', () => {
     expect(ssh.worktreeSetup).toBe('npm ci')
   })
 })
+
+describe("a card's pending setup (#39 D2)", () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix',
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+  }
+
+  it('is copied from the workspace to a card created with its own worktree only', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const col = w.columns[0].id
+    expect(ok(s.createCard(w.id, col, 'wt', undefined, worktree)).setup).toBe('npm ci')
+    expect(ok(s.createCard(w.id, col, 'plain'))).not.toHaveProperty('setup')
+    ok(s.updateWorkspace(w.id, { worktreeSetup: '' }))
+    expect(ok(s.createCard(w.id, col, 'none', undefined, worktree))).not.toHaveProperty('setup')
+  })
+
+  it('is never given to an SSH card', () => {
+    const s = make()
+    const w = ok(
+      s.createWorkspace({ name: 'r', directory: '~/a', host: 'devbox', worktreeSetup: 'npm ci' })
+    )
+    expect(ok(s.createCard(w.id, w.columns[0].id, 'x', undefined, worktree))).not.toHaveProperty(
+      'setup'
+    )
+  })
+
+  it('is cleared for good once it succeeded or was skipped (D4, D6)', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'wt', undefined, worktree))
+    const cleared = ok(s.clearCardSetup(w.id, c.id))
+    expect(cleared).not.toHaveProperty('setup')
+    expect(s.getState().workspaces[0].cards[0]).toEqual(cleared)
+    expect(ok(s.clearCardSetup(w.id, c.id))).toEqual(cleared)
+  })
+})

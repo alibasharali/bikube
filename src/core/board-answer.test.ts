@@ -252,4 +252,86 @@ describe('answerBoardCommand', () => {
     ])
     expect(store.getState()).toBe(before)
   })
+
+  describe('setup (#39 D4)', () => {
+    /** The store with c-api pending `npm ci`. */
+    function pending(): InMemoryWorkspaceStore {
+      const store = setup()
+      const state = store.getState()
+      const [alpha, beta] = state.workspaces
+      return new InMemoryWorkspaceStore({
+        initialState: {
+          ...state,
+          workspaces: [
+            {
+              ...alpha,
+              cards: alpha.cards.map((c) => (c.id === 'c-api' ? { ...c, setup: 'npm ci' } : c))
+            },
+            beta
+          ]
+        }
+      })
+    }
+    const apiCard = (store: InMemoryWorkspaceStore): Card | undefined =>
+      store.getState().workspaces[0].cards.find((c) => c.id === 'c-api')
+
+    it('on ok clears the pending setup, then hands the cleared card on to start', () => {
+      const store = pending()
+      const seen: [Card, string][] = []
+      const reply = answerBoardCommand(
+        store,
+        'c-web',
+        { command: 'setup', card: 'api', result: 'ok' },
+        running,
+        () => {},
+        () => {},
+        (c, result) => seen.push([c, result])
+      )
+      expect(reply).toEqual({ ok: true })
+      expect(apiCard(store)?.setup).toBeUndefined()
+      expect(seen).toEqual([[apiCard(store), 'ok']])
+    })
+
+    it('on failed keeps the pending setup and hands it on', () => {
+      const store = pending()
+      const seen: string[] = []
+      const reply = answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'setup', card: '.', result: 'failed' },
+        running,
+        () => {},
+        () => {},
+        (c, result) => seen.push(`${c.id} ${result}`)
+      )
+      expect(reply).toEqual({ ok: true })
+      expect(apiCard(store)?.setup).toBe('npm ci')
+      expect(seen).toEqual(['c-api failed'])
+    })
+
+    it('refuses a card with no pending setup, or one not running, changing nothing (AC11)', () => {
+      const store = pending()
+      const seen: string[] = []
+      const answer = (cardId: string, isRunning: (id: string) => boolean): unknown =>
+        answerBoardCommand(
+          store,
+          cardId,
+          { command: 'setup', card: '.', result: 'ok' },
+          isRunning,
+          () => {},
+          () => {},
+          (c) => seen.push(c.id)
+        )
+      expect(answer('c-web', running)).toEqual({
+        ok: false,
+        error: 'board: web has no setup running'
+      })
+      expect(answer('c-api', () => false)).toEqual({
+        ok: false,
+        error: 'board: api has no setup running'
+      })
+      expect(apiCard(store)?.setup).toBe('npm ci')
+      expect(seen).toEqual([])
+    })
+  })
 })

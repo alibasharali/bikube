@@ -154,6 +154,8 @@ function readCard(raw: unknown): Card | string {
   if (!startedAgents) return 'bad started agents'
   const worktree = readWorktree(raw.worktree, host.host)
   if (typeof worktree !== 'object') return worktree
+  const setup = readCardSetup(raw.setup)
+  if (typeof setup !== 'object') return setup
   return {
     id,
     columnId,
@@ -164,8 +166,18 @@ function readCard(raw: unknown): Card | string {
     startup,
     agentSessionId,
     claudeStarted,
-    startedAgents
+    startedAgents,
+    ...setup
   }
+}
+
+/** `{}` without a pending setup; `{ setup }` for one trimmed, non-empty line (#39 D2, D8). */
+function readCardSetup(raw: unknown): { setup?: string } | string {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw !== 'string' || !raw) return 'bad card setup'
+  const checked = checkWorktreeSetup(raw)
+  if (!checked.ok || checked.value !== raw) return 'bad card setup'
+  return { setup: raw }
 }
 
 /** `{}` without a worktree; `{ worktree }` for a local card's valid one; else why it is rejected. */

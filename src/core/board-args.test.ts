@@ -85,4 +85,24 @@ describe('parseBoardArgs', () => {
     expect(BOARD_USAGE).toContain('board move <card> <column>')
     expect(BOARD_USAGE).toContain('board status <card> <text>')
   })
+
+  it('parses setup ok and failed; anything else is usage (#39 D4)', () => {
+    for (const result of ['ok', 'failed'] as const) {
+      expect(parseBoardArgs(['setup', '.', result])).toEqual({
+        kind: 'command',
+        command: { command: 'setup', card: '.', result }
+      })
+    }
+    for (const argv of [
+      ['setup', '.', 'OK'],
+      ['setup', '.'],
+      ['setup', '.', 'ok', 'x']
+    ]) {
+      expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
+    }
+  })
+
+  it("keeps setup out of the usage text: it is Drovr's own plumbing (#39 D4)", () => {
+    expect(BOARD_USAGE).not.toContain('setup')
+  })
 })

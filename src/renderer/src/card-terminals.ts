@@ -122,6 +122,8 @@ export class XtermScreen implements CardScreen {
   private pointerSelecting = false
   /** The toggles of the applied find, so a change searches afresh. */
   private findOptions = ''
+  /** The query of the applied find: a query extending it keeps the active match (D5). */
+  private findQuery = ''
   private disposed = false
   private readonly endPointerSelection = (): void => {
     if (this.pointerSelecting) setTimeout(() => (this.pointerSelecting = false), 0)
@@ -162,7 +164,11 @@ export class XtermScreen implements CardScreen {
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.
     this.host.addEventListener('mousedown', () => (this.pointerSelecting = true), true)
-    window.addEventListener('mouseup', this.endPointerSelection)
+    // Released anywhere, even outside the window (blur) or cancelled: never left stuck. Capture
+    // phase, so no handler can stop it; the reset waits for xterm's own mouseup handler.
+    window.addEventListener('mouseup', this.endPointerSelection, true)
+    window.addEventListener('pointercancel', this.endPointerSelection, true)
+    window.addEventListener('blur', this.endPointerSelection)
     // Copy on select: a finished selection goes to the clipboard as it is made, unless Find made
     // it, also when the addon re-searches on new output (#35 D9).
     this.term.onSelectionChange(() => {
@@ -277,13 +283,17 @@ export class XtermScreen implements CardScreen {
     const options = this.searchOptions(find)
     this.finding = true
     const key = `${find.caseSensitive}/${find.regex}`
+    const extending = key === this.findOptions && find.query.startsWith(this.findQuery)
+    this.findQuery = find.query
     // The addon compares a search's toggles with themselves (0.16.0), so a toggle change alone
     // wouldn't re-highlight: start afresh.
     if (key !== this.findOptions) {
       this.search.clearDecorations()
       this.findOptions = key
     }
-    const active = this.findSelected ? this.term.getSelectionPosition() : undefined
+    // Only typing that extends the query keeps the active match; anything else starts again
+    // from the newest (D5).
+    const active = extending && this.findSelected ? this.term.getSelectionPosition() : undefined
     if (active) {
       // The incremental search keeps the active match while it still matches.
       this.search.findNext(find.query, { ...options, incremental: true })
@@ -312,6 +322,7 @@ export class XtermScreen implements CardScreen {
     this.finding = false
     this.findSelected = false
     this.findOptions = ''
+    this.findQuery = ''
   }
 
   private searchable({ query, regex }: FindQuery): boolean {
@@ -351,7 +362,9 @@ export class XtermScreen implements CardScreen {
 
   dispose(): void {
     this.disposed = true
-    window.removeEventListener('mouseup', this.endPointerSelection)
+    window.removeEventListener('mouseup', this.endPointerSelection, true)
+    window.removeEventListener('pointercancel', this.endPointerSelection, true)
+    window.removeEventListener('blur', this.endPointerSelection)
     liveScreens.delete(this)
     this.dropWebgl()
     this.host.remove()

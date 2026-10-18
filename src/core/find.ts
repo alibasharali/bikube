@@ -18,12 +18,15 @@ export interface FindResults {
 
 /**
  * The bar's result text (#35 D7): `<n> of <m>` with `n` counted from the top, `No results`,
- * `Invalid regex`, or `More than 1,000` past the limit, where `n` isn't known.
+ * `Invalid regex`, or `More than 1,000` past the limit, where `n` isn't known; the count alone
+ * when no match is active.
  */
 export function findResultText({ count, index, invalid }: FindResults): string {
   if (invalid) return 'Invalid regex'
   if (count === 0) return 'No results'
-  if (count > FIND_HIGHLIGHT_LIMIT || index < 0) return 'More than 1,000'
+  if (count > FIND_HIGHLIGHT_LIMIT) return 'More than 1,000'
+  // No active match known (none selected): the count alone.
+  if (index < 0) return count === 1 ? '1 result' : `${count} results`
   return `${index + 1} of ${count}`
 }
 

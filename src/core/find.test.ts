@@ -14,10 +14,15 @@ describe('findResultText (#35 D7)', () => {
 
   it('reads More than 1,000 past the highlight limit, where the active match is unknown', () => {
     expect(FIND_HIGHLIGHT_LIMIT).toBe(1000)
-    expect(findResultText({ count: 1000, index: -1 })).toBe('More than 1,000')
+    expect(findResultText({ count: 1001, index: -1 })).toBe('More than 1,000')
     expect(findResultText({ count: 1001, index: 4 })).toBe('More than 1,000')
     // Exactly the limit is still counted.
     expect(findResultText({ count: 1000, index: 999 })).toBe('1000 of 1000')
+  })
+
+  it('reads the count alone when no match is active', () => {
+    expect(findResultText({ count: 1000, index: -1 })).toBe('1000 results')
+    expect(findResultText({ count: 1, index: -1 })).toBe('1 result')
   })
 
   it('reads Invalid regex for an invalid one, whatever the count', () => {

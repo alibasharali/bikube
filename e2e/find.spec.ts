@@ -181,6 +181,32 @@ test('#35 AC2: Enter steps up, Shift+Enter down, both wrapping; the buttons do t
   await expect(result()).toHaveText('1 of 3')
 })
 
+test('#35 D5: only typing that extends the query keeps the active match', async () => {
+  await run(String.raw`printf '\141lpha\nbeta\n\141lpha\n\101lpha\n'`, 'beta')
+  await find('alph')
+  await expect(result()).toHaveText('3 of 3')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+  await expect(result()).toHaveText('1 of 3')
+  // Extending keeps it.
+  await page.keyboard.type('a')
+  await expect(result()).toHaveText('1 of 3')
+  // Deleting a character starts again from the newest.
+  await page.keyboard.press('Backspace')
+  await expect(result()).toHaveText('3 of 3')
+  // So does a toggle change.
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+  await expect(result()).toHaveText('1 of 3')
+  await page.getByRole('button', { name: 'Case sensitive' }).click()
+  await expect(result()).toHaveText('2 of 2')
+  await input().focus()
+  await page.keyboard.press('Enter')
+  await expect(result()).toHaveText('1 of 2')
+  await page.getByRole('button', { name: 'Case sensitive' }).click()
+  await expect(result()).toHaveText('3 of 3')
+})
+
 test('#35 AC3: No results disables the buttons; an empty query shows no text and no highlights', async () => {
   await printAlphas()
   await find('alpha')

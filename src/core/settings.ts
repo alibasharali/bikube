@@ -82,7 +82,7 @@ export interface Preferences {
   notificationSound: boolean
   /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
   claudeStatus: boolean
-  /** The side panel beside an open card or shell shows (#55 D3), in every card at once. */
+  /** The side panel shows (#55 D3), beside the board and every card or shell at once (#57 D3). */
   sidePanelOpen: boolean
   /** The side panel's width in pixels as last dragged (#55 D4), 200 to 4000. */
   sidePanelWidth: number

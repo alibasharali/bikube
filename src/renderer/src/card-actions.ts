@@ -34,6 +34,19 @@ export function continueAfterSetup(workspaceId: string, card: Card): void {
   cardTerminals().continueAfterSetup(card, recordFirstStart(workspaceId, card.id))
 }
 
+/** Retry setup (#39 D6): types the card's pending setup line again; it is `Setting up` again. */
+export function retrySetup(workspaceId: string, cardId: string): void {
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  const setup = workspace?.cards.find((c) => c.id === cardId)?.setup
+  if (setup) cardTerminals().typeSetup(cardId, setup)
+}
+
+/** Skip setup (#39 D6): clears the card's pending setup (saved), then types its start line. */
+export function skipSetup(workspaceId: string, cardId: string): void {
+  const cleared = workspaceStore.clearCardSetup(workspaceId, cardId)
+  if (cleared.ok) continueAfterSetup(workspaceId, cleared.value)
+}
+
 /**
  * Closes a running card (#7 D1, D2): stops its process and keeps the card where it is; it turns
  * Stopped when its shell has exited. Anything else is left as it is.

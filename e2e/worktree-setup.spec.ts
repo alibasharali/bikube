@@ -17,7 +17,8 @@ import { plainCards } from './plain-cards'
 
 // Worktree setup (#39): the workspace's command typed in each new worktree card before its
 // startup command. S1: the workspace field, its one-line check, restart and sync. S2: the
-// card's pending setup, the setup line before the startup command, `board setup`, the hint.
+// card's pending setup, the setup line before the startup command, `board setup`, the hint. S3:
+// the Setting up and Setup failed pills, Retry setup and Skip setup.
 
 const apps: ElectronApplication[] = []
 let root: string
@@ -134,6 +135,16 @@ test('AC2: pasting two lines into Worktree setup says it must be one line and sa
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V')
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-error-setup')).toHaveText('Command must be one line')
+  await page.getByTestId('workspace-cancel').click()
+  await editWorkspace(page, 0)
+  await expect(setupField(page)).toHaveValue('')
+
+  // A setup ending in ; & or | would never report back: refused too.
+  await setupField(page).fill('npm ci;')
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-error-setup')).toHaveText(
+    "Command can't end with ; & or |"
+  )
   await page.getByTestId('workspace-cancel').click()
   await editWorkspace(page, 0)
   await expect(setupField(page)).toHaveValue('')
@@ -376,4 +387,110 @@ test('AC13: with Own worktree checked, the hint names the workspace setup', asyn
   await page.getByTestId('column').first().getByTestId('new-card').click()
   await page.getByTestId('new-card-worktree').check()
   await expect(page.getByTestId('new-card-worktree-hint')).toContainText('Runs npm ci first')
+})
+
+// S3: the setup's pill on the board card, and Retry setup and Skip setup in its menu.
+
+const setupPill = (page: Page, title: string): Locator =>
+  boardCard(page, title).getByTestId('card-setup-pill')
+
+/** Types `text` and Enter into the open card's terminal. */
+async function typeInCard(page: Page, text: string): Promise<void> {
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type(text)
+  await page.keyboard.press('Enter')
+}
+
+/** Picks `item` (a test id) in card `title`'s menu on the board. */
+async function pickInMenu(page: Page, title: string, item: string): Promise<void> {
+  await boardCard(page, title).getByTestId('card-menu').click()
+  await page.getByTestId(item).click()
+}
+
+test('AC4: the board card shows Setting up while the setup runs, then nothing once the agent starts', async () => {
+  const repo = makeRepo()
+  const { page } = await launch(newDataDir())
+  await createSetupWorkspace(page, repo, 'sleep 3')
+  await newCard(page, 'slow', true)
+  await backToBoard(page)
+  await expect(setupPill(page, 'slow')).toHaveText('Setting up', { timeout: 1000 })
+  await expect(setupPill(page, 'slow')).toHaveAttribute('data-state', 'running')
+  // The activity pill's place: no other pill beside it.
+  await expect(boardCard(page, 'slow').getByTestId('card-activity')).toHaveCount(0)
+  await expect(setupPill(page, 'slow')).toHaveCount(0, { timeout: 10_000 })
+  await openOnBoard(page, 'slow')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+})
+
+test('AC5: a failed setup shows Setup failed, the agent never starts and the card stays Running', async () => {
+  const repo = makeRepo()
+  const { page } = await launch(newDataDir())
+  await createSetupWorkspace(page, repo, 'false')
+  await newCard(page, 'broken', true)
+  await backToBoard(page)
+  const card = boardCard(page, 'broken')
+  await expect(setupPill(page, 'broken')).toHaveText('Setup failed')
+  await expect(setupPill(page, 'broken')).toHaveAttribute('data-state', 'failed')
+  await expect(card.getByTestId('card-status-label')).toHaveText('Running')
+  // Its shell is at a prompt.
+  await openOnBoard(page, 'broken')
+  await typeInCard(page, 'echo alive-$((40+2))')
+  await expect.poll(() => lines(page)).toContain('alive-42')
+  expect(await lines(page)).not.toContain(AGENT)
+  // Not offered while the setup runs or once it succeeded: only after a failure (D6).
+  await backToBoard(page)
+  await card.getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-retry-setup')).toBeVisible()
+  await expect(page.getByTestId('card-menu-skip-setup')).toBeVisible()
+  await page.keyboard.press('Escape')
+})
+
+test('AC6: Retry setup types the setup again; once it succeeds the pill goes and the agent starts', async () => {
+  const dataDir = newDataDir()
+  const repo = makeRepo()
+  const { page } = await launch(dataDir)
+  await createSetupWorkspace(page, repo, 'test -f ok.flag')
+  await newCard(page, 'retry', true)
+  // The worktree's long path wraps the typed line, so the board's pill tells it failed.
+  await backToBoard(page)
+  await expect(setupPill(page, 'retry')).toHaveText('Setup failed')
+  await openOnBoard(page, 'retry')
+  await typeInCard(page, 'touch ok.flag')
+  await expect.poll(() => existsSync(join(onlyWorktree(dataDir), 'ok.flag'))).toBe(true)
+  await backToBoard(page)
+  await expect(setupPill(page, 'retry')).toHaveText('Setup failed')
+
+  await pickInMenu(page, 'retry', 'card-menu-retry-setup')
+  await expect(setupPill(page, 'retry')).toHaveCount(0)
+  await openOnBoard(page, 'retry')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  await expect.poll(() => savedSetups(dataDir)).toEqual({ retry: undefined })
+  // Once it succeeded, the menu offers neither.
+  await backToBoard(page)
+  await boardCard(page, 'retry').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-delete')).toBeVisible()
+  await expect(page.getByTestId('card-menu-retry-setup')).toHaveCount(0)
+  await expect(page.getByTestId('card-menu-skip-setup')).toHaveCount(0)
+})
+
+test('AC7: Skip setup starts the agent and clears the setup, so a reopen types only the startup command', async () => {
+  const dataDir = newDataDir()
+  const repo = makeRepo()
+  const { page } = await launch(dataDir)
+  await createSetupWorkspace(page, repo, 'false')
+  await newCard(page, 'skip', true)
+  await backToBoard(page)
+  await expect(setupPill(page, 'skip')).toHaveText('Setup failed')
+
+  await pickInMenu(page, 'skip', 'card-menu-skip-setup')
+  await expect(setupPill(page, 'skip')).toHaveCount(0)
+  await expect.poll(() => savedSetups(dataDir)).toEqual({ skip: undefined })
+  await openOnBoard(page, 'skip')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+
+  await closeOpenCard(page, 'skip')
+  await openOnBoard(page, 'skip')
+  await expect.poll(() => lines(page)).toContain(AGENT)
+  // Joined without breaks, so a typed line the terminal wrapped still reads as one.
+  expect((await lines(page)).join('')).not.toContain('setup')
 })

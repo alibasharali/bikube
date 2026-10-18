@@ -435,5 +435,6 @@ describe('worktree setup in the saved state (#39 D1)', () => {
     expect(without.ok && without.value.workspaces.map((w) => w.worktreeSetup)).toEqual(['', ''])
     expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'a\nb')))
     expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 3)))
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'npm ci;')))
   })
 })

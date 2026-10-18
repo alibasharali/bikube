@@ -1327,6 +1327,17 @@ button {
   color: var(--pill-question-text);
 }
 
+/* A worktree card's setup (#39 D5): neutral while it runs, red once it failed. */
+.card-activity-setup-running {
+  background: var(--pill-working-bg);
+  color: var(--pill-working-text);
+}
+
+.card-activity-setup-failed {
+  background: var(--danger);
+  color: var(--danger-text);
+}
+
 /* Up to 2 lines, then an ellipsis; the full text is the tooltip (#31 D11). */
 .card-agent-status {
   display: -webkit-box;

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { cardStatus, knownRunState, knownStatus, lastOutputLine, statusLabel } from './card-status'
+import {
+  cardPill,
+  cardStatus,
+  knownRunState,
+  knownStatus,
+  lastOutputLine,
+  statusLabel
+} from './card-status'
 
 describe('lastOutputLine (D9)', () => {
   it('returns the last non-blank line at or above the cursor, trimmed', () => {
@@ -130,5 +137,31 @@ describe('cards the registry does not know (#8 D9)', () => {
     const status = cardStatus(running, 'out')
     expect(knownRunState(running)).toBe(running)
     expect(knownStatus(status)).toBe(status)
+  })
+})
+
+describe('cardPill (#31 D13, #39 D5)', () => {
+  const running = { kind: 'running' } as const
+  it('is the activity, or none', () => {
+    expect(cardPill(cardStatus(running, ''))).toBeNull()
+    expect(cardPill(cardStatus(running, '', '', 'waiting'))).toEqual({
+      kind: 'waiting',
+      label: 'Waiting for you'
+    })
+  })
+
+  it('shows the setup state in place of any activity', () => {
+    expect(cardPill(cardStatus(running, '', '', 'working', 'running'))).toEqual({
+      kind: 'setup-running',
+      label: 'Setting up'
+    })
+    expect(cardPill(cardStatus(running, '', '', null, 'failed'))).toEqual({
+      kind: 'setup-failed',
+      label: 'Setup failed'
+    })
+  })
+
+  it('a card that is not running has no setup', () => {
+    expect(cardStatus({ kind: 'stopped' }, '', '', null, 'failed').setup).toBeUndefined()
   })
 })

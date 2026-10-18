@@ -1142,6 +1142,26 @@ describe('worktree setup (#39 D1)', () => {
     expect(s.getState().workspaces[0]).toBe(w)
   })
 
+  it('refuses a setup ending in ; & or |, which would never report back (D1)', () => {
+    const s = make()
+    const refused = {
+      ok: false,
+      error: { field: 'setup', message: "Command can't end with ; & or |" }
+    }
+    for (const setup of ['npm ci;', 'npm ci &', 'npm ci |', ' npm ci; ', 'a && b &&']) {
+      expect(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: setup })).toEqual(
+        refused
+      )
+    }
+    expect(s.getState().workspaces).toEqual([])
+    const w = create(s, 'alpha')
+    expect(s.updateWorkspace(w.id, { worktreeSetup: 'npm ci ||' })).toEqual(refused)
+    expect(s.getState().workspaces[0]).toBe(w)
+    expect(
+      ok(s.updateWorkspace(w.id, { worktreeSetup: 'echo "a;b" && cp x y' })).worktreeSetup
+    ).toBe('echo "a;b" && cp x y')
+  })
+
   it('is kept when the workspace becomes SSH', () => {
     const s = make()
     const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: 'npm ci' }))

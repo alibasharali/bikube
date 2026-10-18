@@ -7,7 +7,13 @@
 import type { TerminalApi, TerminalExit } from '../shared/api'
 import type { Activity } from './activity'
 import { SessionRouter } from './session-router'
-import { cardStatus, lastOutputLine, type CardRunState, type CardStatus } from './card-status'
+import {
+  cardStatus,
+  lastOutputLine,
+  type CardRunState,
+  type CardStatus,
+  type SetupState
+} from './card-status'
 import { readyWatcher } from './ready-marker'
 import {
   firstStart,
@@ -43,11 +49,7 @@ export interface CardRef {
 /** A card as it is when it starts: its startup command is read then (#5 D7). */
 export interface StartingCard extends CardRef, StartupState {}
 
-/**
- * A card's setup in this start (#39 D5): `running` once its setup line is typed until `board
- * setup` answers, `failed` after `board setup . failed`. Runtime only; null when none.
- */
-export type SetupState = 'running' | 'failed'
+export type { SetupState }
 
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
@@ -466,7 +468,7 @@ export class CardSessions<S extends CardScreen> {
   private setSetup(entry: Entry<S>, setup: SetupState | null): void {
     if (entry.setup === setup) return
     entry.setup = setup
-    entry.listeners.forEach((l) => l())
+    this.refresh(entry)
     for (const listener of this.setupListeners) listener(entry.cardId, setup)
   }
 
@@ -477,14 +479,16 @@ export class CardSessions<S extends CardScreen> {
       entry.state,
       lastOutputLine(lines, cursorRow),
       entry.agentStatus,
-      entry.activity
+      entry.activity,
+      entry.setup
     )
     const prev = entry.status
     if (
       next.label === prev.label &&
       next.agentStatus === prev.agentStatus &&
       next.lastLine === prev.lastLine &&
-      next.activity === prev.activity
+      next.activity === prev.activity &&
+      next.setup === prev.setup
     )
       return
     entry.status = next

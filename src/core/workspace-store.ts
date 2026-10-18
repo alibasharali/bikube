@@ -706,11 +706,18 @@ export function checkShell(input: ShellInput): Result<ShellInput> {
   return { ok: true, value: { name, command, autostart: input.autostart === true } }
 }
 
-/** A workspace's Worktree setup, trimmed and checked like a Custom command; '' is none (#39 D1). */
+/**
+ * A workspace's Worktree setup, trimmed and checked like a Custom command; '' is none (#39 D1).
+ * It may not end with `;`, `&` or `|`: the setup line appends `&& …` to it, which would then
+ * never report back.
+ */
 export function checkWorktreeSetup(raw: string): Result<string> {
   const command = raw.trim()
   if (!command) return { ok: true, value: '' }
   const checked = checkStartup({ kind: 'custom', command })
   if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'setup' } }
+  if (/[;&|]$/.test(command)) {
+    return { ok: false, error: { field: 'setup', message: "Command can't end with ; & or |" } }
+  }
   return { ok: true, value: command }
 }

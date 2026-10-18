@@ -194,7 +194,10 @@ function AvailableBody({
         )}
         {waiting && (
           <p className="update-note" data-testid="update-waiting">
-            The download for {release.version} isn’t ready yet. Drovr checks again in a few minutes.
+            The download for {release.version} isn’t ready yet.{' '}
+            {update.rechecking
+              ? 'Drovr checks again in a few minutes.'
+              : 'Check for updates again later.'}
           </p>
         )}
         {!waiting && install === 'manual' && error === undefined && (

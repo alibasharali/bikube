@@ -19,6 +19,29 @@ export const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 export const WAITING_CHECK_MS = 2 * 60 * 1000
 export const WAITING_CHECKS = 30
 
+/**
+ * Counts the rechecks of a release whose file isn't up yet, per version: a release whose file
+ * never came (one platform's build failed) doesn't use up the next one's. A check the user asks
+ * for gives the version its rechecks again.
+ */
+export class WaitingRechecks {
+  private version: string | null = null
+  private used = 0
+
+  constructor(private readonly limit: number = WAITING_CHECKS) {}
+
+  /** Whether to check `version` again soon, counting that recheck when so. */
+  take(version: string, asked: boolean): boolean {
+    if (version !== this.version || asked) {
+      this.version = version
+      this.used = 0
+    }
+    if (this.used >= this.limit) return false
+    this.used++
+    return true
+  }
+}
+
 /** Largest release file Drovr downloads (the macOS zip is about 110 MB). */
 export const MAX_ASSET_BYTES = 500 * 1024 * 1024
 
@@ -224,6 +247,8 @@ export type UpdateState =
       skipped: boolean
       /** Downloading or preparing failed; Install falls back to the release page. */
       error?: string
+      /** The release's file isn't up yet and Drovr will check again soon by itself. */
+      rechecking?: boolean
     }
 
 /** Bytes as the popup shows them: `77.7 MB`. */

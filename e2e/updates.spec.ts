@@ -121,7 +121,7 @@ test.afterEach(async () => {
 })
 
 async function launch(
-  options: { dataDir?: string; current?: string; withTarget?: boolean } = {}
+  options: { dataDir?: string; current?: string; withTarget?: boolean; waitingChecks?: number } = {}
 ): Promise<string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -131,6 +131,7 @@ async function launch(
     DROVR_UPDATE_WAITING_MS: '300'
   }
   if (options.withTarget !== false) env['DROVR_UPDATE_TARGET'] = target()
+  if (options.waitingChecks) env['DROVR_UPDATE_WAITING_CHECKS'] = String(options.waitingChecks)
   const launched = await launchApp({ dataDir: options.dataDir, env })
   app = launched.app
   page = launched.page
@@ -308,6 +309,25 @@ test('a release found before its file is up says so, then installs once the file
   await expect(popup().getByTestId('update-size')).toBeVisible()
   await expect(install()).toHaveText('Install and Relaunch')
   await expect(popup().getByTestId('update-waiting')).toHaveCount(0)
+})
+
+test('once its rechecks are used up the popup stops promising one; a check from Settings starts them again', async () => {
+  feed.fileMissing = true
+  await launch({ waitingChecks: 2 })
+  await openPopup()
+  // Two rechecks find nothing: the popup stops promising one.
+  await expect(popup().getByTestId('update-waiting')).toHaveText(
+    'The download for 0.3.0 isn’t ready yet. Check for updates again later.'
+  )
+  await page.keyboard.press('Escape')
+
+  // A newer version found by that check, still building: rechecked, and installed once its file is up.
+  feed.version = '0.3.1'
+  await checkFromSettings()
+  await expect(popup().getByTestId('update-version')).toHaveText('0.3.1')
+  await expect(popup().getByTestId('update-waiting')).toContainText('checks again in a few minutes')
+  feed.fileMissing = false
+  await expect(install()).toHaveText('Install and Relaunch')
 })
 
 test('a check from Settings says up to date, or that it failed', async () => {

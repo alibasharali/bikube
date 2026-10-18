@@ -12,6 +12,7 @@ import {
   CHECK_INTERVAL_MS,
   WAITING_CHECK_MS,
   WAITING_CHECKS,
+  WaitingRechecks,
   INSTALL_SCRIPT,
   installPaths,
   installTarget,
@@ -36,23 +37,26 @@ export interface MainUpdates {
 /**
  * Only a development build honours these, so smoke tests can drive the updater with a local feed:
  * the release JSON's URL, the version to compare with, the file or folder an install replaces,
- * and how soon a release whose file isn't up yet is checked again. A packaged app always checks
- * GitHub with its own version and location.
+ * and how soon and how often a release whose file isn't up yet is checked again. A packaged app
+ * always checks GitHub with its own version and location.
  */
 function testOverrides(): {
   feed: string
   current: string
   target: string | null
   waitingMs: number | null
+  waitingChecks: number | null
 } | null {
   const feed = process.env['DROVR_UPDATE_FEED']
   if (app.isPackaged || !feed) return null
   const waitingMs = Number(process.env['DROVR_UPDATE_WAITING_MS'])
+  const waitingChecks = Number(process.env['DROVR_UPDATE_WAITING_CHECKS'])
   return {
     feed,
     current: process.env['DROVR_UPDATE_CURRENT'] ?? '0.0.0',
     target: process.env['DROVR_UPDATE_TARGET'] || null,
-    waitingMs: Number.isInteger(waitingMs) && waitingMs > 0 ? waitingMs : null
+    waitingMs: Number.isInteger(waitingMs) && waitingMs > 0 ? waitingMs : null,
+    waitingChecks: Number.isInteger(waitingChecks) && waitingChecks > 0 ? waitingChecks : null
   }
 }
 
@@ -186,26 +190,28 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
       publish({ kind: 'available', release, install, progress: 0, skipped, error })
       return
     }
-    publish({ kind: 'available', release, install, progress: ready ? 1 : 0, skipped })
     if (release.waiting) {
-      if (!skipped) checkSoon()
+      // A check the user asks for gives the version its rechecks again.
+      const rechecking = !skipped && checkSoon(release.version, manual)
+      publish({ kind: 'available', release, install, progress: 0, skipped, rechecking })
       return
     }
-    waitingChecks = 0
+    publish({ kind: 'available', release, install, progress: ready ? 1 : 0, skipped })
     if (!skipped && install !== 'manual' && !ready) void download(release, install)
   }
 
-  /** A release whose file isn't up yet is checked again in a few minutes, a bounded number of times. */
-  let waitingChecks = 0
+  /** Checks again soon for `version`, whose file isn't up yet, when it has rechecks left; whether it will. */
+  const rechecks = new WaitingRechecks(test?.waitingChecks ?? WAITING_CHECKS)
   let waitingTimer: NodeJS.Timeout | null = null
-  function checkSoon(): void {
-    if (waitingTimer || waitingChecks >= WAITING_CHECKS) return
-    waitingChecks++
+  function checkSoon(version: string, asked: boolean): boolean {
+    if (waitingTimer) return true
+    if (!rechecks.take(version, asked)) return false
     waitingTimer = setTimeout(() => {
       waitingTimer = null
       void check(false)
     }, waitingCheckMs)
     waitingTimer.unref()
+    return true
   }
 
   async function download(release: Release, kind: 'mac' | 'appimage'): Promise<void> {

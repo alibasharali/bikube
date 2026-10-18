@@ -23,7 +23,8 @@ import {
   MAX_ASSET_BYTES,
   newerRelease,
   parseVersion,
-  RELEASES_URL
+  RELEASES_URL,
+  WaitingRechecks
 } from './updates'
 
 const DIGEST = 'a'.repeat(64)
@@ -161,6 +162,33 @@ describe('the latest release', () => {
       { ...MAC, base }
     )
     expect(r?.asset?.url).toBe(`${base}f.zip`)
+  })
+})
+
+describe('rechecks of a release whose file isn’t up yet', () => {
+  it('stops after the limit, until the user asks', () => {
+    const rechecks = new WaitingRechecks(2)
+    expect(rechecks.take('0.3.0', false)).toBe(true)
+    expect(rechecks.take('0.3.0', false)).toBe(true)
+    expect(rechecks.take('0.3.0', false)).toBe(false)
+    expect(rechecks.take('0.3.0', true)).toBe(true)
+  })
+
+  it('counts per version: one whose file never came leaves the next its own', () => {
+    const rechecks = new WaitingRechecks(2)
+    rechecks.take('0.3.0', false)
+    rechecks.take('0.3.0', false)
+    expect(rechecks.take('0.3.0', false)).toBe(false)
+    // Found by a background check, not one the user asked for.
+    expect(rechecks.take('0.3.1', false)).toBe(true)
+    expect(rechecks.take('0.3.1', false)).toBe(true)
+    expect(rechecks.take('0.3.1', false)).toBe(false)
+  })
+
+  it('allows 30 by default, an hour at 2 minutes', () => {
+    const rechecks = new WaitingRechecks()
+    for (let i = 0; i < 30; i++) expect(rechecks.take('1.0.0', false)).toBe(true)
+    expect(rechecks.take('1.0.0', false)).toBe(false)
   })
 })
 

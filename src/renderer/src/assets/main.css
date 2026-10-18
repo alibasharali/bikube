@@ -2749,3 +2749,89 @@ button {
 .shell-autostart {
   margin-top: var(--space-1);
 }
+
+/* Find bar (#35 D3, D4): the top-right corner of the pane it searches, left of an extra pane's
+   close button (24px wide, at --space-1 from the edge). */
+.find-bar {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  z-index: 11;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 2 * var(--space-1));
+  /* In a narrow pane its content is clipped, never spilling onto the close button. */
+  overflow: hidden;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-menu);
+  font-size: var(--text-xs);
+}
+
+.find-bar-beside-close {
+  right: calc(2 * var(--space-1) + 24px);
+  max-width: calc(100% - 3 * var(--space-1) - 24px);
+}
+
+.find-input {
+  flex: 0 1 180px;
+  min-width: 40px;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.find-input:focus {
+  border-color: var(--accent);
+}
+
+.find-result {
+  flex: none;
+  min-width: 72px;
+  padding: 0 var(--space-1);
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.find-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.find-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.find-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.find-toggle[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}

@@ -34,7 +34,8 @@ describe('defaultKeymap (#31 D6)', () => {
       closeCard: 'Shift+Cmd+W',
       settings: 'Cmd+,',
       openShell: 'Cmd+T',
-      togglePanel: 'Alt+Cmd+B'
+      togglePanel: 'Alt+Cmd+B',
+      find: 'Cmd+F'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -45,7 +46,8 @@ describe('defaultKeymap (#31 D6)', () => {
         closeCard: 'Ctrl+Shift+Q',
         settings: 'Ctrl+,',
         openShell: 'Ctrl+Shift+T',
-        togglePanel: 'Ctrl+Alt+B'
+        togglePanel: 'Ctrl+Alt+B',
+        find: 'Ctrl+Shift+F'
       })
     }
   })
@@ -78,6 +80,72 @@ describe('Toggle panel (#55 D2, AC3)', () => {
   })
 })
 
+describe('Find (#35 D2)', () => {
+  it('is a configurable action named Find: Cmd+F on macOS, Ctrl+Shift+F elsewhere', () => {
+    expect(SHORTCUT_LABELS.find).toBe('Find')
+    expect(defaultKeymap('darwin').find).toBe('Cmd+F')
+    expect(defaultKeymap('linux').find).toBe('Ctrl+Shift+F')
+    expect(defaultKeymap('win32').find).toBe('Ctrl+Shift+F')
+    expect(keymapAction(press('f', { metaKey: true }), defaultKeymap('darwin'))).toBe('find')
+    expect(
+      keymapAction(press('F', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('find')
+    // Off macOS Ctrl+F stays the shell's (readline's forward-char).
+    expect(keymapAction(press('f', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+    expect(
+      keymapAction(press('F', { metaKey: true, ctrlKey: true }), defaultKeymap('darwin'))
+    ).toBeNull()
+  })
+
+  it('frees the old default once rebound, so the terminal no longer swallows it (AC15)', () => {
+    const rebound = resolveKeymap({ find: 'Ctrl+Alt+F' }, 'linux')
+    expect(keymapAction(press('F', { ctrlKey: true, shiftKey: true }), rebound)).toBeNull()
+    expect(keymapAction(press('f', { ctrlKey: true, altKey: true }), rebound)).toBe('find')
+  })
+
+  it('refuses a fixed shortcut or another action, and lets Reset bring its default back', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('C', { ctrlKey: true, shiftKey: true }), 'find', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Copy' })
+    expect(
+      recordPress(press('D', { ctrlKey: true, shiftKey: true }), 'find', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Split right' })
+    expect(
+      recordPress(press('f', { ctrlKey: true, altKey: true }), 'find', keymap, 'linux')
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+F' })
+    // Its default can't be recorded for another action while Find holds it.
+    expect(
+      recordPress(press('F', { ctrlKey: true, shiftKey: true }), 'splitRight', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Find' })
+    expect(resetRefusal('find', { ...keymap, find: 'Ctrl+Alt+F' }, 'linux')).toBeNull()
+    expect(
+      resetRefusal('find', { ...keymap, find: 'Ctrl+Alt+F', back: 'Ctrl+Shift+F' }, 'linux')
+    ).toBe('Already used by Back to board')
+  })
+
+  it('is read and saved like the others; sharing its default makes both fall back (AC16)', () => {
+    expect(readShortcuts({ find: 'Ctrl+Alt+F' }, 'linux')).toEqual({
+      shortcuts: { find: 'Ctrl+Alt+F' },
+      dropped: []
+    })
+    expect(readShortcuts({ splitRight: 'Ctrl+Shift+F' }, 'linux')).toEqual({
+      shortcuts: {},
+      dropped: ['splitRight']
+    })
+    expect(readShortcuts({ splitRight: 'Cmd+F' }, 'darwin')).toEqual({
+      shortcuts: {},
+      dropped: ['splitRight']
+    })
+    expect(readShortcuts({ find: 'Ctrl+Shift+C' }, 'linux')).toEqual({
+      shortcuts: {},
+      dropped: ['find']
+    })
+    expect(validateShortcuts({ find: 'Ctrl+Alt+F' }, 'linux')).toEqual({ find: 'Ctrl+Alt+F' })
+    expect(validateShortcuts({ splitRight: 'Ctrl+Shift+F' }, 'linux')).toBeNull()
+  })
+})
+
 describe('keymapAction (#31 D7, AC3)', () => {
   const linux = defaultKeymap('linux')
   const mac = defaultKeymap('darwin')
@@ -105,7 +173,8 @@ describe('keymapAction (#31 D7, AC3)', () => {
     expect(keymapAction(press('D', { metaKey: true, shiftKey: true }), linux)).toBeNull()
     expect(keymapAction(press('D', { metaKey: true, shiftKey: true }), mac)).toBe('splitDown')
     expect(keymapAction(press(',', { ctrlKey: true, shiftKey: true }), linux)).toBeNull()
-    expect(keymapAction(press('F', { ctrlKey: true, shiftKey: true }), linux)).toBeNull()
+    // Ctrl+Shift+F is Find (#35 D2): G is a key no default uses.
+    expect(keymapAction(press('G', { ctrlKey: true, shiftKey: true }), linux)).toBeNull()
   })
 
   it('reads a letter from the physical key when the layout gives another character', () => {

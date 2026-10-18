@@ -4,7 +4,7 @@ Managed by Software Factory from its stack registry; changes here are overwritte
 
 | Category | Choice |
 |---|---|
-| Native & desktop UI | Electron desktop app, Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links addons) + node-pty + Vitest + ESLint + electron-builder + npm *(not in the registry yet)* |
+| Native & desktop UI | Electron desktop app, Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links, search addons) + node-pty + Vitest + ESLint + electron-builder + npm *(not in the registry yet)* |
 | Database | none *(not in the registry yet)* |
 | Auth | none *(not in the registry yet)* |
 | Hosting | none *(not in the registry yet)* |
@@ -15,7 +15,7 @@ No recipe matches this combination: the first item scaffolds it from these guide
 
 The developer described these in words. The first item sets them up, proves they work (build, tests, a dev deploy where there is hosting), and records what it learned for the registry.
 
-- **Native & desktop UI:** Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links addons) + node-pty + Vitest + ESLint + electron-builder + npm
+- **Native & desktop UI:** Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links, search addons) + node-pty + Vitest + ESLint + electron-builder + npm
 - **Database:** none
 - **Auth:** none
 - **Hosting:** none

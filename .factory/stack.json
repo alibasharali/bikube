@@ -5,7 +5,7 @@
   ],
   "described": {
     "native-ui": [
-      "Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links addons) + node-pty + Vitest + ESLint + electron-builder + npm"
+      "Electron + TypeScript + electron-vite + React + xterm.js (fit, webgl, web-links, search addons) + node-pty + Vitest + ESLint + electron-builder + npm"
     ],
     "hosting": [
       "none"

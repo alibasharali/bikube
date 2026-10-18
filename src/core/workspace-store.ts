@@ -159,6 +159,12 @@ export interface WorkspaceStore {
   updateWorkspace(id: string, patch: WorkspacePatch): Result<Workspace>
   deleteWorkspace(id: string): Result<void>
   selectWorkspace(id: string): Result<void>
+  /**
+   * Moves the workspace to `toIndex` in the sidebar (0 = top, counted among the other workspaces,
+   * rounded as `moveCard` rounds); past the end or NaN means the bottom. Only the order changes
+   * (#32 D1, D2).
+   */
+  moveWorkspace(workspaceId: string, toIndex: number): Result<void>
   addColumn(workspaceId: string, name: string): Result<Column>
   renameColumn(workspaceId: string, columnId: string, name: string): Result<Column>
   moveColumn(workspaceId: string, columnId: string, direction: MoveDirection): Result<void>
@@ -352,6 +358,21 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   selectWorkspace(id: string): Result<void> {
     if (!this.find(id)) return unknownWorkspace()
     if (this.state.activeId !== id) this.set({ ...this.state, activeId: id })
+    return { ok: true, value: undefined }
+  }
+
+  moveWorkspace(workspaceId: string, toIndex: number): Result<void> {
+    const current = this.find(workspaceId)
+    if (!current) return unknownWorkspace()
+    const others = this.state.workspaces.filter((w) => w.id !== workspaceId)
+    // Fractions round down; NaN fails the comparison and lands at the bottom.
+    const index = Math.max(0, Math.floor(toIndex))
+    const at = index < others.length ? index : others.length
+    const workspaces = [...others.slice(0, at), current, ...others.slice(at)]
+    if (workspaces.every((w, i) => w === this.state.workspaces[i])) {
+      return { ok: true, value: undefined }
+    }
+    this.set({ ...this.state, workspaces })
     return { ok: true, value: undefined }
   }
 

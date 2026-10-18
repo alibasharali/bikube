@@ -713,6 +713,33 @@ test("AC7: the active workspace stays per machine; B's goes to the first when A 
   await expect(activeWorkspace(a.page)).toHaveText('api2')
 })
 
+test('#32 AC9: moving a workspace on A reorders the sidebar on B', async () => {
+  const folder = makeDir('F')
+  const a = await launch(makeDir('ha'))
+  for (const name of ['alpha', 'beta', 'gamma']) {
+    makeDir('hb', name)
+    await createWorkspace(a.page, makeDir('ha', name), name)
+  }
+  await selectWorkspace(a.page, 'alpha')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  const b = await launch(makeDir('hb'))
+  await setSyncFolder(b.page, folder)
+  await closeSettings(b.page)
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['alpha', 'beta', 'gamma'])
+
+  // Alt+Up twice on `gamma`'s row puts it at the top (#32 D5).
+  await a.page.getByTestId('workspace-item').filter({ hasText: 'gamma' }).focus()
+  await a.page.keyboard.press('Alt+ArrowUp')
+  await a.page.keyboard.press('Alt+ArrowUp')
+  await expect.poll(() => workspaceNames(a.page)).toEqual(['gamma', 'alpha', 'beta'])
+  await expect(activeWorkspace(a.page)).toHaveText('alpha')
+
+  await expect
+    .poll(() => workspaceNames(b.page), { timeout: 5000 })
+    .toEqual(['gamma', 'alpha', 'beta'])
+})
+
 test("AC8: launch reads the folder, so B's first board shows A's rename made while B was closed", async () => {
   const folder = makeDir('F')
   const { a, b } = await twoSynced(folder)

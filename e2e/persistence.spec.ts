@@ -239,6 +239,27 @@ test('AC1: workspaces, columns and card order survive a restart', async () => {
   await expect(titles('Done')).toHaveCount(0)
 })
 
+test('#32 AC8: the order of workspaces moved in the sidebar survives a restart', async () => {
+  await launch()
+  for (const name of ['alpha', 'beta', 'gamma']) await createWorkspace(makeDir(name), name)
+  await selectWorkspace('alpha')
+  // Drop `gamma` on the top half of `alpha` (#32 D4).
+  const from = await page.getByTestId('workspace-item').filter({ hasText: 'gamma' }).boundingBox()
+  const to = await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 3, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 3 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 3, to.y + to.height * 0.25, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.workspace-name')).toHaveText(['gamma', 'alpha', 'beta'])
+
+  await restart()
+
+  await expect(page.locator('.workspace-name')).toHaveText(['gamma', 'alpha', 'beta'])
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+})
+
 test('AC2: titles, directories and startup commands survive a restart', async () => {
   await launch()
   const alpha = makeDir('alpha')

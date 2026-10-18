@@ -265,7 +265,8 @@ button {
 .workspace-list {
   list-style: none;
   margin: 0;
-  padding: 0 var(--space-2);
+  /* Room for the drop line above the first row and below the last (#32 D4). */
+  padding: var(--space-1) var(--space-2);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -914,6 +915,31 @@ button {
 
 .sidebar-collapsed .workspace-actions {
   display: none;
+}
+
+/* Dragging a workspace (#32 D4): its row dims, and a line shows where it would land, as for
+   cards (#6 D5). */
+.workspace-dragging {
+  opacity: 0.4;
+}
+
+.workspace-row[data-drop]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.workspace-row[data-drop='before']::before {
+  top: calc(-0.5 * var(--space-1) - 1px);
+}
+
+.workspace-row[data-drop='after']::before {
+  bottom: calc(-0.5 * var(--space-1) - 1px);
 }
 
 .workspace-actions .icon-btn {

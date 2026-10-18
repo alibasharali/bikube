@@ -840,6 +840,80 @@ describe('cards: move (#6 D3, D4)', () => {
   })
 })
 
+describe('workspaces: move (#32 D1, D2)', () => {
+  function order(s: InMemoryWorkspaceStore): string[] {
+    return s.getState().workspaces.map((w) => w.name)
+  }
+
+  function three(s: InMemoryWorkspaceStore): Workspace[] {
+    return [create(s, 'alpha'), create(s, 'beta'), create(s, 'gamma')]
+  }
+
+  it('moves up, down, to the top and to the bottom (AC1)', () => {
+    const s = make()
+    const [a, b, g] = three(s)
+    ok(s.moveWorkspace(b.id, 0))
+    expect(order(s)).toEqual(['beta', 'alpha', 'gamma'])
+    ok(s.moveWorkspace(b.id, 1))
+    expect(order(s)).toEqual(['alpha', 'beta', 'gamma'])
+    ok(s.moveWorkspace(g.id, 0))
+    expect(order(s)).toEqual(['gamma', 'alpha', 'beta'])
+    ok(s.moveWorkspace(g.id, 2))
+    expect(order(s)).toEqual(['alpha', 'beta', 'gamma'])
+    ok(s.moveWorkspace(a.id, 2))
+    expect(order(s)).toEqual(['beta', 'gamma', 'alpha'])
+  })
+
+  it('puts an index past the end at the bottom and rounds as moveCard does', () => {
+    const s = make()
+    const [a, , g] = three(s)
+    ok(s.moveWorkspace(a.id, 99))
+    expect(order(s)).toEqual(['beta', 'gamma', 'alpha'])
+    ok(s.moveWorkspace(a.id, -3))
+    expect(order(s)).toEqual(['alpha', 'beta', 'gamma'])
+    ok(s.moveWorkspace(g.id, 0.5))
+    expect(order(s)).toEqual(['gamma', 'alpha', 'beta'])
+    ok(s.moveWorkspace(g.id, NaN))
+    expect(order(s)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+
+  it('moving to the same place succeeds and changes nothing', () => {
+    const s = make()
+    const [, b] = three(s)
+    const before = s.getState()
+    const listener = vi.fn()
+    s.subscribe(listener)
+    expect(s.moveWorkspace(b.id, 1)).toEqual({ ok: true, value: undefined })
+    expect(s.getState()).toBe(before)
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('reports an unknown workspace and changes nothing', () => {
+    const s = make()
+    three(s)
+    const before = s.getState()
+    expect(s.moveWorkspace('nope', 0)).toEqual({
+      ok: false,
+      error: { field: 'workspace', message: 'Workspace not found' }
+    })
+    expect(s.getState()).toBe(before)
+  })
+
+  it('changes only the order: the active id and every workspace are kept (D2)', () => {
+    const s = make()
+    const [a, b, g] = three(s)
+    card(s, b, 'running')
+    ok(s.createShell(b.id, { name: 'dev', command: 'npm run dev', autostart: true }))
+    const before = s.getState().workspaces
+    ok(s.moveWorkspace(b.id, 0))
+    const after = s.getState()
+    expect(after.activeId).toBe(a.id)
+    expect(after.workspaces).toEqual([before[1], before[0], before[2]])
+    after.workspaces.forEach((w) => expect(w).toBe(before.find((x) => x.id === w.id)))
+    expect(after.workspaces.map((w) => w.id)).toEqual([b.id, a.id, g.id])
+  })
+})
+
 describe('initial state (#8 D5, AC5)', () => {
   it('starts from a seeded state and continues its default titles', () => {
     const seed = new InMemoryWorkspaceStore()

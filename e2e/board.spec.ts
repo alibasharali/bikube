@@ -1,7 +1,8 @@
-import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { backToBoard, boardCard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -174,6 +175,194 @@ test('#31 AC16: Ctrl+1…9 select the workspaces in sidebar order; a missing num
   await page.waitForTimeout(300)
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
   await page.getByTestId('workspace-cancel').click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+})
+
+// Moving workspaces in the sidebar (#32): drag and drop, Alt+Up/Down.
+
+/** Creates `alpha`, `beta` and `gamma` in that order and makes `alpha` active (#32 ACs). */
+async function threeWorkspaces(): Promise<void> {
+  for (const name of ['alpha', 'beta', 'gamma']) await createWorkspace(makeDir(name))
+  await workspaceRow('alpha').getByTestId('workspace-item').click()
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+}
+
+const workspaceRow = (name: string): Locator =>
+  page.locator('.workspace-row').filter({
+    has: page.locator('.workspace-name').getByText(name, { exact: true })
+  })
+
+const sidebarNames = (): Locator => page.locator('.workspace-name')
+
+/** Checks that `alpha` is still the active workspace and its board is shown (#32 D2). */
+async function expectAlphaActive(): Promise<void> {
+  await expect(workspaceRow('alpha').getByTestId('workspace-item')).toHaveAttribute(
+    'aria-current',
+    'true'
+  )
+  await expect(page.locator('[aria-current=true]')).toHaveCount(1)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
+}
+
+/**
+ * Starts a real pointer drag of workspace `name`'s row and moves over `target` at `y` (a fraction
+ * of its height, 0.25 = top half), with intermediate moves so HTML5 drag and drop runs.
+ */
+async function dragWorkspaceOver(name: string, target: Locator, y = 0.5): Promise<void> {
+  const from = await workspaceRow(name).getByTestId('workspace-item').boundingBox()
+  const to = await target.boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 3, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 3 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 3, to.y + to.height * y, { steps: 10 })
+}
+
+async function dragWorkspace(name: string, target: Locator, y = 0.5): Promise<void> {
+  await dragWorkspaceOver(name, target, y)
+  await page.mouse.up()
+}
+
+test('#32 AC2/AC3: dragging a workspace onto the top or bottom half of a row moves it', async () => {
+  await threeWorkspaces()
+
+  await dragWorkspaceOver('gamma', workspaceRow('alpha'), 0.25)
+  await expect(workspaceRow('gamma')).toHaveClass(/workspace-dragging/)
+  await expect(workspaceRow('alpha')).toHaveAttribute('data-drop', 'before')
+  await expect(page.locator('[data-drop]')).toHaveCount(1)
+  await page.mouse.up()
+  await expect(sidebarNames()).toHaveText(['gamma', 'alpha', 'beta'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(workspaceRow('gamma')).not.toHaveClass(/workspace-dragging/)
+  // A drag never selects a workspace (D4).
+  await expectAlphaActive()
+
+  await dragWorkspace('gamma', workspaceRow('beta'), 0.75)
+  await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
+  await dragWorkspace('alpha', workspaceRow('gamma'), 0.75)
+  await expect(sidebarNames()).toHaveText(['beta', 'gamma', 'alpha'])
+  await expectAlphaActive()
+})
+
+test('#32 AC4: Esc, or releasing outside the sidebar, cancels a workspace drag', async () => {
+  await threeWorkspaces()
+
+  await dragWorkspaceOver('gamma', workspaceRow('alpha'), 0.25)
+  await expect(workspaceRow('alpha')).toHaveAttribute('data-drop', 'before')
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(workspaceRow('gamma')).not.toHaveClass(/workspace-dragging/)
+  await expectAlphaActive()
+
+  // Released over the board: no column takes a workspace either (D4).
+  await dragWorkspace('gamma', column('Backlog'))
+  await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(workspaceRow('gamma')).not.toHaveClass(/workspace-dragging/)
+  await expectAlphaActive()
+})
+
+/** The open card's terminal buffer as one string. */
+const bufferText = (): Promise<string> =>
+  page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: {
+            buffer: {
+              active: {
+                length: number
+                getLine(i: number): { translateToString(trim: boolean): string } | undefined
+              }
+            }
+          }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return ''
+    const lines: string[] = []
+    for (let i = 0; i < buffer.length; i++)
+      lines.push(buffer.getLine(i)?.translateToString(true) ?? '')
+    return lines.join('\n')
+  })
+
+test('#32 AC5: a running card is unaffected when its workspace is dragged; cards never drop on the sidebar', async () => {
+  await threeWorkspaces()
+  await workspaceRow('beta').getByTestId('workspace-item').click()
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('api')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'api')
+  await page.keyboard.type('printf drovr-marker; sleep 30')
+  await page.keyboard.press('Enter')
+  await expect.poll(bufferText).toContain('drovr-marker\n')
+  await backToBoard(page)
+
+  // A card dragged over the sidebar shows no line and drops nothing (D4).
+  const from = await boardCard(page, 'api').getByTestId('card-open').boundingBox()
+  const to = await workspaceRow('alpha').boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2 + 5, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 3, to.y + to.height * 0.25, { steps: 10 })
+  await expect(page.locator('.workspace-row[data-drop]')).toHaveCount(0)
+  await page.mouse.up()
+  await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
+  await expect(column('Backlog').getByTestId('card-title')).toHaveText(['api'])
+
+  await workspaceRow('alpha').getByTestId('workspace-item').click()
+  await expectAlphaActive()
+  await dragWorkspace('beta', workspaceRow('alpha'), 0.25)
+  await expect(sidebarNames()).toHaveText(['beta', 'alpha', 'gamma'])
+  await expectAlphaActive()
+
+  await workspaceRow('beta').getByTestId('workspace-item').click()
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+  await expect(boardCard(page, 'api').getByTestId('card-status-label')).toHaveText('Running')
+  await expect(boardCard(page, 'api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+})
+
+test('#32 AC6: Alt+Up and Alt+Down move the focused workspace row and keep its focus', async () => {
+  await threeWorkspaces()
+  const beta = workspaceRow('beta').getByTestId('workspace-item')
+  await beta.focus()
+
+  await page.keyboard.press('Alt+ArrowUp')
+  await expect(sidebarNames()).toHaveText(['beta', 'alpha', 'gamma'])
+  await expect(beta).toBeFocused()
+  await page.keyboard.press('Alt+ArrowUp')
+  await page.waitForTimeout(200)
+  await expect(sidebarNames()).toHaveText(['beta', 'alpha', 'gamma'])
+  await expect(beta).toBeFocused()
+  await expectAlphaActive()
+
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
+  await expect(beta).toBeFocused()
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect(sidebarNames()).toHaveText(['alpha', 'gamma', 'beta'])
+  await expect(beta).toBeFocused()
+  await expectAlphaActive()
+
+  // Plain arrows move nothing; Enter still selects (D5).
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(200)
+  await expect(sidebarNames()).toHaveText(['alpha', 'gamma', 'beta'])
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('board-title')).toHaveText('beta')
+})
+
+test('#32 AC7: Mod+1 switches to the workspace now at the top', async () => {
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
+  await threeWorkspaces()
+  await dragWorkspace('gamma', workspaceRow('alpha'), 0.25)
+  await expect(sidebarNames()).toHaveText(['gamma', 'alpha', 'beta'])
+
+  await page.keyboard.press(`${mod}+1`)
+  await expect(page.getByTestId('board-title')).toHaveText('gamma')
+  await page.keyboard.press(`${mod}+2`)
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
 })
 

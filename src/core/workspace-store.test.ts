@@ -1206,3 +1206,31 @@ describe("a card's pending setup (#39 D2)", () => {
     expect(ok(s.clearCardSetup(w.id, c.id))).toEqual(cleared)
   })
 })
+
+describe('logo (#59 D1, D2, AC5)', () => {
+  it('has no logo key for a new workspace, sets one on create and edit, keeps it, and clears it with null', () => {
+    const s = make()
+    expect('logo' in create(s, 'alpha')).toBe(false)
+    const w = ok(s.createWorkspace({ name: 'b', directory: '/tmp/b', logo: 'rocket' }))
+    expect(w.logo).toBe('rocket')
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).logo).toBe('rocket')
+    expect(ok(s.updateWorkspace(w.id, { logo: 'database' })).logo).toBe('database')
+    const cleared = ok(s.updateWorkspace(w.id, { logo: null }))
+    expect('logo' in cleared).toBe(false)
+    expect('logo' in ok(s.createWorkspace({ name: 'c', directory: '/tmp/c', logo: null }))).toBe(
+      false
+    )
+  })
+
+  it('refuses an id not in the list, saving nothing', () => {
+    const s = make()
+    const refused = { ok: false, error: { field: 'logo', message: 'Unknown logo' } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bad = 'not-a-logo' as any
+    expect(s.createWorkspace({ name: 'a', directory: '/tmp/a', logo: bad })).toEqual(refused)
+    expect(s.getState().workspaces).toEqual([])
+    const w = ok(s.createWorkspace({ name: 'b', directory: '/tmp/b', logo: 'rocket' }))
+    expect(s.updateWorkspace(w.id, { name: 'beta', logo: bad })).toEqual(refused)
+    expect(s.getState().workspaces[0]).toBe(w)
+  })
+})

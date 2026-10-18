@@ -29,6 +29,7 @@ import {
   startWorkspaceDrag
 } from './workspace-drag'
 import { workspaceInitial } from './workspace-initial'
+import { LOGO_ICON, LOGO_ICONS } from './workspace-logo'
 
 interface SidebarProps {
   workspaces: Workspace[]
@@ -234,9 +235,7 @@ function Sidebar({
                 onClick={() => onSelect(w.id)}
                 onKeyDown={(e) => onKeyDown(e, w.id)}
               >
-                <span className="workspace-badge" aria-hidden="true">
-                  {workspaceInitial(w.name)}
-                </span>
+                <WorkspaceBadge workspace={w} />
                 {!collapsed && <WorkspaceName workspace={w} />}
                 {!collapsed && w.host !== undefined && (
                   <Server className="workspace-ssh" {...SMALL_ICON} />
@@ -305,6 +304,21 @@ function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           <span>{branch}</span>
         </span>
       )}
+    </span>
+  )
+}
+
+/** The row's badge: its logo's icon (#59 D4), else the name's initial. */
+function WorkspaceBadge({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const Icon = workspace.logo && LOGO_ICONS[workspace.logo]
+  return (
+    <span
+      className="workspace-badge"
+      data-testid="workspace-badge"
+      data-logo={Icon ? workspace.logo : undefined}
+      aria-hidden="true"
+    >
+      {Icon ? <Icon {...LOGO_ICON} /> : workspaceInitial(workspace.name)}
     </span>
   )
 }

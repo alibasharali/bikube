@@ -13,11 +13,18 @@ import {
 } from '../../core/workspace-form'
 import { CLAUDE_STARTUP, checkCardStartup } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
-import { checkWorktreeSetup, type Workspace } from '../../core/workspace-store'
+import { WORKSPACE_LOGOS, type WorkspaceLogoId } from '../../core/workspace-logos'
+import {
+  checkWorktreeSetup,
+  defaultWorkspaceName,
+  type Workspace
+} from '../../core/workspace-store'
 import { SMALL_ICON } from './icons'
 import Modal from './Modal'
 import StartupField from './StartupField'
 import { workspaceStore } from './store'
+import { workspaceInitial } from './workspace-initial'
+import { LOGO_ICON, LOGO_ICONS } from './workspace-logo'
 
 interface WorkspaceDialogProps {
   /** The workspace being edited, or null to create one. */
@@ -59,6 +66,8 @@ function WorkspaceDialog({
   // Typed in each new worktree card before its startup command; local workspaces only (#39 D1).
   const [setup, setSetup] = useState(workspace?.worktreeSetup ?? '')
   const [setupError, setSetupError] = useState<string | undefined>(undefined)
+  // The sidebar badge's icon (#59 D3); null is None, the name's initial.
+  const [logo, setLogo] = useState<WorkspaceLogoId | null>(workspace?.logo ?? null)
   const [busy, setBusy] = useState(false)
 
   const browse = async (): Promise<void> => {
@@ -93,7 +102,8 @@ function WorkspaceDialog({
         ...result.value,
         host: result.value.host ?? null,
         defaultStartup: command.value,
-        ...(checkedSetup && { worktreeSetup: checkedSetup.value })
+        ...(checkedSetup && { worktreeSetup: checkedSetup.value }),
+        logo
       }
       const stored = workspace
         ? workspaceStore.updateWorkspace(workspace.id, input)
@@ -245,6 +255,46 @@ function WorkspaceDialog({
             </p>
           )}
         </div>
+        <fieldset className="field radio-group">
+          <legend>Logo</legend>
+          <div className="logo-grid">
+            <label className="logo-choice" title="None">
+              <input
+                type="radio"
+                name={`${id}-logo`}
+                value=""
+                aria-label="None"
+                title="None"
+                data-testid="workspace-logo-none"
+                checked={logo === null}
+                onChange={() => setLogo(null)}
+              />
+              {/* The Name field's initial as it reads now; empty, the name it would default to. */}
+              {workspaceInitial(
+                draft.name.trim() ||
+                  defaultWorkspaceName(draft.directory, ssh ? (draft.host ?? '') : null)
+              )}
+            </label>
+            {WORKSPACE_LOGOS.map(({ id: logoId, label }) => {
+              const Icon = LOGO_ICONS[logoId]
+              return (
+                <label key={logoId} className="logo-choice" title={label}>
+                  <input
+                    type="radio"
+                    name={`${id}-logo`}
+                    value={logoId}
+                    aria-label={label}
+                    title={label}
+                    data-testid={`workspace-logo-${logoId}`}
+                    checked={logo === logoId}
+                    onChange={() => setLogo(logoId)}
+                  />
+                  <Icon {...LOGO_ICON} />
+                </label>
+              )
+            })}
+          </div>
+        </fieldset>
         <StartupField
           draft={startup}
           onChange={(next) => {

@@ -340,3 +340,21 @@ describe("a card's pending setup is not synced (#39 D8, AC12)", () => {
     expect(read.ok && read.workspaces[0]!.cards[0]).not.toHaveProperty('setup')
   })
 })
+
+describe('workspace logos in the sync file (#59 D6, AC6)', () => {
+  it('writes the logo, absent for none, and reads it back on the other machine', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [workspace('w', 'alpha', { logo: 'rocket' }), workspace('v', 'beta')]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.logo).toBe('rocket')
+    expect(board.workspaces[1]!).not.toHaveProperty('logo')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    expect(file.board.workspaces[0].logo).toBe('rocket')
+    expect(file.board.workspaces[1]).not.toHaveProperty('logo')
+    const read = parseSyncFile(serializeSyncFile(board, new Date(0)), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.logo).toBe('rocket')
+    expect(read.ok && read.workspaces[1]!).not.toHaveProperty('logo')
+  })
+})

@@ -15,7 +15,7 @@ Finding facts is your job, never the developer's. Read the item (`get_item`), `C
 
 When this item needs another's code or decisions, link it with `link_items(N, other, "builds_on")` and say so in the spec's Problem section ("Builds on #4: …"). Building then waits until #4 is merged; the board shows it. Use `"related"` for a pointer that doesn't order anything.
 
-**Other sessions.** `get_item`'s `fleet` lists the other active items: their files, where they overlap yours, and their notes. Read it before you write. Plan around every overlap: prefer other files, and name the shared ones in the spec. Link the overlapping item `"related"`, or `"builds_on"` only when this item truly needs its change. Never ask the developer about an overlap.
+**Other sessions.** `get_item`'s `fleet` lists the other active items: their files, where they overlap yours, and their notes. Read it before you write, starting with what is marked changed since your last look (`fleet.since`, each item's `changes`, `fleet.left`, notes with `new: true`). Plan around every overlap: prefer other files, and name the shared ones in the spec. Link the overlapping item `"related"`, or `"builds_on"` only when this item truly needs its change. Never ask the developer about an overlap.
 
 Done when you can name every module the item will change.
 

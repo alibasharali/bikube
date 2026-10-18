@@ -68,7 +68,7 @@ Deploys report through GitHub Actions jobs with `environment: dev` / `prod`; rel
 
 ## Other sessions
 
-Several items can be worked on at once. `get_item` returns `fleet`: every other active item, the files its branch changes, where they overlap yours, and the notes its session posted (`post_note`). Sessions plan around overlaps rather than asking the developer: `write-spec` reads the fleet and notes its planned paths, `implement-spec` re-reads it before each slice and notes changes to shared files, and both `implement-spec` and `ship` merge the base branch when `fleet.you.baseTouched` says it changed files of yours.
+Several items can be worked on at once. `get_item` returns `fleet`: every other active item, the files its branch changes, where they overlap yours, and the notes its session posted (`post_note`). Sessions plan around overlaps rather than asking the developer: `write-spec` reads the fleet and notes its planned paths, `implement-spec` re-reads it before each slice and again after each slice is pushed and notes changes to shared files, and both `implement-spec` and `ship` merge the base branch when `fleet.you.baseTouched` says it changed files of yours. Each entry also carries the other session's latest progress line, and `get_item` marks what changed since this item's previous call (`changes`, `left`, `new` notes); sessions read those first.
 
 ## Full auto
 

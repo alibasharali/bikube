@@ -27,7 +27,7 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
 
 ## 1. Each slice, in spec order, one at a time
 
-1. **Fleet.** Call `get_item(N)` again. If `fleet.you.baseTouched` is non-empty, the base branch changed your files: `git fetch origin <base> && git merge origin/<base>`, resolve any conflict, and push. When the slice's plan changes files other items touch (a rename, a schema change, a moved module), `post_note(N, text, paths)` with what changes. Plan around overlaps; never ask the developer about one.
+1. **Fleet.** Call `get_item(N)` again and read what is marked changed first (`fleet.since`, each item's `changes`, `fleet.left`, notes with `new: true`). If `fleet.you.baseTouched` is non-empty, the base branch changed your files: `git fetch origin <base> && git merge origin/<base>`, resolve any conflict, and push. When the slice's plan changes files other items touch (a rename, a schema change, a moved module), `post_note(N, text, paths)` with what changes. Plan around overlaps; never ask the developer about one.
 2. `BASE=$(git rev-parse HEAD)`. Set the slice to `running` in the ledger and `report_progress(N, "Slice <k>/<total>: <slice name>")`.
 3. **Brief** a `slice-implementer`. It sees nothing but the brief:
    - **Objective:** the slice text, every AC it satisfies, and the domain decisions those ACs rest on, all verbatim.
@@ -41,6 +41,7 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
    - `FIX` → resume the same implementer with the findings verbatim, commit `fix(review): <what>`, re-review the new range. At most two rounds; what's left becomes a question for the developer.
    - `HUMAN` → ask the developer with the reviewer's options, record the ruling, and send any code change to the implementer as a fix round.
 7. Set the slice to `done`, commit the ledger `docs(ledger): S<n> done (#<n>)`, and push. Pushing after each slice means a restarted session loses nothing.
+8. **Fleet again.** Call `get_item(N)` and read what is marked changed since step 1. If `fleet.you.baseTouched` is non-empty, merge the base as in step 1. When an item joined or moved onto files of the next slice, or a new note names them, re-plan that slice around the overlap. `post_note` only under step 1's rule. Never ask the developer about an overlap.
 
 If the spec turns out wrong or incomplete, stop and ask the developer. The spec is corrected first, in its own commit, then the code follows. They must never disagree.
 

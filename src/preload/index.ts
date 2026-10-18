@@ -49,6 +49,11 @@ const api: DrovrApi = {
     dirty: (path) => ipcRenderer.invoke(IPC.worktreeDirty, path),
     remove: (repo, path, force) => ipcRenderer.invoke(IPC.worktreeRemove, repo, path, force)
   },
+  git: {
+    branches: (dir) => ipcRenderer.invoke(IPC.gitBranches, dir),
+    switch: (dir, branch) => ipcRenderer.invoke(IPC.gitSwitch, dir, branch),
+    track: (dir, remote, branch) => ipcRenderer.invoke(IPC.gitTrack, dir, remote, branch)
+  },
   update: {
     state: () => ipcRenderer.invoke(IPC.updateState),
     onState: (listener) => {

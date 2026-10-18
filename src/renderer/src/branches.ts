@@ -51,6 +51,11 @@ function watch(dir: string): () => void {
   }
 }
 
+/** Reads `dir`'s branch again at once, e.g. after the branch menu ran git there (#33 D13). */
+export function refreshBranch(dir: string): void {
+  read(dir)
+}
+
 /** The branch checked out in `dir` (a local folder), or null when unknown or not a repository. */
 export function useBranch(dir: string | null): Branch {
   useEffect(() => (dir ? watch(dir) : undefined), [dir])

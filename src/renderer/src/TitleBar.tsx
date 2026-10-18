@@ -3,7 +3,8 @@ import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
 import type { Card, Workspace } from '../../core/workspace-store'
-import { StartupTag, WorktreeBranch } from './CardItem'
+import { BranchChip } from './BranchMenu'
+import { StartupTag } from './CardItem'
 import { useBranch } from './branches'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
@@ -30,8 +31,14 @@ function TitleBar({
   card: Card | null
 }): React.JSX.Element {
   const title = windowTitle(workspace, card)
-  // The branch where what is shown runs: the workspace's folder (a worktree card has its own).
-  const branch = useBranch(workspace && workspace.host === undefined ? workspace.directory : null)
+  // The branch where what is shown runs, and where the branch menu acts (#33 D2): an open worktree
+  // card's own directory, else the workspace's folder. Local workspaces only (D11).
+  const local = workspace && workspace.host === undefined ? workspace : null
+  const worktree = local && card?.worktree ? card : null
+  const dir = worktree ? worktree.directory : (local?.directory ?? null)
+  const live = useBranch(dir)
+  // A worktree card shows its saved branch until its live one is read (D3).
+  const branch = worktree ? (live ?? worktree.worktree!.branch) : live
   useEffect(() => {
     document.title = title
   }, [title])
@@ -58,7 +65,7 @@ function TitleBar({
               </span>
             )}
             {!card && <WorkspaceLocation workspace={workspace} />}
-            {!card && branch && <WorktreeBranch branch={branch} />}
+            {!card && dir && branch && <BranchChip dir={dir} branch={branch} />}
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />
@@ -72,10 +79,8 @@ function TitleBar({
                 ) : (
                   <StartupTag startup={card.startup} />
                 )}
-                {card.worktree ? (
-                  <WorktreeBranch branch={card.worktree.branch} worktree />
-                ) : (
-                  branch && <WorktreeBranch branch={branch} />
+                {dir && branch && (
+                  <BranchChip key={dir} dir={dir} branch={branch} worktree={worktree !== null} />
                 )}
               </>
             )}

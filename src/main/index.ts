@@ -7,6 +7,7 @@ import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } fro
 import { registerAttention } from './attention'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
+import { registerGit } from './git'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
@@ -100,6 +101,7 @@ function startApp(): void {
   registerDirectories()
   registerAttention()
   registerWorktrees()
+  registerGit()
   const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.

@@ -17,4 +17,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- running
+- done: all 17 ACs pass (AC17 except the two known root-only updater tests)

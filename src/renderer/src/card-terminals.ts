@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, type IBufferRange } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -99,6 +99,9 @@ const FIND_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
   activeMatchColorOverviewRuler: AMBER
 }
 
+const samePosition = (a: IBufferRange, b: IBufferRange): boolean =>
+  a.start.x === b.start.x && a.start.y === b.start.y && a.end.x === b.end.x && a.end.y === b.end.y
+
 /** The element the smoke tests read the buffer from. */
 export type TerminalHost = HTMLDivElement & { __xterm?: XTerm }
 
@@ -122,6 +125,8 @@ export class XtermScreen implements CardScreen {
   private pointerSelecting = false
   /** The toggles of the applied find, so a change searches afresh. */
   private findOptions = ''
+  /** Where the match Find last selected is, so stepping goes on from it (#35 D6). */
+  private activeMatch: IBufferRange | undefined
   /** The query of the applied find: a query extending it keeps the active match (D5). */
   private findQuery = ''
   private disposed = false
@@ -174,7 +179,10 @@ export class XtermScreen implements CardScreen {
     this.term.onSelectionChange(() => {
       const byFind = this.finding && !this.pointerSelecting
       this.findSelected = byFind && this.term.hasSelection()
-      if (byFind) return
+      if (byFind) {
+        this.activeMatch = this.term.getSelectionPosition()
+        return
+      }
       if (!settingsStore.get().copyOnSelect || !this.term.hasSelection()) return
       void clipboard.write(this.term.getSelection())
     })
@@ -310,6 +318,14 @@ export class XtermScreen implements CardScreen {
     if (!this.searchable(find)) return
     this.finding = true
     const options = this.searchOptions(find)
+    // The terminal lost Find's selection (a click into it, say): select the active match again
+    // so the step goes on from it; Find made it, so it isn't copied (D9).
+    const match = this.activeMatch
+    const now = this.term.getSelectionPosition()
+    if (match && !(now && samePosition(now, match))) {
+      const { start, end } = match
+      this.term.select(start.x, start.y, (end.y - start.y) * this.term.cols + end.x - start.x)
+    }
     if (direction === 'up') this.search.findPrevious(find.query, options)
     else this.search.findNext(find.query, options)
   }
@@ -323,6 +339,7 @@ export class XtermScreen implements CardScreen {
     this.findSelected = false
     this.findOptions = ''
     this.findQuery = ''
+    this.activeMatch = undefined
   }
 
   private searchable({ query, regex }: FindQuery): boolean {

@@ -9,8 +9,8 @@ import { plainCards } from './plain-cards'
 // Find in a card's terminal (#35): the find bar on the focused pane, its result text, stepping,
 // toggles, highlights, the clipboard, the remembered query, the live count, closing with the
 // view, where Find acts and rebinding it; then split panes, where the bar follows Find to the
-// focused pane and closes with its pane, and the Default shell. The words a test finds are printed with octal escapes
-// (`\141lpha`), so the typed command line never holds them.
+// focused pane and closes with its pane, and the Default shell. The words a test finds are
+// printed with octal escapes (`\141lpha`), so the typed command line never holds them.
 
 const darwin = process.platform === 'darwin'
 /** Find's default (#35 D2) as a Playwright press. */
@@ -182,6 +182,24 @@ test('#35 AC2: Enter steps up, Shift+Enter down, both wrapping; the buttons do t
   await expect(result()).toHaveText('1 of 3')
 })
 
+test('#35 D6: stepping goes on from the active match after a click clears the selection', async () => {
+  await printAlphas()
+  await find('alpha')
+  await expect(result()).toHaveText('3 of 3')
+  await page.keyboard.press('Enter')
+  await expect(result()).toHaveText('2 of 3')
+  await page.locator(TERMINAL).click()
+  await expect.poll(selection).toEqual({ text: '', row: -1 })
+  await page.getByRole('button', { name: 'Next match' }).click()
+  await expect(result()).toHaveText('1 of 3')
+  await input().press('Shift+Enter')
+  await expect(result()).toHaveText('2 of 3')
+  await page.locator(TERMINAL).click()
+  await expect.poll(selection).toEqual({ text: '', row: -1 })
+  await page.getByRole('button', { name: 'Previous match' }).click()
+  await expect(result()).toHaveText('3 of 3')
+})
+
 test('#35 D5: only typing that extends the query keeps the active match', async () => {
   await run(String.raw`printf '\141lpha\nbeta\n\141lpha\n\101lpha\n'`, 'beta')
   await find('alph')
@@ -302,6 +320,10 @@ test('#35 AC8: what Find selects never reaches the clipboard, even with Copy on 
   await expect(result()).toHaveText('2 of 3')
   await page.keyboard.press('Enter')
   await expect(result()).toHaveText('1 of 3')
+  // Nor does the active match selected again after a click cleared the selection (D6).
+  await page.locator(TERMINAL).click()
+  await page.getByRole('button', { name: 'Next match' }).click()
+  await expect(result()).toHaveText('3 of 3')
   await page.waitForTimeout(500)
   expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('before')
 
@@ -542,6 +564,32 @@ test('#35 AC11: the bar follows Find to the focused pane, never covering the clo
     await input().evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd])
   ).toEqual([0, 5])
   await expect(panes().nth(0).getByTestId('find-bar')).toBeVisible()
+})
+
+test('#35 D3, D10: using the bar makes its pane the focused one; closing it keeps that', async () => {
+  await splitWithGamma()
+  await find('gamma')
+  const extraBar = panes().nth(1).getByTestId('find-bar')
+  await panes().nth(0).click()
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  await expect(extraBar).toBeVisible()
+  await input().click()
+  await expect(input()).toBeFocused()
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await page.keyboard.press('Escape')
+  await expect(bar()).toHaveCount(0)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect
+    .poll(() =>
+      panes()
+        .nth(1)
+        .evaluate((pane) => pane.contains(document.activeElement))
+    )
+    .toBe(true)
+  // Close pane closes B, with no Close card dialog.
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(panes()).toHaveCount(1)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 })
 
 test('#35 AC12: the bar closes with the extra pane it searches', async () => {

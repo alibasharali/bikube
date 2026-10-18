@@ -71,9 +71,9 @@ function Pane({
       data-testid="pane"
       data-focused={focused}
       onMouseDownCapture={(event) => {
-        // Closing a pane isn't clicking into it: the focus stays where it was (D3), nor is using
-        // the find bar (#35 D3).
-        if ((event.target as Element).closest('.pane-close, .find-bar')) return
+        // Closing a pane isn't clicking into it: the focus stays where it was (D3). Using the
+        // find bar is: the pane it searches is the focused one (#35 D3, D10).
+        if ((event.target as Element).closest('.pane-close')) return
         cardPanes().focus(cardId, paneId)
       }}
     >
@@ -167,8 +167,10 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   const closeFind = useCallback((): void => {
     const paneId = find?.paneId
     setFind(null)
-    // Keyboard focus goes back to the searched pane's terminal (#35 D10).
-    if (paneId !== undefined) focusScreen(paneScreen(card.id, paneId))
+    // Keyboard focus goes back to the searched pane's terminal, the focused pane (#35 D10).
+    if (paneId === undefined) return
+    cardPanes().focus(card.id, paneId)
+    focusScreen(paneScreen(card.id, paneId))
   }, [find, card.id])
 
   // The card's shortcuts (#31 D5). Capture phase: works wherever focus is, including the

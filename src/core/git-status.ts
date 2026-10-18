@@ -37,12 +37,22 @@ const pathAfter = (record: string, fields: number): string => {
   return record.slice(at)
 }
 
-/** Staged (`x`) and unstaged (`y`) combined into one letter against HEAD (D10). */
+/**
+ * Staged (`x`) and unstaged (`y`) combined into one letter against HEAD (D10). `.A` is an
+ * intent-to-add file (`git add -N`): added.
+ */
 function ordinaryLetter(x: string, y: string): ChangeLetter {
   if (x === 'D' || y === 'D') return 'D'
-  if (x === 'A') return 'A'
+  if (x === 'A' || y === 'A') return 'A'
   return 'M'
 }
+
+/**
+ * The most changes `readStatus` returns: a folder with more (a vendored tree left untracked)
+ * still lists and marks the first ones, without a renderer re-rendering tens of thousands of rows
+ * every poll.
+ */
+export const CHANGES_MAX = 5000
 
 /**
  * The changes in `git status --porcelain=v2 -z` output, paths relative to the repository: one
@@ -50,6 +60,8 @@ function ordinaryLetter(x: string, y: string): ChangeLetter {
  */
 export function parseStatus(stdout: string): FileChange[] {
   const records = stdout.split('\0')
+  // Every record ends in NUL, so the last piece is empty; anything else was cut off.
+  records.pop()
   const byPath = new Map<string, FileChange>()
   const add = (change: FileChange): void => {
     if (!change.path) return
@@ -86,8 +98,9 @@ const NOT_REPOSITORY = /not a git repository|must be run in a work tree/i
 /**
  * The changes inside `folder` (D10): staged, unstaged and untracked against HEAD, ignored files
  * left out, with paths relative to `folder` and paths outside it dropped. A rename keeps its old
- * path as git reports it, inside the folder or not. `not-repository` outside a work tree;
- * `failed` when git fails otherwise (a timeout), so a refresh can keep what it had.
+ * path as git reports it, inside the folder or not. At most `CHANGES_MAX` changes.
+ * `not-repository` outside a work tree; `failed` when git fails otherwise (a timeout, output past
+ * the runner's limit), so a refresh can keep what it had.
  */
 export async function readStatus(folder: string, git: Git): Promise<FolderStatus> {
   const prefix = await git(folder, ['rev-parse', '--show-prefix'])
@@ -104,6 +117,8 @@ export async function readStatus(folder: string, git: Git): Promise<FolderStatus
     '--untracked-files=all',
     '--find-renames'
   ])
+  // Output cut at the runner's limit may end mid-record: keep the status read before (D12).
+  if (status.truncated) return { ok: false, reason: 'failed' }
   if (status.timedOut || status.code !== 0) {
     return {
       ok: false,
@@ -116,6 +131,7 @@ export async function readStatus(folder: string, git: Git): Promise<FolderStatus
     if (!change.path.startsWith(base)) continue
     const path = change.path.slice(base.length)
     if (path) changes.push({ ...change, path })
+    if (changes.length === CHANGES_MAX) break
   }
   return { ok: true, changes }
 }

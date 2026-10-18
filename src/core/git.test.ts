@@ -735,6 +735,18 @@ describe('spawnRunner', () => {
     expect(options[0]).toMatchObject({ cwd: dir, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
   })
 
+  it('says when it kept less of stdout than the command wrote', async () => {
+    // Any command stands in for git: 17 MB of output, past what the runner keeps.
+    const fake = ((_command: string, _args: string[], opts: SpawnOptions) =>
+      spawn('head', ['-c', '17000000', '/dev/zero'], opts)) as typeof spawn
+    const call = { args: [], cwd: dir, env: { PATH: process.env.PATH! }, timeoutMs: 10000 }
+    const big = await spawnRunner(fake, 'linux')(call)
+    expect(big.truncated).toBe(true)
+    expect(big.stdout.length).toBeLessThanOrEqual(16 * 1024 * 1024)
+    const small = await spawnRunner(spawn, 'linux')({ ...call, args: ['--version'] })
+    expect(small.truncated).toBe(false)
+  })
+
   it('reads a non-zero exit, and ends a command at its time limit', async () => {
     const real = spawnRunner(spawn, process.platform)
     const env = { PATH: process.env.PATH!, HOME: dir }

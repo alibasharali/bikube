@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FolderListing } from './file-tree'
 import type { FileChange } from './git-status'
-import { changedRows, treeKey, visibleRows, type TreeRow } from './tree-rows'
+import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from './tree-rows'
 
 // The Files tab's rows (#55 D7, D8): what shows for the expanded folders, and the tree's keys.
 
@@ -161,5 +161,33 @@ describe('changes', () => {
       rows.filter((r) => r.kind === 'folder' || r.kind === 'root').every((r) => r.expanded)
     ).toBe(true)
     expect(changedRows('repo', [])).toEqual([])
+  })
+})
+
+describe('onDisk', () => {
+  // D13: a deleted file does nothing, but one removed only from the index (`git rm --cached`)
+  // still reads D and opens.
+  const disk = new Map<string, FolderListing>([
+    ['', { ok: true, entries: [{ name: 'kept.ts', folder: false }], more: 0 }]
+  ])
+  const changes: FileChange[] = [
+    { path: 'kept.ts', letter: 'D' },
+    { path: 'gone.ts', letter: 'D' },
+    { path: 'new.ts', letter: 'U' }
+  ]
+  const file = (rows: TreeRow[], name: string): TreeRow => rows.find((r) => r.name === name)!
+
+  it('in the tree: a listed file, D or not, and never one only git knows of', () => {
+    const rows = visibleRows('repo', disk, new Set(['']), changes)
+    expect(onDisk(file(rows, 'kept.ts'), disk)).toBe(true)
+    expect(onDisk(file(rows, 'gone.ts'), disk)).toBe(false)
+  })
+
+  it('in Changed only: any file not D, and a D one only when its folder still lists it', () => {
+    const rows = changedRows('repo', changes)
+    expect(onDisk(file(rows, 'new.ts'), disk)).toBe(true)
+    expect(onDisk(file(rows, 'kept.ts'), disk)).toBe(true)
+    expect(onDisk(file(rows, 'gone.ts'), disk)).toBe(false)
+    expect(onDisk(file(rows, 'kept.ts'), new Map())).toBe(false)
   })
 })

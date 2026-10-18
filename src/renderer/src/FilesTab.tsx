@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw, X } fro
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeLetter } from '../../core/git-status'
 import { openErrorLine, type OpenResult } from '../../core/open-result'
-import { changedRows, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
+import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
 import { SMALL_ICON } from './icons'
 
@@ -171,10 +171,10 @@ function LocalFiles({
   /** Only the latest open's result shows. */
   const opens = useRef(0)
 
-  // A deleted file does nothing (D13).
+  // A deleted file does nothing (D13); one still on disk opens, whatever its letter.
   const open = (path: string): void => {
     const row = rows.find((r) => r.path === path)
-    if (row?.kind !== 'file' || row.change === 'D') return
+    if (row?.kind !== 'file' || !onDisk(row, listings)) return
     const at = ++opens.current
     setOpenError(null)
     void onOpenFile(path).then((result) => {

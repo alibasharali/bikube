@@ -22,8 +22,13 @@ interface FolderTree {
 }
 
 const trees = new Map<string, FolderTree>()
-/** Folders with a refresh running: a refresh never starts while the one before it runs (D12). */
-const refreshing = new Set<string>()
+/**
+ * Each folder's running refresh, which ends after the follow-up read when one was asked for: a
+ * read never starts while the one before it runs (D12).
+ */
+const refreshing = new Map<string, Promise<void>>()
+/** Folders asked to refresh again while a read ran: exactly one more read follows it (AC9). */
+const pending = new Set<string>()
 const listeners = new Set<() => void>()
 
 function treeOf(folder: string): FolderTree {
@@ -99,26 +104,44 @@ function shownFolders(expanded: ReadonlySet<string>): string[] {
 
 /**
  * Reads every expanded folder that shows in `folder`'s tree and its git status again (D12),
- * replacing only what changed, so expansion, selection and scroll stay. Skipped while one runs.
+ * replacing only what changed, so expansion, selection and scroll stay. Asked for while a read
+ * runs (a poll, a Refresh click), it reads once more when that read ends, never two at once; the
+ * promise ends after that read.
  */
-export async function refreshTree(folder: string): Promise<void> {
-  if (refreshing.has(folder)) return
-  refreshing.add(folder)
-  try {
-    const tree = treeOf(folder)
-    const paths = shownFolders(tree.expanded)
-    const [status, ...listings] = await Promise.all([
-      readStatus(folder),
-      ...paths.map((path) => read(folder, path))
-    ])
-    let any = storeStatus(folder, status)
-    paths.forEach((path, i) => {
-      if (store(folder, path, listings[i] as FolderListing)) any = true
-    })
-    if (any) changed(tree)
-  } finally {
-    refreshing.delete(folder)
+export function refreshTree(folder: string): Promise<void> {
+  const running = refreshing.get(folder)
+  if (running) {
+    pending.add(folder)
+    return running
   }
+  const run = (async () => {
+    try {
+      do {
+        pending.delete(folder)
+        await readTree(folder)
+      } while (pending.has(folder))
+    } finally {
+      pending.delete(folder)
+      refreshing.delete(folder)
+    }
+  })()
+  refreshing.set(folder, run)
+  return run
+}
+
+/** One read of `folder`'s shown folders and git status. */
+async function readTree(folder: string): Promise<void> {
+  const tree = treeOf(folder)
+  const paths = shownFolders(tree.expanded)
+  const [status, ...listings] = await Promise.all([
+    readStatus(folder),
+    ...paths.map((path) => read(folder, path))
+  ])
+  let any = storeStatus(folder, status)
+  paths.forEach((path, i) => {
+    if (store(folder, path, listings[i] as FolderListing)) any = true
+  })
+  if (any) changed(tree)
 }
 
 /** Expands or collapses `path` in `folder`'s tree; an expanded folder is read at once. */

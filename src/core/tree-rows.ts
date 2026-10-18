@@ -203,6 +203,19 @@ export function changedRows(rootName: string, changes: readonly FileChange[]): T
 }
 
 /** What a key on the tree does: select another row, expand or collapse a folder, or open a file. */
+/**
+ * Whether a file row is on disk, so it can open (D13: a deleted file does nothing). A listed
+ * row is, whatever its letter: `git rm --cached` leaves the file there, reading D. A D row
+ * without an entry is on disk only when its folder's last listing still names it (Changed only
+ * rows carry no entry); any other letter is.
+ */
+export function onDisk(row: TreeRow, listings: ReadonlyMap<string, FolderListing>): boolean {
+  if (row.entry) return true
+  if (row.change !== 'D') return true
+  const listing = listings.get(row.parent ?? '')
+  return listing?.ok === true && listing.entries.some((e) => e.name === row.name && !e.folder)
+}
+
 export type TreeAction = { select?: string; toggle?: string; open?: string }
 
 const selectable = (row: TreeRow): boolean =>

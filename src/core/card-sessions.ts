@@ -91,7 +91,6 @@ export class CardSessions<S extends CardScreen> {
   private readonly early = new Map<string, Set<() => void>>()
   private readonly endedListeners: ((cardId: string) => void)[] = []
   private readonly activityListeners: ((cardId: string, activity: Activity | null) => void)[] = []
-  private readonly setupListeners: ((cardId: string, setup: SetupState | null) => void)[] = []
 
   /**
    * `router` is shared with the cards' extra panes (#11), or a new one over `api`. `defer` runs
@@ -276,11 +275,6 @@ export class CardSessions<S extends CardScreen> {
     return true
   }
 
-  /** The running card's setup state (#39 D5); null when none, or for a card that isn't running. */
-  setupState(cardId: string): SetupState | null {
-    return this.entries.get(cardId)?.setup ?? null
-  }
-
   /**
    * Types the setup line into the running card's main pane again (a retry, #39 D6) and sets its
    * setup `running`. Returns false, changing nothing, for a card that isn't running or whose shell
@@ -321,11 +315,6 @@ export class CardSessions<S extends CardScreen> {
     const first = firstStart(card)
     if (first !== null) onFirstStart?.(first)
     return true
-  }
-
-  /** Called with a card's id and new setup state each time any card's setup state changes (#39 D5). */
-  onSetup(listener: (cardId: string, setup: SetupState | null) => void): void {
-    this.setupListeners.push(listener)
   }
 
   /**
@@ -469,7 +458,6 @@ export class CardSessions<S extends CardScreen> {
     if (entry.setup === setup) return
     entry.setup = setup
     this.refresh(entry)
-    for (const listener of this.setupListeners) listener(entry.cardId, setup)
   }
 
   /** Recomputes the status from the screen and notifies when it changed. */

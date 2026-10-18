@@ -257,7 +257,7 @@ interface CardItemProps {
  * A card on the board (#4 D5, D7, D9, D12, D13): its title and status; click or Enter opens
  * it. Its ⋯ menu renames it inline (as does double-clicking the title), changes its startup
  * command (#5 D11), moves it to the bottom of another column (#6 D8), closes it while it runs
- * (#7 D3, D4), retries or skips a failed setup (#39 D6), or deletes it, asking first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
+ * (#7 D3, D4), retries or skips a setup that is running or failed (#39 D6), or deletes it, asking first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
  * on the board, dimmed meanwhile (#6 D5). A running card's stop button opens the same Close
  * confirmation (#31 D10).
  */
@@ -506,7 +506,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
                 Close
               </button>
             )}
-            {status.setup === 'failed' && (
+            {status.setup !== undefined && (
               <>
                 <button
                   type="button"

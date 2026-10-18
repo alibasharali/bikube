@@ -1017,27 +1017,20 @@ describe('pending setup (#39 D3, D4)', () => {
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
     expect(api.writes).toEqual([['s1', 'go\r']])
-    expect(sessions.setupState('c1')).toBeNull()
+    expect(sessions.status('c1')?.setup).toBeUndefined()
   })
 
   it('is running from the start, failed on board setup failed, cleared when the shell stops (D5, D7)', async () => {
-    const changes: [string, string | null][] = []
-    sessions.onSetup((id, setup) => changes.push([id, setup]))
     sessions.start({ ...card('c1'), setup: 'npm ci' })
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(sessions.setupState('c1')).toBe('running')
+    expect(sessions.status('c1')?.setup).toBe('running')
     expect(sessions.setupFailed('c1')).toBe(true)
-    expect(sessions.setupState('c1')).toBe('failed')
+    expect(sessions.status('c1')?.setup).toBe('failed')
     expect(api.writes).toEqual([['s1', SETUP_LINE]])
     api.emitExit({ id: 's1', exitCode: 0 })
-    expect(sessions.setupState('c1')).toBeNull()
+    expect(sessions.status('c1')?.setup).toBeUndefined()
     expect(sessions.setupFailed('c1')).toBe(false)
-    expect(changes).toEqual([
-      ['c1', 'running'],
-      ['c1', 'failed'],
-      ['c1', null]
-    ])
   })
 
   it('types the setup line again on the next start while it is still pending (D7)', async () => {
@@ -1067,7 +1060,7 @@ describe('pending setup (#39 D3, D4)', () => {
       ['s1', 'codex\r']
     ])
     expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
-    expect(sessions.setupState('c1')).toBeNull()
+    expect(sessions.status('c1')?.setup).toBeUndefined()
   })
 
   it('continues nothing for a card that is not running', async () => {
@@ -1106,16 +1099,19 @@ describe('pending setup (#39 D3, D4)', () => {
     expect(sessions.status('c1')?.setup).toBeUndefined()
   })
 
-  it('types the setup line again on a retry and is running again (D6)', async () => {
+  it('types the setup line again on a retry, from running or failed, and is running again (D6)', async () => {
     sessions.start({ ...card('c1'), setup: 'npm ci' })
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.typeSetup('c1', 'npm ci')).toBe(true)
+    expect(sessions.status('c1')?.setup).toBe('running')
     sessions.setupFailed('c1')
     expect(sessions.typeSetup('c1', 'npm ci')).toBe(true)
     expect(api.writes).toEqual([
       ['s1', SETUP_LINE],
+      ['s1', SETUP_LINE],
       ['s1', SETUP_LINE]
     ])
-    expect(sessions.setupState('c1')).toBe('running')
+    expect(sessions.status('c1')?.setup).toBe('running')
   })
 })

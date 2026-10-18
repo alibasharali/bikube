@@ -280,7 +280,7 @@ describe('answerBoardCommand', () => {
       const seen: [Card, string][] = []
       const reply = answerBoardCommand(
         store,
-        'c-web',
+        'c-api',
         { command: 'setup', card: 'api', result: 'ok' },
         running,
         () => {},
@@ -331,6 +331,26 @@ describe('answerBoardCommand', () => {
         error: 'board: api has no setup running'
       })
       expect(apiCard(store)?.setup).toBe('npm ci')
+      expect(seen).toEqual([])
+    })
+
+    it("refuses another card's setup, even one pending, changing nothing (D4, AC11)", () => {
+      const store = pending()
+      const before = store.getState()
+      const seen: string[] = []
+      for (const result of ['ok', 'failed'] as const) {
+        const reply = answerBoardCommand(
+          store,
+          'c-web',
+          { command: 'setup', card: 'api', result },
+          running,
+          () => {},
+          () => {},
+          (c) => seen.push(c.id)
+        )
+        expect(reply).toEqual({ ok: false, error: 'board: api has no setup running' })
+      }
+      expect(store.getState()).toBe(before)
       expect(seen).toEqual([])
     })
   })

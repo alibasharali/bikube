@@ -372,16 +372,26 @@ test('AC10: no setup line for a card without Own worktree or the Default shell; 
   expect(savedSetups(dataDir)).toEqual({ plain: undefined, worktree: undefined })
 })
 
-test('AC11: board setup in a card with no pending setup says so and exits 1; help does not list it', async () => {
-  const dir = makeDir('api')
+test('AC11: board setup in a card with no pending setup, or for another card, says so and exits 1; help does not list it', async () => {
+  const dir = makeRepo()
   const { page } = await launch(newDataDir())
-  await createSetupWorkspace(page, dir, '')
+  await createSetupWorkspace(page, dir, 'sleep 30')
+  // B's setup is still running when api answers for it.
+  await newCard(page, 'B', true)
+  await backToBoard(page)
+  await expect(setupPill(page, 'B')).toHaveText('Setting up')
   await newCard(page, 'api', false)
   await page.getByTestId('card-view').getByTestId('terminal').click()
-  await page.keyboard.type('board setup . ok 2>err.txt; echo "rc=$?"; board help >help.txt')
+  await page.keyboard.type(
+    'board setup . ok 2>err.txt; echo "rc=$?"; board setup B ok 2>errb.txt; echo "rcb=$?"; board help >help.txt'
+  )
   await page.keyboard.press('Enter')
   await expect.poll(() => lines(page), { timeout: 15_000 }).toContain('rc=1')
+  await expect.poll(() => lines(page)).toContain('rcb=1')
   expect(readFileSync(join(dir, 'err.txt'), 'utf8')).toBe('board: api has no setup running\n')
+  expect(readFileSync(join(dir, 'errb.txt'), 'utf8')).toBe('board: B has no setup running\n')
+  await backToBoard(page)
+  await expect(setupPill(page, 'B')).toHaveText('Setting up')
   await expect.poll(() => existsSync(join(dir, 'help.txt'))).toBe(true)
   await expect.poll(() => readFileSync(join(dir, 'help.txt'), 'utf8')).toContain('board move')
   expect(readFileSync(join(dir, 'help.txt'), 'utf8')).not.toContain('setup')
@@ -424,15 +434,20 @@ test('AC4: the board card shows Setting up while the setup runs, then nothing on
   await expect(setupPill(page, 'slow')).toHaveAttribute('data-state', 'running')
   // The activity pill's place: no other pill beside it.
   await expect(boardCard(page, 'slow').getByTestId('card-activity')).toHaveCount(0)
-  // Retry and Skip are not offered while the setup runs (D6).
+  // Retry and Skip are offered while the setup runs (D6).
   await boardCard(page, 'slow').getByTestId('card-menu').click()
-  await expect(page.getByTestId('card-menu-delete')).toBeVisible()
-  await expect(page.getByTestId('card-menu-retry-setup')).toHaveCount(0)
-  await expect(page.getByTestId('card-menu-skip-setup')).toHaveCount(0)
+  await expect(page.getByTestId('card-menu-retry-setup')).toBeVisible()
+  await expect(page.getByTestId('card-menu-skip-setup')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(setupPill(page, 'slow')).toHaveCount(0, { timeout: 10_000 })
   await openOnBoard(page, 'slow')
   await expect.poll(() => lines(page)).toContain(AGENT)
+  // Once it succeeded, neither is offered.
+  await backToBoard(page)
+  await boardCard(page, 'slow').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-delete')).toBeVisible()
+  await expect(page.getByTestId('card-menu-retry-setup')).toHaveCount(0)
+  await expect(page.getByTestId('card-menu-skip-setup')).toHaveCount(0)
 })
 
 test('AC5: a failed setup shows Setup failed, the agent never starts and the card stays Running', async () => {
@@ -450,7 +465,7 @@ test('AC5: a failed setup shows Setup failed, the agent never starts and the car
   await typeInCard(page, 'echo alive-$((40+2))')
   await expect.poll(() => lines(page)).toContain('alive-42')
   expect(await lines(page)).not.toContain(AGENT)
-  // Offered after a failure (D6); AC4 and AC6 check they aren't while it runs or once it succeeded.
+  // Offered after a failure too (D6); AC4 and AC6 check they aren't once it succeeded.
   await backToBoard(page)
   await card.getByTestId('card-menu').click()
   await expect(page.getByTestId('card-menu-retry-setup')).toBeVisible()
@@ -462,11 +477,11 @@ test('AC6: Retry setup types the setup again; once it succeeds the pill goes and
   const dataDir = newDataDir()
   const repo = makeRepo()
   const { page } = await launch(dataDir)
-  await createSetupWorkspace(page, repo, 'test -f ok.flag')
+  await createSetupWorkspace(page, repo, 'sleep 2 && test -f ok.flag')
   await newCard(page, 'retry', true)
   // The worktree's long path wraps the typed line, so the board's pill tells it failed.
   await backToBoard(page)
-  await expect(setupPill(page, 'retry')).toHaveText('Setup failed')
+  await expect(setupPill(page, 'retry')).toHaveText('Setup failed', { timeout: 10_000 })
   await openOnBoard(page, 'retry')
   await typeInCard(page, 'touch ok.flag')
   await expect.poll(() => existsSync(join(onlyWorktree(dataDir), 'ok.flag'))).toBe(true)
@@ -474,7 +489,9 @@ test('AC6: Retry setup types the setup again; once it succeeds the pill goes and
   await expect(setupPill(page, 'retry')).toHaveText('Setup failed')
 
   await pickInMenu(page, 'retry', 'card-menu-retry-setup')
-  await expect(setupPill(page, 'retry')).toHaveCount(0)
+  // The sleep keeps it Setting up long enough to see, then the pill goes.
+  await expect(setupPill(page, 'retry')).toHaveText('Setting up')
+  await expect(setupPill(page, 'retry')).toHaveCount(0, { timeout: 10_000 })
   await openOnBoard(page, 'retry')
   await expect.poll(() => lines(page)).toContain(AGENT)
   await expect.poll(() => savedSetups(dataDir)).toEqual({ retry: undefined })

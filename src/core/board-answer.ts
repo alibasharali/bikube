@@ -20,8 +20,8 @@ import type { Card, WorkspaceStore } from './workspace-store'
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
  * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it;
- * `activity` likewise hands its value to `setActivity`, null for `none` (#31 D12). `setup` needs
- * a running card with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
+ * `activity` likewise hands its value to `setActivity`, null for `none` (#31 D12). `setup` acts
+ * only on the calling card, which must be running with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
  * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it.
  */
 export function answerBoardCommand(
@@ -49,7 +49,8 @@ export function answerBoardCommand(
     return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
   }
   if (command.command === 'setup') {
-    if (!isRunning(card.value.id) || !card.value.setup) {
+    // Only the calling card's own setup (D4): another card's reads as having none.
+    if (card.value.id !== callingCardId || !isRunning(card.value.id) || !card.value.setup) {
       return { ok: false, error: noSetupError(card.value) }
     }
     if (command.result === 'failed') {

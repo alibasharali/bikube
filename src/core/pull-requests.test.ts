@@ -170,6 +170,25 @@ describe('pushForPullRequest', () => {
     expect(git(remote, 'rev-parse', 'card-1')).toBe(theirs)
   })
 
+  it("gives the open pull request's page for the pushed branch when one is known (D9)", async () => {
+    const asked: string[] = []
+    const known = (branch: string): string | null => {
+      asked.push(branch)
+      return branch === 'card-1' ? 'https://github.com/acme/widget/pull/12' : null
+    }
+    expect(await pushForPullRequest(repo, run, known)).toEqual({
+      ok: true,
+      url: 'https://github.com/acme/widget/pull/12'
+    })
+    expect(git(remote, 'rev-parse', 'card-1')).toBe(git(repo, 'rev-parse', 'HEAD'))
+    git(repo, 'switch', '-q', '-c', 'topic/x')
+    expect(await pushForPullRequest(repo, run, known)).toEqual({
+      ok: true,
+      url: 'https://github.com/acme/widget/compare/topic/x?expand=1'
+    })
+    expect(asked).toEqual(['card-1', 'topic/x'])
+  })
+
   it('refuses a detached HEAD, pushing nothing', async () => {
     git(repo, 'switch', '-q', '--detach')
     expect(await pushForPullRequest(repo, run)).toEqual({ ok: false, reason: 'Not on a branch' })

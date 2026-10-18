@@ -58,15 +58,23 @@ export type PullRequestResult = { ok: true; url: string } | { ok: false; reason:
  * with #33's `push` (to its upstream, else to `origin` as its new upstream; never forced), then
  * builds the compare URL from the URL (`git remote get-url`) of the branch's upstream remote
  * (`branch.<branch>.remote`), else `origin`'s. A failed push is git's message and gives no URL; a
- * remote that isn't on GitHub stays pushed and reads `NOT_GITHUB`.
+ * remote that isn't on GitHub stays pushed and reads `NOT_GITHUB`. With an open pull request
+ * known for the pushed branch (`openPullRequest`, from main's own `gh` reads, D9), its page is
+ * given instead.
  */
-export async function pushForPullRequest(dir: string, run: Git): Promise<PullRequestResult> {
+export async function pushForPullRequest(
+  dir: string,
+  run: Git,
+  openPullRequest: (branch: string) => string | null = () => null
+): Promise<PullRequestResult> {
   // Main queues this with every other git command for `dir`, so the branch can't change between
   // this read and the push's own.
   const branch = await currentBranch(dir, run)
   if (!branch) return { ok: false, reason: 'Not on a branch' }
   const pushed = await push(dir, run)
   if (!pushed.ok) return pushed
+  const known = openPullRequest(branch)
+  if (known !== null) return { ok: true, url: known }
   const configured = await run(dir, ['config', '--get', `branch.${branch}.remote`])
   const name = configured.code === 0 ? configured.stdout.trim() : ''
   const remote = name && name !== '.' ? name : 'origin'

@@ -16,6 +16,7 @@ import type { StartupCommand } from '../../core/startup-command'
 import type { Card, CardWorktree, Column } from '../../core/workspace-store'
 import { useBranch } from './branches'
 import { dismissCardGitAction, runCardGitAction, useCardGitAction } from './card-git'
+import { refreshPullRequest, usePullRequest } from './pull-requests'
 import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
@@ -114,9 +115,37 @@ function CardGitActionLine({ cardId }: { cardId: string }): React.JSX.Element | 
 }
 
 /**
- * A worktree card's Open pull request item (#38 D2, D3): pushes the branch checked out in its
- * worktree now, then main opens GitHub's page for it. Disabled while the card's action runs and
- * unless that worktree is on a branch (`Not on a branch` when detached).
+ * A worktree card's pull request chip (#38 D8): `#<n>` with its CI dot for an open PR, `#<n>
+ * merged` or `#<n> closed`, nothing without a PR known. A button of its own, outside the card's
+ * open button: a click opens the PR in the browser and never the card.
+ */
+function PullRequestChip({ worktree }: { worktree: CardWorktree }): React.JSX.Element | null {
+  const pr = usePullRequest(worktree.path, useBranch(worktree.path))
+  if (pr === null) return null
+  const open = pr.state === 'open'
+  const ci = open ? pr.ci : null
+  const what = open ? (ci ?? 'no checks') : pr.state
+  return (
+    <button
+      type="button"
+      className="card-pr"
+      data-testid="card-pr"
+      data-state={pr.state}
+      data-ci={ci ?? undefined}
+      title={`Pull request #${pr.number}: ${what}`}
+      onClick={() => window.drovr.link.open(pr.url)}
+    >
+      {ci !== null && <span className="card-pr-dot" aria-hidden="true" />}
+      {open ? `#${pr.number}` : `#${pr.number} ${pr.state}`}
+    </button>
+  )
+}
+
+/**
+ * A worktree card's Open pull request item (#38 D2, D3, D9): pushes the branch checked out in its
+ * worktree now, then main opens GitHub's page for it, or the open PR's (`Push and open pull
+ * request #<n>`). Disabled while the card's action runs and unless that worktree is on a branch
+ * (`Not on a branch` when detached).
  */
 function PullRequestItem({
   cardId,
@@ -128,6 +157,7 @@ function PullRequestItem({
   run: (action: () => void) => () => void
 }): React.JSX.Element {
   const branch = useBranch(worktree.path)
+  const pr = usePullRequest(worktree.path, branch)
   const busy = useCardGitAction(cardId).busy !== null
   const onBranch = typeof branch === 'string' && branch !== 'detached'
   const disabled = busy || !onBranch
@@ -145,12 +175,14 @@ function PullRequestItem({
           : run(() => {
               void runCardGitAction(cardId, 'Pushing…', () =>
                 window.drovr.git.openPullRequest(worktree.path)
-              )
+              ).then((result) => {
+                if (result?.ok) refreshPullRequest(worktree.path)
+              })
             })
       }
     >
       <GitPullRequest {...MENU_ICON} />
-      Open pull request
+      {pr?.state === 'open' ? `Push and open pull request #${pr.number}` : 'Open pull request'}
     </button>
   )
 }
@@ -310,6 +342,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           <CardLines status={status} />
         </button>
       )}
+      {card.worktree && <PullRequestChip worktree={card.worktree} />}
       {card.worktree && <CardGitActionLine cardId={card.id} />}
       {running && (
         <button

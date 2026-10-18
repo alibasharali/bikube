@@ -1,6 +1,6 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen } from './card-view'
@@ -11,7 +11,10 @@ import { plainCards } from './plain-cards'
 // Open pull request from a worktree card (#38). Each test makes `repo` on `main`, whose `origin`
 // has the GitHub URL `https://github.com/acme/widget.git` and the local bare `remote.git` as its
 // push URL (`remote.origin.pushurl`), and the worktree card `Card 1` on `card-1` with one commit
-// of its own. `shell.openExternal` records its URLs instead of opening a browser.
+// of its own. `shell.openExternal` records its URLs instead of opening a browser. The login shell
+// (`bash -l`, whose profile puts the fake HOME's `bin` first on PATH) finds a fake `gh` there,
+// printing the JSON `gh.json` holds, else `no pull requests found` with exit 1, so the real `gh`
+// never runs.
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -85,8 +88,56 @@ async function recordOpenedLinks(): Promise<void> {
 const openedLinks = (): Promise<string[]> =>
   app!.evaluate(() => [...((globalThis as { openedLinks?: string[] }).openedLinks ?? [])])
 
+const ghJson = (): string => join(root, 'gh.json')
+const ghLog = (): string => join(root, 'gh.log')
+
+/** The fake `gh` in the fake HOME's `bin`, logging its directory and arguments per run. */
+function fakeGh(): void {
+  const gh = join(fake.home, 'bin', 'gh')
+  writeFileSync(
+    gh,
+    `#!/bin/sh\n{ pwd; printf '%s\\n' "$@"; } >> '${ghLog()}'\n` +
+      `[ -f '${ghJson()}' ] || { echo 'no pull requests found for branch "x"' >&2; exit 1; }\n` +
+      `cat '${ghJson()}'\n`
+  )
+  chmodSync(gh, 0o755)
+}
+
+/** What the fake `gh` answers from now on: PR 12 in `state`, with `checks` as its rollup. */
+function answerPullRequest(state: string, checks: unknown[] = []): void {
+  writeFileSync(
+    ghJson(),
+    JSON.stringify({
+      number: 12,
+      state,
+      url: 'https://github.com/acme/widget/pull/12',
+      statusCheckRollup: checks
+    })
+  )
+}
+
+const FAILING_RUN = {
+  __typename: 'CheckRun',
+  name: 'build',
+  status: 'COMPLETED',
+  conclusion: 'FAILURE'
+}
+
+/** The window gets the focus, as when the user comes back to it. */
+async function focusWindow(): Promise<void> {
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+}
+
+/** Shows the board again: the card view and back, so the board's cards are shown anew. */
+async function showBoardAgain(): Promise<void> {
+  await card1().getByTestId('card-open').click()
+  await expectCardOpen(page, 'Card 1')
+  await backToBoard(page)
+}
+
 const card1 = (): Locator => boardCard(page, 'Card 1')
 const action = (): Locator => card1().getByTestId('card-action')
+const chip = (): Locator => card1().getByTestId('card-pr')
 
 /** Opens `Card 1`'s ⋯ menu; its Open pull request item. */
 async function pullRequestItem(card: Locator = card1()): Promise<Locator> {
@@ -98,6 +149,7 @@ test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-pr-'))
   makeRepos()
   fake = fakeSshHome(root)
+  fakeGh()
   ;({ app, page } = await launchApp({ env: fake.env }))
   await recordOpenedLinks()
   await addWorkspace('repo', repo)
@@ -191,16 +243,99 @@ test('the live branch is pushed, and a detached HEAD disables the item', async (
   expect(await openedLinks()).toHaveLength(1)
 })
 
+test('#38 AC6: the PR chip shows the open PR and its CI, then that it was merged', async () => {
+  answerPullRequest('OPEN', [FAILING_RUN])
+  await showBoardAgain()
+  await expect(chip()).toHaveText('#12', { timeout: 2000 })
+  await expect(chip()).toHaveAttribute('data-ci', 'failing')
+  await expect(chip()).toHaveAttribute('title', 'Pull request #12: failing')
+  // gh ran in the card's worktree for its branch, the branch a positional argument.
+  const log = readFileSync(ghLog(), 'utf8').trimEnd().split('\n')
+  expect(log.slice(-7)).toEqual([
+    worktree,
+    'pr',
+    'view',
+    '--json',
+    'number,state,url,statusCheckRollup',
+    '--',
+    'card-1'
+  ])
+
+  answerPullRequest('MERGED')
+  await focusWindow()
+  await expect(chip()).toHaveText('#12 merged', { timeout: 2000 })
+  await expect(chip()).not.toHaveAttribute('data-ci')
+  await expect(chip()).toHaveAttribute('title', 'Pull request #12: merged')
+})
+
+test('#38 AC7: clicking the chip opens the PR in the browser, not the card', async () => {
+  answerPullRequest('OPEN', [FAILING_RUN])
+  await showBoardAgain()
+  await chip().click()
+  await expect.poll(openedLinks).toEqual(['https://github.com/acme/widget/pull/12'])
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test('#38 AC8: without gh, or without a PR for the branch, no chip and no error', async () => {
+  // gh exits 1 with `no pull requests found` (the fake without gh.json).
+  await focusWindow()
+  await expect(await pullRequestItem()).toHaveText('Open pull request')
+  await page.keyboard.press('Escape')
+  await expect(chip()).toHaveCount(0)
+  await expect(action()).toHaveCount(0)
+
+  // A PR shows; then gh is gone from the login shell's PATH and the chip goes with it.
+  answerPullRequest('OPEN')
+  await focusWindow()
+  await expect(chip()).toHaveText('#12', { timeout: 2000 })
+  await expect(chip()).not.toHaveAttribute('data-ci')
+  rmSync(join(fake.home, 'bin', 'gh'))
+  writeFileSync(join(fake.home, '.bash_profile'), 'export PATH="$HOME/bin:/usr/bin:/bin"\n')
+  await focusWindow()
+  await expect(chip()).toHaveCount(0, { timeout: 2000 })
+  await expect(action()).toHaveCount(0)
+  await expect(await pullRequestItem()).toHaveText('Open pull request')
+})
+
+test('#38 AC9: with an open PR, the item pushes and opens that PR', async () => {
+  answerPullRequest('OPEN', [FAILING_RUN])
+  await showBoardAgain()
+  await expect(chip()).toHaveText('#12', { timeout: 2000 })
+  const item = await pullRequestItem()
+  await expect(item).toHaveText('Push and open pull request #12')
+  await item.click()
+  await expect(action()).toHaveText('Pushed · opened in the browser', { timeout: 10_000 })
+  expect(git(remote, 'rev-parse', 'card-1')).toBe(git(worktree, 'rev-parse', 'HEAD'))
+  expect(await openedLinks()).toEqual(['https://github.com/acme/widget/pull/12'])
+
+  // Merged: the item opens the compare page again.
+  answerPullRequest('MERGED')
+  await focusWindow()
+  await expect(chip()).toHaveText('#12 merged', { timeout: 2000 })
+  const again = await pullRequestItem()
+  await expect(again).toHaveText('Open pull request')
+  await again.click()
+  await expect
+    .poll(openedLinks, { timeout: 10_000 })
+    .toEqual([
+      'https://github.com/acme/widget/pull/12',
+      'https://github.com/acme/widget/compare/card-1?expand=1'
+    ])
+})
+
 test('a plain card and an SSH card have no Open pull request', async () => {
   await newCard('Plain')
   await boardCard(page, 'Plain').getByTestId('card-menu').click()
   await expect(boardCard(page, 'Plain').getByTestId('card-menu-delete')).toBeVisible()
   await expect(boardCard(page, 'Plain').getByTestId('card-menu-pull-request')).toHaveCount(0)
   await page.keyboard.press('Escape')
+  await expect(boardCard(page, 'Plain').getByTestId('card-pr')).toHaveCount(0)
 
   await addWorkspace('remote', '/srv/repo', 'unreachable')
   await newCard('Remote')
   await boardCard(page, 'Remote').getByTestId('card-menu').click()
   await expect(boardCard(page, 'Remote').getByTestId('card-menu-delete')).toBeVisible()
   await expect(boardCard(page, 'Remote').getByTestId('card-menu-pull-request')).toHaveCount(0)
+  await expect(boardCard(page, 'Remote').getByTestId('card-pr')).toHaveCount(0)
 })

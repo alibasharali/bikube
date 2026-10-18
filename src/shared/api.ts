@@ -4,6 +4,7 @@ import type { GhosttyTheme } from '../core/ghostty-config'
 import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
+import type { PullRequestRead } from '../core/pr-status'
 import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
@@ -56,6 +57,7 @@ export const IPC = {
   gitPull: 'git:pull',
   gitPush: 'git:push',
   gitOpenPullRequest: 'git:openPullRequest',
+  gitPullRequest: 'git:pullRequest',
   filesList: 'files:list',
   filesStatus: 'files:status',
   filesOpen: 'files:open',
@@ -261,6 +263,12 @@ export interface GitApi {
    * browser: `Pushed · opened in the browser`, else git's message or `Not a GitHub remote: …`.
    */
   openPullRequest(dir: string): Promise<SyncResult>
+  /**
+   * The pull request of the branch checked out in the worktree `dir`, as the user's `gh` sees it
+   * (#38 D7): the branch main read and its PR, null for none (any failure); null outside a
+   * repository and on a detached HEAD. Never an error.
+   */
+  pullRequest(dir: string): Promise<PullRequestRead | null>
 }
 
 /**

@@ -16,4 +16,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: verifier ALL PASS (AC1–AC16); full smoke 297 passed, 2 failed (updates swap test: root sandbox; settings AC2: passed 3/3 alone, load timing). Ship review fixes (`cd59a80..58588e1`) CLEAN.

@@ -22,7 +22,13 @@ import {
 import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import { shellCards } from '../../core/workspace-shells'
 import type { WorkspaceState } from '../../core/workspace-store'
-import { cardTerminals, useCardRunState, usePaneLayout } from './card-terminals'
+import {
+  cardPanes,
+  cardTerminals,
+  useCardRunState,
+  usePaneLayout,
+  type XtermScreen
+} from './card-terminals'
 import Modal from './Modal'
 import ShortcutKeys from './ShortcutKeys'
 import { currentKeymap, useSettings } from './settings'
@@ -95,6 +101,11 @@ function useStatusKey(ids: string[]): string {
   )
 }
 
+/** A pane's screen, as CardView reads it: the card's own terminal for the main pane. */
+function paneScreen(cardId: string, paneId: string): XtermScreen | undefined {
+  return paneId === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, paneId)
+}
+
 /** The open view as the palette's rows read it, from its live run state and panes. */
 function openView(
   open: OpenTerminal | null,
@@ -106,7 +117,8 @@ function openView(
     ...open,
     running: runState.kind === 'running',
     paneCount: paneIds(layout.tree).length,
-    extraPaneFocused: layout.focused !== MAIN_PANE
+    extraPaneFocused: layout.focused !== MAIN_PANE,
+    focusedPaneHasScreen: paneScreen(open.cardId, layout.focused) !== undefined
   }
 }
 

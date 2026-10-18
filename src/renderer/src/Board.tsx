@@ -3,7 +3,7 @@ import type { Workspace } from '../../core/workspace-store'
 import AddColumn from './AddColumn'
 import ShellStrip from './ShellStrip'
 import BoardColumn from './BoardColumn'
-import { takeNewCardRequest, useNewCardRequest } from './new-card-request'
+import { newCardRequestFor, takeNewCardRequest, usePendingNewCardRequest } from './new-card-request'
 
 /** The workspace's board: columns as vertical lanes, scrolling horizontally. */
 function Board({
@@ -13,11 +13,14 @@ function Board({
   workspace: Workspace
   onOpenCard: (cardId: string) => void
 }): React.JSX.Element {
-  // The command palette's New card opens the first column's form (#40 D9), once per request.
-  const newCardRequest = useNewCardRequest(workspace.id)
+  // The command palette's New card opens the first column's form (#40 D9), once per request. Any
+  // board that shows takes the pending request, so one for another workspace (or one with no
+  // columns) is dropped and never opens a form later.
+  const pending = usePendingNewCardRequest()
+  const newCardRequest = newCardRequestFor(pending, workspace.id, workspace.columns.length > 0)
   useEffect(() => {
-    if (newCardRequest !== undefined) takeNewCardRequest(newCardRequest)
-  }, [newCardRequest])
+    if (pending) takeNewCardRequest(pending.id)
+  }, [pending])
   return (
     <section className="board" data-testid="board" aria-label={`Board for ${workspace.name}`}>
       {/* The name and folder are in the title bar; the heading stays for screen readers. */}

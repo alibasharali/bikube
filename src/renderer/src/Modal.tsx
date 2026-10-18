@@ -86,7 +86,10 @@ function Modal({
       onMouseDown={
         closeOnOutsideClick
           ? (e) => {
-              if (e.target === e.currentTarget) closeRef.current()
+              if (e.target !== e.currentTarget) return
+              // The press's default action would move focus after the close restored it.
+              e.preventDefault()
+              closeRef.current()
             }
           : undefined
       }

@@ -171,7 +171,8 @@ describe('paletteItems actions (#40 D6)', () => {
     cardId: 'c1',
     running: true,
     paneCount: 1,
-    extraPaneFocused: false
+    extraPaneFocused: false,
+    focusedPaneHasScreen: true
   }
   const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
   const APP_ROWS = [
@@ -221,6 +222,18 @@ describe('paletteItems actions (#40 D6)', () => {
       'Find',
       'Move card to In Progress'
     ])
+  })
+
+  it('offers no Find when the focused pane has no screen (#35 D12)', () => {
+    const view = { ...cardView, focusedPaneHasScreen: false }
+    expect(labels(input(state, { view })).slice(0, 5)).toEqual([
+      'Back to board',
+      'Split right',
+      'Split down',
+      'Close card',
+      'Toggle panel'
+    ])
+    expect(labels(input(state, { view }))).not.toContain('Find')
   })
 
   it('offers no moves for a shell', () => {

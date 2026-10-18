@@ -179,6 +179,55 @@ test('AC2: from a focused terminal, the shell receives nothing of the palette an
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
 })
 
+for (const how of ['a click outside', 'the shortcut again'] as const) {
+  test(`D8: closing the palette with ${how} gives the terminal its keyboard back`, async () => {
+    await createWorkspace('Alpha')
+    await newCard('api')
+    await expect.poll(terminalFocused).toBe(true)
+
+    await openPalette()
+    if (how === 'a click outside') await page.mouse.click(5, 5)
+    else await page.keyboard.press(PALETTE)
+    await expect(palette()).toHaveCount(0)
+    await expect.poll(terminalFocused).toBe(true)
+
+    await run('echo ok')
+    await expect.poll(async () => (await bufferLines()).includes('ok')).toBe(true)
+    await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  })
+}
+
+test('D1: the palette opens from the empty state, offering New workspace and Open Settings', async () => {
+  await expect(page.getByTestId('empty-state')).toBeVisible()
+  await openPalette()
+  const actions = await titles(section('actions'))
+  expect(actions).toContain('New workspace')
+  expect(actions).toContain('Open Settings')
+  await expect(section('cards')).toHaveCount(0)
+})
+
+test('D8: while the palette is open, Mod+digit and other shortcuts do nothing', async () => {
+  await createWorkspace('Alpha')
+  await createWorkspace('Beta')
+  await selectWorkspace('Alpha')
+
+  await openPalette()
+  await page.keyboard.press(darwin ? 'Meta+2' : 'Control+2')
+  await page.keyboard.press(darwin ? 'Meta+,' : 'Control+,')
+  await expect(palette()).toBeVisible()
+  await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
+  await expect(page.locator('[data-testid=workspace-item][aria-current=true]')).toHaveText(/Alpha/)
+  await expect(page.getByTestId('board-title')).toHaveText('Alpha')
+
+  // The same keys act once the palette is closed, so the test above proves the palette stopped them.
+  await page.keyboard.press('Escape')
+  await expect(palette()).toHaveCount(0)
+  await page.keyboard.press(darwin ? 'Meta+2' : 'Control+2')
+  await expect(page.getByTestId('board-title')).toHaveText('Beta')
+  await page.keyboard.press(darwin ? 'Meta+,' : 'Control+,')
+  await expect(page.getByTestId('settings-dialog')).toBeVisible()
+})
+
 test('AC3: picking a Stopped card in another workspace makes it active and opens the card running', async () => {
   await createWorkspace('Alpha')
   await newCard('build')

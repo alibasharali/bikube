@@ -132,6 +132,8 @@ export interface OpenView {
   paneCount: number
   /** Whether the focused pane is an extra pane (not the main one). */
   extraPaneFocused: boolean
+  /** Whether the focused pane has a terminal screen to search (Find does nothing without, #35 D12). */
+  focusedPaneHasScreen: boolean
 }
 
 export interface PaletteInput {
@@ -213,7 +215,8 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   }
   if (view.extraPaneFocused) rows.push(keymapRow('closePane', keymap))
   if (view.running) rows.push(keymapRow('closeCard', keymap))
-  rows.push(keymapRow('togglePanel', keymap), keymapRow('find', keymap))
+  rows.push(keymapRow('togglePanel', keymap))
+  if (view.focusedPaneHasScreen) rows.push(keymapRow('find', keymap))
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)

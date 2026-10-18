@@ -27,19 +27,20 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
 
 ## 1. Each slice, in spec order, one at a time
 
-1. `BASE=$(git rev-parse HEAD)`. Set the slice to `running` in the ledger and `report_progress(N, "Slice <k>/<total>: <slice name>")`.
-2. **Brief** a `slice-implementer`. It sees nothing but the brief:
+1. **Fleet.** Call `get_item(N)` again. If `fleet.you.baseTouched` is non-empty, the base branch changed your files: `git fetch origin <base> && git merge origin/<base>`, resolve any conflict, and push. When the slice's plan changes files other items touch (a rename, a schema change, a moved module), `post_note(N, text, paths)` with what changes. Plan around overlaps; never ask the developer about one.
+2. `BASE=$(git rev-parse HEAD)`. Set the slice to `running` in the ledger and `report_progress(N, "Slice <k>/<total>: <slice name>")`.
+3. **Brief** a `slice-implementer`. It sees nothing but the brief:
    - **Objective:** the slice text, every AC it satisfies, and the domain decisions those ACs rest on, all verbatim.
    - **Sources:** the spec path, the *Test seams* rows for these ACs, the ledger's *Interfaces* from earlier slices, rulings that touch this slice.
    - **Boundaries:** the spec's *Out of scope*, other slices' ACs ("not yours").
    - **Output:** the report shape from its definition. Tell it not to commit.
-3. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes (under full auto the round comes back answered with your recommendation unless it is `for_developer`: record the ruling and carry on); the answers come back here (`record_answers`) or in a new session that resumes from the ledger. Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
-4. **DONE:** compare `git status` with the reported *Changed files*: nothing outside the slice, no scratch files. Put back with `git checkout -- <path>` any change to a file the slice may not edit (a formatter's rewrite of kit files, `.github/workflows/`, `.claude/`) rather than committing it. Commit `feat(<area>): S<n> <slice name> (#<n>)`. Record `BASE..HEAD` and the *Interfaces* in the ledger. Brief a `slice-reviewer` with the spec path, slice, ACs, seams and range.
-5. **Route the review:**
-   - `CLEAN` → step 6.
+4. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes (under full auto the round comes back answered with your recommendation unless it is `for_developer`: record the ruling and carry on); the answers come back here (`record_answers`) or in a new session that resumes from the ledger. Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
+5. **DONE:** compare `git status` with the reported *Changed files*: nothing outside the slice, no scratch files. Put back with `git checkout -- <path>` any change to a file the slice may not edit (a formatter's rewrite of kit files, `.github/workflows/`, `.claude/`) rather than committing it. Commit `feat(<area>): S<n> <slice name> (#<n>)`. Record `BASE..HEAD` and the *Interfaces* in the ledger. Brief a `slice-reviewer` with the spec path, slice, ACs, seams and range.
+6. **Route the review:**
+   - `CLEAN` → step 7.
    - `FIX` → resume the same implementer with the findings verbatim, commit `fix(review): <what>`, re-review the new range. At most two rounds; what's left becomes a question for the developer.
    - `HUMAN` → ask the developer with the reviewer's options, record the ruling, and send any code change to the implementer as a fix round.
-6. Set the slice to `done`, commit the ledger `docs(ledger): S<n> done (#<n>)`, and push. Pushing after each slice means a restarted session loses nothing.
+7. Set the slice to `done`, commit the ledger `docs(ledger): S<n> done (#<n>)`, and push. Pushing after each slice means a restarted session loses nothing.
 
 If the spec turns out wrong or incomplete, stop and ask the developer. The spec is corrected first, in its own commit, then the code follows. They must never disagree.
 

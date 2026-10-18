@@ -66,9 +66,13 @@ Deploys report through GitHub Actions jobs with `environment: dev` / `prod`; rel
 7. **Review.** CI and the Claude review run on the PR. The review fixes unambiguous findings (`fix(review): …`) and leaves an unresolved thread for everything else. Reply `@claude <what you want>` in a thread to have Claude fix it. Then the PR merges into the base branch (squash) one of two ways: GitHub auto-merges it once CI and the review pass and every thread is resolved, where the preset allows it and the repo has rulesets (public repos, or GitHub Pro); otherwise the developer presses **Merge** on the item in the factory, which only merges with the required checks green. Agents never merge.
 8. **Deliver.** Per the preset: the developer tests on dev and merges the release PR, a deploy or a published release ships it, or the merge itself was the delivery.
 
+## Other sessions
+
+Several items can be worked on at once. `get_item` returns `fleet`: every other active item, the files its branch changes, where they overlap yours, and the notes its session posted (`post_note`). Sessions plan around overlaps rather than asking the developer: `write-spec` reads the fleet and notes its planned paths, `implement-spec` re-reads it before each slice and notes changes to shared files, and both `implement-spec` and `ship` merge the base branch when `fleet.you.baseTouched` says it changed files of yours.
+
 ## Full auto
 
-The developer can run lights-out (the factory working through the board one item at a time, unattended) with **Full auto**. It then also takes features in *Spec* and items in *Backlog* (never issues, nor a project's first `bootstrap` or `onboard` item), and the session works without the developer:
+The developer can run lights-out (the factory working through the board unattended, one item at a time or up to five at once as the developer sets it, each in its own session) with **Full auto**. It then also takes features in *Spec* and items in *Backlog* (never issues, nor a project's first `bootstrap` or `onboard` item), and the session works without the developer:
 
 - an idea is promoted (`promote_item`) or declined (`decline_idea`) by the session;
 - grilling rounds are answered at once with the session's recommendations;

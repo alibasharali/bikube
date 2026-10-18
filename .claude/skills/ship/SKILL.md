@@ -13,6 +13,8 @@ description: Ship a finished item branch: review it in a fresh context, run the 
 
 ## 2. Checks
 
+Call `get_item(N)` and re-check `fleet`. If `fleet.you.baseTouched` is non-empty, the base branch changed your files since you branched: `git fetch origin <base> && git merge origin/<base>`, resolve any conflict, and push. Overlaps with other items don't stop the PR; never ask the developer about one.
+
 Run `.claude/check.sh`. Red sends you back to fixing, never forward.
 
 ## 3. Review in a fresh context

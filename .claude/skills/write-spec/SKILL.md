@@ -15,6 +15,8 @@ Finding facts is your job, never the developer's. Read the item (`get_item`), `C
 
 When this item needs another's code or decisions, link it with `link_items(N, other, "builds_on")` and say so in the spec's Problem section ("Builds on #4: …"). Building then waits until #4 is merged; the board shows it. Use `"related"` for a pointer that doesn't order anything.
 
+**Other sessions.** `get_item`'s `fleet` lists the other active items: their files, where they overlap yours, and their notes. Read it before you write. Plan around every overlap: prefer other files, and name the shared ones in the spec. Link the overlapping item `"related"`, or `"builds_on"` only when this item truly needs its change. Never ask the developer about an overlap.
+
 Done when you can name every module the item will change.
 
 ## 2. Grill (features only)
@@ -53,5 +55,6 @@ Fill in [spec-template.md](spec-template.md) as `docs/specs/<n>-<slug>.md`, with
 
 1. `report_progress(N, "Writing the spec")` before you start writing. Commit `docs(spec): #<n> <title>` and push the branch.
 2. `attach_spec(N, path, summary, branch)` with a three-line summary.
+3. `post_note(N, text, paths)` with one line on the plan and the repo paths it will change, so other sessions plan around you.
 
 Done when the pushed spec is `status: draft` (features) or `status: approved` (bugs and chores, which have no gate) and the item links it.

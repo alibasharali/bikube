@@ -48,7 +48,7 @@ An **idea** is never worked on: tell the developer to promote it to a feature, b
 
 ## 4. Spec
 
-If the item's description asks for the `bootstrap` skill (a new project's first item) or the `onboard` skill (an imported repo's first item), invoke it instead: each gathers its facts and then uses `write-spec` itself. Otherwise invoke `write-spec` for item N. Done when the spec is committed and pushed, and attached with `attach_spec`.
+If the item's description asks for the `bootstrap` skill (a new project's first item) or the `onboard` skill (an imported repo's first item), invoke it instead: each gathers its facts and then uses `write-spec` itself. Otherwise invoke `write-spec` for item N; it reads `get_item`'s `fleet` first and plans around other items' files. Done when the spec is committed and pushed, and attached with `attach_spec`.
 
 ## 5. Gate (features only)
 

@@ -481,6 +481,29 @@ describe('gitError', () => {
     )
   })
 
+  it("keeps the cause ssh or the remote printed before git's own error", () => {
+    const ssh = [
+      'Fetching origin',
+      'ssh: connect to host example.com port 22: Connection refused',
+      'fatal: Could not read from remote repository.'
+    ].join('\n')
+    expect(gitError({ code: 128, stdout: '', stderr: ssh }, 'fetch')).toBe(
+      'ssh: connect to host example.com port 22: Connection refused\n' +
+        'Could not read from remote repository.'
+    )
+    const hook = [
+      'remote: error: GH006: Protected branch update failed for refs/heads/main.',
+      'To github.com:team/project.git',
+      ' ! [remote rejected] main -> main (protected branch hook declined)',
+      "error: failed to push some refs to 'github.com:team/project.git'"
+    ].join('\n')
+    expect(gitError({ code: 1, stdout: '', stderr: hook }, 'push')).toBe(
+      'remote: error: GH006: Protected branch update failed for refs/heads/main.\n' +
+        '! [remote rejected] main -> main (protected branch hook declined)\n' +
+        "failed to push some refs to 'github.com:team/project.git'"
+    )
+  })
+
   it('drops progress and ref updates when git printed no error line', () => {
     const stderr = [
       'Fetching origin',

@@ -286,9 +286,9 @@ function outcome(output: GitOutput, command: string): GitResult {
  * What the menu's error line says when git fails (D6, D12): `git timed out`, else the meaningful
  * lines of git's stderr, followed by how to set up credentials when git needed some it couldn't
  * ask for. Meaningful: no hints, no blank lines, no progress or ref updates (a pull's or fetch's
- * `From …`, `a..b main -> origin/main`), from git's first `fatal:`/`error:` or `! [rejected]`
- * line on when it printed one, without the `error:`/`fatal:` prefixes. Over 400 characters, the
- * last lines are kept (git's refusal comes last), after a `…` line.
+ * `From …`, `a..b main -> origin/main`; ssh's or the remote's cause before git's own error is
+ * kept), without the `error:`/`fatal:` prefixes. Over 400 characters, the last lines are kept
+ * (git's refusal comes last), after a `…` line.
  */
 export function gitError(output: GitOutput, command: string): string {
   if (output.timedOut) return 'git timed out'
@@ -296,10 +296,7 @@ export function gitError(output: GitOutput, command: string): string {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line && !/^hint:/.test(line) && !PROGRESS.some((p) => p.test(line)))
-  const first = lines.findIndex((line) => /^(fatal|error):|^! \[(remote )?rejected\]/.test(line))
-  const kept = (first > 0 ? lines.slice(first) : lines).map((line) =>
-    line.replace(/^(fatal|error):\s*/, '')
-  )
+  const kept = lines.map((line) => line.replace(/^(fatal|error):\s*/, ''))
   const message = trimToEnd(kept) || `git ${command} failed`
   return needsCredentials(output.stderr) ? `${message}\n${CREDENTIAL_HINT}` : message
 }

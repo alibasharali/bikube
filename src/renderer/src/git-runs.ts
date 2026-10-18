@@ -6,7 +6,8 @@ import { refreshBranch } from './branches'
  * The branch menu's command in each folder (#33 D13), kept outside any chip: the title bar shows
  * a chip in more than one place and makes a new one when a card opens or closes, so what is
  * running and what the last command did must outlive them. Every chip for a folder shows its
- * busy label and disables its actions until it ends; a reopened menu shows its note or error.
+ * busy label and disables its actions until it ends; a menu opened afterwards shows its note or
+ * error once (`takeGitResult`).
  */
 export interface GitRun {
   /** What is running (`Fetching…`), null when idle. */
@@ -44,6 +45,17 @@ export function subscribeGitRuns(listener: () => void): () => void {
 export function clearGitResult(dir: string): void {
   const run = gitRun(dir)
   if (run.error !== null || run.note !== null) set(dir, { ...run, error: null, note: null })
+}
+
+/**
+ * The result of `dir`'s last command, once (null while one runs or when there is none): a menu
+ * opening shows what finished while it was closed, and the next opening is clean.
+ */
+export function takeGitResult(dir: string): Pick<GitRun, 'error' | 'note'> | null {
+  const { busy, error, note } = gitRun(dir)
+  if (busy !== null || (error === null && note === null)) return null
+  clearGitResult(dir)
+  return { error, note }
 }
 
 /**

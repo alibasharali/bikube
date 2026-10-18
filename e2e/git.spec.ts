@@ -450,15 +450,20 @@ test('a running command outlives its chip: a new chip shows it busy, then its re
       await expect(menu().getByTestId(action)).toBeDisabled()
     }
 
-    for (const response of held.splice(0)) response.writeHead(404).end()
-    await expect(menu().getByTestId('branch-busy')).toHaveCount(0)
-    await expect(error()).toBeVisible()
-    await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
-    // Back on the board, its menu shows the same result.
+    // It ends while the menu is closed and the chip changes again: the next menu shows its
+    // result once, and the one after that is clean.
     await page.keyboard.press('Escape')
     await backToBoard(page)
+    await expect(chip()).toHaveAttribute('aria-busy', 'true')
+    for (const response of held.splice(0)) response.writeHead(404).end()
+    await expect(chip()).not.toHaveAttribute('aria-busy', 'true')
     await chip().click()
     await expect(error()).toBeVisible()
+    await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
+    await page.keyboard.press('Escape')
+    await chip().click()
+    await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
+    await expect(error()).toHaveCount(0)
   } finally {
     for (const response of held) response.destroy()
     server.close()

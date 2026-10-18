@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { AheadBehind, BranchList } from '../../core/git'
-import { clearGitResult, runGit, useGitRun, type GitCommandResult } from './git-runs'
+import { clearGitResult, runGit, takeGitResult, useGitRun, type GitCommandResult } from './git-runs'
 import { MENU_ICON, SMALL_ICON } from './icons'
 
 /**
@@ -22,7 +22,8 @@ import { MENU_ICON, SMALL_ICON } from './icons'
  * (D6). Fetch, Pull and Push keep it open with a note and read it again (D8, D9); its header shows
  * how far the current branch is from its upstream (D10). One command at a time per folder, every
  * action disabled meanwhile in every chip for that folder; it keeps running when the menu is
- * closed or the chip goes away, and a reopened menu shows its result (D13, `git-runs`). A folder
+ * closed or the chip goes away, and the next menu opened shows its result once (D13, `git-runs`);
+ * a result shown in an open menu stays until it closes or the next command. A folder
  * that isn't a repository (any more) says so, with every action disabled.
  */
 export function BranchChip({
@@ -44,7 +45,12 @@ export function BranchChip({
    * What is running in the folder (`Switching…`), null when idle, every action waiting for it
    * (D13); git's message when the last command failed; what the last Fetch, Pull or Push did.
    */
-  const { busy, error, note } = useGitRun(dir)
+  const run = useGitRun(dir)
+  const { busy } = run
+  /** The result of a command that finished while the menu was closed, taken when it opened. */
+  const [earlier, setEarlier] = useState<{ error: string | null; note: string | null } | null>(null)
+  const error = run.error ?? (busy ? null : (earlier?.error ?? null))
+  const note = run.note ?? (busy ? null : (earlier?.note ?? null))
   /** The current branch against its upstream; null without one, undefined until read (D10). */
   const [sync, setSync] = useState<AheadBehind | null | undefined>(undefined)
   /** The element focused when a command started, focused again when it ends. */
@@ -145,12 +151,22 @@ export function BranchChip({
     }
     setList(undefined)
     setSync(undefined)
+    setEarlier(takeGitResult(dir))
     setNaming(null)
     setNameProblem(null)
     setOpen(true)
     openRef.current = true
     load()
   }
+
+  // Closing the menu forgets the result it showed (the next opening takes a new one); a command
+  // still running keeps its result for the next opening.
+  const wasOpen = useRef(open)
+  useEffect(() => {
+    const closed = wasOpen.current && !open
+    wasOpen.current = open
+    if (closed) clearGitResult(dir)
+  }, [open, dir])
 
   // When the folder's command ends (started here or in a chip since gone), read the menu again.
   const wasBusy = useRef(busy)
@@ -183,6 +199,7 @@ export function BranchChip({
   const act = async (label: string, command: () => Promise<GitCommandResult>): Promise<void> => {
     if (busy) return
     returnFocus.current = document.activeElement
+    setEarlier(null)
     const result = await runGit(dir, label, command)
     if (!result) return
     if (result.ok && !('note' in result)) {
@@ -229,6 +246,7 @@ export function BranchChip({
   const runAction = (testId: string): void => {
     if (testId === 'branch-new') {
       clearGitResult(dir)
+      setEarlier(null)
       setNameProblem(null)
       setNaming('')
     } else if (testId === 'branch-fetch') {
@@ -266,6 +284,7 @@ export function BranchChip({
         title={worktree ? `Own worktree on ${branch}` : `On ${branch}`}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-busy={busy !== null || undefined}
         onClick={toggle}
       >
         <Icon {...SMALL_ICON} />

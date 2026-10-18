@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearGitResult, gitRun, runGit, subscribeGitRuns } from './git-runs'
+import { clearGitResult, gitRun, runGit, subscribeGitRuns, takeGitResult } from './git-runs'
 
 const { refreshBranch } = vi.hoisted(() => ({ refreshBranch: vi.fn() }))
 vi.mock('./branches', () => ({ refreshBranch }))
@@ -61,5 +61,26 @@ describe('runGit', () => {
     expect(result).toEqual({ ok: false, reason: 'IPC failed' })
     expect(gitRun(dir)).toEqual({ busy: null, error: 'IPC failed', note: null })
     expect(refreshBranch).toHaveBeenCalledWith(dir)
+  })
+})
+
+describe('takeGitResult', () => {
+  it('gives a finished result once, then forgets it', async () => {
+    expect(takeGitResult(dir)).toBeNull()
+    await runGit(dir, 'Pulling…', async () => ({ ok: false, reason: 'would be overwritten' }))
+    expect(takeGitResult(dir)).toEqual({ error: 'would be overwritten', note: null })
+    expect(takeGitResult(dir)).toBeNull()
+    expect(gitRun(dir)).toEqual({ busy: null, error: null, note: null })
+    await runGit(dir, 'Fetching…', async () => ({ ok: true, note: 'Fetched' }))
+    expect(takeGitResult(dir)).toEqual({ error: null, note: 'Fetched' })
+    expect(takeGitResult(dir)).toBeNull()
+  })
+
+  it('gives nothing and keeps the run while a command runs', () => {
+    const fetch = pending<{ ok: true; note: string }>()
+    void runGit(dir, 'Fetching…', fetch.command)
+    expect(takeGitResult(dir)).toBeNull()
+    expect(gitRun(dir).busy).toBe('Fetching…')
+    fetch.finish({ ok: true, note: 'Fetched' })
   })
 })

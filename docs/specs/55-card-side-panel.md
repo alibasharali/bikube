@@ -2,7 +2,7 @@
 item: 55
 type: feature
 title: 'Right side panel for open card'
-status: draft
+status: approved
 branch: claude/55-card-side-panel
 ---
 

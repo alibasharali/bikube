@@ -3,11 +3,13 @@ import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import {
+  createBranch,
   gitIn,
   listBranches,
   switchBranch,
   trackBranch,
   type BranchList,
+  type NewBranchResult,
   type GitResult,
   type GitRunner
 } from '../core/git'
@@ -42,7 +44,7 @@ const folder = async (value: unknown): Promise<string | null> => {
 const NO_FOLDER: GitResult = { ok: false, reason: 'working directory not found' }
 
 /**
- * The title bar's branch menu (#33): lists and switches branches of a local folder's repository.
+ * The title bar's branch menu (#33): lists, switches and creates branches of a local folder's repository.
  * Only an absolute existing folder is used, names are checked against git's own lists before they
  * are passed (as single arguments) and requests come from the main frame only (D15).
  */
@@ -79,6 +81,17 @@ export function registerGit(): void {
         return { ok: false, reason: 'Not a valid branch name' }
       }
       return trackBranch(at, remote, branch, git)
+    }
+  )
+  ipcMain.handle(
+    IPC.gitCreate,
+    async (event, dir: unknown, name: unknown): Promise<NewBranchResult> => {
+      guard(event, IPC.gitCreate)
+      const at = await folder(dir)
+      if (!at) return NO_FOLDER
+      if (typeof name !== 'string')
+        return { ok: false, reason: 'Not a valid branch name', name: true }
+      return createBranch(at, name, git)
     }
   )
 }

@@ -112,6 +112,38 @@ test("a remote's branch is tracked by a new local branch, or switches to the exi
   expect(git(repo, 'branch', '--format=%(refname:short)')).toBe('feature\nmain\nremote-only')
 })
 
+test('New branch creates a branch at HEAD and switches to it; a taken or invalid name runs nothing', async () => {
+  const head = git(repo, 'rev-parse', 'HEAD')
+  await chip().click()
+  await menu().getByTestId('branch-new').click()
+  const name = menu().getByTestId('branch-new-name')
+  const problem = menu().getByTestId('branch-new-problem')
+  await expect(name).toBeFocused()
+
+  await name.fill('feature')
+  await name.press('Enter')
+  await expect(problem).toHaveText('Branch already exists')
+  await name.fill('a..b')
+  await name.press('Enter')
+  await expect(problem).toHaveText('Not a valid branch name')
+  expect(git(repo, 'branch', '--show-current')).toBe('main')
+  expect(git(repo, 'branch', '--format=%(refname:short)')).toBe('feature\nmain')
+
+  // Esc returns to the list, not out of the menu.
+  await name.press('Escape')
+  await expect(menu()).toBeVisible()
+  await expect(name).toHaveCount(0)
+  await expect(section('Local')).toHaveText(['main', 'feature'])
+
+  await menu().getByTestId('branch-new').click()
+  await name.fill('topic/x')
+  await name.press('Enter')
+  await expect(menu()).toHaveCount(0)
+  await expect(chip()).toHaveText('topic/x', { timeout: 1000 })
+  expect(git(repo, 'branch', '--show-current')).toBe('topic/x')
+  expect(git(repo, 'rev-parse', 'topic/x')).toBe(head)
+})
+
 test("a refused switch keeps the menu open with git's message and changes nothing", async () => {
   git(repo, 'switch', '-q', 'feature')
   commit(repo, 'a.txt', 'feature\n', 'on feature')

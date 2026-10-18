@@ -9,15 +9,17 @@ import {
   TreePine
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { BranchList, GitResult } from '../../core/git'
+import type { BranchList, GitResult, NewBranchResult } from '../../core/git'
 import { refreshBranch } from './branches'
 import { MENU_ICON, SMALL_ICON } from './icons'
 
 /**
  * The title bar's branch chip (#33 D1): the branch where what is shown runs, as a button that
  * opens the branch menu below it. The menu lists the local branches, then each remote's (D4, D5);
- * clicking one switches to it. Esc, a click outside or a switch closes it; git's refusal keeps it
- * open with git's message (D6). A command keeps running when the menu is closed meanwhile (D13).
+ * clicking one switches to it. New branch shows a name field in place of the lists (D7): Enter
+ * or Create makes the branch at HEAD and switches to it, Esc returns to the lists. Esc, a click
+ * outside, a switch or a new branch closes it; git's refusal keeps it open with git's message
+ * (D6). A command keeps running when the menu is closed meanwhile (D13).
  */
 export function BranchChip({
   dir,
@@ -36,6 +38,17 @@ export function BranchChip({
   /** What is running (`Switching…`), null when idle; every action waits for it (D13). */
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** The new branch's name while its field shows (D7), null for the lists. */
+  const [naming, setNaming] = useState<string | null>(null)
+  /** Why the typed name was refused before git ran, shown under the field. */
+  const [nameProblem, setNameProblem] = useState<string | null>(null)
+  const namingRef = useRef(naming)
+  useEffect(() => {
+    namingRef.current = naming
+  }, [naming])
+  /** New branch, focused again when Esc leaves its field. */
+  const newButton = useRef<HTMLButtonElement>(null)
+  const refocusNew = useRef(false)
   const [position, setPosition] = useState<React.CSSProperties>()
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -71,11 +84,19 @@ export function BranchChip({
     const onDown = (e: MouseEvent): void => {
       if (!root.current?.contains(e.target as Node)) setOpen(false)
     }
-    // Escape closes it wherever focus is, and nothing else sees it.
+    // Escape closes it wherever focus is (from the name field: back to the lists), and nothing
+    // else sees it.
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
       e.preventDefault()
+      if (namingRef.current !== null) {
+        refocusNew.current = true
+        namingRef.current = null
+        setNaming(null)
+        setNameProblem(null)
+        return
+      }
       close(true)
     }
     window.addEventListener('resize', place)
@@ -96,6 +117,12 @@ export function BranchChip({
     if (!popup.current?.contains(document.activeElement)) (current ?? items?.[0])?.focus()
   }, [open, list])
 
+  useEffect(() => {
+    if (naming !== null || !refocusNew.current) return
+    refocusNew.current = false
+    newButton.current?.focus()
+  }, [naming])
+
   const toggle = (): void => {
     if (open) {
       setOpen(false)
@@ -103,13 +130,18 @@ export function BranchChip({
     }
     setList(null)
     setError(null)
+    setNaming(null)
+    setNameProblem(null)
     setOpen(true)
     openRef.current = true
     load()
   }
 
   /** Runs one git command: busy meanwhile, then the chip re-read; success closes the menu. */
-  const act = async (label: string, command: () => Promise<GitResult>): Promise<void> => {
+  const act = async (
+    label: string,
+    command: () => Promise<GitResult | NewBranchResult>
+  ): Promise<void> => {
     if (busy) return
     setBusy(label)
     setError(null)
@@ -120,6 +152,8 @@ export function BranchChip({
       const active = document.activeElement
       const inMenu = active === document.body || (root.current?.contains(active) ?? false)
       if (openRef.current) close(inMenu)
+    } else if ('name' in result && result.name) {
+      setNameProblem(result.reason)
     } else {
       setError(result.reason)
       load()
@@ -135,8 +169,16 @@ export function BranchChip({
     void act('Switching…', () => window.drovr.git.track(dir, remote, name))
   }
 
+  const create = (e: React.FormEvent): void => {
+    e.preventDefault()
+    if (naming === null) return
+    setNameProblem(null)
+    void act('Creating…', () => window.drovr.git.create(dir, naming))
+  }
+
   const onKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    if (e.target instanceof HTMLInputElement) return
     e.preventDefault()
     const items = Array.from(
       popup.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []
@@ -149,7 +191,7 @@ export function BranchChip({
 
   const Icon = worktree ? TreePine : GitBranch
   const detached = list !== null && list.current === null
-  // New branch, Fetch, Pull and Push are run by their own slices (#33 S2, S3); until then, no `run`.
+  // Fetch, Pull and Push are run by their own slice (#33 S3); until then, no `run`.
   const actions: {
     label: string
     testId: string
@@ -158,7 +200,16 @@ export function BranchChip({
     needsBranch?: boolean
     run?: () => void
   }[] = [
-    { label: 'New branch', testId: 'branch-new', icon: GitBranchPlus },
+    {
+      label: 'New branch',
+      testId: 'branch-new',
+      icon: GitBranchPlus,
+      run: () => {
+        setError(null)
+        setNameProblem(null)
+        setNaming('')
+      }
+    },
     { label: 'Fetch', testId: 'branch-fetch', icon: RefreshCw },
     { label: 'Pull', testId: 'branch-pull', icon: ArrowDownToLine, needsBranch: true },
     { label: 'Push', testId: 'branch-push', icon: ArrowUpFromLine, needsBranch: true }
@@ -203,47 +254,94 @@ export function BranchChip({
               {error}
             </p>
           )}
-          <div className="branch-menu-lists">
-            {list === null ? (
-              <p className="menu-hint branch-menu-loading">Reading branches…</p>
-            ) : (
-              <>
-                <BranchSection
-                  name="Local"
-                  branches={list.local}
-                  current={list.current}
+          {naming !== null ? (
+            <form className="branch-menu-new" onSubmit={create} noValidate>
+              <label className="menu-label" htmlFor="branch-new-name">
+                New branch from {list?.current ?? 'HEAD'}
+              </label>
+              <div className="branch-menu-new-row">
+                <input
+                  id="branch-new-name"
+                  className="inline-input branch-menu-new-name"
+                  data-testid="branch-new-name"
+                  value={naming}
+                  autoFocus
+                  spellCheck={false}
+                  autoComplete="off"
                   disabled={busy !== null}
-                  onPick={switchTo}
+                  aria-invalid={nameProblem ? true : undefined}
+                  aria-describedby={nameProblem ? 'branch-new-problem' : undefined}
+                  onChange={(e) => {
+                    setNaming(e.target.value)
+                    setNameProblem(null)
+                  }}
                 />
-                {list.remotes.map((remote) => (
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-small"
+                  data-testid="branch-new-create"
+                  disabled={busy !== null}
+                >
+                  Create
+                </button>
+              </div>
+              {nameProblem && (
+                <p
+                  className="field-error"
+                  id="branch-new-problem"
+                  role="alert"
+                  data-testid="branch-new-problem"
+                >
+                  {nameProblem}
+                </p>
+              )}
+            </form>
+          ) : (
+            <div className="branch-menu-lists">
+              {list === null ? (
+                <p className="menu-hint branch-menu-loading">Reading branches…</p>
+              ) : (
+                <>
                   <BranchSection
-                    key={remote.name}
-                    name={remote.name}
-                    branches={remote.branches}
-                    current={null}
+                    name="Local"
+                    branches={list.local}
+                    current={list.current}
                     disabled={busy !== null}
-                    onPick={(name) => track(remote.name, name)}
+                    onPick={switchTo}
                   />
-                ))}
-              </>
-            )}
-          </div>
-          <div className="branch-menu-actions">
-            {actions.map(({ label, testId, icon: ActionIcon, needsBranch, run }) => (
-              <button
-                key={label}
-                type="button"
-                role="menuitem"
-                className="menu-item"
-                data-testid={testId}
-                disabled={busy !== null || list === null || !run || (needsBranch && detached)}
-                onClick={run}
-              >
-                <ActionIcon {...MENU_ICON} />
-                {label}
-              </button>
-            ))}
-          </div>
+                  {list.remotes.map((remote) => (
+                    <BranchSection
+                      key={remote.name}
+                      name={remote.name}
+                      branches={remote.branches}
+                      current={null}
+                      disabled={busy !== null}
+                      onPick={(name) => track(remote.name, name)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+          {naming === null && (
+            <div className="branch-menu-actions">
+              {actions.map(({ label, testId, icon: ActionIcon, needsBranch, run }) => (
+                <button
+                  key={label}
+                  ref={testId === 'branch-new' ? newButton : undefined}
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  data-testid={testId}
+                  disabled={busy !== null || list === null || !run || (needsBranch && detached)}
+                  onClick={run}
+                >
+                  <ActionIcon {...MENU_ICON} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

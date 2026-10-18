@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  createBranch,
   gitError,
   gitIn,
   listBranches,
@@ -165,6 +166,53 @@ describe('trackBranch', () => {
     expect(await trackBranch(repo, 'origin', 'nope', spy)).toMatchObject({ ok: false })
     expect(await trackBranch(repo, 'upstream', 'main', spy)).toMatchObject({ ok: false })
     expect(calls.filter((args) => args[0] === 'switch')).toEqual([])
+  })
+})
+
+describe('createBranch', () => {
+  it('creates the branch at HEAD and switches to it', async () => {
+    const head = git(repo, 'rev-parse', 'HEAD')
+    expect(await createBranch(repo, 'topic/x', run)).toEqual({ ok: true })
+    expect(git(repo, 'branch', '--show-current')).toBe('topic/x')
+    expect(git(repo, 'rev-parse', 'topic/x')).toBe(head)
+  })
+
+  it('refuses an empty, invalid or taken name and runs no switch', async () => {
+    const calls: string[][] = []
+    const spy = gitIn(async (call) => {
+      calls.push(call.args)
+      return runner(call)
+    }, process.env)
+    expect(await createBranch(repo, '', spy)).toEqual({
+      ok: false,
+      reason: 'Enter a branch name',
+      name: true
+    })
+    for (const bad of ['a..b', '-f', '@{-1}', 'x.lock']) {
+      expect(await createBranch(repo, bad, spy)).toEqual({
+        ok: false,
+        reason: 'Not a valid branch name',
+        name: true
+      })
+    }
+    expect(await createBranch(repo, 'feature', spy)).toEqual({
+      ok: false,
+      reason: 'Branch already exists',
+      name: true
+    })
+    expect(calls.filter((args) => args[0] === 'switch')).toEqual([])
+    expect(git(repo, 'branch', '--show-current')).toBe('main')
+  })
+
+  it('asks git whether the name is valid', async () => {
+    const calls: string[][] = []
+    const spy = gitIn(async (call) => {
+      calls.push(call.args)
+      return runner(call)
+    }, process.env)
+    await createBranch(repo, 'topic/y', spy)
+    expect(calls).toContainEqual(['check-ref-format', '--branch', 'topic/y'])
+    expect(calls).toContainEqual(['switch', '--no-guess', '-c', 'topic/y'])
   })
 })
 

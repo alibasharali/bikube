@@ -2267,6 +2267,24 @@ button {
   color: var(--danger);
 }
 
+.branch-menu-new {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+.branch-menu-new-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.branch-menu-new-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
 /* The workspace's shells, above the board. */
 .shells {
   display: flex;

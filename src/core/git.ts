@@ -5,6 +5,8 @@
  * it with `execFile`, no shell, stdin closed.
  */
 
+import { branchProblem } from './worktree-names'
+
 /** One git command: its arguments (never through a shell), folder, environment and time limit. */
 export interface GitCall {
   args: string[]
@@ -95,6 +97,9 @@ export interface BranchList {
 
 export type GitResult = { ok: true } | { ok: false; reason: string }
 
+/** A new branch's outcome: `name` when the name was refused before git ran (D7). */
+export type NewBranchResult = { ok: true } | { ok: false; reason: string; name?: true }
+
 const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 /** The branches of the repository `dir` is in, or null outside one (or without git). */
@@ -156,7 +161,7 @@ async function switchTo(dir: string, branch: string, run: Git): Promise<GitResul
 
 const INVALID_NAME = 'Not a valid branch name'
 
-/** Whether git takes `name` as a branch name (D15); S2's new branch check is the same. */
+/** Whether git takes `name` as a branch name (D15); a new branch's check too (D7). */
 export async function validBranchName(dir: string, name: string, run: Git): Promise<boolean> {
   return (await run(dir, ['check-ref-format', '--branch', name])).code === 0
 }
@@ -182,6 +187,24 @@ export async function trackBranch(
   if (!(await validBranchName(dir, branch, run))) return { ok: false, reason: INVALID_NAME }
   const args = ['switch', '--no-guess', '-c', branch, '--track', `${remote}/${branch}`]
   return outcome(await run(dir, args), 'switch')
+}
+
+/**
+ * Creates the branch `name` at HEAD and switches to it (D7: `git switch -c <name>`). The name is
+ * checked first, as for a worktree card's branch (`branchProblem`, then git's own
+ * `check-ref-format --branch`, then the local branches); an empty, invalid or taken name runs
+ * nothing and is refused with `name` set. git's own refusal changes nothing (D6).
+ */
+export async function createBranch(dir: string, name: string, run: Git): Promise<NewBranchResult> {
+  const problem = branchProblem(name)
+  if (problem) return { ok: false, reason: problem, name: true }
+  const list = await listBranches(dir, run)
+  if (!list) return { ok: false, reason: 'not a git repository' }
+  if (!(await validBranchName(dir, name, run))) {
+    return { ok: false, reason: INVALID_NAME, name: true }
+  }
+  if (list.local.includes(name)) return { ok: false, reason: 'Branch already exists', name: true }
+  return outcome(await run(dir, ['switch', '--no-guess', '-c', name]), 'switch')
 }
 
 function outcome(output: GitOutput, command: string): GitResult {

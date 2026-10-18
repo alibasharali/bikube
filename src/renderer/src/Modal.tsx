@@ -11,6 +11,10 @@ interface ModalProps {
   closeOnOutsideClick?: boolean
   /** Extra class on the dialog, e.g. a wider variant. */
   className?: string
+  /** Extra class on the backdrop, e.g. to place the dialog near the top. */
+  backdropClassName?: string
+  /** Keep the title for assistive technology only (it still names the dialog). */
+  hideTitle?: boolean
 }
 
 const FOCUSABLE =
@@ -24,7 +28,9 @@ function Modal({
   children,
   initialFocus,
   closeOnOutsideClick = false,
-  className
+  className,
+  backdropClassName,
+  hideTitle = false
 }: ModalProps): React.JSX.Element {
   const titleId = useId()
   const ref = useRef<HTMLDivElement>(null)
@@ -76,11 +82,14 @@ function Modal({
 
   return (
     <div
-      className="modal-backdrop"
+      className={backdropClassName ? `modal-backdrop ${backdropClassName}` : 'modal-backdrop'}
       onMouseDown={
         closeOnOutsideClick
           ? (e) => {
-              if (e.target === e.currentTarget) closeRef.current()
+              if (e.target !== e.currentTarget) return
+              // The press's default action would move focus after the close restored it.
+              e.preventDefault()
+              closeRef.current()
             }
           : undefined
       }
@@ -93,7 +102,7 @@ function Modal({
         aria-labelledby={titleId}
         data-testid={testId}
       >
-        <h2 id={titleId} className="modal-title">
+        <h2 id={titleId} className={hideTitle ? 'visually-hidden' : 'modal-title'}>
           {title}
         </h2>
         {children}

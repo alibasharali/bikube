@@ -6,6 +6,7 @@ import type { Card } from '../../core/workspace-store'
 import CloseCardDialog from './CloseCardDialog'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
+import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
 import { currentKeymap, settingsStore, useSettings } from './settings'
 import SidePanel from './SidePanel'
 import {
@@ -173,18 +174,9 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
     focusScreen(paneScreen(card.id, paneId))
   }, [find, card.id])
 
-  // The card's shortcuts (#31 D5). Capture phase: works wherever focus is, including the
-  // terminal, which swallows the key.
+  // The card's actions (#31 D5), run by its shortcuts and the command palette (#40 D6).
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      const action = keymapAction(event, currentKeymap())
-      if (action === null || action === 'settings') return
-      // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
-      if (dialogOpen()) return
-      event.preventDefault()
-      event.stopPropagation()
-      // A held shortcut's auto-repeat is swallowed without acting again (D7).
-      if (event.repeat) return
+    const run = (action: CardViewAction): void => {
       if (action === 'back') onBack()
       // Find opens the bar on the focused pane, moves it there from another pane (keeping the
       // query and toggles; the old pane's highlights go with its bar) or, when it is there
@@ -211,8 +203,25 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
         setClosing(true)
       }
     }
+    // Capture phase: works wherever focus is, including the terminal, which swallows the key.
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const action = keymapAction(event, currentKeymap())
+      // Settings, the Default shell and the command palette are the app's (#40 D1).
+      if (!isCardViewAction(action)) return
+      // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
+      if (dialogOpen()) return
+      event.preventDefault()
+      event.stopPropagation()
+      // A held shortcut's auto-repeat is swallowed without acting again (D7).
+      if (event.repeat) return
+      run(action)
+    }
     window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
+    const unregister = registerCardViewActions(run)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      unregister()
+    }
   }, [onBack, card, splittable, running, focusedPane])
 
   return (

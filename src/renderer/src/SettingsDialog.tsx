@@ -56,6 +56,7 @@ import { ghosttyStore, useGhosttyTheme } from './ghostty'
 import { installedFonts } from './installed-fonts'
 import { ICON, SMALL_ICON } from './icons'
 import Modal from './Modal'
+import ShortcutKeys from './ShortcutKeys'
 import { settingsStore, useSettings } from './settings'
 import TerminalPreview from './TerminalPreview'
 import ThemePicker from './ThemePicker'
@@ -1106,42 +1107,6 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
 }
 
 export default SettingsDialog
-
-const MAC_KEYS: Readonly<Record<string, string>> = {
-  Ctrl: '⌃',
-  Alt: '⌥',
-  Shift: '⇧',
-  Cmd: '⌘',
-  ArrowUp: '↑',
-  ArrowDown: '↓',
-  ArrowLeft: '←',
-  ArrowRight: '→'
-}
-
-/**
- * A shortcut as key caps: on macOS its symbols (`⇧⌘B`), elsewhere its keys joined with `+` (so the
- * text stays `Ctrl+Shift+B`).
- */
-function ShortcutKeys({
-  shortcut,
-  platform
-}: {
-  shortcut: string
-  platform: string
-}): React.JSX.Element {
-  const keys = shortcut.split(/\+(?=.)/)
-  const mac = platform === 'darwin'
-  return (
-    <span className="keys">
-      {keys.map((key, i) => (
-        <span key={i} className="keys-part">
-          {!mac && i > 0 && <span className="keys-plus">+</span>}
-          <kbd>{mac ? (MAC_KEYS[key] ?? key) : key}</kbd>
-        </span>
-      ))}
-    </span>
-  )
-}
 
 /**
  * The Shortcuts section (#31 D8): each configurable action with its shortcut and a Reset button.

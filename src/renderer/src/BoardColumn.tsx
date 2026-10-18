@@ -15,6 +15,8 @@ interface BoardColumnProps {
   index: number
   total: number
   onOpenCard: (cardId: string) => void
+  /** A request to open this column's New card form (#40 D9), see `NewCard`. */
+  openNewCard?: number
 }
 
 function BoardColumn({
@@ -22,7 +24,8 @@ function BoardColumn({
   column,
   index,
   total,
-  onOpenCard
+  onOpenCard,
+  openNewCard
 }: BoardColumnProps): React.JSX.Element {
   const [renaming, setRenaming] = useState(false)
   // Where a card dragged over this column would land (#6 D5, D6), or null.
@@ -165,6 +168,7 @@ function BoardColumn({
         columnId={column.id}
         defaultStartup={workspace.defaultStartup}
         onCreated={onOpenCard}
+        openRequest={openNewCard}
       />
     </li>
   )

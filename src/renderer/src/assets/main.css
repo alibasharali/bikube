@@ -1909,6 +1909,104 @@ button {
   font-size: var(--text-xs);
 }
 
+/* The command palette (#40 D2): near the top, centred; a search field over a scrolling list. */
+.modal-backdrop-top {
+  place-items: start center;
+  padding-top: 12vh;
+}
+
+.modal-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(480px, calc(88vh - 16px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.palette-input {
+  flex: none;
+  padding: var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-lg);
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--text-muted);
+}
+
+.palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.palette-section + .palette-section {
+  margin-top: var(--space-2);
+}
+
+.palette-section-title {
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.palette-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.palette-row-action {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.palette-row-shortcut {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.palette-row[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.palette-row-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-md);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.palette-row-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.palette-empty {
+  margin: 0;
+  padding: var(--space-4) var(--space-2);
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* Settings: a list of sections beside the chosen one; the title and Done stay put. */
 .modal-wide {
   width: min(900px, calc(100vw - 32px));

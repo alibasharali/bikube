@@ -2,7 +2,7 @@
 item: 33
 type: feature
 title: 'Basic Git functionality'
-status: draft
+status: approved
 branch: claude/33-basic-git-branches
 ---
 

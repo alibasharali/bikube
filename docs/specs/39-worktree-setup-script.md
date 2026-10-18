@@ -2,7 +2,7 @@
 item: 39
 type: feature
 title: Setup script for new worktree cards
-status: draft
+status: approved
 branch: claude/39-worktree-setup-script
 ---
 

@@ -2,13 +2,14 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, boardCard, expectCardOpen } from './card-view'
+import { backToBoard, boardCard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Find in a card's terminal (#35): the find bar on the focused pane, its result text, stepping,
 // toggles, highlights, the clipboard, the remembered query, the live count, closing with the
-// view, where Find acts and rebinding it. The words a test finds are printed with octal escapes
+// view, where Find acts and rebinding it; then split panes, where the bar follows Find to the
+// focused pane and closes with its pane, and the Default shell. The words a test finds are printed with octal escapes
 // (`\141lpha`), so the typed command line never holds them.
 
 const darwin = process.platform === 'darwin'
@@ -446,4 +447,139 @@ test('#35 AC15: Find is listed in Settings, can be recorded, kept across a resta
   await page.keyboard.press('Escape')
   await dialog().getByTestId('settings-shortcut-reset-find').click()
   await expect(field()).toHaveText('Ctrl+Shift+F')
+})
+
+// Panes and shells (#35 S2).
+
+const panes = (): Locator => page.getByTestId('card-view').getByTestId('pane')
+
+/** Pane `index`'s buffer, one trimmed line each. */
+function paneLines(index: number): Promise<string[]> {
+  return panes()
+    .nth(index)
+    .getByTestId('terminal')
+    .evaluate((host) => {
+      const term = (host as HTMLElement & { __xterm: Xterm }).__xterm
+      const lines: string[] = []
+      for (let i = 0; i < term.buffer.active.length; i++) {
+        lines.push(term.buffer.active.getLine(i)?.translateToString(true).trim() ?? '')
+      }
+      return lines
+    })
+}
+
+/** Whether pane `index`'s terminal has a selection. */
+const paneSelected = (index: number): Promise<boolean> =>
+  panes()
+    .nth(index)
+    .getByTestId('terminal')
+    .evaluate((host) => (host as HTMLElement & { __xterm: Xterm }).__xterm.hasSelection())
+
+const paneDecorations = (index: number): Locator =>
+  panes().nth(index).locator('.xterm-find-result-decoration')
+
+/** Splits the open card right; the new pane is focused, its shell at a prompt. */
+async function splitWithGamma(): Promise<void> {
+  await splitRight(page)
+  await expect(panes()).toHaveCount(2)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect
+    .poll(() => paneLines(1), { timeout: 15_000 })
+    .toContainEqual(expect.stringMatching(/\S/))
+  await page.keyboard.type(String.raw`printf '\147amma\n'`)
+  await page.keyboard.press('Enter')
+  await expect.poll(() => paneLines(1)).toContain('gamma')
+}
+
+/** Whether two boxes overlap. */
+const overlap = (
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): boolean =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+test('#35 AC11: the bar follows Find to the focused pane, never covering the close button', async () => {
+  await splitWithGamma()
+  await find('gamma')
+  const extraBar = panes().nth(1).getByTestId('find-bar')
+  await expect(extraBar).toBeVisible()
+  await expect(result()).toHaveText('1 of 1')
+  await expect(paneDecorations(1)).not.toHaveCount(0)
+  const close = panes().nth(1).getByTestId('pane-close')
+  await panes().nth(1).hover()
+  const closeBox = (await close.boundingBox())!
+  expect(overlap((await extraBar.boundingBox())!, closeBox)).toBe(false)
+  // Nothing of the bar is drawn over it: its centre is the button's own.
+  expect(
+    await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.closest('[data-testid=pane-close]') != null,
+      [closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2] as const
+    )
+  ).toBe(true)
+
+  // Clicking another pane leaves the bar where it is.
+  await panes().nth(0).click()
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  await expect(extraBar).toBeVisible()
+  await expect(bar()).toHaveCount(1)
+
+  // Find moves it to the focused pane, with its query, searching there.
+  await page.keyboard.press(FIND)
+  await expect(panes().nth(0).getByTestId('find-bar')).toBeVisible()
+  await expect(bar()).toHaveCount(1)
+  await expect(input()).toBeFocused()
+  await expect(input()).toHaveValue('gamma')
+  await expect(result()).toHaveText('No results')
+  await expect(paneDecorations(1)).toHaveCount(0)
+  expect(await paneSelected(1)).toBe(false)
+
+  // Find on the pane it is on focuses its field and selects the query.
+  await panes().nth(0).getByTestId('terminal').click()
+  await expect(input()).not.toBeFocused()
+  await page.keyboard.press(FIND)
+  await expect(input()).toBeFocused()
+  expect(
+    await input().evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd])
+  ).toEqual([0, 5])
+  await expect(panes().nth(0).getByTestId('find-bar')).toBeVisible()
+})
+
+test('#35 AC12: the bar closes with the extra pane it searches', async () => {
+  await splitWithGamma()
+  await find('gamma')
+  await expect(panes().nth(1).getByTestId('find-bar')).toBeVisible()
+  // Its close button.
+  await panes().nth(1).getByTestId('pane-close').click()
+  await expect(panes()).toHaveCount(1)
+  await expect(bar()).toHaveCount(0)
+
+  // The Close pane shortcut, with the focus in the bar.
+  await splitWithGamma()
+  await find('gamma')
+  await expect(panes().nth(1).getByTestId('find-bar')).toBeVisible()
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(panes()).toHaveCount(1)
+  await expect(bar()).toHaveCount(0)
+
+  // Find opens it afresh on the pane left.
+  await page.keyboard.press(FIND)
+  await expect(panes().nth(0).getByTestId('find-bar')).toBeVisible()
+  await expect(input()).toHaveValue('gamma')
+})
+
+test('#35 AC13: Find works in the Default shell', async () => {
+  await backToBoard(page)
+  await page
+    .locator('[data-testid="shell"][data-shell-name="Default"]')
+    .getByTestId('shell-open')
+    .click()
+  await expectCardOpen(page, 'Default')
+  await expect.poll(terminalFocused).toBe(true)
+  await expect.poll(bufferLines, { timeout: 15_000 }).toContainEqual(expect.stringMatching(/\S/))
+  await printAlphas()
+  await find('alpha')
+  await expect(bar()).toBeVisible()
+  await expect(result()).toHaveText('3 of 3')
+  const lines = await bufferLines()
+  expect(await selection()).toEqual({ text: 'alpha', row: lines.lastIndexOf('alpha') })
 })

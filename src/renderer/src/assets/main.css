@@ -2663,10 +2663,13 @@ button {
   top: var(--space-1);
   right: var(--space-1);
   z-index: 11;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 2px;
   max-width: calc(100% - 2 * var(--space-1));
+  /* In a narrow pane its content is clipped, never spilling onto the close button. */
+  overflow: hidden;
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -2683,7 +2686,7 @@ button {
 
 .find-input {
   flex: 0 1 180px;
-  min-width: 60px;
+  min-width: 40px;
   padding: 2px var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

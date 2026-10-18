@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { keymapAction } from '../../core/keymap'
-import { canSplit, MAIN_PANE, type SplitTree } from '../../core/split-tree'
+import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import CloseCardDialog from './CloseCardDialog'
 import FindBar from './FindBar'
@@ -162,6 +162,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   const { sidePanelOpen } = useSettings()
   // The find bar (#35 D3, D10): never open when the view opens, gone when it goes away.
   const [find, setFind] = useState<OpenFind | null>(null)
+  // The bar closes with the pane it searches (#35 D10); a closed pane's id is never kept.
+  if (find && !paneIds(layout.tree).includes(find.paneId)) setFind(null)
   const closeFind = useCallback((): void => {
     const paneId = find?.paneId
     setFind(null)
@@ -182,8 +184,9 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       // A held shortcut's auto-repeat is swallowed without acting again (D7).
       if (event.repeat) return
       if (action === 'back') onBack()
-      // Find opens the bar on the focused pane, or focuses its field there (#35 D2, D3); it does
-      // nothing in a pane with no screen (D12).
+      // Find opens the bar on the focused pane, moves it there from another pane (keeping the
+      // query and toggles; the old pane's highlights go with its bar) or, when it is there
+      // already, focuses its field (#35 D2, D3); it does nothing in a pane with no screen (D12).
       else if (action === 'find') {
         if (paneScreen(card.id, focusedPane)) {
           setFind((open) => ({ paneId: focusedPane, request: (open?.request ?? 0) + 1 }))

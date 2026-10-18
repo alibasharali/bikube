@@ -26,6 +26,8 @@ export interface MainSettings {
   flush(): void
   /** The Shell setting: an absolute path, or '' for the login shell. */
   shell(): string
+  /** The settings opening a file from the side panel uses (#55 D14, D15). */
+  editor(): Pick<Settings, 'editor' | 'editorCommand' | 'shell'>
   /** The Claude Code status updates setting. */
   claudeStatus(): boolean
   /** The sync folder kept in the settings file (#13 D10), or null when sync is off. */
@@ -100,6 +102,10 @@ export function registerSettings(): MainSettings {
   return {
     shell: () => file.load().shell,
     claudeStatus: () => file.load().claudeStatus,
+    editor: () => {
+      const { editor, editorCommand, shell } = file.load()
+      return { editor, editorCommand, shell }
+    },
     applyTheme: () => applyTheme(file.load()),
     backgroundColor: () => THEME_BACKGROUNDS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'],
     flush: () => file.flush(),

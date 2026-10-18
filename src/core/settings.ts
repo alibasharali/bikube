@@ -52,6 +52,10 @@ export const MAX_LINE_HEIGHT = 2
 export const MAX_LETTER_SPACING = 4
 export const MIN_SIDE_PANEL_WIDTH = 200
 export const MAX_SIDE_PANEL_WIDTH = 4000
+/** What the Files tab opens a file with (#55 D14). */
+export const EDITORS = ['vscode', 'cursor', 'zed', 'system', 'custom'] as const
+export type Editor = (typeof EDITORS)[number]
+export const MAX_EDITOR_COMMAND_LENGTH = 4096
 
 /**
  * The terminal, notification and side panel preferences. Each is written to the file only when it differs
@@ -82,6 +86,10 @@ export interface Preferences {
   sidePanelOpen: boolean
   /** The side panel's width in pixels as last dragged (#55 D4), 200 to 4000. */
   sidePanelWidth: number
+  /** What the Files tab opens a file with (#55 D14). */
+  editor: Editor
+  /** The Custom command editor's one-line command, run by the user's shell with the file appended. */
+  editorCommand: string
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -98,7 +106,9 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   notificationSound: true,
   claudeStatus: true,
   sidePanelOpen: true,
-  sidePanelWidth: 280
+  sidePanelWidth: 280,
+  editor: 'vscode',
+  editorCommand: ''
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -131,7 +141,10 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     typeof v === 'number' &&
     Number.isInteger(v) &&
     v >= MIN_SIDE_PANEL_WIDTH &&
-    v <= MAX_SIDE_PANEL_WIDTH
+    v <= MAX_SIDE_PANEL_WIDTH,
+  editor: oneOf(EDITORS),
+  editorCommand: (v): v is string =>
+    typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v)
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

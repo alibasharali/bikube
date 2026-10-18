@@ -1,6 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
+import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
 import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
@@ -56,6 +57,7 @@ export const IPC = {
   gitPush: 'git:push',
   filesList: 'files:list',
   filesStatus: 'files:status',
+  filesOpen: 'files:open',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -269,6 +271,12 @@ export interface FilesApi {
    * renames with their old path; `not-repository` outside a work tree.
    */
   status(folder: string): Promise<FolderStatus>
+  /**
+   * Opens the file `path` (relative to `folder`) with the editor setting (D13, D14): `refused`
+   * when it isn't a file inside `folder`, `no-command` for an empty custom command, `failed` with
+   * the reason when the editor couldn't be started.
+   */
+  open(folder: string, path: string): Promise<OpenResult>
 }
 
 /** The app's place on the desktop, for notifications. */

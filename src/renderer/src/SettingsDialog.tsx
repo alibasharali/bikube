@@ -1,6 +1,7 @@
 import {
   Bot,
   ChevronRight,
+  FilePen,
   FolderSync,
   Info,
   Keyboard,
@@ -29,6 +30,8 @@ import {
 } from '../../core/keymap'
 import {
   DEFAULT_FONT_FAMILY,
+  EDITORS,
+  MAX_EDITOR_COMMAND_LENGTH,
   MAX_FONT_FAMILY_LENGTH,
   MAX_FONT_SIZE,
   MAX_LETTER_SPACING,
@@ -39,6 +42,7 @@ import {
   resolveTheme,
   type Bell,
   type CursorStyle,
+  type Editor,
   type ResolvedTheme,
   type Theme
 } from '../../core/settings'
@@ -71,12 +75,14 @@ const DEFAULT_FONT_LABEL =
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
-type Section = 'appearance' | 'terminal' | 'shell' | 'agents' | 'shortcuts' | 'sync' | 'about'
+type Section =
+  'appearance' | 'terminal' | 'shell' | 'editor' | 'agents' | 'shortcuts' | 'sync' | 'about'
 
 const SECTIONS: { key: Section; label: string; icon: LucideIcon }[] = [
   { key: 'appearance', label: 'Appearance', icon: Palette },
   { key: 'terminal', label: 'Terminal', icon: SquareTerminal },
   { key: 'shell', label: 'Shell', icon: TerminalIcon },
+  { key: 'editor', label: 'Editor', icon: FilePen },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
   { key: 'sync', label: 'Sync', icon: FolderSync },
@@ -84,8 +90,8 @@ const SECTIONS: { key: Section; label: string; icon: LucideIcon }[] = [
 ]
 
 /**
- * The Settings dialog (#10 D5): a list of sections (Appearance, Terminal, Shell, Shortcuts, Sync,
- * About)
+ * The Settings dialog (#10 D5): a list of sections (Appearance, Terminal, Shell, Editor, Agents,
+ * Shortcuts, Sync, About)
  * beside the chosen one, which scrolls on its own while the title and Done stay put. It opens on
  * Appearance. Every valid change applies and saves at once; closing applies a typed family, keeps
  * what was applied and drops an invalid font size. Picking a terminal theme swaps the dialog's
@@ -193,6 +199,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           {section === 'appearance' && <AppearanceSection family={family} setFamily={setFamily} />}
           {section === 'terminal' && <TerminalColoursField onPick={setPicking} />}
           {section === 'shell' && <ShellField />}
+          {section === 'editor' && <EditorField />}
           {section === 'agents' && <AgentsSection />}
           {section === 'shortcuts' && (
             <ShortcutsSection keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)} />
@@ -666,6 +673,66 @@ function AgentsSection(): React.JSX.Element {
         onChange={(claudeStatus) => settingsStore.update({ claudeStatus })}
       />
     </>
+  )
+}
+
+const EDITOR_LABELS: Record<Editor, string> = {
+  vscode: 'VS Code',
+  cursor: 'Cursor',
+  zed: 'Zed',
+  system: 'System default',
+  custom: 'Custom command'
+}
+
+/**
+ * The Editor section (#55 D14): what the side panel's Files tab opens a file with, and the custom
+ * command's one-line text, applied as it is typed.
+ */
+function EditorField(): React.JSX.Element {
+  const { editor, editorCommand } = useSettings()
+  const id = useId()
+  const selectId = `${id}-editor`
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={selectId}>
+        Open files with
+      </label>
+      <div className="settings-control">
+        <select
+          id={selectId}
+          className="settings-input"
+          data-testid="settings-editor"
+          value={editor}
+          onChange={(e) => settingsStore.update({ editor: e.target.value as Editor })}
+        >
+          {EDITORS.map((choice) => (
+            <option key={choice} value={choice}>
+              {EDITOR_LABELS[choice]}
+            </option>
+          ))}
+        </select>
+        {editor === 'custom' && (
+          <input
+            className="settings-input"
+            data-testid="settings-editor-command"
+            aria-label="Custom command"
+            value={editorCommand}
+            placeholder="subl -n"
+            maxLength={MAX_EDITOR_COMMAND_LENGTH}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => settingsStore.update({ editorCommand: e.target.value })}
+          />
+        )}
+        <p className="field-hint">
+          {editor === 'custom'
+            ? 'Run by your shell with the file’s path added at the end.'
+            : editor === 'system'
+              ? 'The app your system opens the file with.'
+              : 'Opens the card’s folder with the file in it.'}
+        </p>
+      </div>
+    </div>
   )
 }
 

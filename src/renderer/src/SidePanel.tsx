@@ -146,7 +146,13 @@ function SidePanel({
         id={`${id}-panel-${tab}`}
         aria-labelledby={`${id}-tab-${tab}`}
       >
-        {tab === 'files' && <FilesTab folder={folder} ssh={ssh} />}
+        {tab === 'files' && (
+          <FilesTab
+            folder={folder}
+            ssh={ssh}
+            onOpenFile={(path) => window.drovr.files.open(folder, path)}
+          />
+        )}
       </div>
     </aside>
   )

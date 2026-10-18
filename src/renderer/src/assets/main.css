@@ -1611,6 +1611,24 @@ button {
   font-size: var(--text-sm);
 }
 
+/* An open that failed (#55 D13): kept until the next open or its dismiss button */
+.files-error {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.files-error-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-top: 2px;
+}
+
 /* Split panes (#11 D2, D3, D5): 50/50 splits, the focused pane outlined once there are several */
 .pane-split {
   flex: 1 1 0;

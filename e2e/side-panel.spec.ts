@@ -1,6 +1,14 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
@@ -123,8 +131,8 @@ async function expectTerminalFocused(): Promise<void> {
 }
 
 /** Opens `repo` with card `c1` open at full size. */
-async function openC1(): Promise<void> {
-  await launch()
+async function openC1(launchEnv?: Record<string, string>): Promise<void> {
+  await launch(launchEnv)
   await createWorkspace(repo, 'repo')
   await newCard('c1')
 }
@@ -532,4 +540,118 @@ test('#55 AC8: Changed only lists just the changed paths and their folders; No c
   await changedOnly().click()
   await expect(changedOnly()).toHaveAttribute('aria-pressed', 'false')
   await expect.poll(shownRows).toEqual(['repo', '  dist', '  src', '  .gitignore'])
+})
+
+// Opening files (#55 S4): the editor setting, run through the login shell with its PATH.
+
+/**
+ * The environment to launch with: its login shell (`/bin/sh -l`, through `SHELL`) gets a PATH of
+ * a fake `bin` and the system folders only, so a real `code` never runs; `commands` are fake
+ * editors there, each run logging `run <name>` and then its arguments, one per line.
+ */
+function editorEnv(commands: string[]): Record<string, string> {
+  const home = join(root, 'home')
+  const bin = join(root, 'bin')
+  mkdirSync(home, { recursive: true })
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(join(home, '.profile'), `PATH='${bin}':/usr/bin:/bin; export PATH\n`)
+  for (const name of commands) {
+    const path = join(bin, name)
+    writeFileSync(
+      path,
+      `#!/bin/sh\n{ echo "run $(basename "$0")"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`
+    )
+    chmodSync(path, 0o755)
+  }
+  const inherited: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) inherited[key] = value
+  }
+  return { ...inherited, SHELL: '/bin/sh', HOME: home }
+}
+
+const editorLog = (): string => join(root, 'editors.log')
+const editorRuns = (): string[] =>
+  existsSync(editorLog()) ? readFileSync(editorLog(), 'utf8').trimEnd().split('\n') : []
+const openError = (): Locator => filesTab().getByTestId('files-open-error')
+
+test('#55 AC13: double-click or Enter opens a file in VS Code with the folder; a folder only toggles', async () => {
+  await openC1(editorEnv(['code']))
+  await row('src').dblclick()
+  await expect(row('src/a.ts')).toBeVisible()
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+  await row('src/a.ts').dblclick()
+  await expect.poll(editorRuns).toEqual(['run code', repo, join(repo, 'src', 'a.ts')])
+  // Once: the double-click's two clicks open nothing.
+  await page.waitForTimeout(500)
+  expect(editorRuns()).toEqual(['run code', repo, join(repo, 'src', 'a.ts')])
+  await expect(openError()).toHaveCount(0)
+
+  // Enter on the selected file does the same.
+  await row('src/b.ts').click()
+  await expect(row('src/b.ts')).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(editorRuns)
+    .toEqual([
+      'run code',
+      repo,
+      join(repo, 'src', 'a.ts'),
+      'run code',
+      repo,
+      join(repo, 'src', 'b.ts')
+    ])
+
+  // A folder toggles and runs nothing.
+  const before = editorRuns()
+  await row('src').dblclick()
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'false')
+  await page.waitForTimeout(500)
+  expect(editorRuns()).toEqual(before)
+})
+
+test('#55 AC14: a custom command from Settings > Editor opens the file; a missing editor shows why', async () => {
+  await openC1(editorEnv(['fake-editor']))
+  // VS Code is the default, and it isn't installed here.
+  await row('src').dblclick()
+  await row('src/a.ts').dblclick()
+  await expect(openError()).toHaveText("Couldn't open a.ts: code not found")
+  await openError().getByTestId('files-open-error-dismiss').click()
+  await expect(openError()).toHaveCount(0)
+
+  await page.keyboard.press('Control+,')
+  const dialog = page.getByTestId('settings-dialog')
+  await dialog.getByTestId('settings-section-editor').click()
+  await expect(dialog.getByTestId('settings-editor')).toHaveValue('vscode')
+  await dialog.getByTestId('settings-editor').selectOption({ label: 'Custom command' })
+  await dialog.getByTestId('settings-editor-command').fill('fake-editor --wait')
+  await dialog.getByTestId('settings-done').click()
+  await expect(dialog).toHaveCount(0)
+  await expect
+    .poll(savedSettings)
+    .toMatchObject({ editor: 'custom', editorCommand: 'fake-editor --wait' })
+
+  await row('README.md').dblclick()
+  await expect.poll(editorRuns).toEqual(['run fake-editor', '--wait', join(repo, 'README.md')])
+  await expect(openError()).toHaveCount(0)
+
+  // An empty custom command opens nothing and says where to set one.
+  await page.keyboard.press('Control+,')
+  await dialog.getByTestId('settings-section-editor').click()
+  await dialog.getByTestId('settings-editor-command').fill('')
+  await dialog.getByTestId('settings-done').click()
+  await row('README.md').dblclick()
+  await expect(openError()).toHaveText('Set a command in Settings > Editor')
+  expect(editorRuns()).toEqual(['run fake-editor', '--wait', join(repo, 'README.md')])
+})
+
+test('#55 D13: a deleted file opens nothing', async () => {
+  rmSync(join(repo, 'README.md'))
+  await openC1(editorEnv(['code']))
+  await expect(change('README.md')).toHaveText('D', { timeout: 4000 })
+  await row('README.md').dblclick()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(500)
+  expect(editorRuns()).toEqual([])
+  await expect(openError()).toHaveCount(0)
 })

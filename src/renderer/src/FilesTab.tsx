@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeLetter } from '../../core/git-status'
+import { openErrorLine, type OpenResult } from '../../core/open-result'
 import { changedRows, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
 import { SMALL_ICON } from './icons'
@@ -125,17 +126,18 @@ function Row({
  * or the workspace's folder for a shell) as a `tree`, read lazily one expanded folder at a time,
  * ignored entries dimmed, git's changes marked, Changed only on request, kept up to date while
  * it shows. Over SSH it only says files aren't
- * available (D6): nothing is listed and no git runs. `onOpenFile` gets a file's path (relative to
- * `folder`) on double-click or Enter.
+ * available (D6): nothing is listed and no git runs. `onOpenFile` opens a file's path (relative to
+ * `folder`) on double-click or Enter (D13), never a deleted one; when it fails, an error line
+ * shows until the next open or its dismiss button.
  */
 function FilesTab({
   folder,
   ssh,
-  onOpenFile = () => {}
+  onOpenFile = async () => ({ ok: true })
 }: {
   folder: string
   ssh: boolean
-  onOpenFile?: (path: string) => void
+  onOpenFile?: (path: string) => Promise<OpenResult>
 }): React.JSX.Element {
   if (ssh) {
     return (
@@ -152,7 +154,7 @@ function LocalFiles({
   onOpenFile
 }: {
   folder: string
-  onOpenFile: (path: string) => void
+  onOpenFile: (path: string) => Promise<OpenResult>
 }): React.JSX.Element {
   useRefresh(folder)
   const { expanded, listings, status, changedOnly } = useFolderTree(folder)
@@ -165,9 +167,23 @@ function LocalFiles({
   const [selected, setSelected] = useState<string | null>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const shownSelected = rows.some((r) => r.path === selected) ? selected : null
+  const [openError, setOpenError] = useState<string | null>(null)
+  /** Only the latest open's result shows. */
+  const opens = useRef(0)
+
+  // A deleted file does nothing (D13).
+  const open = (path: string): void => {
+    const row = rows.find((r) => r.path === path)
+    if (row?.kind !== 'file' || row.change === 'D') return
+    const at = ++opens.current
+    setOpenError(null)
+    void onOpenFile(path).then((result) => {
+      if (at === opens.current) setOpenError(openErrorLine(path, result))
+    })
+  }
 
   const activate = (row: TreeRow): void => {
-    if (row.kind === 'file') onOpenFile(row.path)
+    if (row.kind === 'file') open(row.path)
     // Changed only keeps every folder expanded (D11).
     else if ((row.kind === 'root' || row.kind === 'folder') && !onlyChanged) {
       toggleFolder(folder, row.path)
@@ -212,6 +228,21 @@ function LocalFiles({
           <RotateCw {...SMALL_ICON} />
         </button>
       </div>
+      {openError !== null && (
+        <div className="files-error" role="alert" data-testid="files-open-error">
+          <span className="files-error-text">{openError}</span>
+          <button
+            type="button"
+            className="icon-btn"
+            data-testid="files-open-error-dismiss"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setOpenError(null)}
+          >
+            <X {...SMALL_ICON} />
+          </button>
+        </div>
+      )}
       <div
         ref={treeRef}
         className="files-tree"
@@ -224,7 +255,7 @@ function LocalFiles({
           event.preventDefault()
           if (action.select !== undefined) select(action.select, true)
           if (action.toggle !== undefined && !onlyChanged) toggleFolder(folder, action.toggle)
-          if (action.open !== undefined) onOpenFile(action.open)
+          if (action.open !== undefined) open(action.open)
         }}
       >
         {onlyChanged && rows.length === 0 && (

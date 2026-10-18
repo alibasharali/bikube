@@ -22,6 +22,8 @@ interface NewCardProps {
   /** The workspace's default startup command, the preset for the select (#5 D10). */
   defaultStartup: StartupCommand
   onCreated: (cardId: string) => void
+  /** A request to open the form (the command palette's New card, #40 D9): each new id opens it. */
+  openRequest?: number
 }
 
 /**
@@ -32,6 +34,11 @@ interface NewCardProps {
  */
 function NewCard(props: NewCardProps): React.JSX.Element {
   const [adding, setAdding] = useState(false)
+  const [openedFor, setOpenedFor] = useState<number | undefined>(undefined)
+  if (props.openRequest !== undefined && props.openRequest !== openedFor) {
+    setOpenedFor(props.openRequest)
+    setAdding(true)
+  }
   if (!adding) {
     return (
       <button

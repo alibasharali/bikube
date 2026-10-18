@@ -7,21 +7,24 @@ import {
   useState,
   useSyncExternalStore
 } from 'react'
-import { knownRunState, knownStatus } from '../../core/card-status'
+import { knownStatus, type CardRunState } from '../../core/card-status'
 import {
   filterPalette,
   paletteItems,
+  type ActionRow,
   type OpenView,
+  type PaletteAction,
   type PaletteItems,
   type PaletteRow,
   type RowStatus,
   type TerminalRow
 } from '../../core/palette'
-import { MAIN_PANE, paneIds } from '../../core/split-tree'
+import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import { shellCards } from '../../core/workspace-shells'
 import type { WorkspaceState } from '../../core/workspace-store'
-import { cardPanes, cardTerminals } from './card-terminals'
+import { cardTerminals, useCardRunState, usePaneLayout } from './card-terminals'
 import Modal from './Modal'
+import ShortcutKeys from './ShortcutKeys'
 import { currentKeymap, useSettings } from './settings'
 import { useWorkspaceState } from './store'
 
@@ -38,12 +41,15 @@ interface CommandPaletteProps {
   onClose: () => void
   /** Opens a card or shell row (D7); the palette is closed first. */
   onOpenTerminal: (row: TerminalRow) => void
+  /** Runs an action row (D6); the palette is closed first. */
+  onRunAction: (action: PaletteAction) => void
 }
 
 /** The sections shown, in D2's order, each with its heading. */
 const SECTIONS: { key: keyof PaletteItems; title: string }[] = [
   { key: 'cards', title: 'Cards' },
-  { key: 'shells', title: 'Shells' }
+  { key: 'shells', title: 'Shells' },
+  { key: 'actions', title: 'Actions' }
 ]
 
 const rowKey = (row: PaletteRow): string =>
@@ -89,21 +95,32 @@ function useStatusKey(ids: string[]): string {
   )
 }
 
-/** The open view as the palette's rows read it. */
-function openView(open: OpenTerminal | null): OpenView | null {
+/** The open view as the palette's rows read it, from its live run state and panes. */
+function openView(
+  open: OpenTerminal | null,
+  runState: CardRunState,
+  layout: PaneLayout
+): OpenView | null {
   if (!open) return null
-  const layout = cardPanes().layout(open.cardId)
   return {
     ...open,
-    running: knownRunState(cardTerminals().runState(open.cardId)).kind === 'running',
+    running: runState.kind === 'running',
     paneCount: paneIds(layout.tree).length,
     extraPaneFocused: layout.focused !== MAIN_PANE
   }
 }
 
-/** The command palette (#40 D2): a search field over the Cards and Shells sections. */
-function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps): React.JSX.Element {
+/** The command palette (#40 D2): a search field over the Cards, Shells and Actions sections. */
+function CommandPalette({
+  open,
+  onClose,
+  onOpenTerminal,
+  onRunAction
+}: CommandPaletteProps): React.JSX.Element {
   const state = useWorkspaceState()
+  // The open view's actions follow its panes and whether it runs (D6).
+  const runState = useCardRunState(open?.cardId ?? '')
+  const layout = usePaneLayout(open?.cardId ?? '')
   const { theme } = useSettings()
   const [query, setQuery] = useState('')
   const listId = useId()
@@ -116,7 +133,7 @@ function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps):
         paletteItems({
           state,
           status: rowStatus,
-          view: openView(open),
+          view: openView(open, runState, layout),
           theme,
           keymap: currentKeymap(),
           platform: window.drovr?.platform ?? ''
@@ -125,7 +142,7 @@ function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps):
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, open, theme, query, statusKey]
+    [state, open, runState, layout, theme, query, statusKey]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,
@@ -153,7 +170,8 @@ function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps):
   const run = (row: PaletteRow | undefined): void => {
     if (!row) return
     onClose()
-    if (row.kind !== 'action') onOpenTerminal(row)
+    if (row.kind === 'action') onRunAction(row.action)
+    else onOpenTerminal(row)
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
@@ -231,7 +249,9 @@ function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps):
                   id={optionId(at)}
                   role="option"
                   aria-selected={at === selected}
-                  className="palette-row"
+                  className={
+                    row.kind === 'action' ? 'palette-row palette-row-action' : 'palette-row'
+                  }
                   data-testid="palette-row"
                   // Keeps the search field focused, so the keyboard stays in the palette.
                   onMouseDown={(e) => e.preventDefault()}
@@ -240,7 +260,11 @@ function CommandPalette({ open, onClose, onOpenTerminal }: CommandPaletteProps):
                   }}
                   onClick={() => run(row)}
                 >
-                  {row.kind !== 'action' && <TerminalRowContent row={row} />}
+                  {row.kind === 'action' ? (
+                    <ActionRowContent row={row} />
+                  ) : (
+                    <TerminalRowContent row={row} />
+                  )}
                 </div>
               )
             })}
@@ -264,6 +288,22 @@ function TerminalRowContent({ row }: { row: TerminalRow }): React.JSX.Element {
       <span className="palette-row-meta" data-testid="palette-row-meta">
         {meta.join(' · ')}
       </span>
+    </>
+  )
+}
+
+/** An action row (D6): its label, and its shortcut on the right when it has one. */
+function ActionRowContent({ row }: { row: ActionRow }): React.JSX.Element {
+  return (
+    <>
+      <span className="palette-row-title" data-testid="palette-row-title">
+        {row.label}
+      </span>
+      {row.shortcut && (
+        <span className="palette-row-shortcut" data-testid="palette-row-shortcut">
+          <ShortcutKeys shortcut={row.shortcut} platform={window.drovr?.platform ?? ''} />
+        </span>
+      )}
     </>
   )
 }

@@ -210,8 +210,11 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
   const sections = palette().getByTestId('palette-section')
   await expect(sections.first()).toHaveAttribute('data-section', 'cards')
   await expect(sections.nth(1)).toHaveAttribute('data-section', 'shells')
+  await expect(sections.nth(2)).toHaveAttribute('data-section', 'actions')
+  await expect(sections).toHaveCount(3)
   await expect(section('cards').getByText('Cards', { exact: true })).toBeVisible()
   await expect(section('shells').getByText('Shells', { exact: true })).toBeVisible()
+  await expect(section('actions').getByText('Actions', { exact: true })).toBeVisible()
 
   expect(await titles(section('cards'))).toEqual(['one', 'two', 'three'])
   await expect(rows(section('cards')).getByTestId('palette-row-meta')).toHaveText([
@@ -223,6 +226,16 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
   await expect(rows(section('shells')).getByTestId('palette-row-meta')).toHaveText([
     'Alpha · Stopped',
     'Beta · Stopped'
+  ])
+  // The board's actions, in D6's order.
+  expect(await titles(section('actions'))).toEqual([
+    'New card',
+    'Open Default shell',
+    'New workspace',
+    'Open Settings',
+    'Theme: Dark',
+    'Theme: Light',
+    'Switch to workspace Beta'
   ])
 })
 
@@ -299,7 +312,8 @@ test('AC11: Up and Down wrap, the mouse selects on hover, Enter runs the selecte
   await stoppedCard('two')
 
   await openPalette()
-  // `one`, `two` and the Default shell.
+  // `one`, `two` and the Default shell: the workspace's name matches no action.
+  await page.keyboard.type('alpha')
   await expect(rows()).toHaveCount(3)
   await expect(rows().nth(0)).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('ArrowUp')
@@ -311,10 +325,10 @@ test('AC11: Up and Down wrap, the mouse selects on hover, Enter runs the selecte
   // Hovering selects; a new query selects the first row again.
   await rows().nth(1).hover()
   await expect(rows().nth(1)).toHaveAttribute('aria-selected', 'true')
-  await page.keyboard.type('one')
+  await search().fill('alpha one')
   await expect(rows()).toHaveCount(1)
   await expect(rows().nth(0)).toHaveAttribute('aria-selected', 'true')
-  await search().fill('')
+  await search().fill('alpha')
   await expect(rows().nth(0)).toHaveAttribute('aria-selected', 'true')
 
   await page.keyboard.press('Enter')
@@ -367,4 +381,194 @@ test('AC12: a recorded shortcut opens the palette instead of the default, saved,
   await page.keyboard.press('Escape')
   await expect(settings).toHaveCount(0)
   await openPalette()
+})
+
+/** The text of an action row's shortcut, as shown on its right. */
+const actionShortcut = (label: string): Locator => row(label).getByTestId('palette-row-shortcut')
+
+/** The shortcut Settings' Shortcuts section shows for `action`, read with Settings opened. */
+async function settingsShortcut(action: string): Promise<string> {
+  const settings = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-shortcuts').click()
+  const text = (await settings.getByTestId(`settings-shortcut-${action}`).textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  return text
+}
+
+const CARD_VIEW_ACTIONS = [
+  'Back to board',
+  'Split right',
+  'Split down',
+  'Close pane',
+  'Close card',
+  'Toggle panel',
+  'Find'
+]
+
+test('AC7: with a running card open, the card view actions and its moves are listed, with their shortcuts', async () => {
+  await createWorkspace('Alpha')
+  const shortcuts = {
+    back: await settingsShortcut('back'),
+    splitRight: await settingsShortcut('splitRight'),
+    find: await settingsShortcut('find')
+  }
+  await newCard('api')
+
+  await openPalette()
+  const actions = await titles(section('actions'))
+  expect(actions.slice(0, 9)).toEqual([
+    'Back to board',
+    'Split right',
+    'Split down',
+    'Close card',
+    'Toggle panel',
+    'Find',
+    'Move card to In Progress',
+    'Move card to Review',
+    'Move card to Done'
+  ])
+  expect(actions).not.toContain('Close pane')
+  expect(actions).not.toContain('Move card to Backlog')
+  await expect(actionShortcut('Back to board')).toHaveText(shortcuts.back)
+  await expect(actionShortcut('Split right')).toHaveText(shortcuts.splitRight)
+  await expect(actionShortcut('Find')).toHaveText(shortcuts.find)
+  await page.keyboard.press('Escape')
+
+  // On the board none of them is listed.
+  await backToBoard(page)
+  await openPalette()
+  const boardActions = await titles(section('actions'))
+  expect(boardActions.length).toBeGreaterThan(0)
+  for (const label of CARD_VIEW_ACTIONS) expect(boardActions).not.toContain(label)
+  expect(boardActions.some((label) => label.startsWith('Move card to'))).toBe(false)
+})
+
+/** Opens the palette, types `label` and runs its action row with Enter. */
+async function runAction(label: string): Promise<void> {
+  await openPalette()
+  await page.keyboard.type(label)
+  await expect(rows().first().getByTestId('palette-row-title')).toHaveText(label)
+  await page.keyboard.press('Enter')
+  await expect(palette()).toHaveCount(0)
+}
+
+/** Whether keyboard focus is in an extra pane's terminal (not the main one). */
+const extraPaneFocused = (): Promise<boolean> =>
+  page.evaluate(() => {
+    const pane = document.activeElement?.closest('[data-testid=pane]')
+    const panes = Array.from(
+      document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')
+    )
+    return pane != null && panes.indexOf(pane) > 0
+  })
+
+test('AC8: card view actions run from the palette as their shortcuts do', async () => {
+  await createWorkspace('Alpha')
+  await newCard('api')
+
+  // Split right: 2 panes, the new one focused; Close pane is offered for it.
+  await runAction('Split right')
+  await expect(page.getByTestId('pane')).toHaveCount(2)
+  await expect.poll(extraPaneFocused).toBe(true)
+  await openPalette()
+  expect(await titles(section('actions'))).toContain('Close pane')
+  await page.keyboard.press('Escape')
+  await runAction('Close pane')
+  await expect(page.getByTestId('pane')).toHaveCount(1)
+  await expect.poll(terminalFocused).toBe(true)
+
+  // Find opens the find bar on the focused pane, its field focused.
+  await runAction('Find')
+  await expect(page.getByTestId('find-bar')).toBeVisible()
+  await expect(page.getByTestId('find-input')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('find-bar')).toHaveCount(0)
+
+  // Toggle panel hides the side panel and shows it again.
+  await expect(page.getByTestId('side-panel')).toBeVisible()
+  await runAction('Toggle panel')
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await runAction('Toggle panel')
+  await expect(page.getByTestId('side-panel')).toBeVisible()
+
+  // Move card: the card stays open, and is in Review on the board.
+  await runAction('Move card to Review')
+  await expectCardOpen(page, 'api')
+  await expect.poll(terminalFocused).toBe(true)
+  await backToBoard(page)
+  await expect(column('Review').getByTestId('card-title')).toHaveText(['api'])
+  await expect(column('Backlog').getByTestId('card')).toHaveCount(0)
+
+  // Close card opens the Close confirmation.
+  await boardCard('api').getByTestId('card-open').click()
+  await expectCardOpen(page, 'api')
+  await runAction('Close card')
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+
+  // Back to board goes back to the board.
+  await page.getByTestId('confirm-cancel').click()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await runAction('Back to board')
+  await expect(page.getByTestId('board')).toBeVisible()
+})
+
+test('AC9: theme, Settings, workspace and Default shell actions run from the palette', async () => {
+  await createWorkspace('Alpha')
+  await createWorkspace('Beta')
+  await selectWorkspace('Alpha')
+  const file = join(dataDir, 'drovr-settings.json')
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+
+  await runAction('Theme: Dark')
+  await expect.poll(saved).toContain('"theme":"dark"')
+  expect(await app!.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
+  await openPalette()
+  const actions = await titles(section('actions'))
+  expect(actions).not.toContain('Theme: Dark')
+  expect(actions).toContain('Theme: System')
+  expect(actions).toContain('Theme: Light')
+  await page.keyboard.press('Escape')
+
+  await runAction('Open Settings')
+  await expect(page.getByTestId('settings-dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
+
+  await openPalette()
+  await expect(actionShortcut('Switch to workspace Beta')).toHaveText(darwin ? '⌘2' : 'Ctrl+2')
+  expect(await titles(section('actions'))).not.toContain('Switch to workspace Alpha')
+  await page.keyboard.press('Escape')
+  await runAction('Switch to workspace Beta')
+  await expect(page.getByTestId('board-title')).toHaveText('Beta')
+  await expect(page.locator('[data-testid=workspace-item][aria-current=true]')).toHaveText(/Beta/)
+
+  await runAction('Open Default shell')
+  await expect(page.getByTestId('card-view')).toBeVisible()
+
+  await runAction('New workspace')
+  await expect(page.getByTestId('workspace-dialog')).toBeVisible()
+})
+
+test('AC10: New card goes to the board with the first column’s New card form open and focused', async () => {
+  await createWorkspace('Alpha')
+  await newCard('api')
+
+  await runAction('New card')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(column('Backlog').getByTestId('new-card-form')).toBeVisible()
+  await expect(column('Backlog').getByTestId('new-card-input')).toBeFocused()
+  await expect(page.getByTestId('new-card-form')).toHaveCount(1)
+
+  // The form takes a title like its button's: Enter creates and opens the card.
+  await page.keyboard.type('next')
+  await page.keyboard.press('Enter')
+  await expectCardOpen(page, 'next')
+
+  // Going back later doesn't open the form again; from the board, New card opens it.
+  await backToBoard(page)
+  await expect(page.getByTestId('new-card-form')).toHaveCount(0)
+  await runAction('New card')
+  await expect(column('Backlog').getByTestId('new-card-input')).toBeFocused()
 })

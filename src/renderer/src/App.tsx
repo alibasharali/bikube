@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
+import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
 import {
   enterWorkspace,
@@ -16,6 +17,7 @@ import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
+import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
 import ConfirmDialog from './ConfirmDialog'
@@ -23,7 +25,8 @@ import WorkspaceDialog from './WorkspaceDialog'
 import Board from './Board'
 import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
-import { currentKeymap } from './settings'
+import { requestNewCard } from './new-card-request'
+import { currentKeymap, settingsStore } from './settings'
 import Sidebar from './Sidebar'
 import TitleBar from './TitleBar'
 import { useWorkspaceState, workspaceStore } from './store'
@@ -177,6 +180,43 @@ function App(): React.JSX.Element {
     [activeId, openedId, setViews]
   )
 
+  // An action picked in the palette (#40 D6) does what its shortcut, button or menu item does. It
+  // runs once the palette has closed and given focus back (D8), so a card view action acts in the
+  // view as its shortcut would, and a dialog or form it opens keeps the focus.
+  const runAction = useRef<(action: PaletteAction) => void>(() => {})
+  useEffect(() => {
+    runAction.current = (action) => {
+      if (isCardViewAction(action.id)) runCardViewAction(action.id)
+      // To the column's bottom, as the card menu's move (#6 D8); the card stays open.
+      else if (action.id === 'moveCard') {
+        if (activeId && openCard && !openIsShell) {
+          workspaceStore.moveCard(activeId, openCard.id, action.columnId, Number.POSITIVE_INFINITY)
+        }
+      }
+      // The active workspace's board, its first column's New card form open (D9).
+      else if (action.id === 'newCard') {
+        if (!activeId) return
+        closeCard()
+        requestNewCard(activeId)
+      } else if (action.id === 'openShell') openDefaultShell.current()
+      else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
+      else if (action.id === 'settings') setSettingsOpen(true)
+      else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
+      else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
+    }
+  })
+  const pendingAction = useRef<PaletteAction | null>(null)
+  useEffect(() => {
+    const action = pendingAction.current
+    if (paletteOpen || !action) return
+    pendingAction.current = null
+    runAction.current(action)
+  }, [paletteOpen])
+  const onRunAction = useCallback((action: PaletteAction) => {
+    pendingAction.current = action
+    setPaletteOpen(false)
+  }, [])
+
   // Mod+1…9 select the 1st…9th workspace in sidebar order (#31 D18), anywhere no dialog owns the
   // keyboard, swallowed whole even with no workspace at that number; once per press (D7).
   const workspaceIds = workspaces.map((w) => w.id).join('\n')
@@ -244,6 +284,7 @@ function App(): React.JSX.Element {
           }
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}
+          onRunAction={onRunAction}
         />
       )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}

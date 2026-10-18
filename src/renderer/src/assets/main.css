@@ -1956,6 +1956,19 @@ button {
   cursor: pointer;
 }
 
+.palette-row-action {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.palette-row-shortcut {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 .palette-row[aria-selected='true'] {
   background: var(--accent-soft);
 }

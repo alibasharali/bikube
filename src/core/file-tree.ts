@@ -5,7 +5,7 @@
  */
 
 import { readdir, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Git } from './git'
 
 /** The most entries one folder lists (D7); the rest are counted in `more`. */
@@ -58,7 +58,7 @@ export function isTreePath(path: unknown): path is string {
 
 const within = (base: string, path: string): boolean => {
   const rel = relative(base, path)
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel))
 }
 
 /**

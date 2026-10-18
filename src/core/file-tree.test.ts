@@ -107,6 +107,16 @@ describe('listFolder', () => {
     expect(await insideFolder(root, '')).toBe(await realpath(root))
   })
 
+  it('lists a folder whose name starts with .., and still refuses ../outside', async () => {
+    write('..cache/x')
+    mkdirSync(join(dir, 'outside'))
+    symlinkSync(join(root, '..cache'), join(root, 'cache-link'))
+    expect(names(await listFolder(root, '..cache'))).toEqual(['x'])
+    expect(names(await listFolder(root, 'cache-link'))).toEqual(['x'])
+    expect(await listFolder(root, '../outside')).toEqual({ ok: false, reason: 'outside' })
+    expect(await listFolder(root, '..')).toEqual({ ok: false, reason: 'outside' })
+  })
+
   it("can't read a file or a missing folder", async () => {
     write('README.md')
     expect(await listFolder(root, 'README.md')).toEqual({ ok: false, reason: 'unreadable' })

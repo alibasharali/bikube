@@ -7,7 +7,7 @@ import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Colours, copy and paste in a card's terminal (#19: #1 AC6 and AC7 ported to the board), then
-// Shift+Enter and clickable links (not specced: the terminal polish pass).
+// clickable links (not specced: the terminal polish pass); Shift+Enter is in shift-enter.spec.ts.
 // Linux runs drive Ctrl+Shift+C/V; Cmd+C/V on macOS is checked by hand.
 
 let app: ElectronApplication
@@ -225,18 +225,6 @@ test('AC3: paste with a newline reaches the shell', async () => {
       return lines.includes('pasteA') && lines.includes('pasteB')
     })
     .toBe(true)
-})
-
-test('Shift+Enter reaches the shell as ESC CR, so Claude Code takes it as a new line', async () => {
-  await page.locator(`${TERMINAL} .xterm-helper-textarea`).focus()
-  await page.keyboard.type('echo od-ready; od -c')
-  await page.keyboard.press('Enter')
-  // Only once od reads the tty: typed earlier, the shell's line editor would take the keys.
-  await expect.poll(async () => (await bufferText()).split('\n')).toContain('od-ready')
-  await page.keyboard.press('Shift+Enter')
-  await page.keyboard.press('Control+D')
-  // The tty turns the CR into a newline; plain Enter would give `\n` alone.
-  await expect.poll(bufferText).toMatch(/033\s+\\n/)
 })
 
 /** Replaces `shell.openExternal` in main with a recorder, so no browser opens. */

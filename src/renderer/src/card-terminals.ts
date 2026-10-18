@@ -17,12 +17,13 @@ import {
 } from '../../core/card-status'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
-import { isShiftEnter, SHIFT_ENTER } from '../../core/terminal-keys'
+import { isShiftEnter, SHIFT_ENTER, shiftEnterIsNewLine } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
 import { ghosttyStore } from './ghostty'
 import { currentKeymap, settingsStore } from './settings'
+import { workspaceStore } from './store'
 import '@xterm/xterm/css/xterm.css'
 
 let webglWorthIt: boolean | undefined
@@ -93,7 +94,8 @@ export class XtermScreen implements CardScreen {
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
 
-  constructor() {
+  /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
+  constructor(private readonly claudeCode = false) {
     const { fontFamily, fontSize, theme, behaviour } = currentAppearance()
     this.palette = theme
     const { platform, link } = window.drovr
@@ -129,7 +131,10 @@ export class XtermScreen implements CardScreen {
       // sees any part of them (D7), nor of Mod+1…9 (D18).
       if (keymapAction(event, currentKeymap())) return false
       if (workspaceShortcut(event, window.drovr.platform) !== null) return false
-      if (isShiftEnter(event)) {
+      if (
+        isShiftEnter(event) &&
+        shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode)
+      ) {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin)
           this.term.input(SHIFT_ENTER)
@@ -268,12 +273,19 @@ function sessionRouter(): SessionRouter {
   return router
 }
 
+/** Whether the card's startup command is Claude Code; shells and unknown cards are not. */
+function startsClaudeCode(cardId: string): boolean {
+  return workspaceStore
+    .getState()
+    .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
+}
+
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(
       window.drovr.terminal,
-      () => new XtermScreen(),
+      (cardId) => new XtermScreen(startsClaudeCode(cardId)),
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).

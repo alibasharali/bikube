@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { KeyLike } from './clipboard'
-import { isShiftEnter, SHIFT_ENTER } from './terminal-keys'
+import { isShiftEnter, SHIFT_ENTER, shiftEnterIsNewLine } from './terminal-keys'
 
 const key = (over: Partial<KeyLike>): KeyLike => ({
   type: 'keydown',
@@ -28,5 +28,17 @@ describe('isShiftEnter', () => {
 
   it('sends ESC CR', () => {
     expect(SHIFT_ENTER).toBe('\u001b\r')
+  })
+})
+
+describe('shiftEnterIsNewLine', () => {
+  it("is a new line only in a Claude Code card's main pane while Claude Code runs there", () => {
+    expect(shiftEnterIsNewLine(true, true)).toBe(true)
+  })
+
+  it('stays Enter at the shell after Claude Code exits, and in every other pane', () => {
+    expect(shiftEnterIsNewLine(true, false)).toBe(false)
+    expect(shiftEnterIsNewLine(false, true)).toBe(false)
+    expect(shiftEnterIsNewLine(false, false)).toBe(false)
   })
 })

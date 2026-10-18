@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `bf65b6e..55c6a1b` | CLEAN | `Workspace.worktreeSetup: string` ('' none; optional on WorkspaceInput/WorkspacePatch); `checkWorktreeSetup(raw): Result<string>` (field 'setup'); test ids `workspace-worktree-setup`, `workspace-error-setup`; e2e/worktree-setup.spec.ts |
+| S2 | running | | | |
 | S3 | todo | | | |
 
 ## Rulings

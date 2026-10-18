@@ -404,3 +404,21 @@ describe('shells, and a workspace defaulting to Shell', () => {
     expect(parseSavedState(file({ shells: 'nope' })).ok).toBe(false)
   })
 })
+
+describe('worktree setup in the saved state (#39 D1)', () => {
+  it('round trips, reads a file without it as none, and rejects a bad one', () => {
+    const s = new InMemoryWorkspaceStore()
+    ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/a', worktreeSetup: 'npm ci' }))
+    const text = serializeSavedState(s.getState())
+    const parsed = parseSavedState(text)
+    expect(parsed.ok && parsed.value.workspaces[0]!.worktreeSetup).toBe('npm ci')
+    const without = parseSavedState(
+      fileWith((state) => {
+        for (const w of state.workspaces) delete w.worktreeSetup
+      })
+    )
+    expect(without.ok && without.value.workspaces.map((w) => w.worktreeSetup)).toEqual(['', ''])
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'a\nb')))
+    expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 3)))
+  })
+})

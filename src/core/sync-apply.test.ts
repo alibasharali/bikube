@@ -15,6 +15,7 @@ function workspace(id: string, over: Partial<Workspace> = {}): Workspace {
     nextCardNumber: 1,
     defaultStartup: { kind: 'claude' },
     shells: [],
+    worktreeSetup: '',
     ...over
   }
 }

@@ -90,6 +90,11 @@ export interface Workspace {
    * the board, not on it. The Default shell isn't stored: every workspace has it.
    */
   shells: WorkspaceShell[]
+  /**
+   * One line typed in a new worktree card's terminal before its startup command (#39 D1); '' for
+   * none. Local workspaces only use it; an SSH workspace keeps whatever it has.
+   */
+  worktreeSetup: string
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -122,7 +127,16 @@ export interface WorkspaceState {
 
 /** Which input an error belongs to, so the UI can show it inline under that field. */
 export type ErrorField =
-  'name' | 'directory' | 'host' | 'column' | 'workspace' | 'title' | 'card' | 'command' | 'shell'
+  | 'name'
+  | 'directory'
+  | 'host'
+  | 'column'
+  | 'workspace'
+  | 'title'
+  | 'card'
+  | 'command'
+  | 'shell'
+  | 'setup'
 
 export interface FieldError {
   field: ErrorField
@@ -139,6 +153,8 @@ export interface WorkspaceInput {
   host?: string | null
   /** Defaults to Shell (#5 D10). */
   defaultStartup?: StartupCommand
+  /** One line or '' (#39 D1); defaults to ''. */
+  worktreeSetup?: string
 }
 
 export interface WorkspacePatch {
@@ -148,6 +164,8 @@ export interface WorkspacePatch {
   host?: string | null
   /** Changes the preset for new cards only; existing cards keep theirs (#5 D10). */
   defaultStartup?: StartupCommand
+  /** Changes the setup for new worktree cards only (#39 D1, D2). */
+  worktreeSetup?: string
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -296,6 +314,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!name.ok) return name
     const startup = checkCardStartup(input.defaultStartup ?? CLAUDE_STARTUP)
     if (!startup.ok) return startup
+    const setup = checkWorktreeSetup(input.worktreeSetup ?? '')
+    if (!setup.ok) return setup
     const workspace: Workspace = {
       id: this.generateId(),
       name: name.value,
@@ -305,7 +325,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       cards: [],
       nextCardNumber: 1,
       defaultStartup: startup.value,
-      shells: []
+      shells: [],
+      worktreeSetup: setup.value
     }
     this.set({
       workspaces: [...this.state.workspaces, workspace],
@@ -339,7 +360,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       defaultStartup = checked.value
     }
-    const updated: Workspace = { ...current, name, directory, defaultStartup }
+    let worktreeSetup = current.worktreeSetup
+    if (patch.worktreeSetup !== undefined) {
+      const checked = checkWorktreeSetup(patch.worktreeSetup)
+      if (!checked.ok) return checked
+      worktreeSetup = checked.value
+    }
+    const updated: Workspace = { ...current, name, directory, defaultStartup, worktreeSetup }
     // A local workspace has no `host` key at all, so the saved file never gets one (#12 D10).
     if (host === null) delete updated.host
     else updated.host = host
@@ -658,4 +685,13 @@ export function checkShell(input: ShellInput): Result<ShellInput> {
     if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'command' } }
   }
   return { ok: true, value: { name, command, autostart: input.autostart === true } }
+}
+
+/** A workspace's Worktree setup, trimmed and checked like a Custom command; '' is none (#39 D1). */
+export function checkWorktreeSetup(raw: string): Result<string> {
+  const command = raw.trim()
+  if (!command) return { ok: true, value: '' }
+  const checked = checkStartup({ kind: 'custom', command })
+  if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'setup' } }
+  return { ok: true, value: command }
 }

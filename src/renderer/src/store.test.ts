@@ -25,7 +25,8 @@ const saved: WorkspaceState = {
       ],
       nextCardNumber: 2,
       defaultStartup: { kind: 'claude' },
-      shells: []
+      shells: [],
+      worktreeSetup: ''
     }
   ],
   activeId: 'w-saved'

@@ -1116,3 +1116,36 @@ describe('shells', () => {
     expect(s.getState().workspaces[0].shells.map((sh) => sh.id)).toEqual([dev.id])
   })
 })
+
+describe('worktree setup (#39 D1)', () => {
+  it('is empty for a new workspace, set trimmed on create and edit, and kept by other edits', () => {
+    const s = make()
+    expect(create(s, 'alpha').worktreeSetup).toBe('')
+    const w = ok(s.createWorkspace({ name: 'b', directory: '/tmp/b', worktreeSetup: ' npm ci ' }))
+    expect(w.worktreeSetup).toBe('npm ci')
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).worktreeSetup).toBe('npm ci')
+    expect(ok(s.updateWorkspace(w.id, { worktreeSetup: ' uv sync ' })).worktreeSetup).toBe(
+      'uv sync'
+    )
+    expect(ok(s.updateWorkspace(w.id, { worktreeSetup: '  ' })).worktreeSetup).toBe('')
+  })
+
+  it('refuses more than one line under its own field, saving nothing', () => {
+    const s = make()
+    const refused = { ok: false, error: { field: 'setup', message: 'Command must be one line' } }
+    expect(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: 'a\nb' })).toEqual(
+      refused
+    )
+    expect(s.getState().workspaces).toEqual([])
+    const w = create(s, 'alpha')
+    expect(s.updateWorkspace(w.id, { name: 'beta', worktreeSetup: 'a\rb' })).toEqual(refused)
+    expect(s.getState().workspaces[0]).toBe(w)
+  })
+
+  it('is kept when the workspace becomes SSH', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/a', worktreeSetup: 'npm ci' }))
+    const ssh = ok(s.updateWorkspace(w.id, { host: 'devbox', directory: '~/a' }))
+    expect(ssh.worktreeSetup).toBe('npm ci')
+  })
+})

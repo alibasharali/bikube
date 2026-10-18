@@ -32,7 +32,8 @@ const workspace = (id: string, cards: Card[]): Workspace => ({
   cards,
   nextCardNumber: 1,
   defaultStartup: { kind: 'claude' },
-  shells: []
+  shells: [],
+  worktreeSetup: ''
 })
 
 function setup(): InMemoryWorkspaceStore {

@@ -87,7 +87,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         name: sh.name,
         command: sh.command,
         autostart: sh.autostart
-      }))
+      })),
+      // Like the shells, the setup's definition travels (#39 D1); a card's pending one doesn't (D8).
+      worktreeSetup: w.worktreeSetup
     }))
   }
 }

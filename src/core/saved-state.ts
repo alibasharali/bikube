@@ -7,6 +7,7 @@ import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import {
   checkShell,
+  checkWorktreeSetup,
   type Card,
   type CardWorktree,
   type Column,
@@ -93,6 +94,11 @@ function readWorkspace(raw: unknown): Workspace | string {
   }
   const shells = readShells(raw.shells)
   if (typeof shells === 'string') return shells
+  // Missing, as in files from before #39, is none.
+  const rawSetup = raw.worktreeSetup ?? ''
+  if (typeof rawSetup !== 'string') return 'bad worktree setup'
+  const setup = checkWorktreeSetup(rawSetup)
+  if (!setup.ok || setup.value !== rawSetup) return 'bad worktree setup'
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
   for (const c of raw.cards) {
@@ -110,7 +116,8 @@ function readWorkspace(raw: unknown): Workspace | string {
     cards,
     nextCardNumber: nextCardNumber as number,
     defaultStartup,
-    shells
+    shells,
+    worktreeSetup: setup.value
   }
 }
 

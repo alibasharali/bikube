@@ -13,7 +13,7 @@ import {
 } from '../../core/workspace-form'
 import { CLAUDE_STARTUP, checkCardStartup } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
-import type { Workspace } from '../../core/workspace-store'
+import { checkWorktreeSetup, type Workspace } from '../../core/workspace-store'
 import { SMALL_ICON } from './icons'
 import Modal from './Modal'
 import StartupField from './StartupField'
@@ -56,6 +56,9 @@ function WorkspaceDialog({
     startupDraft(workspace?.defaultStartup ?? CLAUDE_STARTUP)
   )
   const [commandError, setCommandError] = useState<string | undefined>(undefined)
+  // Typed in each new worktree card before its startup command; local workspaces only (#39 D1).
+  const [setup, setSetup] = useState(workspace?.worktreeSetup ?? '')
+  const [setupError, setSetupError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
 
   const browse = async (): Promise<void> => {
@@ -77,16 +80,20 @@ function WorkspaceDialog({
       })
       const command = checkCardStartup(draftStartup(startup))
       setCommandError(command.ok ? undefined : command.error.message)
+      // An SSH workspace keeps whatever setup it has, unseen and unchecked (#39 D1).
+      const checkedSetup = ssh ? null : checkWorktreeSetup(setup)
+      setSetupError(checkedSetup && !checkedSetup.ok ? checkedSetup.error.message : undefined)
       if (!result.ok) {
         setErrors(result.errors)
         return
       }
-      if (!command.ok) return
+      if (!command.ok || (checkedSetup && !checkedSetup.ok)) return
       // An explicit null host makes an edited SSH workspace local again (#12 D1).
       const input = {
         ...result.value,
         host: result.value.host ?? null,
-        defaultStartup: command.value
+        defaultStartup: command.value,
+        ...(checkedSetup && { worktreeSetup: checkedSetup.value })
       }
       const stored = workspace
         ? workspaceStore.updateWorkspace(workspace.id, input)
@@ -94,6 +101,10 @@ function WorkspaceDialog({
       if (!stored.ok) {
         if (stored.error.field === 'command') {
           setCommandError(stored.error.message)
+          return
+        }
+        if (stored.error.field === 'setup') {
+          setSetupError(stored.error.message)
           return
         }
         const field =
@@ -243,6 +254,50 @@ function WorkspaceDialog({
           error={commandError}
           testIdPrefix="workspace"
         />
+        {!ssh && (
+          <div className="field">
+            <label htmlFor={`${id}-setup`}>Worktree setup</label>
+            <input
+              id={`${id}-setup`}
+              data-testid="workspace-worktree-setup"
+              value={setup}
+              placeholder="npm ci"
+              spellCheck={false}
+              autoComplete="off"
+              aria-invalid={setupError ? true : undefined}
+              aria-describedby={setupError ? `${id}-setup-error` : `${id}-setup-hint`}
+              onChange={(e) => {
+                setSetup(e.target.value)
+                setSetupError(undefined)
+              }}
+              onPaste={(e) => {
+                // An input drops a pasted newline, joining the lines silently; keep them, so
+                // saving says the command must be one line instead (#39 AC2).
+                const text = e.clipboardData.getData('text/plain')
+                if (!/[\r\n]/.test(text)) return
+                e.preventDefault()
+                const { value, selectionStart, selectionEnd } = e.currentTarget
+                const start = selectionStart ?? value.length
+                setSetup(value.slice(0, start) + text + value.slice(selectionEnd ?? start))
+                setSetupError(undefined)
+              }}
+            />
+            {setupError ? (
+              <p
+                className="field-error"
+                id={`${id}-setup-error`}
+                role="alert"
+                data-testid="workspace-error-setup"
+              >
+                {setupError}
+              </p>
+            ) : (
+              <p className="field-hint" id={`${id}-setup-hint`}>
+                Run in each new Own worktree card before its startup command. Leave empty for none.
+              </p>
+            )}
+          </div>
+        )}
         <div className="modal-actions">
           <button type="button" className="btn" data-testid="workspace-cancel" onClick={onClose}>
             Cancel

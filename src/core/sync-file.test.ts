@@ -38,6 +38,7 @@ function workspace(id: string, name: string, over: Partial<Workspace> = {}): Wor
     nextCardNumber: 2,
     defaultStartup: { kind: 'claude' },
     shells: [],
+    worktreeSetup: '',
     ...over
   }
 }
@@ -132,6 +133,7 @@ describe('the board written to the sync file (#13 D2, D3, D5, D6, AC1, AC5)', ()
 
   it('writes the same text for the same board whatever the key order in memory', () => {
     const reordered: Workspace = {
+      worktreeSetup: api.worktreeSetup,
       shells: api.shells,
       defaultStartup: api.defaultStartup,
       nextCardNumber: api.nextCardNumber,
@@ -303,5 +305,18 @@ describe('worktree cards in the sync file', () => {
     })
     const read = parseSyncFile(serializeSyncFile(board, new Date(0)), HOME)
     expect(read.ok && read.workspaces[0]!.cards[0]!.worktree).toEqual(worktree)
+  })
+})
+
+describe('worktree setup in the sync file (#39 D1, AC12)', () => {
+  it('writes the workspace setup and reads it back on the other machine', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [workspace('w', 'alpha', { worktreeSetup: 'npm ci' })]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.worktreeSetup).toBe('npm ci')
+    const read = parseSyncFile(serializeSyncFile(board, new Date(0)), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.worktreeSetup).toBe('npm ci')
   })
 })

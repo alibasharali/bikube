@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | review | `a722b2a..affb7ba` | | |
+| S1 | done | `a722b2a..c33868e` | fixed r1 | `XtermScreen.find(q)`, `findStep(q, 'up'\|'down')`, `clearFind()`, `onFindResults(l)→unsub` (`FindQuery {query, caseSensitive, regex}`); CardView state `find: {paneId, request} \| null`, `Pane` renders `<FindBar screen focusRequest onClose besideClose>` for the matching id; `findStore` in `src/renderer/src/find.ts`; `findResultText`, `isValidRegex`, `FIND_HIGHLIGHT_LIMIT` in `src/core/find.ts`. Left for S2: `find` keeps a closed pane's id. |
 | S2 | todo | | | |
 
 ## Rulings

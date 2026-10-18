@@ -230,28 +230,29 @@ function onlyWorktree(dataDir: string): string {
   return join(worktrees, repoFolder!, folder!)
 }
 
-/** The open card's terminal buffer, one trimmed string per line. */
+/**
+ * The open card's terminal buffer, one trimmed string per line, wrapped rows joined: the prompt
+ * holds the worktree's long path, so a typed line often wraps.
+ */
 function lines(page: Page): Promise<string[]> {
   return page.evaluate(() => {
+    type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
     const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
       | (HTMLElement & {
-          __xterm?: {
-            buffer: {
-              active: {
-                length: number
-                getLine(i: number): { translateToString(trim: boolean): string } | undefined
-              }
-            }
-          }
+          __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
         })
       | null
     const buffer = host?.__xterm?.buffer.active
     if (!buffer) return []
-    const out: string[] = []
+    const rows: string[] = []
     for (let i = 0; i < buffer.length; i++) {
-      out.push(buffer.getLine(i)?.translateToString(true).trim() ?? '')
+      const line = buffer.getLine(i)
+      const next = buffer.getLine(i + 1)
+      const text = line?.translateToString(!next?.isWrapped) ?? ''
+      if (line?.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+      else rows.push(text)
     }
-    return out
+    return rows.map((r) => r.trim())
   })
 }
 
@@ -317,6 +318,9 @@ test('AC9: a setup that failed runs again after a restart, and the startup comma
   await createSetupWorkspace(page, repo, 'false')
   await newCard(page, 'broken', true)
   await expect.poll(() => screenText(page)).toContain('setup . failed')
+  await backToBoard(page)
+  await expect(setupPill(page, 'broken')).toHaveText('Setup failed')
+  await openOnBoard(page, 'broken')
   // The shell is at a prompt again: the setup answered, and nothing else was typed.
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type('echo still-$((20+1))')
@@ -329,6 +333,9 @@ test('AC9: a setup that failed runs again after a restart, and the startup comma
   ;({ page } = await launch(dataDir))
   await openOnBoard(page, 'broken')
   await expect.poll(() => screenText(page)).toContain('setup . failed')
+  await backToBoard(page)
+  await expect(setupPill(page, 'broken')).toHaveText('Setup failed')
+  await openOnBoard(page, 'broken')
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type('echo again-$((20+2))')
   await page.keyboard.press('Enter')
@@ -417,6 +424,12 @@ test('AC4: the board card shows Setting up while the setup runs, then nothing on
   await expect(setupPill(page, 'slow')).toHaveAttribute('data-state', 'running')
   // The activity pill's place: no other pill beside it.
   await expect(boardCard(page, 'slow').getByTestId('card-activity')).toHaveCount(0)
+  // Retry and Skip are not offered while the setup runs (D6).
+  await boardCard(page, 'slow').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-delete')).toBeVisible()
+  await expect(page.getByTestId('card-menu-retry-setup')).toHaveCount(0)
+  await expect(page.getByTestId('card-menu-skip-setup')).toHaveCount(0)
+  await page.keyboard.press('Escape')
   await expect(setupPill(page, 'slow')).toHaveCount(0, { timeout: 10_000 })
   await openOnBoard(page, 'slow')
   await expect.poll(() => lines(page)).toContain(AGENT)
@@ -437,7 +450,7 @@ test('AC5: a failed setup shows Setup failed, the agent never starts and the car
   await typeInCard(page, 'echo alive-$((40+2))')
   await expect.poll(() => lines(page)).toContain('alive-42')
   expect(await lines(page)).not.toContain(AGENT)
-  // Not offered while the setup runs or once it succeeded: only after a failure (D6).
+  // Offered after a failure (D6); AC4 and AC6 check they aren't while it runs or once it succeeded.
   await backToBoard(page)
   await card.getByTestId('card-menu').click()
   await expect(page.getByTestId('card-menu-retry-setup')).toBeVisible()
@@ -491,6 +504,5 @@ test('AC7: Skip setup starts the agent and clears the setup, so a reopen types o
   await closeOpenCard(page, 'skip')
   await openOnBoard(page, 'skip')
   await expect.poll(() => lines(page)).toContain(AGENT)
-  // Joined without breaks, so a typed line the terminal wrapped still reads as one.
-  expect((await lines(page)).join('')).not.toContain('setup')
+  expect(await screenText(page)).not.toContain('setup . failed')
 })

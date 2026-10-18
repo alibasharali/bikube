@@ -43,6 +43,9 @@ export function retrySetup(workspaceId: string, cardId: string): void {
 
 /** Skip setup (#39 D6): clears the card's pending setup (saved), then types its start line. */
 export function skipSetup(workspaceId: string, cardId: string): void {
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  // A stale Skip, its setup already answered, types nothing.
+  if (!workspace?.cards.find((c) => c.id === cardId)?.setup) return
   const cleared = workspaceStore.clearCardSetup(workspaceId, cardId)
   if (cleared.ok) continueAfterSetup(workspaceId, cleared.value)
 }

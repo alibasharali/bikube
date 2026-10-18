@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
@@ -16,6 +17,7 @@ import {
   type CardStatus
 } from '../../core/card-status'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
+import { FIND_HIGHLIGHT_LIMIT, isValidRegex, type FindResults } from '../../core/find'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
 import { isShiftEnter, SHIFT_ENTER, shiftEnterIsNewLine } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
@@ -76,6 +78,27 @@ function followAppearance(): void {
   darkQuery?.addEventListener('change', apply)
 }
 
+/** What the find bar searches for (#35 D4): the query and its two toggles. */
+export interface FindQuery {
+  query: string
+  caseSensitive: boolean
+  regex: boolean
+}
+
+const AMBER = '#D19A00'
+
+/**
+ * Every match outlined in amber, the active one filled with it too, both in the overview ruler
+ * (#35 D8). The addon wants #RRGGBB.
+ */
+const FIND_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
+  matchBorder: AMBER,
+  matchOverviewRuler: AMBER,
+  activeMatchBackground: AMBER,
+  activeMatchBorder: AMBER,
+  activeMatchColorOverviewRuler: AMBER
+}
+
 /** The element the smoke tests read the buffer from. */
 export type TerminalHost = HTMLDivElement & { __xterm?: XTerm }
 
@@ -89,6 +112,20 @@ export class XtermScreen implements CardScreen {
   private palette: TerminalAppearance['theme']
   private readonly host: TerminalHost = document.createElement('div')
   private readonly fit = new FitAddon()
+  // One more than the bar counts, so it can tell "more than 1,000" from exactly 1,000 (#35 D7).
+  private readonly search = new SearchAddon({ highlightLimit: FIND_HIGHLIGHT_LIMIT + 1 })
+  /** A find is applied (#35): from its first search until it is cleared. */
+  private finding = false
+  /** The current selection is one Find made (the active match), not the user's. */
+  private findSelected = false
+  /** A mouse button is down on the screen: a selection made now is the user's. */
+  private pointerSelecting = false
+  /** The toggles of the applied find, so a change searches afresh. */
+  private findOptions = ''
+  private disposed = false
+  private readonly endPointerSelection = (): void => {
+    if (this.pointerSelecting) setTimeout(() => (this.pointerSelecting = false), 0)
+  }
   private opened = false
   private webgl: WebglAddon | undefined
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
@@ -108,7 +145,9 @@ export class XtermScreen implements CardScreen {
       fontSize,
       theme: { ...theme },
       ...behaviour,
-      linkHandler: { activate: openLink }
+      linkHandler: { activate: openLink },
+      // The search addon's match highlights are decorations (#35 D8).
+      allowProposedApi: true
     })
     this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
     followAppearance()
@@ -118,9 +157,18 @@ export class XtermScreen implements CardScreen {
     this.host.__xterm = this.term
     this.term.loadAddon(this.fit)
     this.term.loadAddon(new WebLinksAddon(openLink))
+    this.term.loadAddon(this.search)
     const clipboard = window.drovr.clipboard
-    // Copy on select: a finished selection goes to the clipboard as it is made.
+    // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
+    // flag outlasts xterm's own mouseup handler, which reports the finished selection.
+    this.host.addEventListener('mousedown', () => (this.pointerSelecting = true), true)
+    window.addEventListener('mouseup', this.endPointerSelection)
+    // Copy on select: a finished selection goes to the clipboard as it is made, unless Find made
+    // it, also when the addon re-searches on new output (#35 D9).
     this.term.onSelectionChange(() => {
+      const byFind = this.finding && !this.pointerSelecting
+      this.findSelected = byFind && this.term.hasSelection()
+      if (byFind) return
       if (!settingsStore.get().copyOnSelect || !this.term.hasSelection()) return
       void clipboard.write(this.term.getSelection())
     })
@@ -207,6 +255,74 @@ export class XtermScreen implements CardScreen {
   }
 
   /**
+   * Calls `listener` with each search's results (#35 D7), also when the addon counts again as
+   * new output arrives; returns the unsubscribe function.
+   */
+  onFindResults(listener: (results: FindResults) => void): () => void {
+    const subscription = this.search.onDidChangeResults(({ resultCount, resultIndex }) =>
+      listener({ count: resultCount, index: resultIndex })
+    )
+    return () => subscription.dispose()
+  }
+
+  /**
+   * Searches as the query or a toggle changes (#35 D5): the active match is the newest, unless
+   * the one active before still matches. An empty query or an invalid regex clears the find.
+   */
+  find(find: FindQuery): void {
+    if (!this.searchable(find)) {
+      this.clearFind()
+      return
+    }
+    const options = this.searchOptions(find)
+    this.finding = true
+    const key = `${find.caseSensitive}/${find.regex}`
+    // The addon compares a search's toggles with themselves (0.16.0), so a toggle change alone
+    // wouldn't re-highlight: start afresh.
+    if (key !== this.findOptions) {
+      this.search.clearDecorations()
+      this.findOptions = key
+    }
+    const active = this.findSelected ? this.term.getSelectionPosition() : undefined
+    if (active) {
+      // The incremental search keeps the active match while it still matches.
+      this.search.findNext(find.query, { ...options, incremental: true })
+      const now = this.term.getSelectionPosition()
+      if (now && now.start.x === active.start.x && now.start.y === active.start.y) return
+    }
+    // Else from the newest output: searching backwards from the end finds the last match.
+    this.term.clearSelection()
+    this.search.findPrevious(find.query, options)
+  }
+
+  /** Steps to the next match upwards (older) or downwards (newer), wrapping (#35 D6). */
+  findStep(find: FindQuery, direction: 'up' | 'down'): void {
+    if (!this.searchable(find)) return
+    this.finding = true
+    const options = this.searchOptions(find)
+    if (direction === 'up') this.search.findPrevious(find.query, options)
+    else this.search.findNext(find.query, options)
+  }
+
+  /** Clears the highlights and the selection Find made (#35 D10). */
+  clearFind(): void {
+    if (this.disposed) return
+    this.search.clearDecorations()
+    if (this.findSelected) this.term.clearSelection()
+    this.finding = false
+    this.findSelected = false
+    this.findOptions = ''
+  }
+
+  private searchable({ query, regex }: FindQuery): boolean {
+    return query !== '' && (!regex || isValidRegex(query))
+  }
+
+  private searchOptions({ caseSensitive, regex }: FindQuery): ISearchOptions {
+    return { caseSensitive, regex, decorations: FIND_DECORATIONS }
+  }
+
+  /**
    * Takes on a new look without touching the process or the scrollback (D3, D4). An attached
    * screen refits, so new columns and rows reach its PTY as a resize; a detached one refits when
    * next attached.
@@ -234,6 +350,8 @@ export class XtermScreen implements CardScreen {
   }
 
   dispose(): void {
+    this.disposed = true
+    window.removeEventListener('mouseup', this.endPointerSelection)
     liveScreens.delete(this)
     this.dropWebgl()
     this.host.remove()

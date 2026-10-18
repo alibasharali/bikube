@@ -191,6 +191,16 @@ button {
   color: var(--text);
 }
 
+.titlebar-panel {
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-panel[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 .titlebar-separator {
   flex: none;
   color: var(--text-muted);
@@ -1360,8 +1370,15 @@ button {
 }
 
 /* No bar (#31 D1): the panes fill the whole area right of the sidebar. */
+.card-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .card-view {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1376,6 +1393,85 @@ button {
 
 .card-view-terminal .terminal {
   flex: 1;
+}
+
+/* The side panel (#55 D1, D4): at the right of the panes, full height, resized from its left edge */
+.side-panel {
+  position: relative;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.side-panel-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  z-index: 1;
+  cursor: col-resize;
+}
+
+.side-panel-resize:hover,
+.side-panel-resize:active,
+.side-panel-resize:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+.side-panel-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 36px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.side-panel-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-1);
+}
+
+.side-panel-tab {
+  padding: 0 var(--space-2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.side-panel-tab:hover {
+  color: var(--text);
+}
+
+.side-panel-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.side-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.files-tab-message {
+  padding: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 /* Split panes (#11 D2, D3, D5): 50/50 splits, the focused pane outlined once there are several */

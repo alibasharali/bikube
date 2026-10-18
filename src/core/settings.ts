@@ -50,9 +50,11 @@ export const SCROLLBACK_CHOICES = [1000, 5000, 10000, 50000] as const
 export const MIN_LINE_HEIGHT = 1
 export const MAX_LINE_HEIGHT = 2
 export const MAX_LETTER_SPACING = 4
+export const MIN_SIDE_PANEL_WIDTH = 200
+export const MAX_SIDE_PANEL_WIDTH = 4000
 
 /**
- * The terminal and notification preferences. Each is written to the file only when it differs
+ * The terminal, notification and side panel preferences. Each is written to the file only when it differs
  * from its default, and a missing one reads as its default, so older files load unchanged.
  */
 export interface Preferences {
@@ -76,6 +78,10 @@ export interface Preferences {
   notificationSound: boolean
   /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
   claudeStatus: boolean
+  /** The side panel beside an open card or shell shows (#55 D3), in every card at once. */
+  sidePanelOpen: boolean
+  /** The side panel's width in pixels as last dragged (#55 D4), 200 to 4000. */
+  sidePanelWidth: number
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -90,7 +96,9 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   boldBright: true,
   notifications: true,
   notificationSound: true,
-  claudeStatus: true
+  claudeStatus: true,
+  sidePanelOpen: true,
+  sidePanelWidth: 280
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -117,7 +125,13 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   boldBright: isBoolean,
   notifications: isBoolean,
   notificationSound: isBoolean,
-  claudeStatus: isBoolean
+  claudeStatus: isBoolean,
+  sidePanelOpen: isBoolean,
+  sidePanelWidth: (v): v is number =>
+    typeof v === 'number' &&
+    Number.isInteger(v) &&
+    v >= MIN_SIDE_PANEL_WIDTH &&
+    v <= MAX_SIDE_PANEL_WIDTH
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

@@ -5,7 +5,8 @@ import { canSplit, MAIN_PANE, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import CloseCardDialog from './CloseCardDialog'
 import { SMALL_ICON } from './icons'
-import { currentKeymap } from './settings'
+import { currentKeymap, settingsStore, useSettings } from './settings'
+import SidePanel from './SidePanel'
 import {
   cardPanes,
   cardTerminals,
@@ -110,7 +111,8 @@ function PaneTree({
 
 /**
  * A card at full size (#4 D7): no bar (#31 D1), only the card's panes filling the area, its own
- * terminal first (#11 D1). Back, split and Close are its shortcuts (#31 D5); the title and status
+ * terminal first (#11 D1); the side panel sits beside the view, at its right, while it is shown
+ * (#55 D1). Back, split and Close are its shortcuts (#31 D5); the title and status
  * show on the board. Leaving only detaches the screens; the processes keep running (D8, D10).
  * When the shell exits, the view goes back to the board (#5 D6), including after Close.
  */
@@ -130,6 +132,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   const running = runState.kind === 'running'
   const splittable = running && canSplit(layout)
   const focusedPane = layout.focused
+  const { sidePanelOpen } = useSettings()
 
   // The card's shortcuts (#31 D5). Capture phase: works wherever focus is, including the
   // terminal, which swallows the key.
@@ -144,6 +147,10 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       // A held shortcut's auto-repeat is swallowed without acting again (D7).
       if (event.repeat) return
       if (action === 'back') onBack()
+      // The side panel shows or hides in every card at once (#55 D2, D3).
+      else if (action === 'togglePanel') {
+        settingsStore.update({ sidePanelOpen: !settingsStore.get().sidePanelOpen })
+      }
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
         if (splittable) cardPanes().split(card, action === 'splitRight' ? 'right' : 'down')
@@ -162,14 +169,27 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   }, [onBack, card, splittable, running, focusedPane])
 
   return (
-    <section className="card-view" data-testid="card-view" aria-label={card.title}>
-      <div className="card-view-terminal" data-testid="card-terminal">
-        <PaneTree cardId={card.id} tree={layout.tree} focused={layout.focused} />
-      </div>
-      {closing && (
-        <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
+    <div className="card-layout">
+      <section className="card-view" data-testid="card-view" aria-label={card.title}>
+        <div className="card-view-terminal" data-testid="card-terminal">
+          <PaneTree cardId={card.id} tree={layout.tree} focused={layout.focused} />
+        </div>
+        {closing && (
+          <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
+        )}
+      </section>
+      {sidePanelOpen && (
+        <SidePanel
+          folder={card.directory}
+          ssh={card.host !== undefined}
+          onHide={() => {
+            settingsStore.update({ sidePanelOpen: false })
+            // The hide button is gone: keyboard focus goes back to the focused pane's terminal.
+            focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused))
+          }}
+        />
       )}
-    </section>
+    </div>
   )
 }
 

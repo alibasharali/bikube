@@ -10,6 +10,7 @@ import {
   shortcutOverrides,
   validateShortcuts,
   workspaceShortcut,
+  SHORTCUT_LABELS,
   type KeyEventLike
 } from './keymap'
 
@@ -32,7 +33,8 @@ describe('defaultKeymap (#31 D6)', () => {
       closePane: 'Cmd+W',
       closeCard: 'Shift+Cmd+W',
       settings: 'Cmd+,',
-      openShell: 'Cmd+T'
+      openShell: 'Cmd+T',
+      togglePanel: 'Alt+Cmd+B'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -42,9 +44,37 @@ describe('defaultKeymap (#31 D6)', () => {
         closePane: 'Ctrl+Shift+W',
         closeCard: 'Ctrl+Shift+Q',
         settings: 'Ctrl+,',
-        openShell: 'Ctrl+Shift+T'
+        openShell: 'Ctrl+Shift+T',
+        togglePanel: 'Ctrl+Alt+B'
       })
     }
+  })
+})
+
+describe('Toggle panel (#55 D2, AC3)', () => {
+  it('is a configurable action named Toggle panel, matched with focus anywhere', () => {
+    expect(SHORTCUT_LABELS.togglePanel).toBe('Toggle panel')
+    expect(keymapAction(press('b', { ctrlKey: true, altKey: true }), defaultKeymap('linux'))).toBe(
+      'togglePanel'
+    )
+    expect(keymapAction(press('B', { metaKey: true, altKey: true }), defaultKeymap('darwin'))).toBe(
+      'togglePanel'
+    )
+    expect(fixedShortcuts('linux').has('Ctrl+Alt+B')).toBe(false)
+    expect(fixedShortcuts('darwin').has('Alt+Cmd+B')).toBe(false)
+  })
+
+  it('can be recorded as another key, which replaces the default', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('p', { ctrlKey: true, altKey: true }), 'togglePanel', keymap, 'linux')
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+P' })
+    const next = resolveKeymap({ togglePanel: 'Ctrl+Alt+P' }, 'linux')
+    expect(keymapAction(press('b', { ctrlKey: true, altKey: true }), next)).toBeNull()
+    expect(keymapAction(press('p', { ctrlKey: true, altKey: true }), next)).toBe('togglePanel')
+    expect(readShortcuts({ togglePanel: 'Ctrl+Alt+P' }, 'linux').shortcuts).toEqual({
+      togglePanel: 'Ctrl+Alt+P'
+    })
   })
 })
 
@@ -276,8 +306,8 @@ describe('readShortcuts (#31 D9, AC8)', () => {
       dropped: ['splitRight']
     })
     // Back moves away, so Split right may take its default.
-    expect(readShortcuts({ back: 'Ctrl+Alt+B', splitRight: 'Ctrl+Shift+B' }, 'linux')).toEqual({
-      shortcuts: { back: 'Ctrl+Alt+B', splitRight: 'Ctrl+Shift+B' },
+    expect(readShortcuts({ back: 'Ctrl+Alt+K', splitRight: 'Ctrl+Shift+B' }, 'linux')).toEqual({
+      shortcuts: { back: 'Ctrl+Alt+K', splitRight: 'Ctrl+Shift+B' },
       dropped: []
     })
   })

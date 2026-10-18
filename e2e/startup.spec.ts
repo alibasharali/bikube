@@ -414,10 +414,17 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
   const sizeLog = join(root, 'pty-size')
   writeFileSync(shell, `#!/bin/sh\nstty size > '${sizeLog}'\nexec /bin/bash "$@"\n`)
   chmodSync(shell, 0o755)
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  // The side panel (#55) narrows the open view: hide it (from the Default shell, before the
+  // sized shell is set), so the view is as wide as this line needs.
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toBeVisible()
+  await page.getByTestId('titlebar-panel').click()
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await backToBoard(page)
   await app.evaluate((_, path) => {
     process.env.SHELL = path
   }, shell)
-  await createWorkspace(makeDir('alpha'), 'alpha')
   // Longer than 80 columns with the prompt, short enough for the open view (about 103).
   const word = 'drovr-long-startup-line-'.padEnd(70, 'x')
   const command = `tput cols; echo ${word}`

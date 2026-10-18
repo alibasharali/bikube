@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, Server } from 'lucide-react'
+import { ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
@@ -8,11 +8,13 @@ import { StartupTag } from './CardItem'
 import { useBranch } from './branches'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
+import { settingsStore, useSettings } from './settings'
 
 /**
  * The app's own title bar, above the sidebar and the main area: it drags the window, leaves room
  * for the macOS window buttons over the sidebar, and names where the user is (the workspace, and
- * the open card with its startup tag). With a card open, the workspace name goes back to its board.
+ * the open card with its startup tag). With a card open, the workspace name goes back to its board
+ * and a button at the right end shows or hides the side panel (#55 D2).
  * The window title follows it.
  */
 function TitleBar({
@@ -40,6 +42,7 @@ function TitleBar({
   // A worktree card shows its saved branch until its live one is first read (D3); then none when
   // its directory is no longer a repository.
   const branch = worktree && live === undefined ? worktree.worktree!.branch : live
+  const { sidePanelOpen } = useSettings()
   useEffect(() => {
     document.title = title
   }, [title])
@@ -88,6 +91,19 @@ function TitleBar({
           </>
         ) : (
           <span className="titlebar-current">Drovr</span>
+        )}
+        {workspace && card && (
+          <button
+            type="button"
+            className="icon-btn titlebar-panel"
+            data-testid="titlebar-panel"
+            aria-label="Side panel"
+            aria-pressed={sidePanelOpen}
+            title={sidePanelOpen ? 'Hide panel' : 'Show panel'}
+            onClick={() => settingsStore.update({ sidePanelOpen: !sidePanelOpen })}
+          >
+            <PanelRight {...ICON} />
+          </button>
         )}
       </div>
     </header>

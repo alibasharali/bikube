@@ -12,7 +12,8 @@ export const SHORTCUT_ACTIONS = [
   'closePane',
   'closeCard',
   'settings',
-  'openShell'
+  'openShell',
+  'togglePanel'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 
@@ -32,7 +33,8 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   closePane: 'Cmd+W',
   closeCard: 'Shift+Cmd+W',
   settings: 'Cmd+,',
-  openShell: 'Cmd+T'
+  openShell: 'Cmd+T',
+  togglePanel: 'Alt+Cmd+B'
 })
 
 const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
@@ -42,7 +44,8 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   closePane: 'Ctrl+Shift+W',
   closeCard: 'Ctrl+Shift+Q',
   settings: 'Ctrl+,',
-  openShell: 'Ctrl+Shift+T'
+  openShell: 'Ctrl+Shift+T',
+  togglePanel: 'Ctrl+Alt+B'
 })
 
 /** This OS's default shortcuts (D6). */
@@ -193,7 +196,8 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   closePane: 'Close pane',
   closeCard: 'Close card',
   settings: 'Open Settings',
-  openShell: 'Open Default shell'
+  openShell: 'Open Default shell',
+  togglePanel: 'Toggle panel'
 })
 
 /** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */

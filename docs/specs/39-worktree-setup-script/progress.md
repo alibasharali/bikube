@@ -18,4 +18,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- running
+- done (ALL PASS, e2e on the running app at 1 worker; AC12 card part by Vitest)

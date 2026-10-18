@@ -107,7 +107,7 @@ function startApp(): void {
   registerDirectories()
   registerAttention()
   registerWorktrees()
-  registerGit()
+  registerGit(() => settings.shell())
   registerFiles(() => settings.editor())
   const updates = registerUpdates(() => terminals.sessionCount)
 

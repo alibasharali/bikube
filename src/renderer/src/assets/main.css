@@ -785,12 +785,13 @@ button {
   color: inherit;
 }
 
-.menu-item:hover:not(:disabled),
+.menu-item:hover:not(:disabled, [aria-disabled='true']),
 .menu-item:focus-visible {
   background: var(--surface-hover);
 }
 
-.menu-item:disabled {
+.menu-item:disabled,
+.menu-item[aria-disabled='true'] {
   color: var(--text-muted);
   opacity: 0.5;
   cursor: default;
@@ -1127,12 +1128,13 @@ button {
 
 /* A card (#31 D11): its body (the open button) spans the whole card and lays its lines out on
    the card's rows (subgrid), so the ⋯ menu sits beside the title row and the stop button (D10)
-   beside the status row, though neither may be inside the button. Rows: title, status, agent
-   status, last output line. */
+   beside the status row, though neither may be inside the button. Rows: title, a worktree card's
+   PR chip (#38 D8) and action line (#38 D6, both also outside the button), status, agent status,
+   last output line. */
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: repeat(4, auto);
+  grid-template-rows: repeat(6, auto);
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1207,7 +1209,7 @@ button {
 }
 
 .card-body > .card-status {
-  grid-row: 2;
+  grid-row: 4;
   margin-top: var(--space-1);
 }
 
@@ -1218,11 +1220,103 @@ button {
 }
 
 .card-body > .card-agent-status {
-  grid-row: 3;
+  grid-row: 5;
 }
 
 .card-body > .card-status-line {
-  grid-row: 4;
+  grid-row: 6;
+}
+
+/* A worktree card's PR chip (#38 D8), under its branch: `#12` with its CI dot, or merged/closed. */
+.card-pr {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0 var(--space-3);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.card-pr:hover,
+.card-pr:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.card-pr-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.card-pr[data-ci='passing'] .card-pr-dot {
+  background: var(--pill-waiting-text);
+}
+
+.card-pr[data-ci='failing'] .card-pr-dot {
+  background: var(--danger);
+}
+
+.card-pr[data-ci='pending'] .card-pr-dot {
+  background: var(--pill-question-text);
+}
+
+/* A worktree card's action line (#38 D6): Pushing…, its note, or git's message with Dismiss. */
+.card-action {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.card-action[data-state='note'] {
+  color: var(--text);
+}
+
+.card-action[data-state='error'] {
+  color: var(--danger);
+}
+
+.card-action-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.card-action-dismiss {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.card-action-dismiss:hover,
+.card-action-dismiss:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .card-open {
@@ -1242,7 +1336,7 @@ button {
 
 .card-stop {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 4;
   align-self: center;
   justify-self: center;
   display: inline-flex;

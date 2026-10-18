@@ -1,23 +1,30 @@
 import {
   GitBranch,
+  GitMerge,
+  GitPullRequest,
   Pencil,
   RotateCw,
   SkipForward,
   Square,
   SquareTerminal,
   Trash2,
-  TreePine
+  TreePine,
+  X
 } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
-import type { Card, Column } from '../../core/workspace-store'
+import type { Card, CardWorktree, Column } from '../../core/workspace-store'
+import { refreshBranch, useBranch } from './branches'
+import { dismissCardGitAction, runCardGitAction, useCardGitAction } from './card-git'
+import { refreshPullRequest, usePullRequest } from './pull-requests'
 import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
+import MergeCardDialog, { type MergeChoice } from './MergeCardDialog'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
@@ -77,6 +84,159 @@ export function WorktreeBranch({
       <Icon {...SMALL_ICON} />
       <span className="card-branch-name">{branch}</span>
     </span>
+  )
+}
+
+/**
+ * A worktree card's action line (#38 D6), under its branch: the running action's busy label, then
+ * its note, or git's message with a Dismiss button. Outside the card's open button, so Dismiss
+ * is a button of its own.
+ */
+function CardGitActionLine({ cardId }: { cardId: string }): React.JSX.Element | null {
+  const { busy, error, note } = useCardGitAction(cardId)
+  const text = busy ?? error ?? note
+  if (text === null) return null
+  const state = busy !== null ? 'busy' : error !== null ? 'error' : 'note'
+  return (
+    <div
+      className="card-action"
+      data-testid="card-action"
+      data-state={state}
+      role={state === 'error' ? 'alert' : 'status'}
+    >
+      <span className="card-action-text">{text}</span>
+      {state === 'error' && (
+        <button
+          type="button"
+          className="card-action-dismiss"
+          aria-label="Dismiss"
+          title="Dismiss"
+          onClick={() => dismissCardGitAction(cardId)}
+        >
+          <X {...SMALL_ICON} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A worktree card's pull request chip (#38 D8): `#<n>` with its CI dot for an open PR, `#<n>
+ * merged` or `#<n> closed`, nothing without a PR known. A button of its own, outside the card's
+ * open button: a click opens the PR in the browser and never the card.
+ */
+function PullRequestChip({ worktree }: { worktree: CardWorktree }): React.JSX.Element | null {
+  const pr = usePullRequest(worktree.path, useBranch(worktree.path))
+  if (pr === null) return null
+  const open = pr.state === 'open'
+  const ci = open ? pr.ci : null
+  const what = open ? (ci ?? 'no checks') : pr.state
+  return (
+    <button
+      type="button"
+      className="card-pr"
+      data-testid="card-pr"
+      data-state={pr.state}
+      data-ci={ci ?? undefined}
+      title={`Pull request #${pr.number}: ${what}`}
+      onClick={() => window.drovr.link.open(pr.url)}
+    >
+      {ci !== null && <span className="card-pr-dot" aria-hidden="true" />}
+      {open ? `#${pr.number}` : `#${pr.number} ${pr.state}`}
+    </button>
+  )
+}
+
+/**
+ * A worktree card's Open pull request item (#38 D2, D3, D9): pushes the branch checked out in its
+ * worktree now, then main opens GitHub's page for it, or the open PR's (`Push and open pull
+ * request #<n>`). Disabled while the card's action runs and unless that worktree is on a branch
+ * (`Not on a branch` when detached).
+ */
+function PullRequestItem({
+  cardId,
+  worktree,
+  run
+}: {
+  cardId: string
+  worktree: CardWorktree
+  run: (action: () => void) => () => void
+}): React.JSX.Element {
+  const branch = useBranch(worktree.path)
+  const pr = usePullRequest(worktree.path, branch)
+  const busy = useCardGitAction(cardId).busy !== null
+  const onBranch = typeof branch === 'string' && branch !== 'detached'
+  const disabled = busy || !onBranch
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu-item"
+      data-testid="card-menu-pull-request"
+      aria-disabled={disabled || undefined}
+      title={branch === 'detached' ? 'Not on a branch' : undefined}
+      onClick={
+        disabled
+          ? undefined
+          : run(() => {
+              void runCardGitAction(cardId, 'Pushing…', () =>
+                window.drovr.git.openPullRequest(worktree.path)
+              ).then((result) => {
+                if (result?.ok) refreshPullRequest(worktree.path)
+              })
+            })
+      }
+    >
+      <GitPullRequest {...MENU_ICON} />
+      {pr?.state === 'open' ? `Push and open pull request #${pr.number}` : 'Open pull request'}
+    </button>
+  )
+}
+
+/** A live branch read as a branch name: null when detached, not a repository or not read yet. */
+const onBranch = (branch: string | null | undefined): string | null =>
+  typeof branch === 'string' && branch !== 'detached' ? branch : null
+
+/**
+ * A worktree card's Merge into item (#38 D2, D10): `Merge into <branch>`, the workspace folder's
+ * live branch, merging the branch checked out in the card's worktree now once confirmed
+ * (`onChoose`). Disabled while the card's action runs, when the worktree is detached (`Not on a
+ * branch`) and unless the workspace folder is on a branch.
+ */
+function MergeItem({
+  cardId,
+  worktree,
+  run,
+  onChoose
+}: {
+  cardId: string
+  worktree: CardWorktree
+  run: (action: () => void) => () => void
+  onChoose: (choice: MergeChoice) => void
+}): React.JSX.Element {
+  const cardBranch = onBranch(useBranch(worktree.path))
+  const branch = onBranch(useBranch(worktree.repo))
+  const busy = useCardGitAction(cardId).busy !== null
+  const choice = busy || cardBranch === null || branch === null ? null : { cardBranch, branch }
+  const title =
+    cardBranch === null
+      ? 'Not on a branch'
+      : branch === null
+        ? 'The workspace folder is not on a branch'
+        : undefined
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu-item"
+      data-testid="card-menu-merge"
+      aria-disabled={choice === null || undefined}
+      title={title}
+      onClick={choice === null ? undefined : run(() => onChoose(choice))}
+    >
+      <GitMerge {...MENU_ICON} />
+      {`Merge into ${branch ?? '…'}`}
+    </button>
   )
 }
 
@@ -173,6 +333,18 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
   }
 
   const [deletingWorktree, setDeletingWorktree] = useState(false)
+  const [merging, setMerging] = useState<MergeChoice | null>(null)
+  const merge = ({ cardBranch, branch }: MergeChoice): void => {
+    setMerging(null)
+    const worktree = card.worktree
+    if (!worktree) return
+    void runCardGitAction(card.id, 'Merging…', () =>
+      window.drovr.git.merge(worktree.path, worktree.repo, cardBranch, branch)
+    ).then((result) => {
+      // The workspace folder's chips show what the merge left (D11).
+      if (result) refreshBranch(worktree.repo)
+    })
+  }
   const onDelete = (): void => {
     if (card.worktree) {
       setDeletingWorktree(true)
@@ -235,6 +407,8 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           <CardLines status={status} />
         </button>
       )}
+      {card.worktree && <PullRequestChip worktree={card.worktree} />}
+      {card.worktree && <CardGitActionLine cardId={card.id} />}
       {running && (
         <button
           type="button"
@@ -303,6 +477,20 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               <SquareTerminal {...MENU_ICON} />
               Startup command…
             </button>
+            {card.worktree && (
+              <PullRequestItem cardId={card.id} worktree={card.worktree} run={run} />
+            )}
+            {card.worktree && (
+              <MergeItem
+                cardId={card.id}
+                worktree={card.worktree}
+                run={run}
+                onChoose={(choice) => {
+                  cancelPendingOpen()
+                  setMerging(choice)
+                }}
+              />
+            )}
             {running && (
               <button
                 type="button"
@@ -375,6 +563,14 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             setConfirm(null)
             removeCard(workspaceId, card.id)
           }}
+        />
+      )}
+      {merging && card.worktree && (
+        <MergeCardDialog
+          worktree={card.worktree}
+          choice={merging}
+          onMerge={() => merge(merging)}
+          onCancel={() => setMerging(null)}
         />
       )}
       {deletingWorktree && card.worktree && (

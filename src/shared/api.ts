@@ -4,6 +4,7 @@ import type { GhosttyTheme } from '../core/ghostty-config'
 import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
+import type { PullRequestRead } from '../core/pr-status'
 import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
@@ -55,6 +56,9 @@ export const IPC = {
   gitFetch: 'git:fetch',
   gitPull: 'git:pull',
   gitPush: 'git:push',
+  gitOpenPullRequest: 'git:openPullRequest',
+  gitPullRequest: 'git:pullRequest',
+  gitMerge: 'git:merge',
   filesList: 'files:list',
   filesStatus: 'files:status',
   filesOpen: 'files:open',
@@ -254,6 +258,25 @@ export interface GitApi {
   pull(dir: string): Promise<SyncResult>
   /** Pushes the current branch, to `origin` as its upstream when it has none: `Pushed` (D9). */
   push(dir: string): Promise<SyncResult>
+  /**
+   * Open pull request from a worktree card (#38 D3, D4): pushes the branch checked out in its
+   * worktree `dir` like `push`, then main opens GitHub's page for a new pull request on it in the
+   * browser: `Pushed · opened in the browser`, else git's message or `Not a GitHub remote: …`.
+   */
+  openPullRequest(dir: string): Promise<SyncResult>
+  /**
+   * The pull request of the branch checked out in the worktree `dir`, as the user's `gh` sees it
+   * (#38 D7): the branch main read and its PR, null for none (any failure); null outside a
+   * repository and on a detached HEAD. Never an error.
+   */
+  pullRequest(dir: string): Promise<PullRequestRead | null>
+  /**
+   * Merge into the workspace branch (#38 D11, D12): merges the branch checked out in the card's
+   * worktree `dir` into the current branch of the workspace folder `repo`, refused unless they are
+   * still `cardBranch` and `branch` (what the confirmation named): `Merged <card branch> into
+   * <branch>` or `Already up to date`, else why nothing was merged.
+   */
+  merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
 /**

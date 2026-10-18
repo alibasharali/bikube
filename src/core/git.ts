@@ -407,7 +407,7 @@ export async function fetchAll(dir: string, run: Git): Promise<SyncResult> {
 }
 
 /** The checked-out branch; null on a detached HEAD or outside a repository. */
-async function currentBranch(dir: string, run: Git): Promise<string | null> {
+export async function currentBranch(dir: string, run: Git): Promise<string | null> {
   return headBranch(await run(dir, ['symbolic-ref', '--quiet', 'HEAD']))
 }
 

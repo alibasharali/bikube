@@ -102,10 +102,18 @@ export type NewBranchResult = { ok: true } | { ok: false; reason: string; name?:
 
 const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
+/**
+ * Whether `dir` is inside a git work tree (D15): main asks before running any other git command
+ * there. False outside one, in a `.git` folder or without git.
+ */
+export async function inRepository(dir: string, run: Git): Promise<boolean> {
+  const inside = await run(dir, ['rev-parse', '--is-inside-work-tree'])
+  return inside.code === 0 && !inside.timedOut && inside.stdout.trim() === 'true'
+}
+
 /** The branches of the repository `dir` is in, or null outside one (or without git). */
 export async function listBranches(dir: string, run: Git): Promise<BranchList | null> {
-  const inside = await run(dir, ['rev-parse', '--is-inside-work-tree'])
-  if (inside.code !== 0 || inside.stdout.trim() !== 'true') return null
+  if (!(await inRepository(dir, run))) return null
   const [head, refs, remotes] = await Promise.all([
     run(dir, ['symbolic-ref', '--quiet', '--short', 'HEAD']),
     run(dir, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes']),

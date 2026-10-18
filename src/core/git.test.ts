@@ -13,6 +13,7 @@ import {
   pull,
   push,
   gitIn,
+  inRepository,
   listBranches,
   switchBranch,
   trackBranch,
@@ -77,6 +78,20 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
+})
+
+describe('inRepository', () => {
+  it('is true inside a work tree, false outside one, and runs nothing else', async () => {
+    expect(await inRepository(repo, run)).toBe(true)
+    expect(await inRepository(join(repo, '.git'), run)).toBe(false)
+    expect(await inRepository(dir, run)).toBe(false)
+    const { calls, runner } = recording()
+    await inRepository('/repo', gitIn(runner))
+    expect(calls.map((call) => call.args)).toEqual([
+      ['config', '--get', 'core.sshCommand'],
+      ['rev-parse', '--is-inside-work-tree']
+    ])
+  })
 })
 
 describe('listBranches', () => {

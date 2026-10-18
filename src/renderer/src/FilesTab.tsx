@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, CornerDownRight, RotateCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
-import { refreshTree, toggleFolder, useFolderTree } from './file-tree'
+import type { ChangeLetter } from '../../core/git-status'
+import { changedRows, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
+import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
 import { SMALL_ICON } from './icons'
 
 /** How often the shown folder is read again while the tab shows and the window is focused (D12). */
@@ -33,7 +34,17 @@ function useRefresh(folder: string): void {
   }, [folder])
 }
 
-/** One row of the tree (D7, D8, D9). */
+/** Each letter's meaning (D10), read out with it. */
+const CHANGE_NAMES: Record<ChangeLetter, string> = {
+  M: 'Modified',
+  A: 'Added',
+  D: 'Deleted',
+  U: 'Untracked',
+  R: 'Renamed',
+  C: 'Conflicted'
+}
+
+/** One row of the tree (D7, D8, D9, D10). */
 function Row({
   row,
   selected,
@@ -58,6 +69,8 @@ function Row({
       data-path={row.path}
       data-kind={row.kind}
       data-ignored={row.ignored}
+      data-change={row.change}
+      data-dot={expandable ? row.dot === true : undefined}
       role="treeitem"
       aria-level={row.depth + 1}
       aria-selected={item ? selected : undefined}
@@ -92,14 +105,26 @@ function Row({
           <CornerDownRight {...SMALL_ICON} />
         </span>
       )}
+      {row.dot && !row.change && <span className="files-dot" aria-label="Has changes" />}
+      {row.change && (
+        <span
+          className="files-change"
+          data-testid="files-change"
+          aria-label={CHANGE_NAMES[row.change]}
+          title={row.from !== undefined ? `Renamed from ${row.from}` : CHANGE_NAMES[row.change]}
+        >
+          {row.change}
+        </span>
+      )}
     </div>
   )
 }
 
 /**
- * The side panel's Files tab (#55 D5–D9, D12): the open card's folder (`folder`, its directory,
+ * The side panel's Files tab (#55 D5–D12): the open card's folder (`folder`, its directory,
  * or the workspace's folder for a shell) as a `tree`, read lazily one expanded folder at a time,
- * ignored entries dimmed, kept up to date while it shows. Over SSH it only says files aren't
+ * ignored entries dimmed, git's changes marked, Changed only on request, kept up to date while
+ * it shows. Over SSH it only says files aren't
  * available (D6): nothing is listed and no git runs. `onOpenFile` gets a file's path (relative to
  * `folder`) on double-click or Enter.
  */
@@ -130,15 +155,23 @@ function LocalFiles({
   onOpenFile: (path: string) => void
 }): React.JSX.Element {
   useRefresh(folder)
-  const { expanded, listings } = useFolderTree(folder)
-  const rows = visibleRows(folderName(folder), listings, expanded)
+  const { expanded, listings, status, changedOnly } = useFolderTree(folder)
+  const changes = status?.ok ? status.changes : []
+  const repository = status?.ok === true
+  const onlyChanged = changedOnly && repository
+  const rows = onlyChanged
+    ? changedRows(folderName(folder), changes)
+    : visibleRows(folderName(folder), listings, expanded, changes)
   const [selected, setSelected] = useState<string | null>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const shownSelected = rows.some((r) => r.path === selected) ? selected : null
 
   const activate = (row: TreeRow): void => {
     if (row.kind === 'file') onOpenFile(row.path)
-    else if (row.kind === 'root' || row.kind === 'folder') toggleFolder(folder, row.path)
+    // Changed only keeps every folder expanded (D11).
+    else if ((row.kind === 'root' || row.kind === 'folder') && !onlyChanged) {
+      toggleFolder(folder, row.path)
+    }
   }
   const select = (path: string, focus: boolean): void => {
     setSelected(path)
@@ -152,6 +185,22 @@ function LocalFiles({
   return (
     <div className="files-tab" data-testid="files-tab" data-folder={folder}>
       <div className="files-header">
+        <button
+          type="button"
+          className="icon-btn files-changed-only"
+          data-testid="files-changed-only"
+          aria-label="Changed only"
+          aria-pressed={onlyChanged}
+          title={
+            status && !status.ok && status.reason === 'not-repository'
+              ? 'Not a git repository'
+              : 'Changed only'
+          }
+          disabled={!repository}
+          onClick={() => setChangedOnly(folder, !changedOnly)}
+        >
+          <FileDiff {...SMALL_ICON} />
+        </button>
         <button
           type="button"
           className="icon-btn files-refresh"
@@ -174,10 +223,15 @@ function LocalFiles({
           if (Object.keys(action).length === 0) return
           event.preventDefault()
           if (action.select !== undefined) select(action.select, true)
-          if (action.toggle !== undefined) toggleFolder(folder, action.toggle)
+          if (action.toggle !== undefined && !onlyChanged) toggleFolder(folder, action.toggle)
           if (action.open !== undefined) onOpenFile(action.open)
         }}
       >
+        {onlyChanged && rows.length === 0 && (
+          <div className="files-tab-message" data-testid="files-no-changes">
+            No changes
+          </div>
+        )}
         {rows.map((row) => (
           <Row
             key={row.path}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FolderListing } from './file-tree'
-import { treeKey, visibleRows, type TreeRow } from './tree-rows'
+import type { FileChange } from './git-status'
+import { changedRows, treeKey, visibleRows, type TreeRow } from './tree-rows'
 
 // The Files tab's rows (#55 D7, D8): what shows for the expanded folders, and the tree's keys.
 
@@ -74,5 +75,91 @@ describe('treeKey', () => {
   it('toggles a folder and opens a file with Enter', () => {
     expect(treeKey(rows, 'src', 'Enter')).toEqual({ toggle: 'src' })
     expect(treeKey(rows, 'src/a.ts', 'Enter')).toEqual({ open: 'src/a.ts' })
+  })
+})
+
+// The changes (#55 D10, D11): letters, folder dots, deleted rows, and the Changed only rows.
+
+const changes: FileChange[] = [
+  { path: 'src/a.ts', letter: 'M' },
+  { path: 'src/new.ts', letter: 'U' },
+  { path: 'src/c.ts', letter: 'R', from: 'src/b.ts' },
+  { path: 'README.md', letter: 'D' },
+  { path: 'gone/deep/x.ts', letter: 'D' }
+]
+
+const marked = (rows: TreeRow[]): string[] =>
+  rows.map(
+    (r) =>
+      `${'  '.repeat(r.depth)}${r.name}${r.change ? ` ${r.change}` : ''}${r.from ? ` <${r.from}` : ''}${r.dot ? ' •' : ''}`
+  )
+
+describe('changes', () => {
+  const tree = new Map<string, FolderListing>([
+    [
+      '',
+      {
+        ok: true,
+        entries: [
+          { name: 'dist', folder: true, ignored: true },
+          { name: 'src', folder: true },
+          { name: '.gitignore', folder: false }
+        ],
+        more: 0
+      }
+    ],
+    [
+      'src',
+      {
+        ok: true,
+        entries: [
+          { name: 'a.ts', folder: false },
+          { name: 'c.ts', folder: false },
+          { name: 'new.ts', folder: false }
+        ],
+        more: 0
+      }
+    ],
+    ['gone', { ok: false, reason: 'unreadable' }]
+  ])
+
+  it('#55 AC16: marks letters and folder dots, and lists deleted files and their gone folders', () => {
+    const rows = visibleRows('repo', tree, new Set(['', 'src', 'gone', 'gone/deep']), changes)
+    expect(marked(rows)).toEqual([
+      'repo •',
+      '  dist',
+      '  gone •',
+      '    deep •',
+      '      x.ts D',
+      '  src •',
+      '    a.ts M',
+      '    c.ts R <src/b.ts',
+      '    new.ts U',
+      '  .gitignore',
+      '  README.md D'
+    ])
+    expect(rows.find((r) => r.path === 'README.md')?.kind).toBe('file')
+    expect(rows.find((r) => r.path === 'gone/deep')?.kind).toBe('folder')
+    // A collapsed folder still shows its dot.
+    expect(marked(visibleRows('repo', tree, new Set(['']), changes))).toContain('  src •')
+  })
+
+  it('#55 AC16: Changed only lists just the changed paths and the folders to them, all expanded', () => {
+    const rows = changedRows('repo', changes)
+    expect(marked(rows)).toEqual([
+      'repo •',
+      '  gone •',
+      '    deep •',
+      '      x.ts D',
+      '  src •',
+      '    a.ts M',
+      '    c.ts R <src/b.ts',
+      '    new.ts U',
+      '  README.md D'
+    ])
+    expect(
+      rows.filter((r) => r.kind === 'folder' || r.kind === 'root').every((r) => r.expanded)
+    ).toBe(true)
+    expect(changedRows('repo', [])).toEqual([])
   })
 })

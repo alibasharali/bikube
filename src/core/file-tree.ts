@@ -7,6 +7,9 @@
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Git } from './git'
+import { compareNames } from './tree-rows'
+
+export { compareNames }
 
 /** The most entries one folder lists (D7); the rest are counted in `more`. */
 export const FOLDER_CAP = 2000
@@ -82,13 +85,6 @@ export async function insideFolder(
   } catch {
     return null
   }
-}
-
-const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
-
-/** Entry names in the tree's order (D7): case-insensitive, natural (`file2` before `file10`). */
-export function compareNames(a: string, b: string): number {
-  return collator.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0)
 }
 
 /** Undoes git's C-style quoting of a path it prints (`core.quotePath=false`: only `"`, `\` and control characters). */

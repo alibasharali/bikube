@@ -1548,6 +1548,63 @@ button {
   color: var(--text-muted);
 }
 
+/* git's changes (#55 D10): a letter at the row's right, a dot on folders leading to one */
+.files-change,
+.files-dot {
+  flex: none;
+  margin-left: auto;
+}
+
+.files-change {
+  min-width: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.files-row[data-change='M'] .files-change {
+  color: var(--pill-question-text);
+}
+
+.files-row[data-change='A'] .files-change,
+.files-row[data-change='U'] .files-change {
+  color: var(--pill-waiting-text);
+}
+
+.files-row[data-change='R'] .files-change {
+  color: var(--pill-working-text);
+}
+
+.files-row[data-change='D'] .files-change,
+.files-row[data-change='C'] .files-change {
+  color: var(--danger);
+}
+
+.files-row[data-change='D'] .files-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.files-dot {
+  width: 6px;
+  height: 6px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--pill-question-text);
+}
+
+.files-changed-only:disabled {
+  opacity: 0.4;
+  background: transparent;
+  cursor: default;
+}
+
+.files-changed-only[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .files-tab-message {
   padding: var(--space-3);
   color: var(--text-muted);

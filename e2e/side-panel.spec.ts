@@ -307,6 +307,9 @@ const filesTab = (): Locator => panel().getByTestId('files-tab')
 /** The tree's row for `path` (relative, `''` for the root row). */
 const row = (path: string): Locator =>
   filesTab().locator(`[data-testid=files-row][data-path="${path}"]`)
+/** The change letter on `path`'s row. */
+const change = (path: string): Locator => row(path).getByTestId('files-change')
+const changedOnly = (): Locator => filesTab().getByTestId('files-changed-only')
 /** The names of the rows that show, in order, indented two spaces per level. */
 const shownRows = (): Promise<string[]> =>
   filesTab()
@@ -401,6 +404,7 @@ test('#55 AC9: a new file shows under an expanded folder within 4 s, and at once
   await page.keyboard.type('touch src/z.ts')
   await page.keyboard.press('Enter')
   await expect(row('src/z.ts')).toBeVisible({ timeout: 4000 })
+  await expect(change('src/z.ts')).toHaveText('U', { timeout: 4000 })
   // Nothing collapsed.
   await expect(row('dist/out.js')).toBeVisible()
   await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
@@ -411,6 +415,7 @@ test('#55 AC9: a new file shows under an expanded folder within 4 s, and at once
   writeFileSync(join(repo, 'src', 'y.ts'), '')
   await panel().getByTestId('files-refresh').click()
   await expect(row('src/y.ts')).toBeVisible({ timeout: 1000 })
+  await expect(change('src/y.ts')).toHaveText('U', { timeout: 1000 })
   await expect(row('src/z.ts')).toHaveAttribute('aria-selected', 'true')
 })
 
@@ -449,4 +454,82 @@ test('#55 AC11: outside a git repository the tree lists every file and dims noth
   await newCard('c1')
   await expect.poll(shownRows).toEqual(['plain', '  dist', '  .gitignore', '  notes.txt'])
   await expect(filesTab().locator('[data-ignored=true]')).toHaveCount(0)
+  // Nothing is marked, and Changed only is disabled.
+  await expect(changedOnly()).toBeDisabled()
+  await expect(changedOnly()).toHaveAttribute('title', 'Not a git repository')
+  await expect(filesTab().getByTestId('files-change')).toHaveCount(0)
+  await expect(filesTab().locator('[data-dot=true]')).toHaveCount(0)
+})
+
+// The changes (#55 S3): git's letters, folder dots, deleted rows and the Changed only filter.
+
+/** AC7's changes: `src/a.ts` modified, `src/new.ts` untracked, `README.md` deleted, `src/b.ts` staged as renamed to `src/c.ts`. */
+function makeChanges(): void {
+  writeFileSync(join(repo, 'src', 'a.ts'), 'export const a = 3\n')
+  writeFileSync(join(repo, 'src', 'new.ts'), '')
+  rmSync(join(repo, 'README.md'))
+  execFileSync('git', ['mv', 'src/b.ts', 'src/c.ts'], { cwd: repo })
+}
+
+test('#55 AC7: changed paths read their letters, folders a dot, a deleted file struck through', async () => {
+  makeChanges()
+  await openC1()
+  await row('src').dblclick()
+  await expect(row('src')).toHaveAttribute('data-dot', 'true', { timeout: 4000 })
+  await expect(change('src/a.ts')).toHaveText('M', { timeout: 4000 })
+  await expect(change('src/new.ts')).toHaveText('U')
+  await expect(change('src/c.ts')).toHaveText('R')
+  await expect(change('src/c.ts')).toHaveAttribute('title', 'Renamed from src/b.ts')
+  await expect(change('README.md')).toHaveText('D')
+  await expect(row('README.md').locator('.files-name')).toHaveCSS(
+    'text-decoration-line',
+    'line-through'
+  )
+  await expect(row('dist')).toHaveAttribute('data-dot', 'false')
+  await expect(change('.gitignore')).toHaveCount(0)
+  // The deleted file is listed among the files, in order.
+  await expect
+    .poll(shownRows)
+    .toEqual([
+      'repo',
+      '  dist',
+      '  src',
+      '    a.ts',
+      '    c.ts',
+      '    new.ts',
+      '  .gitignore',
+      '  README.md'
+    ])
+})
+
+test('#55 AC8: Changed only lists just the changed paths and their folders; No changes without any', async () => {
+  makeChanges()
+  await openC1()
+  await expect(change('README.md')).toHaveText('D', { timeout: 4000 })
+  await expect(changedOnly()).toBeEnabled()
+  await expect(changedOnly()).toHaveAttribute('aria-pressed', 'false')
+  await changedOnly().click()
+  await expect(changedOnly()).toHaveAttribute('aria-pressed', 'true')
+  await expect
+    .poll(shownRows)
+    .toEqual(['repo', '  src', '    a.ts', '    c.ts', '    new.ts', '  README.md'])
+  await expect(change('src/c.ts')).toHaveText('R')
+
+  // Remembered for the folder: Back and reopen keeps it on.
+  await backToBoard(page)
+  await openCard('c1')
+  await expect(changedOnly()).toHaveAttribute('aria-pressed', 'true')
+
+  // With nothing changed it reads No changes.
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], { cwd: repo })
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'all'], {
+    cwd: repo
+  })
+  await panel().getByTestId('files-refresh').click()
+  await expect(filesTab().getByTestId('files-no-changes')).toHaveText('No changes')
+  await expect(filesTab().locator('[data-testid=files-row]')).toHaveCount(0)
+
+  await changedOnly().click()
+  await expect(changedOnly()).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(shownRows).toEqual(['repo', '  dist', '  src', '  .gitignore'])
 })

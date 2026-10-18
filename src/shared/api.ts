@@ -2,6 +2,7 @@ import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
 import type { FolderListing } from '../core/file-tree'
+import type { FolderStatus } from '../core/git-status'
 import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
@@ -54,6 +55,7 @@ export const IPC = {
   gitPull: 'git:pull',
   gitPush: 'git:push',
   filesList: 'files:list',
+  filesStatus: 'files:status',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -262,6 +264,11 @@ export interface FilesApi {
    * inside `folder`: folders first, the first 2,000, ignored ones marked (D7, D8, D9).
    */
   list(folder: string, path: string): Promise<FolderListing>
+  /**
+   * What git sees as changed inside `folder` (D10): one letter per path (relative to `folder`),
+   * renames with their old path; `not-repository` outside a work tree.
+   */
+  status(folder: string): Promise<FolderStatus>
 }
 
 /** The app's place on the desktop, for notifications. */

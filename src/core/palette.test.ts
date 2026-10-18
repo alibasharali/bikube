@@ -201,8 +201,10 @@ describe('paletteItems actions (#40 D6)', () => {
     ])
   })
 
-  it('offers none of the view actions on the board', () => {
-    expect(labels(input(state))).toEqual(APP_ROWS)
+  it('offers Toggle panel and none of the other view actions on the board (#57 D4)', () => {
+    expect(labels(input(state))).toEqual(['Toggle panel', ...APP_ROWS])
+    const rows = paletteItems(input(state)).actions
+    expect(rows[0]).toMatchObject({ action: { id: 'togglePanel' }, shortcut: 'Ctrl+Alt+B' })
   })
 
   it('offers Close pane with an extra pane focused and no splits at 4 panes', () => {

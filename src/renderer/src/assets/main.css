@@ -646,6 +646,7 @@ button {
 .board {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   padding: var(--space-4) var(--space-6);
@@ -1475,7 +1476,8 @@ button {
 }
 
 /* No bar (#31 D1): the panes fill the whole area right of the sidebar. */
-.card-layout {
+.card-layout,
+.board-layout {
   flex: 1;
   min-height: 0;
   display: flex;

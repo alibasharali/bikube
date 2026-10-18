@@ -92,7 +92,8 @@ function TitleBar({
         ) : (
           <span className="titlebar-current">Drovr</span>
         )}
-        {workspace && card && (
+        {/* On the board as in a card (#57 D4). */}
+        {workspace && (
           <button
             type="button"
             className="icon-btn titlebar-panel"

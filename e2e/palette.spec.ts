@@ -276,8 +276,9 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'Alpha · Stopped',
     'Beta · Stopped'
   ])
-  // The board's actions, in D6's order.
+  // The board's actions, in D6's order, Toggle panel first (#57 D4).
   expect(await titles(section('actions'))).toEqual([
+    'Toggle panel',
     'New card',
     'Open Default shell',
     'New workspace',
@@ -485,12 +486,14 @@ test('AC7: with a running card open, the card view actions and its moves are lis
   await expect(actionShortcut('Find')).toHaveText(shortcuts.find)
   await page.keyboard.press('Escape')
 
-  // On the board none of them is listed.
+  // On the board none of them is listed but Toggle panel, which works there too (#57 D4).
   await backToBoard(page)
   await openPalette()
   const boardActions = await titles(section('actions'))
-  expect(boardActions.length).toBeGreaterThan(0)
-  for (const label of CARD_VIEW_ACTIONS) expect(boardActions).not.toContain(label)
+  expect(boardActions[0]).toBe('Toggle panel')
+  for (const label of CARD_VIEW_ACTIONS) {
+    if (label !== 'Toggle panel') expect(boardActions).not.toContain(label)
+  }
   expect(boardActions.some((label) => label.startsWith('Move card to'))).toBe(false)
 })
 

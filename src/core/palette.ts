@@ -234,8 +234,10 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
 
 function actionRows(input: PaletteInput): ActionRow[] {
   const { state, keymap, view } = input
-  const rows = view ? viewRows(input, view) : []
-  if (state.workspaces.some((w) => w.id === state.activeId)) {
+  const hasActive = state.workspaces.some((w) => w.id === state.activeId)
+  // On the board the panel toggles too, as in a card (#57 D4).
+  const rows = view ? viewRows(input, view) : hasActive ? [keymapRow('togglePanel', keymap)] : []
+  if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
   }

@@ -9,7 +9,13 @@ import {
   TreePine
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { BranchList, GitResult, NewBranchResult } from '../../core/git'
+import type {
+  AheadBehind,
+  BranchList,
+  GitResult,
+  NewBranchResult,
+  SyncResult
+} from '../../core/git'
 import { refreshBranch } from './branches'
 import { MENU_ICON, SMALL_ICON } from './icons'
 
@@ -19,7 +25,9 @@ import { MENU_ICON, SMALL_ICON } from './icons'
  * clicking one switches to it. New branch shows a name field in place of the lists (D7): Enter
  * or Create makes the branch at HEAD and switches to it, Esc returns to the lists. Esc, a click
  * outside, a switch or a new branch closes it; git's refusal keeps it open with git's message
- * (D6). A command keeps running when the menu is closed meanwhile (D13).
+ * (D6). Fetch, Pull and Push keep it open with a note and read it again (D8, D9); its header shows
+ * how far the current branch is from its upstream (D10). One command at a time, every action
+ * disabled meanwhile; it keeps running when the menu is closed (D13).
  */
 export function BranchChip({
   dir,
@@ -38,6 +46,13 @@ export function BranchChip({
   /** What is running (`Switching…`), null when idle; every action waits for it (D13). */
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** What the last Fetch, Pull or Push did (`Fetched`), shown until the next command. */
+  const [note, setNote] = useState<string | null>(null)
+  /** The current branch against its upstream; null without one, undefined until read (D10). */
+  const [sync, setSync] = useState<AheadBehind | null | undefined>(undefined)
+  /** The element focused when a command started, focused again when it ends. */
+  const returnFocus = useRef<Element | null>(null)
+  const nameField = useRef<HTMLInputElement>(null)
   /** The new branch's name while its field shows (D7), null for the lists. */
   const [naming, setNaming] = useState<string | null>(null)
   /** Why the typed name was refused before git ran, shown under the field. */
@@ -62,6 +77,9 @@ export function BranchChip({
   const load = (): void => {
     void window.drovr.git.branches(dir).then((next) => {
       if (openRef.current) setList(next)
+    })
+    void window.drovr.git.aheadBehind(dir).then((next) => {
+      if (openRef.current) setSync(next)
     })
   }
 
@@ -129,7 +147,9 @@ export function BranchChip({
       return
     }
     setList(null)
+    setSync(undefined)
     setError(null)
+    setNote(null)
     setNaming(null)
     setNameProblem(null)
     setOpen(true)
@@ -137,18 +157,40 @@ export function BranchChip({
     load()
   }
 
-  /** Runs one git command: busy meanwhile, then the chip re-read; success closes the menu. */
+  // A command's disabled buttons lose the focus: give it back when the command ends, to the name
+  // field when the name was refused (D7), else to what had it.
+  useEffect(() => {
+    if (busy !== null) return
+    const back = returnFocus.current
+    returnFocus.current = null
+    if (nameProblem !== null) {
+      nameField.current?.focus()
+      return
+    }
+    const lost = document.activeElement === null || document.activeElement === document.body
+    if (lost && back instanceof HTMLElement && popup.current?.contains(back)) back.focus()
+  }, [busy, nameProblem])
+
+  /**
+   * Runs one git command: busy meanwhile, then the chip re-read. A switch or a new branch closes
+   * the menu on success; Fetch, Pull and Push show their note and read the menu again.
+   */
   const act = async (
     label: string,
-    command: () => Promise<GitResult | NewBranchResult>
+    command: () => Promise<GitResult | NewBranchResult | SyncResult>
   ): Promise<void> => {
     if (busy) return
+    returnFocus.current = document.activeElement
     setBusy(label)
     setError(null)
+    setNote(null)
     const result = await command()
     setBusy(null)
     refreshBranch(dir)
-    if (result.ok) {
+    if (result.ok && 'note' in result) {
+      setNote(result.note)
+      load()
+    } else if (result.ok) {
       const active = document.activeElement
       const inMenu = active === document.body || (root.current?.contains(active) ?? false)
       if (openRef.current) close(inMenu)
@@ -191,25 +233,30 @@ export function BranchChip({
 
   const Icon = worktree ? TreePine : GitBranch
   const detached = list !== null && list.current === null
-  // Fetch, Pull and Push are run by their own slice (#33 S3); until then, no `run`.
+  /** Runs the action `testId` names: New branch shows the name field, the others run git. */
+  const runAction = (testId: string): void => {
+    if (testId === 'branch-new') {
+      setError(null)
+      setNote(null)
+      setNameProblem(null)
+      setNaming('')
+    } else if (testId === 'branch-fetch') {
+      void act('Fetching…', () => window.drovr.git.fetch(dir))
+    } else if (testId === 'branch-pull') {
+      void act('Pulling…', () => window.drovr.git.pull(dir))
+    } else if (testId === 'branch-push') {
+      void act('Pushing…', () => window.drovr.git.push(dir))
+    }
+  }
+
   const actions: {
     label: string
     testId: string
     icon: typeof Check
     /** Pull and Push need a branch: disabled on a detached HEAD (D9). */
     needsBranch?: boolean
-    run?: () => void
   }[] = [
-    {
-      label: 'New branch',
-      testId: 'branch-new',
-      icon: GitBranchPlus,
-      run: () => {
-        setError(null)
-        setNameProblem(null)
-        setNaming('')
-      }
-    },
+    { label: 'New branch', testId: 'branch-new', icon: GitBranchPlus },
     { label: 'Fetch', testId: 'branch-fetch', icon: RefreshCw },
     { label: 'Pull', testId: 'branch-pull', icon: ArrowDownToLine, needsBranch: true },
     { label: 'Push', testId: 'branch-push', icon: ArrowUpFromLine, needsBranch: true }
@@ -244,6 +291,22 @@ export function BranchChip({
           data-testid="branch-menu"
           style={{ position: 'fixed', ...position }}
         >
+          {list?.current && sync !== undefined && (
+            <div className="branch-menu-header">
+              <span className="branch-menu-current">{list.current}</span>
+              <span
+                className="branch-menu-sync"
+                data-testid="branch-sync"
+                title={
+                  sync
+                    ? 'Commits ahead of and behind its upstream, as of the last fetch'
+                    : 'This branch tracks no remote branch'
+                }
+              >
+                {sync ? `↑${sync.ahead} ↓${sync.behind}` : 'No upstream'}
+              </span>
+            </div>
+          )}
           {busy && (
             <p className="branch-menu-status" role="status" data-testid="branch-busy">
               {busy}
@@ -254,6 +317,15 @@ export function BranchChip({
               {error}
             </p>
           )}
+          {note && (
+            <p
+              className="branch-menu-status branch-menu-note"
+              role="status"
+              data-testid="branch-note"
+            >
+              {note}
+            </p>
+          )}
           {naming !== null ? (
             <form className="branch-menu-new" onSubmit={create} noValidate>
               <label className="menu-label" htmlFor="branch-new-name">
@@ -261,6 +333,7 @@ export function BranchChip({
               </label>
               <div className="branch-menu-new-row">
                 <input
+                  ref={nameField}
                   id="branch-new-name"
                   className="inline-input branch-menu-new-name"
                   data-testid="branch-new-name"
@@ -325,7 +398,7 @@ export function BranchChip({
           )}
           {naming === null && (
             <div className="branch-menu-actions">
-              {actions.map(({ label, testId, icon: ActionIcon, needsBranch, run }) => (
+              {actions.map(({ label, testId, icon: ActionIcon, needsBranch }) => (
                 <button
                   key={label}
                   ref={testId === 'branch-new' ? newButton : undefined}
@@ -333,8 +406,8 @@ export function BranchChip({
                   role="menuitem"
                   className="menu-item"
                   data-testid={testId}
-                  disabled={busy !== null || list === null || !run || (needsBranch && detached)}
-                  onClick={run}
+                  disabled={busy !== null || list === null || (needsBranch && detached)}
+                  onClick={() => runAction(testId)}
                 >
                   <ActionIcon {...MENU_ICON} />
                   {label}

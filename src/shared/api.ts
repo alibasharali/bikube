@@ -1,7 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
-import type { BranchList, GitResult, NewBranchResult } from '../core/git'
+import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
 import type { SyncStatus } from '../core/sync-status'
@@ -47,6 +47,10 @@ export const IPC = {
   gitSwitch: 'git:switch',
   gitTrack: 'git:track',
   gitCreate: 'git:create',
+  gitAheadBehind: 'git:aheadBehind',
+  gitFetch: 'git:fetch',
+  gitPull: 'git:pull',
+  gitPush: 'git:push',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -230,6 +234,14 @@ export interface GitApi {
    * and comes back with `name` set.
    */
   create(dir: string, name: string): Promise<NewBranchResult>
+  /** The current branch's `↑ahead ↓behind` against its upstream as of the last fetch; null without one (D10). */
+  aheadBehind(dir: string): Promise<AheadBehind | null>
+  /** `git fetch --all --prune`: `Fetched`, else git's message (D8). */
+  fetch(dir: string): Promise<SyncResult>
+  /** `git pull --ff-only`: `Pulled` or `Already up to date`, else git's refusal (D9). */
+  pull(dir: string): Promise<SyncResult>
+  /** Pushes the current branch, to `origin` as its upstream when it has none: `Pushed` (D9). */
+  push(dir: string): Promise<SyncResult>
 }
 
 /** The app's place on the desktop, for notifications. */

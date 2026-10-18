@@ -2267,6 +2267,36 @@ button {
   color: var(--danger);
 }
 
+.branch-menu .branch-menu-note {
+  color: var(--text);
+}
+
+/* The current branch and how far it is from its upstream (#33 D10). */
+.branch-menu-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs);
+}
+
+.branch-menu-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.branch-menu-sync {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .branch-menu-new {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,7 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { createServer, type Server, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -123,6 +125,7 @@ test('New branch creates a branch at HEAD and switches to it; a taken or invalid
   await name.fill('feature')
   await name.press('Enter')
   await expect(problem).toHaveText('Branch already exists')
+  await expect(name).toBeFocused()
   await name.fill('a..b')
   await name.press('Enter')
   await expect(problem).toHaveText('Not a valid branch name')
@@ -183,8 +186,10 @@ test('no chip in an SSH workspace or outside a repository; a detached HEAD has n
   await chip().click()
   await expect(section('Local')).toHaveText(['feature', 'main'])
   await expect(menu().locator('[aria-current]')).toHaveCount(0)
+  await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
   await expect(menu().getByTestId('branch-pull')).toBeDisabled()
   await expect(menu().getByTestId('branch-push')).toBeDisabled()
+  await expect(menu().getByTestId('branch-sync')).toHaveCount(0)
 })
 
 test("with a worktree card open, the menu switches the card's worktree, and the chip follows", async () => {
@@ -275,4 +280,150 @@ test("switching workspace with the menu open drops the old workspace's menu", as
   await expect(page.getByTestId('board-title')).toHaveText('other')
   await expect(chip()).toHaveText('trunk')
   await expect(menu()).toHaveCount(0)
+})
+
+/** A second clone of `remote.git`, as another machine pushing to it. */
+function otherClone(): string {
+  const other = mkdtempSync(join(root, 'other-'))
+  rmSync(other, { recursive: true })
+  git(root, 'clone', '-q', join(root, 'remote.git'), other)
+  git(other, 'config', 'user.email', 'test@example.com')
+  git(other, 'config', 'user.name', 'Test')
+  return other
+}
+
+/** Another machine's commit on `main`, pushed to `remote.git`. */
+function theirCommit(): string {
+  const other = otherClone()
+  commit(other, 'theirs.txt', `${other}\n`, 'theirs')
+  git(other, 'push', '-q', 'origin', 'main')
+  return git(other, 'rev-parse', 'HEAD')
+}
+
+const note = (): Locator => menu().getByTestId('branch-note')
+const error = (): Locator => menu().getByTestId('branch-error')
+const header = (): Locator => menu().getByTestId('branch-sync')
+
+test('Fetch fetches every remote, dropping branches deleted there', async () => {
+  const other = otherClone()
+  git(other, 'push', '-q', 'origin', 'main:new-one')
+  git(other, 'push', '-q', 'origin', '--delete', 'remote-only')
+  await chip().click()
+  await expect(section('origin')).toHaveText(['feature', 'main', 'remote-only'])
+  await menu().getByTestId('branch-fetch').click()
+  await expect(note()).toHaveText('Fetched')
+  await expect(menu()).toBeVisible()
+  await expect(section('origin')).toHaveText(['feature', 'main', 'new-one'])
+})
+
+test('the header shows ahead and behind as of the last fetch, or No upstream', async () => {
+  theirCommit()
+  commit(repo, 'c.txt', 'one\n', 'mine 1')
+  commit(repo, 'd.txt', 'two\n', 'mine 2')
+  await chip().click()
+  await expect(header()).toHaveText('↑2 ↓0')
+  await menu().getByTestId('branch-fetch').click()
+  await expect(note()).toHaveText('Fetched')
+  await expect(header()).toHaveText('↑2 ↓1')
+  await page.keyboard.press('Escape')
+
+  git(repo, 'switch', '-q', '-c', 'solo')
+  await expect(chip()).toHaveText('solo')
+  await chip().click()
+  await expect(header()).toHaveText('No upstream')
+})
+
+test('Pull fast-forwards a branch behind its upstream, and refuses a diverged one', async () => {
+  const theirs = theirCommit()
+  await chip().click()
+  await menu().getByTestId('branch-pull').click()
+  await expect(note()).toHaveText('Pulled')
+  await expect(header()).toHaveText('↑0 ↓0')
+  expect(git(repo, 'rev-parse', 'HEAD')).toBe(theirs)
+  await page.keyboard.press('Escape')
+
+  theirCommit()
+  commit(repo, 'c.txt', 'mine\n', 'mine')
+  const head = git(repo, 'rev-parse', 'HEAD')
+  await chip().click()
+  await menu().getByTestId('branch-fetch').click()
+  await expect(header()).toHaveText('↑1 ↓1')
+  await menu().getByTestId('branch-pull').click()
+  await expect(error()).toContainText('Not possible to fast-forward')
+  await expect(note()).toHaveCount(0)
+  expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+})
+
+test("Push pushes a new branch to origin as its upstream; a rejection is git's, never forced", async () => {
+  await chip().click()
+  await menu().getByTestId('branch-new').click()
+  await menu().getByTestId('branch-new-name').fill('topic/x')
+  await menu().getByTestId('branch-new-name').press('Enter')
+  await expect(chip()).toHaveText('topic/x')
+  await chip().click()
+  await expect(header()).toHaveText('No upstream')
+  await menu().getByTestId('branch-push').click()
+  await expect(note()).toHaveText('Pushed')
+  await expect(header()).toHaveText('↑0 ↓0')
+  expect(git(join(root, 'remote.git'), 'rev-parse', 'topic/x')).toBe(git(repo, 'rev-parse', 'HEAD'))
+  await page.keyboard.press('Escape')
+
+  git(repo, 'switch', '-q', 'main')
+  const theirs = theirCommit()
+  commit(repo, 'c.txt', 'mine\n', 'mine')
+  await expect(chip()).toHaveText('main')
+  await chip().click()
+  await menu().getByTestId('branch-push').click()
+  await expect(error()).toContainText('rejected')
+  expect(git(join(root, 'remote.git'), 'rev-parse', 'main')).toBe(theirs)
+})
+
+/** A local HTTP server as `origin`'s URL: `answer` decides each request's response. */
+async function httpOrigin(answer: (response: ServerResponse) => void): Promise<Server> {
+  const server = createServer((_request, response) => answer(response))
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+  const { port } = server.address() as AddressInfo
+  git(repo, 'remote', 'set-url', 'origin', `http://127.0.0.1:${port}/repo.git`)
+  git(repo, 'config', 'remote.origin.proxy', '')
+  return server
+}
+
+test('a remote that wants a password fails at once with how to set up credentials', async () => {
+  const server = await httpOrigin((response) => {
+    response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="drovr"' })
+    response.end()
+  })
+  try {
+    await chip().click()
+    await menu().getByTestId('branch-fetch').click()
+    await expect(error()).toHaveText(
+      /Set up an SSH key or a git credential helper for this remote\.$/,
+      { timeout: 10_000 }
+    )
+    await expect(menu().getByTestId('branch-busy')).toHaveCount(0)
+  } finally {
+    server.close()
+  }
+})
+
+test('while Fetch runs, the menu shows Fetching… and every action waits', async () => {
+  const held: ServerResponse[] = []
+  const server = await httpOrigin((response) => held.push(response))
+  try {
+    await chip().click()
+    await menu().getByTestId('branch-fetch').click()
+    await expect(menu().getByTestId('branch-busy')).toHaveText('Fetching…')
+    await expect.poll(() => held.length).toBeGreaterThan(0)
+    const items = menu().getByRole('menuitem')
+    await expect(items).toHaveCount(2 + 3 + 4)
+    for (const item of await items.all()) await expect(item).toBeDisabled()
+
+    for (const response of held.splice(0)) response.writeHead(404).end()
+    await expect(menu().getByTestId('branch-busy')).toHaveCount(0)
+    await expect(error()).toBeVisible()
+    await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
+  } finally {
+    for (const response of held) response.destroy()
+    server.close()
+  }
 })

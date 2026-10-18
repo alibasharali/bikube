@@ -242,3 +242,78 @@ const CREDENTIAL_FAILURES = [
 function needsCredentials(stderr: string): boolean {
   return CREDENTIAL_FAILURES.some((pattern) => pattern.test(stderr))
 }
+
+/** The current branch's commits ahead of and behind its upstream, as of the last fetch (D10). */
+export interface AheadBehind {
+  ahead: number
+  behind: number
+}
+
+/**
+ * How far the current branch is from its upstream (D10: `git rev-list --left-right --count
+ * HEAD...@{upstream}`); null without an upstream, on a detached HEAD or outside a repository.
+ */
+export async function aheadBehind(dir: string, run: Git): Promise<AheadBehind | null> {
+  const output = await run(dir, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])
+  if (output.code !== 0 || output.timedOut) return null
+  const [ahead, behind] = output.stdout.trim().split(/\s+/).map(Number)
+  if (!Number.isInteger(ahead) || !Number.isInteger(behind)) return null
+  return { ahead: ahead!, behind: behind! }
+}
+
+/** Fetch, Pull and Push (D8, D9): the note the menu shows on success, else git's message. */
+export type SyncResult = { ok: true; note: string } | { ok: false; reason: string }
+
+function synced(output: GitOutput, command: string, note: string): SyncResult {
+  return output.code === 0 && !output.timedOut
+    ? { ok: true, note }
+    : { ok: false, reason: gitError(output, command) }
+}
+
+/** Fetches every remote, removing remote branches deleted there (D8: `git fetch --all --prune`). */
+export async function fetchAll(dir: string, run: Git): Promise<SyncResult> {
+  return synced(await run(dir, ['fetch', '--all', '--prune']), 'fetch', 'Fetched')
+}
+
+/** The checked-out branch; null on a detached HEAD or outside a repository. */
+async function currentBranch(dir: string, run: Git): Promise<string | null> {
+  const head = await run(dir, ['symbolic-ref', '--quiet', '--short', 'HEAD'])
+  return head.code === 0 ? head.stdout.trim() || null : null
+}
+
+const NOT_ON_BRANCH: SyncResult = { ok: false, reason: 'Not on a branch' }
+
+/**
+ * Fast-forwards the current branch to its upstream (D9: `git pull --ff-only`); a diverged branch
+ * is refused with git's message (D6). `Already up to date` when HEAD didn't move.
+ */
+export async function pull(dir: string, run: Git): Promise<SyncResult> {
+  if (!(await currentBranch(dir, run))) return NOT_ON_BRANCH
+  const before = await run(dir, ['rev-parse', 'HEAD'])
+  const output = await run(dir, ['pull', '--ff-only'])
+  const result = synced(output, 'pull', 'Pulled')
+  if (!result.ok) return result
+  const after = await run(dir, ['rev-parse', 'HEAD'])
+  return before.code === 0 && after.code === 0 && before.stdout === after.stdout
+    ? { ok: true, note: 'Already up to date' }
+    : result
+}
+
+/**
+ * Pushes the current branch (D9): to its upstream with `git push`; without one, to `origin` as
+ * its new upstream (`git push --set-upstream origin refs/heads/<branch>`, the full ref so a name
+ * can never read as an option). Never forced; a rejection is git's message (D6).
+ */
+export async function push(dir: string, run: Git): Promise<SyncResult> {
+  const branch = await currentBranch(dir, run)
+  if (!branch) return NOT_ON_BRANCH
+  const upstream = await run(dir, [
+    'rev-parse',
+    '--abbrev-ref',
+    '--symbolic-full-name',
+    '@{upstream}'
+  ])
+  const args =
+    upstream.code === 0 ? ['push'] : ['push', '--set-upstream', 'origin', `refs/heads/${branch}`]
+  return synced(await run(dir, args), 'push', 'Pushed')
+}

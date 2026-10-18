@@ -1,11 +1,17 @@
 import { execFile, execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  aheadBehind,
   createBranch,
+  fetchAll,
   gitError,
+  pull,
+  push,
   gitIn,
   listBranches,
   switchBranch,
@@ -213,6 +219,181 @@ describe('createBranch', () => {
     await createBranch(repo, 'topic/y', spy)
     expect(calls).toContainEqual(['check-ref-format', '--branch', 'topic/y'])
     expect(calls).toContainEqual(['switch', '--no-guess', '-c', 'topic/y'])
+  })
+})
+
+/** A second clone of `remote.git`, as another machine pushing to it. */
+function otherClone(): string {
+  const other = join(dir, 'other')
+  git(dir, 'clone', '-q', remote, other)
+  git(other, 'config', 'user.email', 'test@example.com')
+  git(other, 'config', 'user.name', 'Test')
+  return other
+}
+
+describe('aheadBehind', () => {
+  it("counts the current branch's commits against its upstream as of the last fetch", async () => {
+    expect(await aheadBehind(repo, run)).toEqual({ ahead: 0, behind: 0 })
+    const other = otherClone()
+    commit(other, 'b.txt', 'theirs\n', 'theirs')
+    git(other, 'push', '-q', 'origin', 'main')
+    commit(repo, 'c.txt', 'one\n', 'mine 1')
+    commit(repo, 'd.txt', 'two\n', 'mine 2')
+    expect(await aheadBehind(repo, run)).toEqual({ ahead: 2, behind: 0 })
+    git(repo, 'fetch', '-q')
+    expect(await aheadBehind(repo, run)).toEqual({ ahead: 2, behind: 1 })
+  })
+
+  it('is null without an upstream, and on a detached HEAD', async () => {
+    git(repo, 'switch', '-q', '-c', 'solo')
+    expect(await aheadBehind(repo, run)).toBeNull()
+    git(repo, 'switch', '-q', '--detach')
+    expect(await aheadBehind(repo, run)).toBeNull()
+  })
+})
+
+describe('fetchAll', () => {
+  it('fetches every remote, dropping branches deleted there', async () => {
+    const other = otherClone()
+    git(other, 'push', '-q', 'origin', 'main:new-one')
+    git(other, 'push', '-q', 'origin', '--delete', 'remote-only')
+    expect(await fetchAll(repo, run)).toEqual({ ok: true, note: 'Fetched' })
+    expect((await listBranches(repo, run))!.remotes).toEqual([
+      { name: 'origin', branches: ['feature', 'main', 'new-one'] }
+    ])
+  })
+
+  it('runs git fetch --all --prune without prompts', async () => {
+    const { calls, runner } = recording()
+    await fetchAll('/repo', gitIn(runner, { PATH: '/usr/bin' }))
+    const fetch = calls.find((call) => call.args[0] === 'fetch')!
+    expect(fetch.args).toEqual(['fetch', '--all', '--prune'])
+    expect(fetch.env).toMatchObject({ GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '' })
+    expect(fetch.timeoutMs).toBe(120_000)
+  })
+
+  it("gives git's message and the credential hint when the remote wants a password", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="drovr"' })
+      response.end()
+    })
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    try {
+      const { port } = server.address() as AddressInfo
+      git(repo, 'remote', 'set-url', 'origin', `http://127.0.0.1:${port}/repo.git`)
+      git(repo, 'config', 'remote.origin.proxy', '')
+      const result = await fetchAll(repo, run)
+      expect(result.ok).toBe(false)
+      expect(!result.ok && result.reason).toMatch(
+        /\nSet up an SSH key or a git credential helper for this remote\.$/
+      )
+    } finally {
+      server.close()
+    }
+  })
+
+  it('reads a timeout as such', async () => {
+    const timedOut: GitRunner = async (call) =>
+      call.args[0] === 'fetch'
+        ? { code: 1, stdout: '', stderr: '', timedOut: true }
+        : { code: 1, stdout: '', stderr: '' }
+    expect(await fetchAll('/repo', gitIn(timedOut))).toEqual({
+      ok: false,
+      reason: 'git timed out'
+    })
+  })
+})
+
+describe('pull', () => {
+  it('fast-forwards to the upstream, or says it is already up to date', async () => {
+    const other = otherClone()
+    commit(other, 'b.txt', 'theirs\n', 'theirs')
+    git(other, 'push', '-q', 'origin', 'main')
+    expect(await pull(repo, run)).toEqual({ ok: true, note: 'Pulled' })
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(git(other, 'rev-parse', 'HEAD'))
+    expect(await aheadBehind(repo, run)).toEqual({ ahead: 0, behind: 0 })
+    expect(await pull(repo, run)).toEqual({ ok: true, note: 'Already up to date' })
+  })
+
+  it("refuses a diverged branch with git's message and changes nothing", async () => {
+    const other = otherClone()
+    commit(other, 'b.txt', 'theirs\n', 'theirs')
+    git(other, 'push', '-q', 'origin', 'main')
+    commit(repo, 'c.txt', 'mine\n', 'mine')
+    const head = git(repo, 'rev-parse', 'HEAD')
+    const result = await pull(repo, run)
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toContain('Not possible to fast-forward')
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+  })
+
+  it('runs git pull --ff-only, and nothing on a detached HEAD', async () => {
+    const calls: string[][] = []
+    const spy = gitIn(async (call) => {
+      calls.push(call.args)
+      return runner(call)
+    }, process.env)
+    await pull(repo, spy)
+    expect(calls).toContainEqual(['pull', '--ff-only'])
+    calls.length = 0
+    git(repo, 'switch', '-q', '--detach')
+    expect(await pull(repo, spy)).toEqual({ ok: false, reason: 'Not on a branch' })
+    expect(calls.filter((args) => args[0] === 'pull')).toEqual([])
+  })
+})
+
+describe('push', () => {
+  it('pushes a branch without an upstream to origin and makes it its upstream', async () => {
+    git(repo, 'switch', '-q', '-c', 'topic/x')
+    commit(repo, 'c.txt', 'mine\n', 'mine')
+    expect(await aheadBehind(repo, run)).toBeNull()
+    expect(await push(repo, run)).toEqual({ ok: true, note: 'Pushed' })
+    expect(git(remote, 'rev-parse', 'topic/x')).toBe(git(repo, 'rev-parse', 'HEAD'))
+    expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/topic/x')
+    expect(await aheadBehind(repo, run)).toEqual({ ahead: 0, behind: 0 })
+  })
+
+  it('pushes a branch with an upstream to it', async () => {
+    commit(repo, 'c.txt', 'mine\n', 'mine')
+    expect(await push(repo, run)).toEqual({ ok: true, note: 'Pushed' })
+    expect(git(remote, 'rev-parse', 'main')).toBe(git(repo, 'rev-parse', 'HEAD'))
+  })
+
+  it("is rejected with git's message when the remote moved ahead, never forced", async () => {
+    const other = otherClone()
+    commit(other, 'b.txt', 'theirs\n', 'theirs')
+    git(other, 'push', '-q', 'origin', 'main')
+    commit(repo, 'c.txt', 'mine\n', 'mine')
+    const result = await push(repo, run)
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toContain('rejected')
+    expect(git(remote, 'rev-parse', 'main')).toBe(git(other, 'rev-parse', 'HEAD'))
+  })
+
+  it('runs git push, or --set-upstream origin with the branch as a ref; nothing detached', async () => {
+    const calls: string[][] = []
+    const spy = gitIn(async (call) => {
+      calls.push(call.args)
+      return runner(call)
+    }, process.env)
+    await push(repo, spy)
+    expect(calls).toContainEqual(['push'])
+    git(repo, 'switch', '-q', '-c', 'topic/y')
+    await push(repo, spy)
+    expect(calls).toContainEqual(['push', '--set-upstream', 'origin', 'refs/heads/topic/y'])
+    expect(calls.flat()).not.toContain('--force')
+    calls.length = 0
+    git(repo, 'switch', '-q', '--detach')
+    expect(await push(repo, spy)).toEqual({ ok: false, reason: 'Not on a branch' })
+    expect(calls.filter((args) => args[0] === 'push')).toEqual([])
+  })
+
+  it("gives git's error without an origin remote", async () => {
+    git(repo, 'switch', '-q', '-c', 'topic/z')
+    git(repo, 'remote', 'remove', 'origin')
+    const result = await push(repo, run)
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.reason).toContain('origin')
   })
 })
 

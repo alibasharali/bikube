@@ -53,7 +53,11 @@ const api: DrovrApi = {
     branches: (dir) => ipcRenderer.invoke(IPC.gitBranches, dir),
     switch: (dir, branch) => ipcRenderer.invoke(IPC.gitSwitch, dir, branch),
     track: (dir, remote, branch) => ipcRenderer.invoke(IPC.gitTrack, dir, remote, branch),
-    create: (dir, name) => ipcRenderer.invoke(IPC.gitCreate, dir, name)
+    create: (dir, name) => ipcRenderer.invoke(IPC.gitCreate, dir, name),
+    aheadBehind: (dir) => ipcRenderer.invoke(IPC.gitAheadBehind, dir),
+    fetch: (dir) => ipcRenderer.invoke(IPC.gitFetch, dir),
+    pull: (dir) => ipcRenderer.invoke(IPC.gitPull, dir),
+    push: (dir) => ipcRenderer.invoke(IPC.gitPush, dir)
   },
   update: {
     state: () => ipcRenderer.invoke(IPC.updateState),

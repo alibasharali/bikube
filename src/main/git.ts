@@ -3,15 +3,21 @@ import { execFile } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import {
+  aheadBehind,
   createBranch,
+  fetchAll,
   gitIn,
   listBranches,
+  pull,
+  push,
   switchBranch,
   trackBranch,
+  type AheadBehind,
   type BranchList,
   type NewBranchResult,
   type GitResult,
-  type GitRunner
+  type GitRunner,
+  type SyncResult
 } from '../core/git'
 import { IPC } from '../shared/api'
 
@@ -41,10 +47,14 @@ const folder = async (value: unknown): Promise<string | null> => {
   }
 }
 
-const NO_FOLDER: GitResult = { ok: false, reason: 'working directory not found' }
+const NO_FOLDER: { ok: false; reason: string } = {
+  ok: false,
+  reason: 'working directory not found'
+}
 
 /**
- * The title bar's branch menu (#33): lists, switches and creates branches of a local folder's repository.
+ * The title bar's branch menu (#33): lists, switches and creates branches of a local folder's
+ * repository, fetches, pulls and pushes it.
  * Only an absolute existing folder is used, names are checked against git's own lists before they
  * are passed (as single arguments) and requests come from the main frame only (D15).
  */
@@ -94,4 +104,19 @@ export function registerGit(): void {
       return createBranch(at, name, git)
     }
   )
+  ipcMain.handle(IPC.gitAheadBehind, async (event, dir: unknown): Promise<AheadBehind | null> => {
+    guard(event, IPC.gitAheadBehind)
+    const at = await folder(dir)
+    return at ? aheadBehind(at, git) : null
+  })
+  const sync = (channel: string, command: typeof fetchAll): void => {
+    ipcMain.handle(channel, async (event, dir: unknown): Promise<SyncResult> => {
+      guard(event, channel)
+      const at = await folder(dir)
+      return at ? command(at, git) : NO_FOLDER
+    })
+  }
+  sync(IPC.gitFetch, fetchAll)
+  sync(IPC.gitPull, pull)
+  sync(IPC.gitPush, push)
 }

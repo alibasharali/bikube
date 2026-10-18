@@ -97,6 +97,12 @@ describe('Find (#35 D2)', () => {
     ).toBeNull()
   })
 
+  it('frees the old default once rebound, so the terminal no longer swallows it (AC15)', () => {
+    const rebound = resolveKeymap({ find: 'Ctrl+Alt+F' }, 'linux')
+    expect(keymapAction(press('F', { ctrlKey: true, shiftKey: true }), rebound)).toBeNull()
+    expect(keymapAction(press('f', { ctrlKey: true, altKey: true }), rebound)).toBe('find')
+  })
+
   it('refuses a fixed shortcut or another action, and lets Reset bring its default back', () => {
     const keymap = defaultKeymap('linux')
     expect(

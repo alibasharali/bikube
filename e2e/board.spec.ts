@@ -242,6 +242,36 @@ test('#32 AC2/AC3: dragging a workspace onto the top or bottom half of a row mov
   await dragWorkspace('alpha', workspaceRow('gamma'), 0.75)
   await expect(sidebarNames()).toHaveText(['beta', 'gamma', 'alpha'])
   await expectAlphaActive()
+
+  // The collapsed sidebar's rows drag too (D4); there they are named by their labels.
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
+  // Its width animates: read the rows' boxes once it is a rail.
+  await expect
+    .poll(() => page.getByTestId('sidebar').evaluate((el) => el.getBoundingClientRect().width))
+    .toBeLessThan(100)
+  const items = page.getByTestId('workspace-item')
+  const railRow = (name: string): Locator =>
+    page.locator('.workspace-row').filter({ has: page.getByLabel(name, { exact: true }) })
+  const from = await railRow('alpha').boundingBox()
+  const to = await railRow('beta').boundingBox()
+  if (!from || !to) throw new Error('nothing to drag')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2 + 3, from.y + from.height / 2 + 5, { steps: 3 })
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height * 0.25, { steps: 10 })
+  await expect(railRow('beta')).toHaveAttribute('data-drop', 'before')
+  await page.mouse.up()
+  await expect
+    .poll(() => items.evaluateAll((els) => els.map((el) => el.getAttribute('aria-label'))))
+    .toEqual(['alpha', 'beta', 'gamma'])
+  await expect(page.locator('[data-drop]')).toHaveCount(0)
+  await expect(railRow('alpha').getByTestId('workspace-item')).toHaveAttribute(
+    'aria-current',
+    'true'
+  )
+  await expect(page.locator('[aria-current=true]')).toHaveCount(1)
+  await expect(page.getByTestId('board-title')).toHaveText('alpha')
 })
 
 test('#32 AC4: Esc, or releasing outside the sidebar, cancels a workspace drag', async () => {
@@ -312,6 +342,9 @@ test('#32 AC5: a running card is unaffected when its workspace is dragged; cards
   await expect(sidebarNames()).toHaveText(['alpha', 'beta', 'gamma'])
   await expect(column('Backlog').getByTestId('card-title')).toHaveText(['api'])
 
+  // `beta` is left with its card open at full size; the move keeps that view (D2).
+  await boardCard(page, 'api').getByTestId('card-open').click()
+  await expectCardOpen(page, 'api')
   await workspaceRow('alpha').getByTestId('workspace-item').click()
   await expectAlphaActive()
   await dragWorkspace('beta', workspaceRow('alpha'), 0.25)
@@ -319,6 +352,9 @@ test('#32 AC5: a running card is unaffected when its workspace is dragged; cards
   await expectAlphaActive()
 
   await workspaceRow('beta').getByTestId('workspace-item').click()
+  await expectCardOpen(page, 'api')
+  await expect.poll(bufferText).toContain('drovr-marker\n')
+  await backToBoard(page)
   await expect(page.getByTestId('board-title')).toHaveText('beta')
   await expect(boardCard(page, 'api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(boardCard(page, 'api').getByTestId('card-status-line')).toHaveText('drovr-marker')

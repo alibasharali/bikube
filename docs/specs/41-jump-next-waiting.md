@@ -2,7 +2,7 @@
 item: 41
 type: feature
 title: 'Jump to the next card that needs you'
-status: draft
+status: approved
 branch: claude/41-jump-next-waiting
 ---
 

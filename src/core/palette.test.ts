@@ -48,6 +48,7 @@ function workspace(
     nextCardNumber: 1,
     defaultStartup: { kind: 'shell' },
     shells: [],
+    worktreeSetup: '',
     ...extra
   }
 }

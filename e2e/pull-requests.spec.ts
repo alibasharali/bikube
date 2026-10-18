@@ -13,8 +13,9 @@ import { plainCards } from './plain-cards'
 // push URL (`remote.origin.pushurl`), and the worktree card `Card 1` on `card-1` with one commit
 // of its own. `shell.openExternal` records its URLs instead of opening a browser. The login shell
 // (`bash -l`, whose profile puts the fake HOME's `bin` first on PATH) finds a fake `gh` there,
-// printing the JSON `gh.json` holds, else `no pull requests found` with exit 1, so the real `gh`
-// never runs.
+// printing the JSON `gh.json` holds, else `no pull requests found` with exit 1, so it answers
+// before any `gh` installed on the machine. AC8's "no gh" half removes the fake and leaves only
+// that `bin` on the login PATH, so no `gh` is found on any machine.
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -291,7 +292,7 @@ test('#38 AC8: without gh, or without a PR for the branch, no chip and no error'
   await expect(chip()).toHaveText('#12', { timeout: 2000 })
   await expect(chip()).not.toHaveAttribute('data-ci')
   rmSync(join(fake.home, 'bin', 'gh'))
-  writeFileSync(join(fake.home, '.bash_profile'), 'export PATH="$HOME/bin:/usr/bin:/bin"\n')
+  writeFileSync(join(fake.home, '.bash_profile'), 'export PATH="$HOME/bin"\n')
   await focusWindow()
   await expect(chip()).toHaveCount(0, { timeout: 2000 })
   await expect(action()).toHaveCount(0)

@@ -326,7 +326,6 @@ test('AC5: a pane whose shell exits under an open dialog leaves the keyboard wit
   await splitRight(page)
   await expect(panes()).toHaveCount(2)
   await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
-  const mainBefore = await screenText(0)
 
   await run(1, 'sleep 1; exit')
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
@@ -340,6 +339,19 @@ test('AC5: a pane whose shell exits under an open dialog leaves the keyboard wit
     page.evaluate(() => !!document.activeElement?.closest('[data-testid=settings-dialog]'))
   await page.waitForTimeout(300)
   expect(await inDialog()).toBe(true)
+  // The baseline is taken once the main pane has re-fitted to full width: its prompt rewraps then.
+  let mainBefore = await screenText(0)
+  await expect
+    .poll(
+      async () => {
+        const now = await screenText(0)
+        const stable = now === mainBefore
+        mainBefore = now
+        return stable
+      },
+      { intervals: [300] }
+    )
+    .toBe(true)
   await page.keyboard.type('q')
   await page.waitForTimeout(300)
   expect(await screenText(0)).toBe(mainBefore)

@@ -1,10 +1,21 @@
-import { GitBranch, Pencil, Square, SquareTerminal, Trash2, TreePine } from 'lucide-react'
+import {
+  GitBranch,
+  GitPullRequest,
+  Pencil,
+  Square,
+  SquareTerminal,
+  Trash2,
+  TreePine,
+  X
+} from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
-import type { Card, Column } from '../../core/workspace-store'
+import type { Card, CardWorktree, Column } from '../../core/workspace-store'
+import { useBranch } from './branches'
+import { dismissCardGitAction, runCardGitAction, useCardGitAction } from './card-git'
 import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
@@ -66,6 +77,81 @@ export function WorktreeBranch({
       <Icon {...SMALL_ICON} />
       <span className="card-branch-name">{branch}</span>
     </span>
+  )
+}
+
+/**
+ * A worktree card's action line (#38 D6), under its branch: the running action's busy label, then
+ * its note, or git's message with a Dismiss button. Outside the card's open button, so Dismiss
+ * is a button of its own.
+ */
+function CardGitActionLine({ cardId }: { cardId: string }): React.JSX.Element | null {
+  const { busy, error, note } = useCardGitAction(cardId)
+  const text = busy ?? error ?? note
+  if (text === null) return null
+  const state = busy !== null ? 'busy' : error !== null ? 'error' : 'note'
+  return (
+    <div
+      className="card-action"
+      data-testid="card-action"
+      data-state={state}
+      role={state === 'error' ? 'alert' : 'status'}
+    >
+      <span className="card-action-text">{text}</span>
+      {state === 'error' && (
+        <button
+          type="button"
+          className="card-action-dismiss"
+          aria-label="Dismiss"
+          title="Dismiss"
+          onClick={() => dismissCardGitAction(cardId)}
+        >
+          <X {...SMALL_ICON} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * A worktree card's Open pull request item (#38 D2, D3): pushes the branch checked out in its
+ * worktree now, then main opens GitHub's page for it. Disabled while the card's action runs and
+ * unless that worktree is on a branch (`Not on a branch` when detached).
+ */
+function PullRequestItem({
+  cardId,
+  worktree,
+  run
+}: {
+  cardId: string
+  worktree: CardWorktree
+  run: (action: () => void) => () => void
+}): React.JSX.Element {
+  const branch = useBranch(worktree.path)
+  const busy = useCardGitAction(cardId).busy !== null
+  const onBranch = typeof branch === 'string' && branch !== 'detached'
+  const disabled = busy || !onBranch
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu-item"
+      data-testid="card-menu-pull-request"
+      aria-disabled={disabled || undefined}
+      title={branch === 'detached' ? 'Not on a branch' : undefined}
+      onClick={
+        disabled
+          ? undefined
+          : run(() => {
+              void runCardGitAction(cardId, 'Pushing…', () =>
+                window.drovr.git.openPullRequest(worktree.path)
+              )
+            })
+      }
+    >
+      <GitPullRequest {...MENU_ICON} />
+      Open pull request
+    </button>
   )
 }
 
@@ -224,6 +310,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           <CardLines status={status} />
         </button>
       )}
+      {card.worktree && <CardGitActionLine cardId={card.id} />}
       {running && (
         <button
           type="button"
@@ -292,6 +379,9 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               <SquareTerminal {...MENU_ICON} />
               Startup command…
             </button>
+            {card.worktree && (
+              <PullRequestItem cardId={card.id} worktree={card.worktree} run={run} />
+            )}
             {running && (
               <button
                 type="button"

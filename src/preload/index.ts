@@ -60,7 +60,8 @@ const api: DrovrApi = {
     aheadBehind: (dir) => ipcRenderer.invoke(IPC.gitAheadBehind, dir),
     fetch: (dir) => ipcRenderer.invoke(IPC.gitFetch, dir),
     pull: (dir) => ipcRenderer.invoke(IPC.gitPull, dir),
-    push: (dir) => ipcRenderer.invoke(IPC.gitPush, dir)
+    push: (dir) => ipcRenderer.invoke(IPC.gitPush, dir),
+    openPullRequest: (dir) => ipcRenderer.invoke(IPC.gitOpenPullRequest, dir)
   },
   files: {
     list: (folder, path) => ipcRenderer.invoke(IPC.filesList, folder, path),

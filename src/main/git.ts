@@ -1,4 +1,4 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
@@ -20,6 +20,7 @@ import {
   type GitResult,
   type SyncResult
 } from '../core/git'
+import { OPENED_NOTE, pushForPullRequest } from '../core/pull-requests'
 import { IPC } from '../shared/api'
 
 /** `value` when it is an absolute path to an existing folder, else null. */
@@ -124,4 +125,19 @@ export function registerGit(): void {
   sync(IPC.gitFetch, fetchAll)
   sync(IPC.gitPull, pull)
   sync(IPC.gitPush, push)
+  // Open pull request (#38 D3, D12): the renderer names only the card's worktree folder; the
+  // push runs queued with that folder's other git commands, and main builds and opens the URL.
+  ipcMain.handle(IPC.gitOpenPullRequest, async (event, dir: unknown): Promise<SyncResult> => {
+    guard(event, IPC.gitOpenPullRequest)
+    const at = await repository(dir)
+    if (!at) return NO_REPOSITORY
+    const result = await queued(at, () => pushForPullRequest(at, git))
+    if (!result.ok) return result
+    try {
+      await shell.openExternal(result.url)
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : String(error) }
+    }
+    return { ok: true, note: OPENED_NOTE }
+  })
 }

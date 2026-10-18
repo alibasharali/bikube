@@ -55,6 +55,7 @@ export const IPC = {
   gitFetch: 'git:fetch',
   gitPull: 'git:pull',
   gitPush: 'git:push',
+  gitOpenPullRequest: 'git:openPullRequest',
   filesList: 'files:list',
   filesStatus: 'files:status',
   filesOpen: 'files:open',
@@ -254,6 +255,12 @@ export interface GitApi {
   pull(dir: string): Promise<SyncResult>
   /** Pushes the current branch, to `origin` as its upstream when it has none: `Pushed` (D9). */
   push(dir: string): Promise<SyncResult>
+  /**
+   * Open pull request from a worktree card (#38 D3, D4): pushes the branch checked out in its
+   * worktree `dir` like `push`, then main opens GitHub's page for a new pull request on it in the
+   * browser: `Pushed · opened in the browser`, else git's message or `Not a GitHub remote: …`.
+   */
+  openPullRequest(dir: string): Promise<SyncResult>
 }
 
 /**

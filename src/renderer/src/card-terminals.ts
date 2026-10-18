@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
@@ -16,6 +17,8 @@ import {
 } from '../../core/card-status'
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
+import { isShiftEnter, SHIFT_ENTER } from '../../core/terminal-keys'
+import { opensLink } from '../../core/terminal-links'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
 import { ghosttyStore } from './ghostty'
@@ -93,7 +96,18 @@ export class XtermScreen implements CardScreen {
   constructor() {
     const { fontFamily, fontSize, theme, behaviour } = currentAppearance()
     this.palette = theme
-    this.term = new XTerm({ fontFamily, fontSize, theme: { ...theme }, ...behaviour })
+    const { platform, link } = window.drovr
+    // Plain URLs (the addon) and OSC 8 links (the handler) open in the browser on Mod+click.
+    const openLink = (event: MouseEvent, uri: string): void => {
+      if (opensLink(event, platform)) link.open(uri)
+    }
+    this.term = new XTerm({
+      fontFamily,
+      fontSize,
+      theme: { ...theme },
+      ...behaviour,
+      linkHandler: { activate: openLink }
+    })
     this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
     followAppearance()
     liveScreens.add(this)
@@ -101,6 +115,7 @@ export class XtermScreen implements CardScreen {
     this.host.dataset.testid = 'terminal'
     this.host.__xterm = this.term
     this.term.loadAddon(this.fit)
+    this.term.loadAddon(new WebLinksAddon(openLink))
     const clipboard = window.drovr.clipboard
     // Copy on select: a finished selection goes to the clipboard as it is made.
     this.term.onSelectionChange(() => {
@@ -114,6 +129,12 @@ export class XtermScreen implements CardScreen {
       // sees any part of them (D7), nor of Mod+1…9 (D18).
       if (keymapAction(event, currentKeymap())) return false
       if (workspaceShortcut(event, window.drovr.platform) !== null) return false
+      if (isShiftEnter(event)) {
+        event.preventDefault()
+        if (event.type === 'keydown' && !this.term.options.disableStdin)
+          this.term.input(SHIFT_ENTER)
+        return false
+      }
       const action = clipboardShortcut(event, window.drovr.platform)
       if (!action) return true
       // Stop the native paste event too, or xterm would paste twice.

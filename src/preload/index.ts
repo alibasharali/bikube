@@ -12,6 +12,9 @@ const api: DrovrApi = {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
     write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text)
   },
+  link: {
+    open: (url) => ipcRenderer.send(IPC.linkOpen, url)
+  },
   fs: {
     isDirectory: (path) => ipcRenderer.invoke(IPC.fsIsDirectory, path)
   },

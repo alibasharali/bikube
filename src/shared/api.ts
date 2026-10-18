@@ -19,6 +19,7 @@ export const IPC = {
   exit: 'terminal:exit',
   clipboardRead: 'clipboard:read',
   clipboardWrite: 'clipboard:write',
+  linkOpen: 'link:open',
   fsIsDirectory: 'fs:isDirectory',
   dialogPickDirectory: 'dialog:pickDirectory',
   stateLoad: 'state:load',
@@ -109,6 +110,11 @@ export interface TerminalApi {
 export interface ClipboardApi {
   read(): Promise<string>
   write(text: string): Promise<void>
+}
+
+/** A terminal link, opened in the default browser by main (http and https only). */
+export interface LinkApi {
+  open(url: string): void
 }
 
 /** Filesystem checks, run by main. */
@@ -287,6 +293,7 @@ export interface DrovrApi {
   platform: NodeJS.Platform
   terminal: TerminalApi
   clipboard: ClipboardApi
+  link: LinkApi
   fs: FsApi
   dialog: DialogApi
   state: StateApi

@@ -8,6 +8,7 @@ import { registerAttention } from './attention'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerGit } from './git'
+import { registerLinks } from './links'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { registerState } from './state'
@@ -67,8 +68,11 @@ function createWindow(settings: MainSettings): void {
   }
 }
 
-// Smoke tests give each launch its own data directory (#8 D11); must be set before ready.
-const userDataDir = process.env['DROVR_USER_DATA_DIR']
+// Smoke tests give each launch its own data directory (#8 D11); the development build otherwise
+// uses `drovr-dev`, so it runs beside an installed Drovr. Must be set before ready.
+const userDataDir =
+  process.env['DROVR_USER_DATA_DIR'] ??
+  (app.isPackaged ? undefined : join(app.getPath('appData'), 'drovr-dev'))
 if (userDataDir) app.setPath('userData', userDataDir)
 
 // One instance per data directory (#8 D12): a second launch hands over to the running one and
@@ -98,6 +102,7 @@ function startApp(): void {
     () => settings.claudeStatus()
   )
   registerClipboard()
+  registerLinks()
   registerDirectories()
   registerAttention()
   registerWorktrees()

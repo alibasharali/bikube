@@ -565,3 +565,55 @@ test('#14 AC7: off macOS the menu bar is hidden and auto-hides', async () => {
   })
   expect(menuBar).toEqual({ visible: false, autoHide: true })
 })
+
+/** The sidebar badge of the workspace row at `index`. */
+const badge = (index = 0): Locator => page.getByTestId('workspace-badge').nth(index)
+
+test('#59 AC1: a logo picked on create shows in the badge, expanded and collapsed', async () => {
+  await openCreateDialog()
+  await page.getByTestId('workspace-directory').fill(makeDir('alpha'))
+  const none = page.getByTestId('workspace-logo-none')
+  await expect(none).toBeChecked()
+  // None shows the Name field's initial as it reads now (D3).
+  await expect(page.locator('label:has([data-testid="workspace-logo-none"])')).toHaveText('A')
+  await page.getByTestId('workspace-name').fill('beta')
+  await expect(page.locator('label:has([data-testid="workspace-logo-none"])')).toHaveText('B')
+  const rocket = page.getByRole('radio', { name: 'Rocket', exact: true })
+  await expect(rocket).toHaveAttribute('title', 'Rocket')
+  await rocket.check()
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+  await expect(badge()).toHaveAttribute('data-logo', 'rocket')
+  await expect(badge().locator('svg')).toBeVisible()
+  await expect(badge()).toHaveText('')
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
+  await expect(badge()).toHaveAttribute('data-logo', 'rocket')
+  await expect(badge().locator('svg')).toBeVisible()
+})
+
+test('#59 AC2: editing shows the logo checked; None clears it, Cancel keeps it', async () => {
+  await openCreateDialog()
+  await page.getByTestId('workspace-directory').fill(makeDir('alpha'))
+  await page.getByTestId('workspace-logo-rocket').check()
+  await page.getByTestId('workspace-submit').click()
+  await expect(badge()).toHaveAttribute('data-logo', 'rocket')
+
+  // Cancel after picking another logo leaves the badge as it was.
+  await rowAction(0, 'workspace-edit')
+  await expect(page.getByTestId('workspace-logo-rocket')).toBeChecked()
+  await page.getByTestId('workspace-logo-database').check()
+  await page.getByTestId('workspace-cancel').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await expect(badge()).toHaveAttribute('data-logo', 'rocket')
+
+  // None and Save brings the initial letter back.
+  await rowAction(0, 'workspace-edit')
+  await expect(page.getByTestId('workspace-logo-rocket')).toBeChecked()
+  await page.getByTestId('workspace-logo-none').check()
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await expect(badge()).not.toHaveAttribute('data-logo')
+  await expect(badge()).toHaveText('A')
+})

@@ -5,6 +5,7 @@
 import { isAgentKind, type AgentKind } from './agent-presets'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
+import { isWorkspaceLogo } from './workspace-logos'
 import {
   checkShell,
   checkWorktreeSetup,
@@ -99,6 +100,9 @@ function readWorkspace(raw: unknown): Workspace | string {
   if (typeof rawSetup !== 'string') return 'bad worktree setup'
   const setup = checkWorktreeSetup(rawSetup)
   if (!setup.ok || setup.value !== rawSetup) return 'bad worktree setup'
+  // Missing is none (#59 D2); an id this version doesn't know, from a newer one, is none too (D5).
+  if (raw.logo !== undefined && typeof raw.logo !== 'string') return 'bad logo'
+  const logo = isWorkspaceLogo(raw.logo) ? { logo: raw.logo } : {}
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
   for (const c of raw.cards) {
@@ -112,6 +116,7 @@ function readWorkspace(raw: unknown): Workspace | string {
     name,
     directory,
     ...host,
+    ...logo,
     columns,
     cards,
     nextCardNumber: nextCardNumber as number,

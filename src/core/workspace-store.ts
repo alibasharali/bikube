@@ -7,6 +7,7 @@
 
 import type { AgentKind } from './agent-presets'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
+import { isWorkspaceLogo, type WorkspaceLogoId } from './workspace-logos'
 import {
   CLAUDE_STARTUP,
   checkCardStartup,
@@ -80,6 +81,8 @@ export interface Workspace {
   directory: string
   /** The SSH host (#12 D1, D2); absent for a local workspace. New cards copy it. */
   host?: string
+  /** The sidebar badge's icon (#59 D1, D2); absent for none, which shows the name's initial. */
+  logo?: WorkspaceLogoId
   /** Each workspace owns exactly one board; this is its ordered columns. */
   columns: Column[]
   /**
@@ -143,6 +146,7 @@ export type ErrorField =
   | 'command'
   | 'shell'
   | 'setup'
+  | 'logo'
 
 export interface FieldError {
   field: ErrorField
@@ -161,6 +165,8 @@ export interface WorkspaceInput {
   defaultStartup?: StartupCommand
   /** One line or '' (#39 D1); defaults to ''. */
   worktreeSetup?: string
+  /** One of `WORKSPACE_LOGOS` (#59 D1); absent or null means none. */
+  logo?: WorkspaceLogoId | null
 }
 
 export interface WorkspacePatch {
@@ -172,6 +178,8 @@ export interface WorkspacePatch {
   defaultStartup?: StartupCommand
   /** Changes the setup for new worktree cards only (#39 D1, D2). */
   worktreeSetup?: string
+  /** A logo sets the badge's icon, null clears it (#59 D2). */
+  logo?: WorkspaceLogoId | null
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -324,11 +332,14 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!startup.ok) return startup
     const setup = checkWorktreeSetup(input.worktreeSetup ?? '')
     if (!setup.ok) return setup
+    const logo = checkLogo(input.logo ?? null)
+    if (!logo.ok) return logo
     const workspace: Workspace = {
       id: this.generateId(),
       name: name.value,
       directory,
       ...(host !== null && { host }),
+      ...(logo.value !== null && { logo: logo.value }),
       columns: DEFAULT_COLUMN_NAMES.map((n) => ({ id: this.generateId(), name: n })),
       cards: [],
       nextCardNumber: 1,
@@ -374,10 +385,19 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       worktreeSetup = checked.value
     }
+    let logo = current.logo ?? null
+    if (patch.logo !== undefined) {
+      const checked = checkLogo(patch.logo)
+      if (!checked.ok) return checked
+      logo = checked.value
+    }
     const updated: Workspace = { ...current, name, directory, defaultStartup, worktreeSetup }
     // A local workspace has no `host` key at all, so the saved file never gets one (#12 D10).
     if (host === null) delete updated.host
     else updated.host = host
+    // Likewise no `logo` key without a logo (#59 D2).
+    if (logo === null) delete updated.logo
+    else updated.logo = logo
     this.replace(updated)
     return { ok: true, value: updated }
   }
@@ -720,4 +740,10 @@ export function checkWorktreeSetup(raw: string): Result<string> {
     return { ok: false, error: { field: 'setup', message: "Command can't end with ; & or |" } }
   }
   return { ok: true, value: command }
+}
+
+/** A workspace's logo: one of `WORKSPACE_LOGOS`, or null for none (#59 D1, D2). */
+function checkLogo(raw: WorkspaceLogoId | null): Result<WorkspaceLogoId | null> {
+  if (raw === null || isWorkspaceLogo(raw)) return { ok: true, value: raw }
+  return fail('logo', 'Unknown logo')
 }

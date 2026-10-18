@@ -260,6 +260,32 @@ test('#32 AC8: the order of workspaces moved in the sidebar survives a restart',
   await expect(page.getByTestId('board-title')).toHaveText('alpha')
 })
 
+test('#59 AC3: a workspace logo survives a restart and is in the state file', async () => {
+  await launch()
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  await page.getByTestId('workspace-directory').fill(makeDir('alpha'))
+  await page.getByTestId('workspace-name').fill('alpha')
+  await page.getByTestId('workspace-logo-rocket').check()
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await createWorkspace(makeDir('beta'), 'beta')
+  // A function, not a locator: `restart` gives a new page.
+  const badges = (): Locator => page.getByTestId('workspace-badge')
+  await expect(badges().nth(0)).toHaveAttribute('data-logo', 'rocket')
+
+  await restart()
+
+  await expect(badges().nth(0)).toHaveAttribute('data-logo', 'rocket')
+  await expect(badges().nth(0).locator('svg')).toBeVisible()
+  await expect(badges().nth(1)).not.toHaveAttribute('data-logo')
+  await expect(badges().nth(1)).toHaveText('B')
+  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const [alpha, beta] = saved.state.workspaces
+  expect(alpha.logo).toBe('rocket')
+  expect(beta).not.toHaveProperty('logo')
+})
+
 test('AC2: titles, directories and startup commands survive a restart', async () => {
   await launch()
   const alpha = makeDir('alpha')

@@ -438,3 +438,33 @@ describe('worktree setup in the saved state (#39 D1)', () => {
     expectRejected(fileWith((state) => (state.workspaces[0].worktreeSetup = 'npm ci;')))
   })
 })
+
+describe('workspace logos in the saved state (#59 D2, D5, AC4)', () => {
+  it('writes a logo only on a workspace that has one, and reads it back', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    const [alpha] = s.getState().workspaces
+    ok(s.updateWorkspace(alpha.id, { logo: 'rocket' }))
+    const state = s.getState()
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces
+    expect(first.logo).toBe('rocket')
+    expect('logo' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('reads a file from before logos with none', () => {
+    const read = parseSavedState(serializeSavedState(fullState()))
+    expect(read.ok && read.value.workspaces.every((w) => !('logo' in w))).toBe(true)
+  })
+
+  it('reads an unknown logo as none and loads the rest of the file', () => {
+    const read = parseSavedState(fileWith((s) => (s.workspaces[0].logo = 'not-a-logo')))
+    expect(read).toEqual({ ok: true, value: fullState() })
+    expect(read.ok && 'logo' in read.value.workspaces[0]).toBe(false)
+  })
+
+  it('rejects a logo that is not a string', () => {
+    expectRejected(fileWith((s) => (s.workspaces[0].logo = 5)))
+    expectRejected(fileWith((s) => (s.workspaces[0].logo = null)))
+  })
+})

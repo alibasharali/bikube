@@ -59,6 +59,8 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
       name: w.name,
       directory: dir(w.directory, w.host),
       ...(w.host !== undefined && { host: w.host }),
+      // The badge's logo is part of the definition, as the name is (#59 D6).
+      ...(w.logo !== undefined && { logo: w.logo }),
       columns: w.columns.map((c) => ({ id: c.id, name: c.name })),
       cards: w.cards.map((c) => ({
         id: c.id,

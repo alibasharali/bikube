@@ -142,4 +142,25 @@ describe('mergeCardBranch', () => {
     expect(git(repo, 'rev-parse', 'main')).toBe(main)
     expect(git(repo, 'rev-parse', 'other')).toBe(main)
   })
+
+  it('refuses a worktree from another repository, running nothing in either (D12)', async () => {
+    const other = join(dir, 'other')
+    git(dir, 'init', '-q', '-b', 'card-1', other)
+    git(other, 'config', 'user.email', 'test@example.com')
+    git(other, 'config', 'user.name', 'Test')
+    commit(other, 'z.txt', 'other\n', 'other work')
+    const main = git(repo, 'rev-parse', 'main')
+    const seen: string[][] = []
+    const watched: typeof run = (cwd, args) => {
+      seen.push(args)
+      return run(cwd, args)
+    }
+    expect(await mergeCardBranch(repo, other, expected, watched)).toEqual({
+      ok: false,
+      reason: "The card's worktree is not in this repository"
+    })
+    expect(seen.every((args) => args[0] === 'rev-parse')).toBe(true)
+    expect(git(repo, 'rev-parse', 'main')).toBe(main)
+    expect(git(repo, 'status', '--porcelain')).toBe('')
+  })
 })

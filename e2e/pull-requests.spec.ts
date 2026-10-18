@@ -257,6 +257,10 @@ test('the live branch is pushed, and a detached HEAD disables the item', async (
   await item.click({ force: true })
   await expect(item).toBeVisible()
   expect(await openedLinks()).toHaveLength(1)
+  // Merge into is disabled in the same menu, for the same reason.
+  const merge = card1().getByTestId('card-menu-merge')
+  await expect(merge).toHaveAttribute('aria-disabled', 'true')
+  await expect(merge).toHaveAttribute('title', 'Not on a branch')
 })
 
 test('#38 AC6: the PR chip shows the open PR and its CI, then that it was merged', async () => {

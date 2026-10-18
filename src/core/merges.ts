@@ -5,6 +5,7 @@
  * workspace folder's other git commands.
  */
 
+import { resolve } from 'node:path'
 import { currentBranch, gitError, type Git, type GitOutput, type SyncResult } from './git'
 
 /** The branches the confirmation named (D10): the card's and the workspace folder's. */
@@ -23,6 +24,21 @@ const CARD_BRANCH_CHANGED: SyncResult = {
 const BRANCH_CHANGED: SyncResult = {
   ok: false,
   reason: "The workspace folder's branch changed: try again"
+}
+
+const OTHER_REPOSITORY: SyncResult = {
+  ok: false,
+  reason: "The card's worktree is not in this repository"
+}
+
+/**
+ * `dir`'s repository as git's absolute common directory (`--path-format=absolute`; a relative
+ * answer from an older git is resolved against `dir`); null when git can't say.
+ */
+async function commonDir(dir: string, run: Git): Promise<string | null> {
+  const out = await run(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  const path = out.stdout.trim()
+  return out.code === 0 && !out.timedOut && path !== '' ? resolve(dir, path) : null
 }
 
 /** How many conflicting files the error names before `and N more` (D11). */
@@ -52,7 +68,8 @@ async function abandon(repoDir: string, merged: GitOutput, run: Git): Promise<Sy
 
 /**
  * Merges the branch checked out in the card's worktree `worktreeDir` into the workspace folder
- * `repoDir`'s current branch (D11), refusing unless both are still the ones `expected` names (D12)
+ * `repoDir`'s current branch (D11), refusing a worktree of another repository (both folders'
+ * git common directories must be the same), and unless both are still the ones `expected` names (D12)
  * and unless the workspace folder has no uncommitted changes to tracked files. Then `git merge
  * --no-edit refs/heads/<card branch>` (a full ref, so a name never reads as an option;
  * fast-forwarding when it can): `Merged <card branch> into <branch>`, or `Already up to date`
@@ -64,6 +81,9 @@ export async function mergeCardBranch(
   expected: MergeBranches,
   run: Git
 ): Promise<SyncResult> {
+  // The card's worktree must be one of the workspace folder's own (D12).
+  const [worktreeRepo, repo] = [await commonDir(worktreeDir, run), await commonDir(repoDir, run)]
+  if (worktreeRepo === null || worktreeRepo !== repo) return OTHER_REPOSITORY
   // The confirmation must merge exactly what it said (D12).
   if ((await currentBranch(worktreeDir, run)) !== expected.cardBranch) return CARD_BRANCH_CHANGED
   if ((await currentBranch(repoDir, run)) !== expected.branch) return BRANCH_CHANGED

@@ -112,6 +112,14 @@ describe('parsePullRequest (#38 D7, D8)', () => {
     expect(parsePullRequest(pr({ statusCheckRollup: [] }))).toMatchObject({ ci: null })
   })
 
+  it("reads gh's one-line JSON after anything a login profile printed first", () => {
+    expect(parsePullRequest(`Welcome back\n{not json\n\n${pr()}\n\n`)).toMatchObject({
+      number: 12,
+      state: 'open'
+    })
+    expect(parsePullRequest('Welcome back\n')).toBeNull()
+  })
+
   it('reads anything else as no pull request', () => {
     for (const text of [
       '',
@@ -175,6 +183,16 @@ describe('readPullRequest (#38 D7)', () => {
       ...VIEW,
       'feat/a b'
     ])
+  })
+
+  it('reads the PR when the login profile prints a line first', async () => {
+    const home = env.HOME as string
+    writeFileSync(
+      join(home, '.profile'),
+      `echo Welcome back\nPATH='${bin}':/usr/bin:/bin; export PATH\n`
+    )
+    fakeGh(`cat <<'EOF'\n${pr()}\nEOF`)
+    expect(await read()).toMatchObject({ number: 12, state: 'open', ci: 'failing' })
   })
 
   it('reads a missing gh, a failing gh, bad output and a timeout as no PR', async () => {

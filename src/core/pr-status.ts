@@ -70,12 +70,20 @@ const PULL_URL = new RegExp(`^https://github\\.com/(${NAME})/(${NAME})/pull/([1-
 /**
  * `gh pr view --json number,state,url,statusCheckRollup`'s output as a pull request (D7, D8);
  * null for anything else, including a `url` that isn't this PR's page on github.com, so the URL
- * is safe to open.
+ * is safe to open. Only gh's JSON is read: its last non-empty line starting with `{` (gh prints
+ * one compact line when stdout isn't a terminal), so whatever a login profile printed before it
+ * is skipped.
  */
 export function parsePullRequest(text: string): PullRequestStatus | null {
+  const line = text
+    .split('\n')
+    .map((each) => each.trim())
+    .filter((each) => each.startsWith('{'))
+    .pop()
+  if (line === undefined) return null
   let data: unknown
   try {
-    data = JSON.parse(text)
+    data = JSON.parse(line)
   } catch {
     return null
   }

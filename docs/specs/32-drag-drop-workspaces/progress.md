@@ -14,4 +14,4 @@ None.
 
 ## Verification
 
-- todo
+- done: AC1–AC9 pass on the running app (repo e2e + unit); AC10: check.sh and smoke green except two updates tests that need a non-root user (read-only folder; sandbox runs as root)

@@ -2,7 +2,7 @@
 item: 35
 type: feature
 title: 'Find in terminal (Mod+F)'
-status: draft
+status: approved
 branch: claude/35-find-in-terminal
 ---
 

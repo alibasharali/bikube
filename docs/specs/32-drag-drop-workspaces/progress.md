@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
+| S1 | done | `54e2b37..2cd9840` | CLEAN | `moveWorkspace(id, toIndex)`; `WORKSPACE_DRAG_TYPE`; `.workspace-row[data-workspace-id][data-drop]` |
 
 ## Rulings
 

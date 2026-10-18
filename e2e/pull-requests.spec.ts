@@ -146,6 +146,21 @@ async function pullRequestItem(card: Locator = card1()): Promise<Locator> {
   return card.getByTestId('card-menu-pull-request')
 }
 
+/** Opens `Card 1`'s ⋯ menu; its Merge into item. */
+async function mergeItem(): Promise<Locator> {
+  await card1().getByTestId('card-menu').click()
+  return card1().getByTestId('card-menu-merge')
+}
+
+/** Picks `Merge into main` and confirms it. */
+async function confirmMerge(): Promise<void> {
+  const item = await mergeItem()
+  await expect(item).toHaveText('Merge into main')
+  await item.click()
+  await page.getByTestId('confirm-dialog').getByTestId('confirm-merge').click()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+}
+
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-pr-'))
   makeRepos()
@@ -330,6 +345,7 @@ test('a plain card and an SSH card have no Open pull request', async () => {
   await boardCard(page, 'Plain').getByTestId('card-menu').click()
   await expect(boardCard(page, 'Plain').getByTestId('card-menu-delete')).toBeVisible()
   await expect(boardCard(page, 'Plain').getByTestId('card-menu-pull-request')).toHaveCount(0)
+  await expect(boardCard(page, 'Plain').getByTestId('card-menu-merge')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(boardCard(page, 'Plain').getByTestId('card-pr')).toHaveCount(0)
 
@@ -338,5 +354,82 @@ test('a plain card and an SSH card have no Open pull request', async () => {
   await boardCard(page, 'Remote').getByTestId('card-menu').click()
   await expect(boardCard(page, 'Remote').getByTestId('card-menu-delete')).toBeVisible()
   await expect(boardCard(page, 'Remote').getByTestId('card-menu-pull-request')).toHaveCount(0)
+  await expect(boardCard(page, 'Remote').getByTestId('card-menu-merge')).toHaveCount(0)
   await expect(boardCard(page, 'Remote').getByTestId('card-pr')).toHaveCount(0)
+})
+
+test('#38 AC11: Merge fast-forwards the workspace branch, the card still running', async () => {
+  await confirmMerge()
+  await expect(action()).toHaveText('Merged card-1 into main', { timeout: 10_000 })
+  expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('card work')
+  expect(git(repo, 'rev-parse', 'main')).toBe(git(worktree, 'rev-parse', 'HEAD'))
+  await expect(card1().getByTestId('card-stop')).toBeVisible()
+  await expect(page.getByTestId('board')).toBeVisible()
+
+  await confirmMerge()
+  await expect(action()).toHaveText('Already up to date', { timeout: 10_000 })
+})
+
+test('#38 AC12: a workspace folder with uncommitted changes refuses the merge', async () => {
+  const main = git(repo, 'rev-parse', 'main')
+  writeFileSync(join(repo, 'a.txt'), 'changed\n')
+  await confirmMerge()
+  await expect(action()).toContainText(
+    'The workspace folder has uncommitted changes: commit or stash them first',
+    { timeout: 10_000 }
+  )
+  expect(git(repo, 'rev-parse', 'main')).toBe(main)
+
+  // An untracked file alone doesn't block it.
+  git(repo, 'checkout', '--', 'a.txt')
+  writeFileSync(join(repo, 'loose.txt'), 'untracked\n')
+  await action().getByRole('button', { name: 'Dismiss' }).click()
+  await confirmMerge()
+  await expect(action()).toHaveText('Merged card-1 into main', { timeout: 10_000 })
+})
+
+test('#38 AC13: a conflicting merge is aborted, the workspace folder as it was', async () => {
+  commit(worktree, 'a.txt', 'card\n', 'card a')
+  commit(repo, 'a.txt', 'main\n', 'main a')
+  const main = git(repo, 'rev-parse', 'main')
+  await confirmMerge()
+  await expect(action()).toContainText('Merge conflict in a.txt: nothing was merged', {
+    timeout: 10_000
+  })
+  expect(git(repo, 'status', '--porcelain')).toBe('')
+  expect(git(repo, 'rev-parse', 'main')).toBe(main)
+})
+
+test('#38 AC14: the confirmation names the merge and warns of uncommitted work', async () => {
+  writeFileSync(join(worktree, 'draft.txt'), 'not committed\n')
+  const main = git(repo, 'rev-parse', 'main')
+  await (await mergeItem()).click()
+  const dialog = page.getByTestId('confirm-dialog')
+  await expect(dialog.getByRole('heading')).toHaveText('Merge branch')
+  await expect(dialog).toContainText(`Merge card-1 into main in ${repo}?`)
+  await expect(dialog).toContainText(
+    "The card's uncommitted changes are not included: only its commits are merged."
+  )
+  await dialog.getByTestId('confirm-cancel').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(action()).toHaveCount(0)
+  expect(git(repo, 'rev-parse', 'main')).toBe(main)
+
+  // Committed, the line is gone.
+  git(worktree, 'add', 'draft.txt')
+  git(worktree, 'commit', '-q', '-m', 'draft')
+  await (await mergeItem()).click()
+  await expect(dialog).toContainText(`Merge card-1 into main in ${repo}?`)
+  await expect(dialog).not.toContainText('uncommitted')
+  await dialog.getByTestId('confirm-cancel').click()
+
+  // A detached workspace folder disables the item.
+  git(repo, 'switch', '-q', '--detach')
+  await focusWindow()
+  const item = await mergeItem()
+  await expect(item).toHaveAttribute('aria-disabled', 'true', { timeout: 10_000 })
+  await expect(item).toHaveAttribute('title', 'The workspace folder is not on a branch')
+  await expect(item).toHaveText('Merge into …')
+  await item.click({ force: true })
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
 })

@@ -1,5 +1,6 @@
 import {
   GitBranch,
+  GitMerge,
   GitPullRequest,
   Pencil,
   Square,
@@ -14,13 +15,14 @@ import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
 import type { Card, CardWorktree, Column } from '../../core/workspace-store'
-import { useBranch } from './branches'
+import { refreshBranch, useBranch } from './branches'
 import { dismissCardGitAction, runCardGitAction, useCardGitAction } from './card-git'
 import { refreshPullRequest, usePullRequest } from './pull-requests'
 import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
+import MergeCardDialog, { type MergeChoice } from './MergeCardDialog'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
@@ -187,6 +189,53 @@ function PullRequestItem({
   )
 }
 
+/** A live branch read as a branch name: null when detached, not a repository or not read yet. */
+const onBranch = (branch: string | null | undefined): string | null =>
+  typeof branch === 'string' && branch !== 'detached' ? branch : null
+
+/**
+ * A worktree card's Merge into item (#38 D2, D10): `Merge into <branch>`, the workspace folder's
+ * live branch, merging the branch checked out in the card's worktree now once confirmed
+ * (`onChoose`). Disabled while the card's action runs, when the worktree is detached (`Not on a
+ * branch`) and unless the workspace folder is on a branch.
+ */
+function MergeItem({
+  cardId,
+  worktree,
+  run,
+  onChoose
+}: {
+  cardId: string
+  worktree: CardWorktree
+  run: (action: () => void) => () => void
+  onChoose: (choice: MergeChoice) => void
+}): React.JSX.Element {
+  const cardBranch = onBranch(useBranch(worktree.path))
+  const branch = onBranch(useBranch(worktree.repo))
+  const busy = useCardGitAction(cardId).busy !== null
+  const choice = busy || cardBranch === null || branch === null ? null : { cardBranch, branch }
+  const title =
+    cardBranch === null
+      ? 'Not on a branch'
+      : branch === null
+        ? 'The workspace folder is not on a branch'
+        : undefined
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu-item"
+      data-testid="card-menu-merge"
+      aria-disabled={choice === null || undefined}
+      title={title}
+      onClick={choice === null ? undefined : run(() => onChoose(choice))}
+    >
+      <GitMerge {...MENU_ICON} />
+      {`Merge into ${branch ?? '…'}`}
+    </button>
+  )
+}
+
 /** How long a click on the title waits for a second click (double-click renames, D12). */
 const DOUBLE_CLICK_MS = 250
 
@@ -280,6 +329,18 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
   }
 
   const [deletingWorktree, setDeletingWorktree] = useState(false)
+  const [merging, setMerging] = useState<MergeChoice | null>(null)
+  const merge = ({ cardBranch, branch }: MergeChoice): void => {
+    setMerging(null)
+    const worktree = card.worktree
+    if (!worktree) return
+    void runCardGitAction(card.id, 'Merging…', () =>
+      window.drovr.git.merge(worktree.path, worktree.repo, cardBranch, branch)
+    ).then((result) => {
+      // The workspace folder's chips show what the merge left (D11).
+      if (result) refreshBranch(worktree.repo)
+    })
+  }
   const onDelete = (): void => {
     if (card.worktree) {
       setDeletingWorktree(true)
@@ -415,6 +476,17 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             {card.worktree && (
               <PullRequestItem cardId={card.id} worktree={card.worktree} run={run} />
             )}
+            {card.worktree && (
+              <MergeItem
+                cardId={card.id}
+                worktree={card.worktree}
+                run={run}
+                onChoose={(choice) => {
+                  cancelPendingOpen()
+                  setMerging(choice)
+                }}
+              />
+            )}
             {running && (
               <button
                 type="button"
@@ -463,6 +535,14 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             setConfirm(null)
             removeCard(workspaceId, card.id)
           }}
+        />
+      )}
+      {merging && card.worktree && (
+        <MergeCardDialog
+          worktree={card.worktree}
+          choice={merging}
+          onMerge={() => merge(merging)}
+          onCancel={() => setMerging(null)}
         />
       )}
       {deletingWorktree && card.worktree && (

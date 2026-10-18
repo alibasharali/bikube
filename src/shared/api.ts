@@ -58,6 +58,7 @@ export const IPC = {
   gitPush: 'git:push',
   gitOpenPullRequest: 'git:openPullRequest',
   gitPullRequest: 'git:pullRequest',
+  gitMerge: 'git:merge',
   filesList: 'files:list',
   filesStatus: 'files:status',
   filesOpen: 'files:open',
@@ -269,6 +270,13 @@ export interface GitApi {
    * repository and on a detached HEAD. Never an error.
    */
   pullRequest(dir: string): Promise<PullRequestRead | null>
+  /**
+   * Merge into the workspace branch (#38 D11, D12): merges the branch checked out in the card's
+   * worktree `dir` into the current branch of the workspace folder `repo`, refused unless they are
+   * still `cardBranch` and `branch` (what the confirmation named): `Merged <card branch> into
+   * <branch>` or `Already up to date`, else why nothing was merged.
+   */
+  merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
 /**

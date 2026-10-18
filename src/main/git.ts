@@ -22,6 +22,7 @@ import {
   type GitResult,
   type SyncResult
 } from '../core/git'
+import { mergeCardBranch } from '../core/merges'
 import { readPullRequest, type PullRequestRead } from '../core/pr-status'
 import { OPENED_NOTE, pushForPullRequest } from '../core/pull-requests'
 import { IPC } from '../shared/api'
@@ -181,4 +182,25 @@ export function registerGit(shellSetting: () => string): void {
     }
     return { ok: true, note: OPENED_NOTE }
   })
+  // Merge into the workspace branch (#38 D11, D12): the renderer names the card's worktree, the
+  // workspace folder and the two branches its confirmation showed; main reads both branches
+  // itself, queued with the workspace folder's other git commands.
+  ipcMain.handle(
+    IPC.gitMerge,
+    async (
+      event,
+      dir: unknown,
+      repo: unknown,
+      cardBranch: unknown,
+      branch: unknown
+    ): Promise<SyncResult> => {
+      guard(event, IPC.gitMerge)
+      const [worktreeAt, repoAt] = [await repository(dir), await repository(repo)]
+      if (!worktreeAt || !repoAt) return NO_REPOSITORY
+      if (typeof cardBranch !== 'string' || typeof branch !== 'string') {
+        return { ok: false, reason: 'Not a valid branch name' }
+      }
+      return queued(repoAt, () => mergeCardBranch(repoAt, worktreeAt, { cardBranch, branch }, git))
+    }
+  )
 }

@@ -186,10 +186,6 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
           setFind((open) => ({ paneId: focusedPane, request: (open?.request ?? 0) + 1 }))
         }
       }
-      // The side panel shows or hides in every card at once (#55 D2, D3).
-      else if (action === 'togglePanel') {
-        settingsStore.update({ sidePanelOpen: !settingsStore.get().sidePanelOpen })
-      }
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
         if (splittable) cardPanes().split(card, action === 'splitRight' ? 'right' : 'down')
@@ -206,7 +202,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
     // Capture phase: works wherever focus is, including the terminal, which swallows the key.
     const onKeyDown = (event: KeyboardEvent): void => {
       const action = keymapAction(event, currentKeymap())
-      // Settings, the Default shell and the command palette are the app's (#40 D1).
+      // Settings, the Default shell, the command palette and Toggle panel are the app's (#40 D1,
+      // #57 D4).
       if (!isCardViewAction(action)) return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
       if (dialogOpen()) return

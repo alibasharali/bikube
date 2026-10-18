@@ -16,13 +16,15 @@ import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// The side panel beside an open card (#55 S1): shown by default, toggled by its title bar button,
-// its hide button and the Toggle panel shortcut, resized from its left edge, saved app-wide in
-// drovr-settings.json, and its Files tab's SSH message.
+// The side panel beside an open card (#55 S1) and beside the board (#57): shown by default,
+// toggled by its title bar button, its hide button and the Toggle panel shortcut, resized from its
+// left edge, saved app-wide in drovr-settings.json, and its Files tab's SSH message.
 
 const darwin = process.platform === 'darwin'
 /** The Toggle panel default (#55 D2) as a Playwright press. */
 const TOGGLE = darwin ? 'Alt+Meta+B' : 'Control+Alt+B'
+/** The command palette's default shortcut (#40 D1) as a Playwright press. */
+const PALETTE = darwin ? 'Meta+K' : 'Control+Shift+P'
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -154,10 +156,101 @@ test('#55 AC1: the panel shows by default at the right of the panes, 280 px, Fil
   // Nothing is saved while the panel is as by default.
   expect(savedSettings()).not.toHaveProperty('sidePanelOpen')
 
-  // The button shows only while a card is open.
+  // Back on the board, the panel and its button stay (#57 D1, D4).
   await backToBoard(page)
-  await expect(panelButton()).toHaveCount(0)
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
+  await expect(panel()).toBeVisible()
+})
+
+test('#57 AC1: the panel shows at the right of the board, 280 px, with the workspace folder', async () => {
+  await launch()
+  // No panel and no button on the empty state.
+  await expect(page.getByTestId('empty-state')).toBeVisible()
   await expect(panel()).toHaveCount(0)
+  await expect(panelButton()).toHaveCount(0)
+
+  await createWorkspace(repo, 'repo')
+  const board = page.getByTestId('board')
+  await expect(board).toBeVisible()
+  await expect(panel()).toBeVisible()
+  const panelBox = (await panel().boundingBox())!
+  const boardBox = (await board.boundingBox())!
+  expect(panelBox.width).toBe(280)
+  expect(panelBox.x).toBeGreaterThanOrEqual(boardBox.x + boardBox.width - 1)
+  // Full height of the content area, beside the board.
+  expect(Math.abs(panelBox.height - boardBox.height)).toBeLessThanOrEqual(1)
+  await expect(panel().getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
+  await expect(row('')).toHaveText('repo')
+  await expect(row('')).toHaveAttribute('title', repo)
+  await expect(row('src')).toBeVisible()
+  await expect(row('README.md')).toBeVisible()
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
+  // The board still scrolls its columns sideways rather than pushing the panel out.
+  await expect
+    .poll(() => page.locator('.board-columns').evaluate((el) => getComputedStyle(el).overflowX))
+    .toBe('auto')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerWidth)
+  )
+})
+
+test('#57 AC2: the shortcut, the button and the palette toggle it on the board, shared with cards', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await expect(panel()).toBeVisible()
+
+  await page.keyboard.press(TOGGLE)
+  await expect(panel()).toHaveCount(0)
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(() => savedSettings()['sidePanelOpen']).toBe(false)
+
+  // One open state (D3): a card opened now shows no panel.
+  await newCard('c1')
+  await expect(panel()).toHaveCount(0)
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'false')
+  await backToBoard(page)
+
+  await panelButton().click()
+  await expect(panel()).toBeVisible()
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => 'sidePanelOpen' in savedSettings()).toBe(false)
+
+  // The palette's Toggle panel row on the board.
+  for (const shown of [false, true]) {
+    await page.keyboard.press(PALETTE)
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await expect(palette).toBeVisible()
+    await page.keyboard.type('Toggle panel')
+    await expect(palette.getByTestId('palette-row-title').first()).toHaveText('Toggle panel')
+    await page.keyboard.press('Enter')
+    await expect(palette).toHaveCount(0)
+    await expect(panel()).toHaveCount(shown ? 1 : 0)
+  }
+
+  // The hide button on the board hides it everywhere too.
+  await panel().getByTestId('side-panel-hide').click()
+  await expect(panel()).toHaveCount(0)
+  await openCard('c1')
+  await expect(panel()).toHaveCount(0)
+  await backToBoard(page)
+
+  // Held down, it toggles once; behind a dialog it does nothing (D4).
+  const [mod, alt, key] = TOGGLE.split('+') as [string, string, string]
+  await page.keyboard.down(mod)
+  await page.keyboard.down(alt)
+  await page.keyboard.down(key)
+  await page.keyboard.down(key)
+  await page.keyboard.down(key)
+  await page.keyboard.up(key)
+  await page.keyboard.up(alt)
+  await page.keyboard.up(mod)
+  await expect(panel()).toBeVisible()
+  await page.keyboard.press(darwin ? 'Meta+,' : 'Control+,')
+  await expect(page.getByTestId('settings-dialog')).toBeVisible()
+  await page.keyboard.press(TOGGLE)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
+  await expect(panel()).toBeVisible()
 })
 
 test('#55 AC2: the shortcut, the button and the hide button toggle it, saved across a restart', async () => {
@@ -304,6 +397,22 @@ test.describe('over SSH', () => {
     await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
     await newCard('c1')
 
+    await expect(panel()).toBeVisible()
+    await expect(panel().getByTestId('files-tab')).toHaveText("Files aren't available over SSH yet")
+  })
+
+  test("#57 AC3: an SSH workspace's board shows the panel with the SSH message", async () => {
+    await launch(fake.env)
+    await page.getByTestId('workspace-add').click()
+    await plainCards(page)
+    await page.getByTestId('workspace-location-ssh').check()
+    await page.getByTestId('workspace-host').fill('devbox')
+    await page.getByTestId('workspace-directory').fill(REMOTE_DIR)
+    await page.getByTestId('workspace-name').fill('remote')
+    await page.getByTestId('workspace-submit').click()
+    await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+    await expect(page.getByTestId('board')).toBeVisible()
     await expect(panel()).toBeVisible()
     await expect(panel().getByTestId('files-tab')).toHaveText("Files aren't available over SSH yet")
   })

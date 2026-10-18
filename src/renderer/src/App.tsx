@@ -26,17 +26,29 @@ import Board from './Board'
 import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
 import { requestNewCard } from './new-card-request'
-import { currentKeymap, settingsStore } from './settings'
+import { currentKeymap, settingsStore, useSettings } from './settings'
 import Sidebar from './Sidebar'
 import TitleBar from './TitleBar'
 import { useWorkspaceState, workspaceStore } from './store'
 import { useSyncStatus } from './sync'
+import SidePanel from './SidePanel'
+
+/** Shows or hides the side panel, on the board and in every card at once (#55 D3, #57 D3). */
+function togglePanel(): void {
+  settingsStore.update({ sidePanelOpen: !settingsStore.get().sidePanelOpen })
+}
 
 function App(): React.JSX.Element {
   const { workspaces, activeId } = useWorkspaceState()
   const syncStatus = syncStatusText(useSyncStatus())
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
+  const { sidePanelOpen } = useSettings()
+  // Whether a workspace is active, for the Toggle panel shortcut (#57 D4).
+  const hasWorkspace = useRef(false)
+  useEffect(() => {
+    hasWorkspace.current = active !== null
+  })
   // One card open at full size at a time, always one of the active workspace's (#4 D7). Each
   // workspace remembers its view for this run (#31 D19): the card open in it, or its board.
   const [views, setViews] = useState<ViewMemory>(NO_VIEWS)
@@ -155,6 +167,14 @@ function App(): React.JSX.Element {
         setPaletteOpen(paletteShown.current)
         return
       }
+      // The side panel shows or hides on the board and in every card at once (#55 D3, #57 D4).
+      if (action === 'togglePanel') {
+        if (!hasWorkspace.current || document.querySelector('[aria-modal="true"]')) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat) togglePanel()
+        return
+      }
       if (action !== 'settings' && action !== 'openShell') return
       // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
       if (document.querySelector('[aria-modal="true"]')) return
@@ -187,6 +207,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     runAction.current = (action) => {
       if (isCardViewAction(action.id)) runCardViewAction(action.id)
+      else if (action.id === 'togglePanel') togglePanel()
       // To the column's bottom, as the card menu's move (#6 D8); the card stays open.
       else if (action.id === 'moveCard') {
         if (activeId && openCard && !openIsShell) {
@@ -265,7 +286,17 @@ function App(): React.JSX.Element {
           {active && openCard ? (
             <CardView key={openCard.id} card={openCard} onBack={closeCard} />
           ) : active ? (
-            <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+            // The side panel beside the board shows the workspace's folder (#57 D1, D2).
+            <div className="board-layout">
+              <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+              {sidePanelOpen && (
+                <SidePanel
+                  folder={active.directory}
+                  ssh={active.host !== undefined}
+                  onHide={() => settingsStore.update({ sidePanelOpen: false })}
+                />
+              )}
+            </div>
           ) : (
             <EmptyState onCreateWorkspace={onCreateWorkspace} />
           )}

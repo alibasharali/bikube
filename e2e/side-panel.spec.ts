@@ -300,3 +300,153 @@ test.describe('over SSH', () => {
     await expect(panel().getByTestId('files-tab')).toHaveText("Files aren't available over SSH yet")
   })
 })
+
+// The Files tab's tree (#55 S2): the card's folder, lazily listed, ignored entries dimmed.
+
+const filesTab = (): Locator => panel().getByTestId('files-tab')
+/** The tree's row for `path` (relative, `''` for the root row). */
+const row = (path: string): Locator =>
+  filesTab().locator(`[data-testid=files-row][data-path="${path}"]`)
+/** The names of the rows that show, in order, indented two spaces per level. */
+const shownRows = (): Promise<string[]> =>
+  filesTab()
+    .locator('[data-testid=files-row]')
+    .evaluateAll((rows) =>
+      rows.map(
+        (r) =>
+          '  '.repeat(Number(r.getAttribute('aria-level')) - 1) +
+          (r.querySelector('.files-name')?.textContent ?? '')
+      )
+    )
+
+test('#55 AC5: the tree lists folders, then files, without .git, ignored ones dimmed', async () => {
+  await openC1()
+  await expect(row('')).toHaveText('repo')
+  await expect(row('')).toHaveAttribute('title', repo)
+  await expect.poll(shownRows).toEqual(['repo', '  dist', '  src', '  .gitignore', '  README.md'])
+  await expect(row('dist')).toHaveAttribute('data-ignored', 'true')
+  await expect(row('src')).toHaveAttribute('data-ignored', 'false')
+  await expect(row('README.md')).toHaveAttribute('data-ignored', 'false')
+
+  await row('src').dblclick()
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+  await row('dist').dblclick()
+  await expect
+    .poll(shownRows)
+    .toEqual([
+      'repo',
+      '  dist',
+      '    out.js',
+      '  src',
+      '    a.ts',
+      '    b.ts',
+      '  .gitignore',
+      '  README.md'
+    ])
+  await expect(row('dist/out.js')).toHaveAttribute('data-ignored', 'true')
+  await expect(row('src/a.ts')).toHaveAttribute('data-ignored', 'false')
+
+  // Double-clicking an expanded folder collapses it.
+  await row('dist').dblclick()
+  await expect(row('dist/out.js')).toHaveCount(0)
+})
+
+test('#55 AC6: expanded folders are remembered after going Back and reopening the card', async () => {
+  await openC1()
+  await row('src').dblclick()
+  await expect(row('src/a.ts')).toBeVisible()
+  await backToBoard(page)
+  await openCard('c1')
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+  await expect(row('src/a.ts')).toBeVisible()
+  await expect(row('dist')).toHaveAttribute('aria-expanded', 'false')
+})
+
+test('#55 D7: the tree is keyboard-navigable', async () => {
+  await openC1()
+  await expect(row('src')).toBeVisible()
+  await row('').click()
+  await expect(row('')).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(row('dist')).toBeFocused()
+  await expect(row('dist')).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowRight')
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+  await expect(row('src/a.ts')).toBeVisible()
+  await page.keyboard.press('ArrowRight')
+  await expect(row('src/a.ts')).toBeFocused()
+  await page.keyboard.press('ArrowLeft')
+  await expect(row('src')).toBeFocused()
+  await page.keyboard.press('ArrowLeft')
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'false')
+  await page.keyboard.press('Enter')
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+  await expect(row('src')).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(row('dist')).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(row('')).toBeFocused()
+  await page.keyboard.press('ArrowLeft')
+  await expect(row('')).toHaveAttribute('aria-expanded', 'false')
+  await expect(row('src')).toHaveCount(0)
+})
+
+test('#55 AC9: a new file shows under an expanded folder within 4 s, and at once with Refresh', async () => {
+  await openC1()
+  await row('src').dblclick()
+  await row('dist').dblclick()
+  await expect(row('dist/out.js')).toBeVisible()
+  await terminalArea().click()
+  await page.keyboard.type('touch src/z.ts')
+  await page.keyboard.press('Enter')
+  await expect(row('src/z.ts')).toBeVisible({ timeout: 4000 })
+  // Nothing collapsed.
+  await expect(row('dist/out.js')).toBeVisible()
+  await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
+
+  // Refresh reads at once: the file is made right after a read, well before the next one.
+  await row('src/z.ts').click()
+  await expect(row('src/z.ts')).toHaveAttribute('aria-selected', 'true')
+  writeFileSync(join(repo, 'src', 'y.ts'), '')
+  await panel().getByTestId('files-refresh').click()
+  await expect(row('src/y.ts')).toBeVisible({ timeout: 1000 })
+  await expect(row('src/z.ts')).toHaveAttribute('aria-selected', 'true')
+})
+
+test("#55 AC10: a worktree card shows its worktree, the workspace's Default shell the workspace folder", async () => {
+  await openC1()
+  await backToBoard(page)
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Own tree')
+  await page.getByTestId('new-card-worktree').check()
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'Own tree')
+  await expect(row('')).toHaveText('own-tree')
+  await expect(row('')).toHaveAttribute(
+    'title',
+    new RegExp(`${join('worktrees', '[^/]+', 'own-tree')}$`)
+  )
+  await expect
+    .poll(shownRows)
+    .toEqual(['own-tree', '  dist', '  src', '  .gitignore', '  README.md'])
+
+  await backToBoard(page)
+  await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Default')
+  await expect(row('')).toHaveText('repo')
+  await expect(row('')).toHaveAttribute('title', repo)
+  await expect.poll(shownRows).toEqual(['repo', '  dist', '  src', '  .gitignore', '  README.md'])
+})
+
+test('#55 AC11: outside a git repository the tree lists every file and dims nothing', async () => {
+  const plain = join(root, 'plain')
+  mkdirSync(join(plain, 'dist'), { recursive: true })
+  writeFileSync(join(plain, '.gitignore'), 'dist/\n')
+  writeFileSync(join(plain, 'notes.txt'), '')
+  await launch()
+  await createWorkspace(plain, 'plain')
+  await newCard('c1')
+  await expect.poll(shownRows).toEqual(['plain', '  dist', '  .gitignore', '  notes.txt'])
+  await expect(filesTab().locator('[data-ignored=true]')).toHaveCount(0)
+})

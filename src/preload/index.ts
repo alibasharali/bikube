@@ -62,6 +62,9 @@ const api: DrovrApi = {
     pull: (dir) => ipcRenderer.invoke(IPC.gitPull, dir),
     push: (dir) => ipcRenderer.invoke(IPC.gitPush, dir)
   },
+  files: {
+    list: (folder, path) => ipcRenderer.invoke(IPC.filesList, folder, path)
+  },
   update: {
     state: () => ipcRenderer.invoke(IPC.updateState),
     onState: (listener) => {

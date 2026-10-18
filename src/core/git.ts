@@ -137,6 +137,23 @@ export function gitIn(runner: GitRunner, base: Record<string, string | undefined
   }
 }
 
+/**
+ * A `Git` for read-only local commands (#55 D16: `status`, `check-ignore`, `rev-parse`) over
+ * `runner`, with the no-prompt environment from `base`: every command gets
+ * `--no-optional-locks`, so a polled read never takes the index lock a running agent's git
+ * needs. Unlike `gitIn` it never reads `core.sshCommand` first: these commands reach no remote.
+ */
+export function readOnlyGit(runner: GitRunner, base: Record<string, string | undefined> = {}): Git {
+  const env = gitEnv(base)
+  return (cwd, args) =>
+    runner({
+      args: ['--no-optional-locks', ...args],
+      cwd,
+      env,
+      timeoutMs: GIT_TIMEOUT_MS
+    })
+}
+
 export interface RemoteBranches {
   /** The remote's name, e.g. `origin`. */
   name: string

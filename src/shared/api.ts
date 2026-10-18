@@ -1,6 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
+import type { FolderListing } from '../core/file-tree'
 import type { AheadBehind, BranchList, GitResult, NewBranchResult, SyncResult } from '../core/git'
 import type { CreateResult } from '../core/worktrees'
 import type { Settings } from '../core/settings'
@@ -52,6 +53,7 @@ export const IPC = {
   gitFetch: 'git:fetch',
   gitPull: 'git:pull',
   gitPush: 'git:push',
+  filesList: 'files:list',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -250,6 +252,18 @@ export interface GitApi {
   push(dir: string): Promise<SyncResult>
 }
 
+/**
+ * The side panel's Files tab (#55 D16), read by main inside the shown folder (an absolute,
+ * existing folder): anything that resolves outside it is refused with `ok: false`.
+ */
+export interface FilesApi {
+  /**
+   * The entries of the folder `path` (relative, `/`-separated, `''` for the shown folder itself)
+   * inside `folder`: folders first, the first 2,000, ignored ones marked (D7, D8, D9).
+   */
+  list(folder: string, path: string): Promise<FolderListing>
+}
+
 /** The app's place on the desktop, for notifications. */
 export interface AppApi {
   /** The Dock (or launcher) badge: how many cards wait for the user; 0 clears it. */
@@ -303,5 +317,6 @@ export interface DrovrApi {
   app: AppApi
   worktree: WorktreeApi
   git: GitApi
+  files: FilesApi
   update: UpdateApi
 }

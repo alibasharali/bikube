@@ -1468,6 +1468,86 @@ button {
   overflow: auto;
 }
 
+/* The Files tab (#55 D7–D9): a header with Refresh, and the folder's tree */
+.files-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.files-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) 0;
+}
+
+.files-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.files-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding-right: var(--space-2);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.files-row:hover {
+  background: var(--surface-hover);
+}
+
+.files-row[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.files-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.files-row[data-ignored='true'],
+.files-row[data-kind='more'],
+.files-row[data-kind='error'] {
+  color: var(--text-muted);
+}
+
+.files-row[data-ignored='true'] .files-name {
+  opacity: 0.6;
+}
+
+.files-chevron {
+  flex: none;
+  display: inline-flex;
+  width: 16px;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.files-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.files-link {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
 .files-tab-message {
   padding: var(--space-3);
   color: var(--text-muted);

@@ -178,7 +178,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const action = keymapAction(event, currentKeymap())
-      if (action === null || action === 'settings') return
+      // Settings and the command palette are the app's (#40 D1).
+      if (action === null || action === 'settings' || action === 'palette') return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
       if (dialogOpen()) return
       event.preventDefault()

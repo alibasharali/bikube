@@ -35,7 +35,8 @@ describe('defaultKeymap (#31 D6)', () => {
       settings: 'Cmd+,',
       openShell: 'Cmd+T',
       togglePanel: 'Alt+Cmd+B',
-      find: 'Cmd+F'
+      find: 'Cmd+F',
+      palette: 'Cmd+K'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -47,9 +48,43 @@ describe('defaultKeymap (#31 D6)', () => {
         settings: 'Ctrl+,',
         openShell: 'Ctrl+Shift+T',
         togglePanel: 'Ctrl+Alt+B',
-        find: 'Ctrl+Shift+F'
+        find: 'Ctrl+Shift+F',
+        palette: 'Ctrl+Shift+P'
       })
     }
+  })
+})
+
+describe('Command palette (#40 D1)', () => {
+  it('is a configurable action named Command palette: Cmd+K on macOS, Ctrl+Shift+P elsewhere', () => {
+    expect(SHORTCUT_LABELS.palette).toBe('Command palette')
+    expect(keymapAction(press('k', { metaKey: true }), defaultKeymap('darwin'))).toBe('palette')
+    expect(
+      keymapAction(press('P', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('palette')
+    // Off macOS Ctrl+K stays readline's kill-line.
+    expect(keymapAction(press('k', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+  })
+
+  it('can be recorded as another key and saved only when it differs (AC12)', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('k', { ctrlKey: true, altKey: true }), 'palette', keymap, 'linux')
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+K' })
+    const next = resolveKeymap({ palette: 'Ctrl+Alt+K' }, 'linux')
+    expect(keymapAction(press('P', { ctrlKey: true, shiftKey: true }), next)).toBeNull()
+    expect(keymapAction(press('k', { ctrlKey: true, altKey: true }), next)).toBe('palette')
+    expect(shortcutOverrides(next, 'linux')).toEqual({ palette: 'Ctrl+Alt+K' })
+    expect(validateShortcuts({ palette: 'Ctrl+Alt+K' }, 'linux')).toEqual({
+      palette: 'Ctrl+Alt+K'
+    })
+  })
+
+  it('falls back with another action given its default (#31 D9)', () => {
+    expect(readShortcuts({ find: 'Ctrl+Shift+P' }, 'linux')).toEqual({
+      shortcuts: {},
+      dropped: ['find']
+    })
   })
 })
 

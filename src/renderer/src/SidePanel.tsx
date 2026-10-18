@@ -22,9 +22,10 @@ function useWindowWidth(): number {
 }
 
 /**
- * The side panel at the right of an open card or shell (#55 D1), or of the board (#57 D1): a tab strip with a hide button,
- * the selected tab's body, and a left edge that resizes it (D4). Its width is the saved one kept
- * between 200 px and half the window; a drag shows each move and saves when it ends.
+ * The side panel at the right of an open card or shell (#55 D1), or of the board (#57 D1): a tab
+ * strip with a hide button, the selected tab's body, and a left edge that resizes it (D4). Its
+ * width is the saved one kept between 200 px and half the window; a drag shows each move and saves
+ * when it ends.
  */
 function SidePanel({
   folder,

@@ -6,7 +6,8 @@ import { expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// Colours, copy and paste in a card's terminal (#19: #1 AC6 and AC7 ported to the board).
+// Colours, copy and paste in a card's terminal (#19: #1 AC6 and AC7 ported to the board), then
+// Shift+Enter and clickable links (not specced: the terminal polish pass).
 // Linux runs drive Ctrl+Shift+C/V; Cmd+C/V on macOS is checked by hand.
 
 let app: ElectronApplication
@@ -226,7 +227,7 @@ test('AC3: paste with a newline reaches the shell', async () => {
     .toBe(true)
 })
 
-test('AC4: Shift+Enter reaches the shell as ESC CR, so Claude Code takes it as a new line', async () => {
+test('Shift+Enter reaches the shell as ESC CR, so Claude Code takes it as a new line', async () => {
   await page.locator(`${TERMINAL} .xterm-helper-textarea`).focus()
   await page.keyboard.type('echo od-ready; od -c')
   await page.keyboard.press('Enter')
@@ -300,7 +301,7 @@ async function clickText(text: string, withModifier: boolean): Promise<void> {
   if (withModifier) await page.keyboard.up(linkModifier)
 }
 
-test('AC5: a URL in the output opens in the browser on Mod+click, not on a plain click', async () => {
+test('a URL in the output opens in the browser on Mod+click, not on a plain click', async () => {
   const opened = await recordOpenedLinks()
   await printToTerm('\r\nLocal:   http://localhost:5173/app\r\n')
   await clickText('localhost:5173', false)
@@ -314,7 +315,7 @@ test('AC5: a URL in the output opens in the browser on Mod+click, not on a plain
     .toContain('http://localhost:5173/app')
 })
 
-test('AC6: an OSC 8 link opens its target on Mod+click', async () => {
+test('an OSC 8 link opens its target on Mod+click', async () => {
   const opened = await recordOpenedLinks()
   await printToTerm('\r\nsee \x1b]8;;https://example.com/docs\x07the docs\x1b]8;;\x07 here\r\n')
   await expect

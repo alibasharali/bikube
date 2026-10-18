@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, spawn, type SpawnOptions } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -15,6 +15,7 @@ import {
   gitIn,
   inRepository,
   listBranches,
+  spawnRunner,
   switchBranch,
   trackBranch,
   type GitCall,
@@ -116,6 +117,14 @@ describe('listBranches', () => {
   it('is null outside a repository', async () => {
     expect(await listBranches(dir, run)).toBeNull()
   })
+
+  it('marks the current branch when a tag has the same name, and pushes it as itself', async () => {
+    git(repo, 'switch', '-q', '-c', 'v1')
+    git(repo, 'tag', 'v1')
+    expect((await listBranches(repo, run))?.current).toBe('v1')
+    expect(await push(repo, run)).toEqual({ ok: true, note: 'Pushed' })
+    expect(git(remote, 'rev-parse', 'refs/heads/v1')).toBe(git(repo, 'rev-parse', 'HEAD'))
+  })
 })
 
 describe('switchBranch', () => {
@@ -176,6 +185,28 @@ describe('trackBranch', () => {
     expect(await trackBranch(repo, 'origin', 'feature', run)).toEqual({ ok: true })
     expect(git(repo, 'branch', '--show-current')).toBe('feature')
     expect(git(repo, 'branch', '--list', '--format=%(refname:short)')).toBe('feature\nmain')
+  })
+
+  it('tracks a branch of a remote whose name starts with a dash, as a ref', async () => {
+    git(repo, 'config', 'remote.-x.url', remote)
+    git(repo, 'config', 'remote.-x.fetch', '+refs/heads/*:refs/remotes/-x/*')
+    git(repo, 'fetch', '-q', '--', '-x')
+    const calls: string[][] = []
+    const spy = gitIn(async (call) => {
+      calls.push(call.args)
+      return runner(call)
+    }, process.env)
+    expect(await trackBranch(repo, '-x', 'remote-only', spy)).toEqual({ ok: true })
+    expect(calls).toContainEqual([
+      'switch',
+      '--no-guess',
+      '-c',
+      'remote-only',
+      '--track',
+      'refs/remotes/-x/remote-only'
+    ])
+    expect(git(repo, 'branch', '--show-current')).toBe('remote-only')
+    expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('-x/remote-only')
   })
 
   it('runs nothing for a remote branch the remote does not list', async () => {
@@ -427,6 +458,51 @@ describe('gitError', () => {
     )
   })
 
+  it("keeps git's refusal after a long fetch preamble", () => {
+    const updates = Array.from(
+      { length: 20 },
+      (_, i) => `   1a2b3c${i}..4d5e6f${i}  branch-${i}     -> origin/branch-${i}`
+    )
+    const stderr = [
+      'POST git-upload-pack (175 bytes)',
+      'Fetching origin',
+      'From https://example.com/team/project',
+      ...updates,
+      ' * [new branch]      topic      -> origin/topic',
+      ' + 0a1b2c3...4d5e6f7 forced     -> origin/forced  (forced update)',
+      ' - [deleted]         (none)     -> origin/gone',
+      'hint: Diverging branches can’t be fast-forwarded, you need to either:',
+      'hint:   git merge --no-ff',
+      'fatal: Not possible to fast-forward, aborting.',
+      ''
+    ].join('\n')
+    expect(gitError({ code: 128, stdout: '', stderr }, 'pull')).toBe(
+      'Not possible to fast-forward, aborting.'
+    )
+  })
+
+  it('drops progress and ref updates when git printed no error line', () => {
+    const stderr = [
+      'Fetching origin',
+      'From /tmp/remote',
+      '   1a2b3c4..4d5e6f7  main       -> origin/main',
+      'Something else went wrong',
+      ''
+    ].join('\n')
+    expect(gitError({ code: 1, stdout: '', stderr }, 'fetch')).toBe('Something else went wrong')
+  })
+
+  it('keeps the end of a long message of many lines', () => {
+    const lines = Array.from({ length: 30 }, (_, i) => `remote: line ${i} of the hook output`)
+    const stderr = [' ! [remote rejected] main -> main (pre-receive hook declined)', ...lines]
+      .concat('error: failed to push some refs')
+      .join('\n')
+    const message = gitError({ code: 1, stdout: '', stderr }, 'push')
+    expect(message.length).toBeLessThanOrEqual(400)
+    expect(message.startsWith('…\n')).toBe(true)
+    expect(message.endsWith('failed to push some refs')).toBe(true)
+  })
+
   it('trims a long message to 400 characters', () => {
     const message = gitError({ code: 1, stdout: '', stderr: `fatal: ${'x'.repeat(1000)}` }, 'push')
     expect(message).toHaveLength(400)
@@ -540,5 +616,44 @@ describe('gitIn', () => {
     }, base)(repo, ['status'])
     const status = calls.find((call) => call.args[0] === 'status')!
     expect(status.env.GIT_SSH_COMMAND).toBe('ssh -i /keys/repo -o BatchMode=yes')
+  })
+})
+
+describe('spawnRunner', () => {
+  it('runs git in a session of its own off Windows, so ssh has no terminal to ask on', async () => {
+    const options: SpawnOptions[] = []
+    const fake = ((command: string, args: string[], opts: SpawnOptions) => {
+      options.push(opts)
+      return spawn(command, args, opts)
+    }) as typeof spawn
+    const call = {
+      args: ['--version'],
+      cwd: dir,
+      env: { PATH: process.env.PATH! },
+      timeoutMs: 5000
+    }
+    const output = await spawnRunner(fake, 'linux')(call)
+    expect(output).toMatchObject({ code: 0, timedOut: false })
+    expect(output.stdout).toMatch(/^git version /)
+    expect(await spawnRunner(fake, 'win32')(call)).toMatchObject({ code: 0 })
+    expect(options.map((opts) => opts.detached)).toEqual([true, undefined])
+    expect(options[0]).toMatchObject({ cwd: dir, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+  })
+
+  it('reads a non-zero exit, and ends a command at its time limit', async () => {
+    const real = spawnRunner(spawn, process.platform)
+    const env = { PATH: process.env.PATH!, HOME: dir }
+    const failed = await real({ args: ['rev-parse', 'HEAD'], cwd: dir, env, timeoutMs: 5000 })
+    expect(failed).toMatchObject({ code: 128, timedOut: false })
+    expect(failed.stderr).toMatch(/not a git repository/)
+    const started = Date.now()
+    const slow = await real({
+      args: ['-c', 'alias.slow=!sleep 30', 'slow'],
+      cwd: dir,
+      env,
+      timeoutMs: 300
+    })
+    expect(slow.timedOut).toBe(true)
+    expect(Date.now() - started).toBeLessThan(5000)
   })
 })

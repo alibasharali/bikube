@@ -56,14 +56,17 @@ export function refreshBranch(dir: string): void {
   read(dir)
 }
 
-/** The branch checked out in `dir` (a local folder), or null when unknown or not a repository. */
-export function useBranch(dir: string | null): Branch {
+/**
+ * The branch checked out in `dir` (a local folder): undefined until first read, null when it
+ * isn't a repository (or no longer exists) and for no folder.
+ */
+export function useBranch(dir: string | null): Branch | undefined {
   useEffect(() => (dir ? watch(dir) : undefined), [dir])
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    () => (dir ? (branches.get(dir) ?? null) : null)
+    () => (dir ? branches.get(dir) : null)
   )
 }

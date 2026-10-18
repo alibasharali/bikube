@@ -427,3 +427,73 @@ test('while Fetch runs, the menu shows Fetching… and every action waits', asyn
     server.close()
   }
 })
+
+test('a running command outlives its chip: a new chip shows it busy, then its result', async () => {
+  const held: ServerResponse[] = []
+  const server = await httpOrigin((response) => held.push(response))
+  try {
+    await chip().click()
+    await menu().getByTestId('branch-fetch').click()
+    await expect(menu().getByTestId('branch-busy')).toHaveText('Fetching…')
+    await expect.poll(() => held.length).toBeGreaterThan(0)
+    await page.keyboard.press('Escape')
+    await expect(menu()).toHaveCount(0)
+
+    // Opening a card shows the chip anew (the same folder): still Fetching…, nothing to start.
+    await page.getByTestId('column').first().getByTestId('new-card').click()
+    await page.getByTestId('new-card-input').fill('Plain')
+    await page.getByTestId('new-card-input').press('Enter')
+    await expectCardOpen(page, 'Plain')
+    await chip().click()
+    await expect(menu().getByTestId('branch-busy')).toHaveText('Fetching…')
+    for (const action of ['branch-new', 'branch-fetch', 'branch-pull', 'branch-push']) {
+      await expect(menu().getByTestId(action)).toBeDisabled()
+    }
+
+    for (const response of held.splice(0)) response.writeHead(404).end()
+    await expect(menu().getByTestId('branch-busy')).toHaveCount(0)
+    await expect(error()).toBeVisible()
+    await expect(menu().getByTestId('branch-fetch')).toBeEnabled()
+    // Back on the board, its menu shows the same result.
+    await page.keyboard.press('Escape')
+    await backToBoard(page)
+    await chip().click()
+    await expect(error()).toBeVisible()
+  } finally {
+    for (const response of held) response.destroy()
+    server.close()
+  }
+})
+
+test('a folder that is no longer a repository says so, every action disabled', async () => {
+  // The folder stops being a repository between the chip's last read and the menu's: main
+  // answers the menu's read as it does outside a repository.
+  await app!.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('git:branches')
+    ipcMain.handle('git:branches', () => null)
+  })
+  await chip().click()
+  await expect(menu().getByTestId('branch-not-repository')).toHaveText('Not a git repository')
+  await expect(menu().getByText('Reading branches…')).toHaveCount(0)
+  await expect(menu().getByTestId('branch-item')).toHaveCount(0)
+  for (const action of ['branch-new', 'branch-fetch', 'branch-pull', 'branch-push']) {
+    await expect(menu().getByTestId(action)).toBeDisabled()
+  }
+})
+
+test('a worktree card whose directory is gone shows no chip, not its saved branch', async () => {
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Card one')
+  await page.getByTestId('new-card-worktree').check()
+  await page.getByTestId('new-card-branch').fill('card-1')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'Card one')
+  await expect(chip()).toHaveText('card-1')
+  const worktree = git(repo, 'worktree', 'list', '--porcelain')
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => line.slice('worktree '.length))
+    .find((path) => path !== repo)!
+  rmSync(worktree, { recursive: true, force: true })
+  await expect(chip()).toHaveCount(0, { timeout: 10_000 })
+})

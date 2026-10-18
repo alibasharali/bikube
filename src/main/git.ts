@@ -1,5 +1,5 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import {
@@ -11,32 +11,16 @@ import {
   listBranches,
   pull,
   push,
+  spawnRunner,
   switchBranch,
   trackBranch,
   type AheadBehind,
   type BranchList,
   type NewBranchResult,
   type GitResult,
-  type GitRunner,
   type SyncResult
 } from '../core/git'
 import { IPC } from '../shared/api'
-
-/** git without a shell, stdin closed, killed at the call's time limit (D12). */
-const runner: GitRunner = ({ args, cwd, env, timeoutMs }) =>
-  new Promise((done) => {
-    const child = execFile(
-      'git',
-      args,
-      { cwd, env, timeout: timeoutMs, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        const timedOut = error !== null && error.killed === true
-        const code = error ? (typeof error.code === 'number' ? error.code : 1) : 0
-        done({ code, stdout, stderr, timedOut })
-      }
-    )
-    child.stdin?.end()
-  })
 
 /** `value` when it is an absolute path to an existing folder, else null. */
 const folder = async (value: unknown): Promise<string | null> => {
@@ -59,7 +43,23 @@ const NO_REPOSITORY: { ok: false; reason: string } = { ok: false, reason: 'not a
  * are passed (as single arguments) and requests come from the main frame only (D15).
  */
 export function registerGit(): void {
-  const git = gitIn(runner, process.env)
+  const git = gitIn(spawnRunner(spawn, process.platform), process.env)
+  /**
+   * The last menu request queued for each folder (D13): each one starts once the one before it
+   * in that folder has ended, so two never run in one repository at once (index and ref locks),
+   * even from two chips for the same folder.
+   */
+  const queues = new Map<string, Promise<unknown>>()
+  const queued = <T>(dir: string, work: () => Promise<T>): Promise<T> => {
+    const before = queues.get(dir) ?? Promise.resolve()
+    const next = before.then(work, work)
+    const tail = next.catch(() => undefined)
+    queues.set(dir, tail)
+    void tail.then(() => {
+      if (queues.get(dir) === tail) queues.delete(dir)
+    })
+    return next
+  }
   const guard = (event: IpcMainInvokeEvent, channel: string): void => {
     if (event.senderFrame === null || event.senderFrame !== event.sender.mainFrame) {
       throw new Error(`${channel} rejected: untrusted sender`)
@@ -83,7 +83,7 @@ export function registerGit(): void {
       const at = await repository(dir)
       if (!at) return NO_REPOSITORY
       if (typeof branch !== 'string') return { ok: false, reason: 'Not a valid branch name' }
-      return switchBranch(at, branch, git)
+      return queued(at, () => switchBranch(at, branch, git))
     }
   )
   ipcMain.handle(
@@ -95,7 +95,7 @@ export function registerGit(): void {
       if (typeof remote !== 'string' || typeof branch !== 'string') {
         return { ok: false, reason: 'Not a valid branch name' }
       }
-      return trackBranch(at, remote, branch, git)
+      return queued(at, () => trackBranch(at, remote, branch, git))
     }
   )
   ipcMain.handle(
@@ -106,7 +106,7 @@ export function registerGit(): void {
       if (!at) return NO_REPOSITORY
       if (typeof name !== 'string')
         return { ok: false, reason: 'Not a valid branch name', name: true }
-      return createBranch(at, name, git)
+      return queued(at, () => createBranch(at, name, git))
     }
   )
   ipcMain.handle(IPC.gitAheadBehind, async (event, dir: unknown): Promise<AheadBehind | null> => {
@@ -118,7 +118,7 @@ export function registerGit(): void {
     ipcMain.handle(channel, async (event, dir: unknown): Promise<SyncResult> => {
       guard(event, channel)
       const at = await repository(dir)
-      return at ? command(at, git) : NO_REPOSITORY
+      return at ? queued(at, () => command(at, git)) : NO_REPOSITORY
     })
   }
   sync(IPC.gitFetch, fetchAll)

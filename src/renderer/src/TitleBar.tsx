@@ -37,8 +37,9 @@ function TitleBar({
   const worktree = local && card?.worktree ? card : null
   const dir = worktree ? worktree.directory : (local?.directory ?? null)
   const live = useBranch(dir)
-  // A worktree card shows its saved branch until its live one is read (D3).
-  const branch = worktree ? (live ?? worktree.worktree!.branch) : live
+  // A worktree card shows its saved branch until its live one is first read (D3); then none when
+  // its directory is no longer a repository.
+  const branch = worktree && live === undefined ? worktree.worktree!.branch : live
   useEffect(() => {
     document.title = title
   }, [title])

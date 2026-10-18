@@ -9,14 +9,8 @@ import {
   TreePine
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type {
-  AheadBehind,
-  BranchList,
-  GitResult,
-  NewBranchResult,
-  SyncResult
-} from '../../core/git'
-import { refreshBranch } from './branches'
+import type { AheadBehind, BranchList } from '../../core/git'
+import { clearGitResult, runGit, useGitRun, type GitCommandResult } from './git-runs'
 import { MENU_ICON, SMALL_ICON } from './icons'
 
 /**
@@ -26,8 +20,10 @@ import { MENU_ICON, SMALL_ICON } from './icons'
  * or Create makes the branch at HEAD and switches to it, Esc returns to the lists. Esc, a click
  * outside, a switch or a new branch closes it; git's refusal keeps it open with git's message
  * (D6). Fetch, Pull and Push keep it open with a note and read it again (D8, D9); its header shows
- * how far the current branch is from its upstream (D10). One command at a time, every action
- * disabled meanwhile; it keeps running when the menu is closed (D13).
+ * how far the current branch is from its upstream (D10). One command at a time per folder, every
+ * action disabled meanwhile in every chip for that folder; it keeps running when the menu is
+ * closed or the chip goes away, and a reopened menu shows its result (D13, `git-runs`). A folder
+ * that isn't a repository (any more) says so, with every action disabled.
  */
 export function BranchChip({
   dir,
@@ -42,12 +38,13 @@ export function BranchChip({
   worktree?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const [list, setList] = useState<BranchList | null>(null)
-  /** What is running (`Switching…`), null when idle; every action waits for it (D13). */
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  /** What the last Fetch, Pull or Push did (`Fetched`), shown until the next command. */
-  const [note, setNote] = useState<string | null>(null)
+  /** The folder's branches; undefined until read, null when it isn't a repository. */
+  const [list, setList] = useState<BranchList | null | undefined>(undefined)
+  /**
+   * What is running in the folder (`Switching…`), null when idle, every action waiting for it
+   * (D13); git's message when the last command failed; what the last Fetch, Pull or Push did.
+   */
+  const { busy, error, note } = useGitRun(dir)
   /** The current branch against its upstream; null without one, undefined until read (D10). */
   const [sync, setSync] = useState<AheadBehind | null | undefined>(undefined)
   /** The element focused when a command started, focused again when it ends. */
@@ -146,16 +143,23 @@ export function BranchChip({
       setOpen(false)
       return
     }
-    setList(null)
+    setList(undefined)
     setSync(undefined)
-    setError(null)
-    setNote(null)
     setNaming(null)
     setNameProblem(null)
     setOpen(true)
     openRef.current = true
     load()
   }
+
+  // When the folder's command ends (started here or in a chip since gone), read the menu again.
+  const wasBusy = useRef(busy)
+  useEffect(() => {
+    const ended = wasBusy.current !== null && busy === null
+    wasBusy.current = busy
+    if (ended && openRef.current) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` reads only refs and `dir`
+  }, [busy])
 
   // A command's disabled buttons lose the focus: give it back when the command ends, to the name
   // field when the name was refused (D7), else to what had it.
@@ -172,33 +176,21 @@ export function BranchChip({
   }, [busy, nameProblem])
 
   /**
-   * Runs one git command: busy meanwhile, then the chip re-read. A switch or a new branch closes
-   * the menu on success; Fetch, Pull and Push show their note and read the menu again.
+   * Runs one git command as the folder's one command (`runGit`: busy meanwhile, its note or error
+   * kept, the chip re-read). A switch or a new branch closes the menu on success; a refused name
+   * shows under the field; the menu is read again when the command ends (above).
    */
-  const act = async (
-    label: string,
-    command: () => Promise<GitResult | NewBranchResult | SyncResult>
-  ): Promise<void> => {
+  const act = async (label: string, command: () => Promise<GitCommandResult>): Promise<void> => {
     if (busy) return
     returnFocus.current = document.activeElement
-    setBusy(label)
-    setError(null)
-    setNote(null)
-    const result = await command()
-    setBusy(null)
-    refreshBranch(dir)
-    if (result.ok && 'note' in result) {
-      setNote(result.note)
-      load()
-    } else if (result.ok) {
+    const result = await runGit(dir, label, command)
+    if (!result) return
+    if (result.ok && !('note' in result)) {
       const active = document.activeElement
       const inMenu = active === document.body || (root.current?.contains(active) ?? false)
       if (openRef.current) close(inMenu)
-    } else if ('name' in result && result.name) {
+    } else if (!result.ok && 'name' in result && result.name) {
       setNameProblem(result.reason)
-    } else {
-      setError(result.reason)
-      load()
     }
   }
 
@@ -232,12 +224,11 @@ export function BranchChip({
   }
 
   const Icon = worktree ? TreePine : GitBranch
-  const detached = list !== null && list.current === null
+  const detached = list != null && list.current === null
   /** Runs the action `testId` names: New branch shows the name field, the others run git. */
   const runAction = (testId: string): void => {
     if (testId === 'branch-new') {
-      setError(null)
-      setNote(null)
+      clearGitResult(dir)
       setNameProblem(null)
       setNaming('')
     } else if (testId === 'branch-fetch') {
@@ -371,8 +362,12 @@ export function BranchChip({
             </form>
           ) : (
             <div className="branch-menu-lists">
-              {list === null ? (
+              {list === undefined ? (
                 <p className="menu-hint branch-menu-loading">Reading branches…</p>
+              ) : list === null ? (
+                <p className="menu-hint" data-testid="branch-not-repository">
+                  Not a git repository
+                </p>
               ) : (
                 <>
                   <BranchSection
@@ -406,7 +401,7 @@ export function BranchChip({
                   role="menuitem"
                   className="menu-item"
                   data-testid={testId}
-                  disabled={busy !== null || list === null || (needsBranch && detached)}
+                  disabled={busy !== null || !list || (needsBranch && detached)}
                   onClick={() => runAction(testId)}
                 >
                   <ActionIcon {...MENU_ICON} />

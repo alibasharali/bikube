@@ -338,6 +338,14 @@ describe('fetchAll', () => {
     }
   })
 
+  it('says so when the repository has no remote, instead of Fetched', async () => {
+    git(repo, 'remote', 'remove', 'origin')
+    expect(await fetchAll(repo, run)).toEqual({
+      ok: false,
+      reason: 'This repository has no remote'
+    })
+  })
+
   it('reads a timeout as such', async () => {
     const timedOut: GitRunner = async (call) =>
       call.args[0] === 'fetch'
@@ -385,6 +393,70 @@ describe('pull', () => {
     git(repo, 'switch', '-q', '--detach')
     expect(await pull(repo, spy)).toEqual({ ok: false, reason: 'Not on a branch' })
     expect(calls.filter((args) => args[0] === 'pull')).toEqual([])
+  })
+})
+
+describe('pull without an upstream', () => {
+  /** `repo`'s `main` with its upstream unset, as after `git init` and `git remote add`. */
+  const untrack = (): void => {
+    git(repo, 'branch', '--unset-upstream')
+  }
+
+  it("tracks the remote's branch of the same name, then pulls", async () => {
+    untrack()
+    const other = otherClone()
+    commit(other, 'b.txt', 'theirs\n', 'theirs')
+    git(other, 'push', '-q', 'origin', 'main')
+    git(repo, 'fetch', '-q')
+    expect(await pull(repo, run)).toEqual({ ok: true, note: 'Pulled · now tracking origin/main' })
+    expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/main')
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(git(other, 'rev-parse', 'HEAD'))
+  })
+
+  it('says when it was already up to date', async () => {
+    untrack()
+    expect(await pull(repo, run)).toEqual({
+      ok: true,
+      note: 'Already up to date · now tracking origin/main'
+    })
+  })
+
+  it('prefers origin, else the one remote with that branch', async () => {
+    untrack()
+    git(repo, 'remote', 'add', 'aaa', remote)
+    git(repo, 'fetch', '-q', 'aaa')
+    await pull(repo, run)
+    expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/main')
+    git(repo, 'branch', '--unset-upstream')
+    git(repo, 'remote', 'remove', 'origin')
+    await pull(repo, run)
+    expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('aaa/main')
+  })
+
+  it('tracks nothing when two remotes other than origin have the branch', async () => {
+    untrack()
+    git(repo, 'remote', 'rename', 'origin', 'one')
+    git(repo, 'remote', 'add', 'two', remote)
+    git(repo, 'fetch', '-q', 'two')
+    expect(await pull(repo, run)).toEqual({
+      ok: false,
+      reason: 'No upstream: main is on more than one remote'
+    })
+    expect(() => git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toThrow()
+  })
+
+  it('says Push creates it when no remote has the branch', async () => {
+    git(repo, 'switch', '-q', '-c', 'topic/new')
+    expect(await pull(repo, run)).toEqual({
+      ok: false,
+      reason: 'No origin/topic/new to pull from: Push creates it'
+    })
+  })
+
+  it('says so when the repository has no remote', async () => {
+    untrack()
+    git(repo, 'remote', 'remove', 'origin')
+    expect(await pull(repo, run)).toEqual({ ok: false, reason: 'This repository has no remote' })
   })
 })
 

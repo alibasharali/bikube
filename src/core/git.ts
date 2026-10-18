@@ -368,9 +368,20 @@ function synced(output: GitOutput, command: string, note: string): SyncResult {
     : { ok: false, reason: gitError(output, command) }
 }
 
+const NO_REMOTE: SyncResult = { ok: false, reason: 'This repository has no remote' }
+
+/** The repository's remotes by name; empty when it has none. */
+async function remoteNames(dir: string, run: Git): Promise<string[]> {
+  const output = await run(dir, ['remote'])
+  return output.code === 0 ? output.stdout.split('\n').filter(Boolean) : []
+}
+
 /** Fetches every remote, removing remote branches deleted there (D8: `git fetch --all --prune`). */
 export async function fetchAll(dir: string, run: Git): Promise<SyncResult> {
-  return synced(await run(dir, ['fetch', '--all', '--prune']), 'fetch', 'Fetched')
+  const result = synced(await run(dir, ['fetch', '--all', '--prune']), 'fetch', 'Fetched')
+  // With no remote git fetches nothing and still succeeds.
+  if (result.ok && (await remoteNames(dir, run)).length === 0) return NO_REMOTE
+  return result
 }
 
 /** The checked-out branch; null on a detached HEAD or outside a repository. */
@@ -394,15 +405,57 @@ const NOT_ON_BRANCH: SyncResult = { ok: false, reason: 'Not on a branch' }
  * is refused with git's message (D6). `Already up to date` when HEAD didn't move.
  */
 export async function pull(dir: string, run: Git): Promise<SyncResult> {
-  if (!(await currentBranch(dir, run))) return NOT_ON_BRANCH
+  const branch = await currentBranch(dir, run)
+  if (!branch) return NOT_ON_BRANCH
+  let tracking = ''
+  if (!(await hasUpstream(dir, run))) {
+    const adopted = await adoptUpstream(dir, branch, run)
+    if (!adopted.ok) return adopted
+    tracking = ` · now tracking ${adopted.note}`
+  }
   const before = await run(dir, ['rev-parse', 'HEAD'])
   const output = await run(dir, ['pull', '--ff-only'])
   const result = synced(output, 'pull', 'Pulled')
   if (!result.ok) return result
   const after = await run(dir, ['rev-parse', 'HEAD'])
-  return before.code === 0 && after.code === 0 && before.stdout === after.stdout
-    ? { ok: true, note: 'Already up to date' }
-    : result
+  const moved = !(before.code === 0 && after.code === 0 && before.stdout === after.stdout)
+  return { ok: true, note: `${moved ? 'Pulled' : 'Already up to date'}${tracking}` }
+}
+
+async function hasUpstream(dir: string, run: Git): Promise<boolean> {
+  const output = await run(dir, [
+    'rev-parse',
+    '--abbrev-ref',
+    '--symbolic-full-name',
+    '@{upstream}'
+  ])
+  return output.code === 0 && !output.timedOut
+}
+
+/**
+ * Makes the remote branch named like `branch` its upstream, as of the last fetch: `origin`'s, else
+ * the one remote's that has it. The note is the upstream's name (`origin/main`).
+ */
+async function adoptUpstream(dir: string, branch: string, run: Git): Promise<SyncResult> {
+  const list = await listBranches(dir, run)
+  if (!list || list.remotes.length === 0) return NO_REMOTE
+  const having = list.remotes.filter((r) => r.branches.includes(branch)).map((r) => r.name)
+  const remote = having.includes('origin') ? 'origin' : having.length === 1 ? having[0] : undefined
+  if (!remote) {
+    if (having.length > 1)
+      return { ok: false, reason: `No upstream: ${branch} is on more than one remote` }
+    return list.remotes.some((r) => r.name === 'origin')
+      ? { ok: false, reason: `No origin/${branch} to pull from: Push creates it` }
+      : { ok: false, reason: `No upstream, and no remote has ${branch}` }
+  }
+  // The upstream as a full ref, so a remote named like `-x` never reads as an option; git refuses
+  // branch names that start with `-`, and takes the local branch only by its short name.
+  const output = await run(dir, [
+    'branch',
+    `--set-upstream-to=refs/remotes/${remote}/${branch}`,
+    branch
+  ])
+  return synced(output, 'branch', `${remote}/${branch}`)
 }
 
 /**

@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { execFileSync } from 'node:child_process'
 import { createServer, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
@@ -206,7 +206,8 @@ test("with a worktree card open, the menu switches the card's worktree, and the 
     .split('\n')
     .filter((line) => line.startsWith('worktree '))
     .map((line) => line.slice('worktree '.length))
-    .find((path) => path !== repo)!
+    // git prints real paths: on macOS the temp folder is /private/var behind /var.
+    .find((path) => path !== realpathSync(repo))!
 
   await chip().click()
   await expect(section('Local').first()).toHaveText('card-1')
@@ -352,6 +353,31 @@ test('Pull fast-forwards a branch behind its upstream, and refuses a diverged on
   await expect(error()).toContainText('Not possible to fast-forward')
   await expect(note()).toHaveCount(0)
   expect(git(repo, 'rev-parse', 'HEAD')).toBe(head)
+})
+
+test("Pull without an upstream tracks the remote's branch of the same name, then pulls", async () => {
+  git(repo, 'branch', '--unset-upstream')
+  const theirs = theirCommit()
+  await chip().click()
+  await expect(header()).toHaveText('No upstream')
+  await menu().getByTestId('branch-fetch').click()
+  await expect(note()).toHaveText('Fetched')
+  await menu().getByTestId('branch-pull').click()
+  await expect(note()).toHaveText('Pulled · now tracking origin/main')
+  await expect(header()).toHaveText('↑0 ↓0')
+  expect(git(repo, 'rev-parse', 'HEAD')).toBe(theirs)
+  expect(git(repo, 'rev-parse', '--abbrev-ref', '@{upstream}')).toBe('origin/main')
+})
+
+test('a repository with no remote reads No remote, and Fetch and Pull say so', async () => {
+  git(repo, 'remote', 'remove', 'origin')
+  await chip().click()
+  await expect(header()).toHaveText('No remote')
+  await menu().getByTestId('branch-fetch').click()
+  await expect(error()).toHaveText('This repository has no remote')
+  await expect(note()).toHaveCount(0)
+  await menu().getByTestId('branch-pull').click()
+  await expect(error()).toHaveText('This repository has no remote')
 })
 
 test("Push pushes a new branch to origin as its upstream; a rejection is git's, never forced", async () => {

@@ -310,10 +310,16 @@ export function BranchChip({
                 title={
                   sync
                     ? 'Commits ahead of and behind its upstream, as of the last fetch'
-                    : 'This branch tracks no remote branch'
+                    : list.remotes.length === 0
+                      ? 'This repository has no remote'
+                      : 'This branch tracks no remote branch'
                 }
               >
-                {sync ? `↑${sync.ahead} ↓${sync.behind}` : 'No upstream'}
+                {sync
+                  ? `↑${sync.ahead} ↓${sync.behind}`
+                  : list.remotes.length === 0
+                    ? 'No remote'
+                    : 'No upstream'}
               </span>
             </div>
           )}

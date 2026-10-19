@@ -8,7 +8,7 @@ import {
   Settings,
   Trash2
 } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { hoverHalf } from '../../core/card-drops'
 import {
   keyMoveIndex,
@@ -17,7 +17,9 @@ import {
   workspaceMoveKey,
   type WorkspaceHover
 } from '../../core/workspace-drops'
+import { waitingCounts } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
+import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
@@ -70,6 +72,8 @@ function Sidebar({
   // The row a keyboard move just moved: it takes focus back once it has re-rendered (D5).
   const focusAfterMove = useRef<string | null>(null)
   const ids = workspaces.map((w) => w.id)
+  const queue = useWaitingQueue()
+  const waiting = useMemo(() => waitingCounts(queue, workspaces), [queue, workspaces])
 
   useLayoutEffect(() => {
     const id = focusAfterMove.current
@@ -209,6 +213,7 @@ function Sidebar({
       >
         {workspaces.map((w) => {
           const active = w.id === activeId
+          const count = waiting.get(w.id) ?? 0
           return (
             <li
               key={w.id}
@@ -221,7 +226,13 @@ function Sidebar({
                 className={active ? 'workspace-item active' : 'workspace-item'}
                 data-testid="workspace-item"
                 aria-current={active ? 'true' : undefined}
-                aria-label={collapsed ? w.name : undefined}
+                aria-label={
+                  collapsed
+                    ? count > 0
+                      ? `${w.name}, ${waitingTooltip(count)}`
+                      : w.name
+                    : undefined
+                }
                 title={
                   collapsed
                     ? w.name
@@ -235,10 +246,23 @@ function Sidebar({
                 onClick={() => onSelect(w.id)}
                 onKeyDown={(e) => onKeyDown(e, w.id)}
               >
-                <WorkspaceBadge workspace={w} />
+                <WorkspaceBadge workspace={w} waiting={collapsed ? count : 0} />
                 {!collapsed && <WorkspaceName workspace={w} />}
                 {!collapsed && w.host !== undefined && (
                   <Server className="workspace-ssh" {...SMALL_ICON} />
+                )}
+                {!collapsed && count > 0 && (
+                  <>
+                    <span
+                      className="workspace-waiting"
+                      data-testid="workspace-waiting"
+                      title={waitingTooltip(count)}
+                      aria-hidden="true"
+                    >
+                      {count}
+                    </span>
+                    <span className="visually-hidden">, {waitingTooltip(count)}</span>
+                  </>
                 )}
               </button>
               {!collapsed && (
@@ -308,8 +332,20 @@ function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   )
 }
 
-/** The row's badge: its logo's icon (#59 D4), else the name's initial. */
-function WorkspaceBadge({ workspace }: { workspace: Workspace }): React.JSX.Element {
+/** The tooltip of a workspace's waiting count (#41 D6). */
+const waitingTooltip = (count: number): string => `${count} waiting for you`
+
+/**
+ * The row's badge: its logo's icon (#59 D4), else the name's initial; in the collapsed sidebar,
+ * with a dot counting its waiting cards and shells on the corner when any wait (#41 D6).
+ */
+function WorkspaceBadge({
+  workspace,
+  waiting
+}: {
+  workspace: Workspace
+  waiting: number
+}): React.JSX.Element {
   const Icon = workspace.logo && LOGO_ICONS[workspace.logo]
   return (
     <span
@@ -319,6 +355,15 @@ function WorkspaceBadge({ workspace }: { workspace: Workspace }): React.JSX.Elem
       aria-hidden="true"
     >
       {Icon ? <Icon {...LOGO_ICON} /> : workspaceInitial(workspace.name)}
+      {waiting > 0 && (
+        <span
+          className="workspace-waiting-dot"
+          data-testid="workspace-waiting-dot"
+          title={waitingTooltip(waiting)}
+        >
+          {waiting}
+        </span>
+      )}
     </span>
   )
 }

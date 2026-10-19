@@ -7,6 +7,7 @@ import { ACTIVITY_LABELS, type Activity } from './activity'
 import { SHORTCUT_LABELS, type Keymap } from './keymap'
 import type { Theme } from './settings'
 import { MAX_PANES } from './split-tree'
+import { nextWaitingCard } from './waiting'
 import { shellCards } from './workspace-shells'
 import {
   cardsInColumn,
@@ -99,6 +100,7 @@ export type PaletteAction =
   | { id: 'moveCard'; columnId: string }
   | { id: 'newCard' }
   | { id: 'openShell' }
+  | { id: 'nextWaiting' }
   | { id: 'newWorkspace' }
   | { id: 'settings' }
   | { id: 'theme'; theme: Theme }
@@ -145,6 +147,8 @@ export interface PaletteInput {
   theme: Theme
   keymap: Keymap
   platform: string
+  /** The waiting cards' and shells' ids, oldest first (#41 D2). */
+  waiting: readonly string[]
 }
 
 const DEFAULT_SHELL_TITLE = 'Default shell'
@@ -240,6 +244,10 @@ function actionRows(input: PaletteInput): ActionRow[] {
   if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
+  }
+  // Only when the Next waiting card shortcut would open something (#41 D7).
+  if (nextWaitingCard(input.waiting, view?.cardId ?? null, state.workspaces)) {
+    rows.push(keymapRow('nextWaiting', keymap))
   }
   rows.push({ kind: 'action', action: { id: 'newWorkspace' }, label: 'New workspace' })
   rows.push(keymapRow('settings', keymap))

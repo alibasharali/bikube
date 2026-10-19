@@ -363,6 +363,49 @@ button {
   white-space: nowrap;
 }
 
+/* A workspace's waiting cards and shells (#41 D6): an amber pill at the row's right end, in the
+   colour of the Needs your answer pill, and in the collapsed sidebar a dot on the badge. */
+.workspace-badge {
+  position: relative;
+}
+
+.workspace-waiting {
+  flex: none;
+  min-width: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--pill-question-bg);
+  color: var(--pill-question-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Stays visible left of the edit and delete buttons when they show. */
+.workspace-row:hover .workspace-waiting,
+.workspace-row:focus-within .workspace-waiting {
+  margin-right: calc(2 * 28px + 2 * var(--space-1) + var(--space-1) - var(--space-2));
+}
+
+.workspace-waiting-dot {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--pill-question-text);
+  box-shadow: 0 0 0 2px var(--surface);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
 /* An SSH workspace's marker (#31 D17). */
 .workspace-ssh {
   flex: none;

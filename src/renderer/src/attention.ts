@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from 'react'
 import { ACTIVITY_LABELS, type Activity } from '../../core/activity'
+import { isWaiting, withActivity, withoutDeleted } from '../../core/waiting'
 import { playTone } from './bell'
 import { cardTerminals } from './card-terminals'
 import { settingsStore } from './settings'
@@ -8,12 +10,12 @@ import { workspaceStore } from './store'
  * Telling the user when an agent needs them: a notification (with a tone, when on) as a card's
  * activity becomes Waiting for you or Needs your answer, unless that card is open in the focused
  * window; the Dock badge counts the cards waiting. Clicking a notification opens its card.
+ * The waiting cards and shells, oldest first (#41 D2), are a queue the sidebar follows.
  */
 
-const NEEDS_YOU: ReadonlySet<Activity> = new Set(['waiting', 'question'])
-
-/** The cards whose agent waits for the user now, for the badge. */
-const waiting = new Set<string>()
+/** The cards and shells whose agent waits for the user now, oldest first (#41 D1, D2). */
+let waiting: readonly string[] = []
+const waitingListeners = new Set<() => void>()
 /** The card open at full size, which the user is looking at while the window has focus. */
 let lookingAt: string | null = null
 let openRequest: ((workspaceId: string, cardId: string) => void) | null = null
@@ -32,8 +34,31 @@ export function onOpenRequest(handler: (workspaceId: string, cardId: string) => 
   }
 }
 
+/** The waiting cards' and shells' ids, oldest first (#41 D2). */
+export function waitingQueue(): readonly string[] {
+  return waiting
+}
+
+/** Calls `listener` each time the waiting queue changes. Returns an unsubscribe function. */
+export function subscribeWaiting(listener: () => void): () => void {
+  waitingListeners.add(listener)
+  return () => waitingListeners.delete(listener)
+}
+
+/** The waiting queue, re-rendering as it changes (#41 D6). */
+export function useWaitingQueue(): readonly string[] {
+  return useSyncExternalStore(subscribeWaiting, waitingQueue)
+}
+
+function setWaiting(next: readonly string[]): void {
+  if (next === waiting) return
+  waiting = next
+  updateBadge()
+  for (const listener of waitingListeners) listener()
+}
+
 function updateBadge(): void {
-  window.drovr.app.setBadge(settingsStore.get().notifications ? waiting.size : 0)
+  window.drovr.app.setBadge(settingsStore.get().notifications ? waiting.length : 0)
 }
 
 function cardOf(cardId: string): { workspaceId: string; workspace: string; title: string } | null {
@@ -72,22 +97,12 @@ export function startAttention(): void {
   if (started) return
   started = true
   cardTerminals().onActivity((cardId, activity) => {
-    const was = waiting.has(cardId)
-    if (activity && NEEDS_YOU.has(activity)) waiting.add(cardId)
-    else waiting.delete(cardId)
-    if (waiting.has(cardId) !== was) updateBadge()
-    if (activity && NEEDS_YOU.has(activity)) notify(cardId, activity)
+    setWaiting(withActivity(waiting, cardId, activity))
+    if (activity && isWaiting(activity)) notify(cardId, activity)
   })
-  // A deleted card no longer waits.
+  // A deleted card or shell no longer waits; a workspace's Default shell isn't stored, but stays.
   workspaceStore.subscribe(() => {
-    const ids = new Set(
-      workspaceStore.getState().workspaces.flatMap((w) => w.cards.map((c) => c.id))
-    )
-    let changed = false
-    for (const id of waiting) {
-      if (!ids.has(id)) changed = waiting.delete(id) || changed
-    }
-    if (changed) updateBadge()
+    setWaiting(withoutDeleted(waiting, workspaceStore.getState().workspaces))
   })
   // Turning notifications off clears the badge; on brings it back.
   let notifications = settingsStore.get().notifications

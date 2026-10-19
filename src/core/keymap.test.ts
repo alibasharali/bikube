@@ -36,7 +36,8 @@ describe('defaultKeymap (#31 D6)', () => {
       openShell: 'Cmd+T',
       togglePanel: 'Alt+Cmd+B',
       find: 'Cmd+F',
-      palette: 'Cmd+K'
+      palette: 'Cmd+K',
+      nextWaiting: 'Cmd+J'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -49,7 +50,8 @@ describe('defaultKeymap (#31 D6)', () => {
         openShell: 'Ctrl+Shift+T',
         togglePanel: 'Ctrl+Alt+B',
         find: 'Ctrl+Shift+F',
-        palette: 'Ctrl+Shift+P'
+        palette: 'Ctrl+Shift+P',
+        nextWaiting: 'Ctrl+Shift+J'
       })
     }
   })
@@ -85,6 +87,34 @@ describe('Command palette (#40 D1)', () => {
       shortcuts: {},
       dropped: ['find']
     })
+  })
+})
+
+describe('Next waiting card (#41 D3)', () => {
+  it('is a configurable action named Next waiting card: Cmd+J on macOS, Ctrl+Shift+J elsewhere', () => {
+    expect(SHORTCUT_LABELS.nextWaiting).toBe('Next waiting card')
+    expect(keymapAction(press('j', { metaKey: true }), defaultKeymap('darwin'))).toBe('nextWaiting')
+    expect(
+      keymapAction(press('J', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('nextWaiting')
+    // Off macOS Ctrl+J stays the shell's newline.
+    expect(keymapAction(press('j', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+  })
+
+  it('can be recorded as another key, saved only when it differs, and Reset (AC8)', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('j', { ctrlKey: true, altKey: true }), 'nextWaiting', keymap, 'linux')
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+J' })
+    const next = resolveKeymap({ nextWaiting: 'Ctrl+Alt+J' }, 'linux')
+    expect(keymapAction(press('J', { ctrlKey: true, shiftKey: true }), next)).toBeNull()
+    expect(keymapAction(press('j', { ctrlKey: true, altKey: true }), next)).toBe('nextWaiting')
+    expect(shortcutOverrides(next, 'linux')).toEqual({ nextWaiting: 'Ctrl+Alt+J' })
+    expect(readShortcuts({ nextWaiting: 'Ctrl+Alt+J' }, 'linux')).toEqual({
+      shortcuts: { nextWaiting: 'Ctrl+Alt+J' },
+      dropped: []
+    })
+    expect(resetRefusal('nextWaiting', next, 'linux')).toBeNull()
   })
 })
 

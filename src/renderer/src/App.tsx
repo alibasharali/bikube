@@ -12,7 +12,8 @@ import {
   selectWorkspace,
   type ViewMemory
 } from '../../core/view-memory'
-import { onOpenRequest, setLookingAt } from './attention'
+import { nextWaitingCard } from '../../core/waiting'
+import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
@@ -121,6 +122,28 @@ function App(): React.JSX.Element {
     }
   })
 
+  // A card or shell picked in the palette opens at full size in its workspace, started first when
+  // it isn't running, as a click on it does; one in another workspace makes that workspace active,
+  // as a clicked notification does (#40 D7). The card already open just stays.
+  const onPaletteOpen = useCallback(
+    (workspaceId: string, cardId: string) => {
+      if (workspaceId === activeId && cardId === openedId) return
+      startCard(workspaceId, cardId)
+      setViews((v) => rememberCard(v, workspaceId, cardId))
+      if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
+    },
+    [activeId, openedId, setViews]
+  )
+
+  // Next waiting card (#41 D4, D5): opens as a palette pick does; nothing when none would open.
+  const openNextWaiting = useRef(() => {})
+  useEffect(() => {
+    openNextWaiting.current = () => {
+      const next = nextWaitingCard(waitingQueue(), openedId, workspaces)
+      if (next) onPaletteOpen(next.workspaceId, next.cardId)
+    }
+  })
+
   // A workspace's autostart shells start the first time it is opened in this run of the app.
   const autostarted = useRef(new Set<string>())
   useEffect(() => {
@@ -175,6 +198,14 @@ function App(): React.JSX.Element {
         if (!event.repeat) togglePanel()
         return
       }
+      // The card that has waited longest, then the next (#41 D3, D4), unless a dialog is open.
+      if (action === 'nextWaiting') {
+        if (document.querySelector('[aria-modal="true"]')) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat) openNextWaiting.current()
+        return
+      }
       if (action !== 'settings' && action !== 'openShell') return
       // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
       if (document.querySelector('[aria-modal="true"]')) return
@@ -186,19 +217,6 @@ function App(): React.JSX.Element {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [])
-
-  // A card or shell picked in the palette opens at full size in its workspace, started first when
-  // it isn't running, as a click on it does; one in another workspace makes that workspace active,
-  // as a clicked notification does (#40 D7). The card already open just stays.
-  const onPaletteOpen = useCallback(
-    (workspaceId: string, cardId: string) => {
-      if (workspaceId === activeId && cardId === openedId) return
-      startCard(workspaceId, cardId)
-      setViews((v) => rememberCard(v, workspaceId, cardId))
-      if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
-    },
-    [activeId, openedId, setViews]
-  )
 
   // An action picked in the palette (#40 D6) does what its shortcut, button or menu item does. It
   // runs once the palette has closed and given focus back (D8), so a card view action acts in the
@@ -220,6 +238,7 @@ function App(): React.JSX.Element {
         closeCard()
         requestNewCard(activeId)
       } else if (action.id === 'openShell') openDefaultShell.current()
+      else if (action.id === 'nextWaiting') openNextWaiting.current()
       else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
       else if (action.id === 'settings') setSettingsOpen(true)
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })

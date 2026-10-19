@@ -110,6 +110,11 @@ test('AC1: a workspace row counts its waiting cards, live', async () => {
   await expect(pill('Beta')).toHaveText('2')
   await expect(pill('Beta')).toHaveAttribute('title', '2 waiting for you')
   await expect(pill('Alpha')).toHaveCount(0)
+  // A screen reader hears the count in words as part of the row's name.
+  await expect(row('Beta').getByTestId('workspace-item')).toHaveAccessibleName(
+    /^Beta\s*, 2 waiting for you$/
+  )
+  await expect(row('Alpha').getByTestId('workspace-item')).toHaveAccessibleName('Alpha')
 
   // The pill stays visible while the row's edit and delete buttons show.
   await row('Beta').hover()
@@ -143,6 +148,9 @@ test('AC2: the collapsed sidebar shows the count as a dot on the badge', async (
   await expect(dot).toHaveText('2')
   await expect(dot).toHaveAttribute('title', '2 waiting for you')
   await expect(dot).toBeVisible()
+  await expect(row('Beta').getByTestId('workspace-item')).toHaveAccessibleName(
+    'Beta, 2 waiting for you'
+  )
   await expect(row('Alpha').getByTestId('workspace-waiting-dot')).toHaveCount(0)
   await expect(page.getByTestId('workspace-waiting')).toHaveCount(0)
 
@@ -253,11 +261,34 @@ test('AC6: from a focused terminal the shell gets no keys; with Settings open no
   await setActivity('a2', 'waiting', 'Waiting for you')
 
   await openCard('a1')
+  // xterm turns Ctrl+Shift+J and Cmd+J into no input, so the shell's output alone can't show a
+  // leak: the press must not reach the terminal's keyboard (its helper textarea) at all.
+  const listening = await page.evaluate(() => {
+    const keyboard = document.querySelector(
+      '[data-testid=card-view] [data-testid=terminal] .xterm-helper-textarea'
+    )
+    const w = window as unknown as { __leakedKeys: string[] }
+    w.__leakedKeys = []
+    keyboard?.addEventListener('keydown', (e) => {
+      const { key } = e as KeyboardEvent
+      if (!['Control', 'Shift', 'Meta'].includes(key)) w.__leakedKeys.push(key)
+    })
+    return keyboard !== null
+  })
+  expect(listening).toBe(true)
+  const shown = async (): Promise<string[]> => (await bufferLines()).filter((line) => line !== '')
+  await expect.poll(shown).not.toHaveLength(0)
+  const before = await shown()
   await page.keyboard.press(NEXT)
   await expectOpenIn('Alpha', 'a2')
+  expect(
+    await page.evaluate(() => (window as unknown as { __leakedKeys: string[] }).__leakedKeys)
+  ).toEqual([])
 
   await backToBoard(page)
   await openCard('a1')
+  await settle()
+  expect(await shown()).toEqual(before)
   await page.keyboard.type('echo ok')
   await page.keyboard.press('Enter')
   await expect.poll(bufferLines).toContain('ok')

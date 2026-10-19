@@ -226,7 +226,13 @@ function Sidebar({
                 className={active ? 'workspace-item active' : 'workspace-item'}
                 data-testid="workspace-item"
                 aria-current={active ? 'true' : undefined}
-                aria-label={collapsed ? w.name : undefined}
+                aria-label={
+                  collapsed
+                    ? count > 0
+                      ? `${w.name}, ${waitingTooltip(count)}`
+                      : w.name
+                    : undefined
+                }
                 title={
                   collapsed
                     ? w.name
@@ -246,13 +252,17 @@ function Sidebar({
                   <Server className="workspace-ssh" {...SMALL_ICON} />
                 )}
                 {!collapsed && count > 0 && (
-                  <span
-                    className="workspace-waiting"
-                    data-testid="workspace-waiting"
-                    title={waitingTooltip(count)}
-                  >
-                    {count}
-                  </span>
+                  <>
+                    <span
+                      className="workspace-waiting"
+                      data-testid="workspace-waiting"
+                      title={waitingTooltip(count)}
+                      aria-hidden="true"
+                    >
+                      {count}
+                    </span>
+                    <span className="visually-hidden">, {waitingTooltip(count)}</span>
+                  </>
                 )}
               </button>
               {!collapsed && (

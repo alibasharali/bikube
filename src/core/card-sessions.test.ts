@@ -34,8 +34,13 @@ class FakeScreen implements CardScreen {
   onResize(listener: (size: { cols: number; rows: number }) => void): void {
     this.resizeListener = listener
   }
+  /** The line the new session starts on (#46 D5a); lines above it read as blank. */
+  sessionStart = 0
+  markSessionStart(): void {
+    this.sessionStart = this.text.split(/\r?\n/).length - 1
+  }
   screen(): { lines: string[]; cursorRow: number } {
-    const lines = this.text.split(/\r?\n/)
+    const lines = this.text.split(/\r?\n/).map((line, i) => (i < this.sessionStart ? '' : line))
     return { lines, cursorRow: lines.length - 1 }
   }
   setReadOnly(): void {
@@ -1229,6 +1234,19 @@ describe('kept output (#46)', () => {
     api.emitExit({ id: 's2', exitCode: 255 })
     expect(sessions.runState('c1')).toMatchObject({ sshFailed: 'ssh: connect refused' })
     expect(keeper.saves[1]).toEqual(['c1', 'ssh: connect refused'])
+  })
+
+  it('reads the status and SSH failed from the new session only, never the restored lines (D5a, D9)', async () => {
+    sessions.start({ ...card('c1'), host: 'me@devbox' })
+    keeper.reads[0].resolve(KEPT)
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.status('c1')).toEqual({ label: 'Running', agentStatus: '', lastLine: '' })
+    api.emitData('s1', '')
+    expect(sessions.status('c1')!.lastLine).toBe('')
+    api.emitExit({ id: 's1', exitCode: 255 })
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped', sshFailed: '' })
   })
 
   it("saves nothing for a start that couldn't start, or a card deleted (D2)", async () => {

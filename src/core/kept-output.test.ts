@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_KEPT_CHARS, keptOutput, restoredText } from './kept-output'
+import { MAX_KEPT_CHARS, keptOutput, keptRange, restoredText } from './kept-output'
 
 /** A screen of `total` scrollback rows (`row 0` oldest) under 2 screen rows, serialized plainly. */
 function fakeSerialize(
@@ -52,6 +52,22 @@ describe('keptOutput (#46 D3)', () => {
     expect(kept.length).toBeLessThanOrEqual(MAX_KEPT_CHARS)
     expect(kept.startsWith(screenLine)).toBe(true)
     expect(kept.endsWith('last')).toBe(true)
+  })
+})
+
+describe('keptRange (#46 D1, D3)', () => {
+  it('ends at the last row with text, wherever the cursor is, with the rows above it', () => {
+    // 24 screen rows, text last on row 80: the blank rows below it are left out.
+    expect(keptRange(80, 10, 24)).toEqual({ start: 47, end: 80 })
+    expect(keptRange(80, 0, 24)).toEqual({ start: 57, end: 80 })
+  })
+
+  it('starts at the buffer top when there are fewer rows', () => {
+    expect(keptRange(5, 10, 24)).toEqual({ start: 0, end: 5 })
+  })
+
+  it('is null when the buffer has no text', () => {
+    expect(keptRange(-1, 10, 24)).toBeNull()
   })
 })
 

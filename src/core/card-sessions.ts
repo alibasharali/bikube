@@ -33,13 +33,22 @@ export interface CardScreen {
   /** Keystrokes typed into the screen. */
   onInput(listener: (data: string) => void): void
   onResize(listener: (size: { cols: number; rows: number }) => void): void
-  /** The visible screen's lines (bottom of scrollback) and the cursor's row in them. */
+  /**
+   * The visible screen's lines (bottom of scrollback) and the cursor's row in them. Rows above
+   * the one `markSessionStart` marked read as blank.
+   */
   screen(): { lines: string[]; cursorRow: number }
+  /**
+   * Everything above the cursor's row is a previous run's restored output (#46 D5a, D9): from
+   * now on `screen()` reads those rows as blank, so the status reads only this session's rows.
+   */
+  markSessionStart(): void
   /** Stops taking input: the shell couldn't start (#5 D8). */
   setReadOnly(): void
   /**
    * The normal buffer's newest `scrollback` rows and its screen, with colours and attributes,
-   * without terminal modes or the alternate screen (#46 D1).
+   * without terminal modes, the alternate screen, the final cursor position or the screen's
+   * trailing blank rows (#46 D1).
    */
   serialize(scrollback: number): string
   dispose(): void
@@ -264,7 +273,11 @@ export class CardSessions<S extends CardScreen> {
         .catch(() => null)
         .then((kept) => {
           if (!current()) return
-          if (kept) screen.write(restoredText(kept))
+          if (kept) {
+            screen.write(restoredText(kept), () => {
+              if (current()) screen.markSessionStart()
+            })
+          }
           spawn()
         })
     })

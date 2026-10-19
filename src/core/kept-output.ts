@@ -29,6 +29,21 @@ export function keptOutput(serialize: (rows: number) => string, scrollback: numb
   }
 }
 
+/**
+ * The buffer rows a save serializes (D1, D3): up to `lastRow`, the last row with text (so the
+ * screen's blank rows below it are left out, wherever the cursor was), and at most `scrollback`
+ * plus `screenRows` rows ending there. Null when the buffer has no text (`lastRow` below 0).
+ */
+export function keptRange(
+  lastRow: number,
+  scrollback: number,
+  screenRows: number
+): { start: number; end: number } | null {
+  if (lastRow < 0) return null
+  const rows = Math.max(0, Math.floor(scrollback)) + screenRows
+  return { start: Math.max(0, lastRow + 1 - rows), end: lastRow }
+}
+
 function cutAtLineBreak(text: string): string {
   const tail = text.slice(-MAX_KEPT_CHARS)
   const lineBreak = tail.indexOf('\n')

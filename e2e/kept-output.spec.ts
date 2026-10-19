@@ -186,6 +186,22 @@ test('AC3: output of a shell that exited by itself is above the separator', asyn
   expect(lastIndex(lines, 'kept-46-exit')).toBeLessThan(lastIndex(lines, SEPARATOR))
 })
 
+test('D1: the separator starts below the last old line, wherever the old cursor was', async () => {
+  await newCard('api')
+  // Scrollback, a cleared screen, three lines and the cursor back up on the first (an agent's
+  // input box above its footer): the blank rows below and the cursor's place are not kept.
+  await run(String.raw`seq 1 60; printf '\033[H\033[2Jkept-a\nkept-b\nkept-c\033[2A'`)
+  await expect.poll(bufferLines).toContain('kept-c')
+  await closeOpenCard('api')
+
+  await openCard('api')
+  await expect.poll(async () => lastIndex(await bufferLines(), SEPARATOR)).toBeGreaterThan(0)
+  const lines = await bufferLines()
+  expect(lastIndex(lines, 'kept-b')).toBeGreaterThan(0)
+  expect(lastIndex(lines, 'kept-c')).toBe(lastIndex(lines, 'kept-b') + 1)
+  expect(lastIndex(lines, SEPARATOR)).toBe(lastIndex(lines, 'kept-c') + 1)
+})
+
 test('AC5: colours are kept, terminal modes are not', async () => {
   await newCard('api')
   // `\033`, not `\e`: dash's printf has no `\e`.

@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { Terminal as XTerm, type IBufferRange } from '@xterm/xterm'
+import { Terminal as XTerm, type IBufferRange, type IMarker } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
@@ -9,6 +9,7 @@ import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
+import { keptRange } from '../../core/kept-output'
 import { SessionRouter } from '../../core/session-router'
 import type { PaneLayout } from '../../core/split-tree'
 import {
@@ -146,6 +147,8 @@ export class XtermScreen implements CardScreen {
   private cell = ''
   /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
   private sawProbe = false
+  /** The new session's first row, below a restored previous run (#46 D5a); none when none. */
+  private sessionStart: IMarker | undefined
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
@@ -254,11 +257,20 @@ export class XtermScreen implements CardScreen {
 
   screen(): { lines: string[]; cursorRow: number } {
     const buffer = this.term.buffer.active
+    // Rows above the new session's first are a previous run's (#46 D5a); a marker trimmed off
+    // the scrollback has line -1. The alternate screen is all this session's.
+    const first = buffer.type === 'normal' ? (this.sessionStart?.line ?? -1) : -1
     const lines: string[] = []
     for (let row = 0; row < this.term.rows; row++) {
-      lines.push(buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? '')
+      const line = buffer.baseY + row
+      lines.push(line < first ? '' : (buffer.getLine(line)?.translateToString(true) ?? ''))
     }
     return { lines, cursorRow: buffer.cursorY }
+  }
+
+  markSessionStart(): void {
+    this.sessionStart?.dispose()
+    this.sessionStart = this.term.registerMarker(0)
   }
 
   setReadOnly(): void {
@@ -266,7 +278,13 @@ export class XtermScreen implements CardScreen {
   }
 
   serialize(scrollback: number): string {
-    return this.serializer.serialize({ scrollback, excludeModes: true, excludeAltBuffer: true })
+    // A range ends at the last row with text and leaves out the final cursor move (#46 D1).
+    const buffer = this.term.buffer.normal
+    let last = buffer.length - 1
+    while (last >= 0 && !buffer.getLine(last)?.translateToString(true).trim()) last--
+    const range = keptRange(last, scrollback, this.term.rows)
+    if (!range) return ''
+    return this.serializer.serialize({ range, excludeModes: true, excludeAltBuffer: true })
   }
 
   /** Shows the screen in `container`, fitted and kept fitted; returns the detach function. */

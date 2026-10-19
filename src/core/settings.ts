@@ -88,6 +88,8 @@ export interface Preferences {
   claudeStatus: boolean
   /** Local zsh, bash and fish shells start with Drovr's integration scripts (#45 D3, D4). */
   shellIntegration: boolean
+  /** Sixel and iTerm2 images show in terminals created while it is on (#52 D3). */
+  inlineImages: boolean
   /** The side panel shows (#55 D3), beside the board and every card or shell at once (#57 D3). */
   sidePanelOpen: boolean
   /** The side panel's width in pixels as last dragged (#55 D4), 200 to 4000. */
@@ -116,6 +118,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   notificationSound: true,
   claudeStatus: true,
   shellIntegration: true,
+  inlineImages: true,
   sidePanelOpen: true,
   sidePanelWidth: 280,
   editor: 'vscode',
@@ -150,6 +153,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   notificationSound: isBoolean,
   claudeStatus: isBoolean,
   shellIntegration: isBoolean,
+  inlineImages: isBoolean,
   sidePanelOpen: isBoolean,
   sidePanelWidth: (v): v is number =>
     typeof v === 'number' &&

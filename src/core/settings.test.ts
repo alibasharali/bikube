@@ -575,6 +575,32 @@ describe('the Shell integration preference (#45 D4)', () => {
   })
 })
 
+describe('the Inline images preference (#52 D3, AC1)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('reads true without the key, and saving true writes none', () => {
+    const without: Partial<Settings> = { ...base }
+    delete without.inlineImages
+    expect(DEFAULT_SETTINGS.inlineImages).toBe(true)
+    expect(parseSettingsFile(file(without), 'linux').settings.inlineImages).toBe(true)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('inlineImages')
+  })
+
+  it('reads false from the file, and saving false writes it', () => {
+    const settings: Settings = { ...base, inlineImages: false }
+    const text = serializeSettings(settings)
+    expect(JSON.parse(text).settings.inlineImages).toBe(false)
+    expect(parseSettingsFile(file(settings), 'linux')).toEqual({ settings, replaced: [] })
+  })
+
+  it('reads a non-boolean value as the default true', () => {
+    const parsed = parseSettingsFile(file({ ...base, inlineImages: 'off' }), 'linux')
+    expect(parsed.settings.inlineImages).toBe(true)
+    expect(parsed.replaced).toEqual(['inlineImages'])
+  })
+})
+
 describe('the Keep output preference (#46 D8)', () => {
   const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
 

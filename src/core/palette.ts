@@ -97,6 +97,7 @@ export type PaletteAction =
   | { id: 'closeCard' }
   | { id: 'togglePanel' }
   | { id: 'find' }
+  | { id: 'copyCommandOutput' }
   | { id: 'moveCard'; columnId: string }
   | { id: 'newCard' }
   | { id: 'openShell' }
@@ -223,7 +224,9 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   if (view.extraPaneFocused) rows.push(keymapRow('closePane', keymap))
   if (view.running) rows.push(keymapRow('closeCard', keymap))
   rows.push(keymapRow('togglePanel', keymap))
-  if (view.focusedPaneHasScreen) rows.push(keymapRow('find', keymap))
+  if (view.focusedPaneHasScreen) {
+    rows.push(keymapRow('find', keymap), keymapRow('copyCommandOutput', keymap))
+  }
   // Whenever the view has panes to zoom, or is zoomed (#48 D7).
   if (view.paneCount > 1 || view.zoomed) rows.push(keymapRow('zoomPane', keymap))
   if (view.kind !== 'card') return rows

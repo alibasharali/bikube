@@ -195,6 +195,7 @@ describe('paletteItems actions (#40 D6)', () => {
       'Close card',
       'Toggle panel',
       'Find',
+      'Copy command output',
       'Move card to In Progress',
       'Move card to Review',
       'Move card to Done',
@@ -220,10 +221,11 @@ describe('paletteItems actions (#40 D6)', () => {
 
   it('offers no splits or Close card for a stopped card', () => {
     const view = { ...cardView, running: false }
-    expect(labels(input(state, { view })).slice(0, 4)).toEqual([
+    expect(labels(input(state, { view })).slice(0, 5)).toEqual([
       'Back to board',
       'Toggle panel',
       'Find',
+      'Copy command output',
       'Move card to In Progress'
     ])
   })
@@ -240,15 +242,40 @@ describe('paletteItems actions (#40 D6)', () => {
     expect(labels(input(state, { view }))).not.toContain('Find')
   })
 
+  it('offers Copy command output after Find whenever the focused pane has a screen (#60 D5)', () => {
+    const shown = labels(input(state, { view: cardView }))
+    expect(shown.slice(shown.indexOf('Find'), shown.indexOf('Find') + 2)).toEqual([
+      'Find',
+      'Copy command output'
+    ])
+    const rows = paletteItems(input(state, { view: cardView })).actions
+    expect(rows.find((r) => r.label === 'Copy command output')).toEqual({
+      kind: 'action',
+      action: { id: 'copyCommandOutput' },
+      label: 'Copy command output',
+      shortcut: 'Ctrl+Shift+A'
+    })
+    const mac = input(state, { view: cardView, keymap: defaultKeymap('darwin') })
+    expect(paletteItems(mac).actions.find((r) => r.label === 'Copy command output')?.shortcut).toBe(
+      'Shift+Cmd+A'
+    )
+    const stopped = labels(input(state, { view: { ...cardView, running: false } }))
+    expect(stopped).toContain('Copy command output')
+    const noScreen = { ...cardView, focusedPaneHasScreen: false }
+    expect(labels(input(state, { view: noScreen }))).not.toContain('Copy command output')
+    expect(labels(input(state))).not.toContain('Copy command output')
+  })
+
   it('offers no moves for a shell', () => {
     const view: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
-    expect(labels(input(state, { view })).slice(0, 7)).toEqual([
+    expect(labels(input(state, { view })).slice(0, 8)).toEqual([
       'Back to board',
       'Split right',
       'Split down',
       'Close card',
       'Toggle panel',
       'Find',
+      'Copy command output',
       'New card'
     ])
   })
@@ -257,7 +284,7 @@ describe('paletteItems actions (#40 D6)', () => {
     expect(labels(input(state, { view: cardView }))).not.toContain('Zoom pane')
     const split = { ...cardView, paneCount: 3, extraPaneFocused: true }
     const rows = paletteItems(input(state, { view: split })).actions
-    expect(rows.map((r) => r.label).slice(0, 8)).toEqual([
+    expect(rows.map((r) => r.label).slice(0, 9)).toEqual([
       'Back to board',
       'Split right',
       'Split down',
@@ -265,9 +292,10 @@ describe('paletteItems actions (#40 D6)', () => {
       'Close card',
       'Toggle panel',
       'Find',
+      'Copy command output',
       'Zoom pane'
     ])
-    expect(rows[7]).toMatchObject({ action: { id: 'zoomPane' }, shortcut: 'Ctrl+Shift+Enter' })
+    expect(rows[8]).toMatchObject({ action: { id: 'zoomPane' }, shortcut: 'Ctrl+Shift+Enter' })
     expect(labels(input(state, { view: { ...cardView, zoomed: true } }))).toContain('Zoom pane')
   })
 

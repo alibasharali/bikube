@@ -454,7 +454,8 @@ const CARD_VIEW_ACTIONS = [
   'Close pane',
   'Close card',
   'Toggle panel',
-  'Find'
+  'Find',
+  'Copy command output'
 ]
 
 test('AC7: with a running card open, the card view actions and its moves are listed, with their shortcuts', async () => {
@@ -468,13 +469,14 @@ test('AC7: with a running card open, the card view actions and its moves are lis
 
   await openPalette()
   const actions = await titles(section('actions'))
-  expect(actions.slice(0, 9)).toEqual([
+  expect(actions.slice(0, 10)).toEqual([
     'Back to board',
     'Split right',
     'Split down',
     'Close card',
     'Toggle panel',
     'Find',
+    'Copy command output',
     'Move card to In Progress',
     'Move card to Review',
     'Move card to Done'
@@ -588,6 +590,56 @@ test('#48 AC6: with a split card open the palette lists Zoom pane with its short
   await runAction('Zoom pane')
   await expect(page.getByTestId('pane-zoom')).toHaveCount(0)
   await expect(page.getByTestId('pane').first()).toBeVisible()
+})
+
+/**
+ * Records each text the app writes to the clipboard from now on, still writing it: the system
+ * clipboard is shared by every test on xvfb's display, so the tests read what this app wrote.
+ */
+const recordClipboardWrites = (): Promise<void> =>
+  app!.evaluate(({ clipboard }) => {
+    const writes: string[] = []
+    const write = clipboard.writeText.bind(clipboard)
+    Object.assign(globalThis, { __clipboardWrites: writes })
+    clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
+      writes.push(text)
+      write(text, type)
+    }
+  })
+
+/** The texts the app wrote to the clipboard since `recordClipboardWrites`. */
+const clipboardWrites = (): Promise<string[]> =>
+  app!.evaluate(() => [
+    ...(globalThis as unknown as { __clipboardWrites: string[] }).__clipboardWrites
+  ])
+
+test('#60 AC6: Copy command output is listed with its shortcut and copies as the shortcut does', async () => {
+  // Shell /bin/sh, so only the marks the test prints reach the terminal (no shell integration).
+  await app?.close()
+  writeFileSync(
+    join(dataDir, 'drovr-settings.json'),
+    JSON.stringify({ version: 1, settings: { shell: '/bin/sh' } })
+  )
+  ;({ app, page } = await launchApp({ dataDir }))
+  await createWorkspace('Alpha')
+  const shortcut = await settingsShortcut('copyCommandOutput')
+  expect(shortcut).toBe(darwin ? 'Shift+Cmd+A' : 'Ctrl+Shift+A')
+  await newCard('api')
+  await recordClipboardWrites()
+  // A marked command (prompt `$ `, then its output `three` between its C and D;0).
+  await run(
+    String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007three\n\033]133;D;0\007'`
+  )
+  await expect.poll(async () => (await bufferLines()).includes('$ three')).toBe(true)
+
+  await openPalette()
+  await page.keyboard.type('copy output')
+  await expect(rows().first().getByTestId('palette-row-title')).toHaveText('Copy command output')
+  await expect(actionShortcut('Copy command output')).toHaveText(shortcut)
+  await page.keyboard.press('Enter')
+  await expect(palette()).toHaveCount(0)
+  await expect.poll(clipboardWrites).toEqual(['three'])
+  await expect.poll(terminalFocused).toBe(true)
 })
 
 test('AC10: New card goes to the board with the first column’s New card form open and focused', async () => {

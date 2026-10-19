@@ -39,7 +39,8 @@ describe('defaultKeymap (#31 D6)', () => {
       palette: 'Cmd+K',
       nextWaiting: 'Cmd+J',
       previousPrompt: 'Cmd+ArrowUp',
-      nextPrompt: 'Cmd+ArrowDown'
+      nextPrompt: 'Cmd+ArrowDown',
+      zoomPane: 'Shift+Cmd+Enter'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -55,7 +56,8 @@ describe('defaultKeymap (#31 D6)', () => {
         palette: 'Ctrl+Shift+P',
         nextWaiting: 'Ctrl+Shift+J',
         previousPrompt: 'Ctrl+Shift+ArrowUp',
-        nextPrompt: 'Ctrl+Shift+ArrowDown'
+        nextPrompt: 'Ctrl+Shift+ArrowDown',
+        zoomPane: 'Ctrl+Shift+Enter'
       })
     }
   })
@@ -166,6 +168,50 @@ describe('Previous prompt, Next prompt (#45 D5)', () => {
       dropped: []
     })
     expect(resetRefusal('previousPrompt', next, 'linux')).toBeNull()
+  })
+})
+
+describe('Zoom pane (#48 D3, AC9)', () => {
+  it('is a configurable action named Zoom pane: Shift+Cmd+Enter on macOS, Ctrl+Shift+Enter elsewhere', () => {
+    expect(SHORTCUT_LABELS.zoomPane).toBe('Zoom pane')
+    expect(defaultKeymap('darwin').zoomPane).toBe('Shift+Cmd+Enter')
+    expect(defaultKeymap('linux').zoomPane).toBe('Ctrl+Shift+Enter')
+    expect(defaultKeymap('win32').zoomPane).toBe('Ctrl+Shift+Enter')
+    expect(
+      keymapAction(press('Enter', { metaKey: true, shiftKey: true }), defaultKeymap('darwin'))
+    ).toBe('zoomPane')
+    expect(
+      keymapAction(press('Enter', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('zoomPane')
+    // Plain and Shift+Enter stay the terminal's.
+    expect(keymapAction(press('Enter', { shiftKey: true }), defaultKeymap('linux'))).toBeNull()
+    expect(keymapAction(press('Enter', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+  })
+
+  it('reads the default from a saved keymap without it', () => {
+    for (const platform of ['darwin', 'linux']) {
+      const { shortcuts, dropped } = readShortcuts({ find: 'Ctrl+Alt+F' }, platform)
+      expect(dropped).toEqual([])
+      expect(resolveKeymap(shortcuts, platform).zoomPane).toBe(defaultKeymap(platform).zoomPane)
+    }
+  })
+
+  it('is refused as a duplicate like any other action', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('Enter', { ctrlKey: true, shiftKey: true }), 'find', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Zoom pane' })
+    expect(
+      recordPress(press('F', { ctrlKey: true, shiftKey: true }), 'zoomPane', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Find' })
+    expect(validateShortcuts({ zoomPane: 'Ctrl+Shift+F' }, 'linux')).toBeNull()
+    expect(readShortcuts({ zoomPane: 'Ctrl+Shift+F' }, 'linux')).toEqual({
+      shortcuts: {},
+      dropped: ['zoomPane']
+    })
+    expect(
+      recordPress(press('Enter', { ctrlKey: true, altKey: true }), 'zoomPane', keymap, 'linux')
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+Enter' })
   })
 })
 

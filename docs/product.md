@@ -32,4 +32,4 @@ Shipping: GitHub releases. A release workflow on a macOS runner builds an unsign
 
 Ideas considered and left out, with why, so they are not proposed again.
 
-- None yet.
+- Broadcast input to every pane of a card (iTerm2, Terminator, Kitty): low value for Drovr, and keys sent to several agents at once are more likely a mistake than a wish. Pane zoom (#48) covers the cramped-panes need.

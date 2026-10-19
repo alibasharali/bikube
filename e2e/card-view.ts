@@ -12,7 +12,8 @@ export const SHORTCUTS = {
   splitRight: darwin ? 'Meta+D' : 'Control+Shift+D',
   splitDown: darwin ? 'Meta+Shift+D' : 'Control+Shift+E',
   closePane: darwin ? 'Meta+W' : 'Control+Shift+W',
-  closeCard: darwin ? 'Meta+Shift+W' : 'Control+Shift+Q'
+  closeCard: darwin ? 'Meta+Shift+W' : 'Control+Shift+Q',
+  zoomPane: darwin ? 'Meta+Shift+Enter' : 'Control+Shift+Enter'
 } as const
 
 /** The full-size card view. */
@@ -37,6 +38,11 @@ export async function splitRight(page: Page): Promise<void> {
 /** Splits the focused pane of the open card downwards (the Split down shortcut). */
 export async function splitDown(page: Page): Promise<void> {
   await page.keyboard.press(SHORTCUTS.splitDown)
+}
+
+/** Zooms the open view's focused pane, or ends its zoom (the Zoom pane shortcut, #48 D3). */
+export async function zoomPane(page: Page): Promise<void> {
+  await page.keyboard.press(SHORTCUTS.zoomPane)
 }
 
 /** Presses the Close card shortcut: a running card's Close confirmation opens. */

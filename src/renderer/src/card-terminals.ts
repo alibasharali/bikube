@@ -45,6 +45,7 @@ import {
 } from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
+import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
 import { currentKeymap, settingsStore } from './settings'
 import { workspaceStore } from './store'
@@ -680,6 +681,11 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
     registry.onEnded((cardId) => cardPanes().dispose(cardId))
+    // A local main pane's output shows its dev servers' chips (#49 D2, D5, D6).
+    registry.watchOutput({
+      output: (cardId, data) => devServers().output(cardId, MAIN_PANE, data),
+      ended: (cardId) => devServers().paneEnded(cardId, MAIN_PANE)
+    })
     // Every running card's output is saved as the app starts quitting, before main stops the
     // shells (#46 D2).
     const cards = registry
@@ -693,24 +699,32 @@ export function cardTerminals(): CardSessions<XtermScreen> {
 
 /** The app-wide extra panes of cards (#11 D1), with their layouts. */
 export function cardPanes(): CardPanes<XtermScreen> {
-  paneRegistry ??= new CardPanes(
-    window.drovr.terminal,
-    sessionRouter(),
-    (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
-    (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
-    // A new split starts where the focused pane's shell last said it was (#45 D8).
-    (card, focused) => {
-      const screen =
-        focused === MAIN_PANE
-          ? cardTerminals().screen(card.id)
-          : paneRegistry?.screen(card.id, focused)
-      return splitDirectory(screen?.marks.directory(), {
-        cardDirectory: card.directory,
-        sshHost: card.host,
-        localHostName: window.drovr.hostName
-      })
-    }
-  )
+  if (!paneRegistry) {
+    paneRegistry = new CardPanes(
+      window.drovr.terminal,
+      sessionRouter(),
+      (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
+      (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
+      // A new split starts where the focused pane's shell last said it was (#45 D8).
+      (card, focused) => {
+        const screen =
+          focused === MAIN_PANE
+            ? cardTerminals().screen(card.id)
+            : paneRegistry?.screen(card.id, focused)
+        return splitDirectory(screen?.marks.directory(), {
+          cardDirectory: card.directory,
+          sshHost: card.host,
+          localHostName: window.drovr.hostName
+        })
+      }
+    )
+    // A local extra pane's output shows its dev servers' chips too (#49 D3, D5, D6).
+    paneRegistry.watchOutput({
+      opened: (cardId, paneId) => devServers().paneOpened(cardId, paneId),
+      output: (cardId, paneId, data) => devServers().output(cardId, paneId, data),
+      ended: (cardId, paneId) => devServers().paneEnded(cardId, paneId)
+    })
+  }
   return paneRegistry
 }
 

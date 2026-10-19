@@ -85,6 +85,16 @@ export interface OutputKeeper {
   save(cardId: string, data: string): void
 }
 
+/**
+ * Sees a local card's main pane output of its current start only (#49 D2, D6): never kept output
+ * (#46), an SSH card's, or an earlier start's. `ended` runs as each start begins and when it ends
+ * (stopped, couldn't start, disposed), so whatever it read before is forgotten (#49 D5).
+ */
+export interface OutputWatcher {
+  output(cardId: string, data: string): void
+  ended(cardId: string): void
+}
+
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
 
@@ -125,6 +135,7 @@ export class CardSessions<S extends CardScreen> {
   private readonly early = new Map<string, Set<() => void>>()
   private readonly endedListeners: ((cardId: string) => void)[] = []
   private readonly activityListeners: ((cardId: string, activity: Activity | null) => void)[] = []
+  private outputWatcher: OutputWatcher | null = null
 
   /**
    * `router` is shared with the cards' extra panes (#11), or a new one over `api`. `defer` runs
@@ -213,12 +224,14 @@ export class CardSessions<S extends CardScreen> {
       if (!current()) return
       screen.write(`Couldn't start: ${reason}\r\n`)
       this.setState(entry, { kind: 'failed', reason })
+      this.outputWatcher?.ended(card.id)
       this.endedListeners.forEach((listener) => listener(card.id))
     }
     entry.closing = false
     entry.closed = false
     entry.host = card.host
     entry.watch = null
+    this.outputWatcher?.ended(card.id)
     this.setState(entry, state)
     if (setup !== null) this.setSetup(entry, 'running')
     const sessionStarted = (id: string): void => {
@@ -382,6 +395,11 @@ export class CardSessions<S extends CardScreen> {
     this.endedListeners.push(listener)
   }
 
+  /** Gives `watcher` every local card's main pane output (#49 D2); one watcher. */
+  watchOutput(watcher: OutputWatcher): void {
+    this.outputWatcher = watcher
+  }
+
   /**
    * Called with a card's id and new activity each time any card's activity changes, cleared
    * (null) included: for notifications, which watch every card.
@@ -455,11 +473,13 @@ export class CardSessions<S extends CardScreen> {
     if (entry.timer) clearTimeout(entry.timer)
     entry.listeners.clear()
     entry.screen?.dispose()
+    this.outputWatcher?.ended(cardId)
   }
 
   /** `parsed` acknowledges the chunk once the screen has it (#16 D4). */
   private output(entry: Entry<S>, data: string, parsed: () => void): void {
     entry.watch?.(data)
+    if (entry.host === undefined) this.outputWatcher?.output(entry.cardId, data)
     if (!entry.screen) return parsed()
     entry.screen.write(data, () => {
       parsed()
@@ -508,6 +528,7 @@ export class CardSessions<S extends CardScreen> {
     entry.timer = null
     entry.dirty = false
     this.setState(entry, state)
+    this.outputWatcher?.ended(cardId)
     this.endedListeners.forEach((listener) => listener(cardId))
   }
 

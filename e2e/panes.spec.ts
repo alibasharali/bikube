@@ -8,8 +8,10 @@ import {
   closeCard,
   expectCardOpen,
   expectStatusOnBoard,
+  SHORTCUTS,
   splitDown,
-  splitRight
+  splitRight,
+  zoomPane
 } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -676,4 +678,165 @@ test('#31 AC4: the Close card shortcut asks, then stops the card with every pane
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
   for (const pid of pids) await expect.poll(() => alive(pid)).toBe(false)
+})
+
+// Zoom a pane (#48): the focused pane fills the view, the others keep running, hidden.
+
+/** The zoom chip on the shown pane (#48 D5). */
+const zoomChip = (): Locator => page.getByTestId('card-view').getByTestId('pane-zoom')
+
+test('#48 AC1: Zoom pane shows only the focused pane, wider, and again restores the layout', async () => {
+  await apiWithPanes(3)
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(focusedPaneIndex).toBe(2)
+  const boxes = [await box(panes().nth(0)), await box(panes().nth(1)), await box(panes().nth(2))]
+  const { cols } = await paneLook(2)
+  await expect(zoomChip()).toHaveCount(0)
+  // A line typed half-way: a stray Enter from the shortcut would run it early, printing `xy`.
+  await page.keyboard.type("printf 'x%sy\\n' ")
+
+  await zoomPane(page)
+  await expect(panes().nth(0)).toBeHidden()
+  await expect(panes().nth(1)).toBeHidden()
+  await expect(panes().nth(2)).toBeVisible()
+  const area = await box(page.getByTestId('card-terminal'))
+  const zoomed = await box(panes().nth(2))
+  expect(Math.abs(zoomed.width - area.width)).toBeLessThanOrEqual(4)
+  expect(Math.abs(zoomed.height - area.height)).toBeLessThanOrEqual(4)
+  await expect.poll(async () => (await paneLook(2)).cols).toBeGreaterThan(cols)
+  await expect(zoomChip()).toHaveText('Zoomed · 3 panes')
+  await expect(zoomChip()).toHaveAttribute('title', 'Show all panes')
+  await expect.poll(focusedPaneIndex).toBe(2)
+  await page.keyboard.type('mid')
+  await page.keyboard.press('Enter')
+  await expectLine(2, 'xmidy')
+  expect(await bufferLines(2)).not.toContain('xy')
+
+  await zoomPane(page)
+  await expect(panes()).toHaveCount(3)
+  for (const index of [0, 1, 2]) {
+    await expect(panes().nth(index)).toBeVisible()
+    const after = await box(panes().nth(index))
+    expect(Math.abs(after.x - boxes[index].x)).toBeLessThanOrEqual(2)
+    expect(Math.abs(after.y - boxes[index].y)).toBeLessThanOrEqual(2)
+    expect(Math.abs(after.width - boxes[index].width)).toBeLessThanOrEqual(2)
+    expect(Math.abs(after.height - boxes[index].height)).toBeLessThanOrEqual(2)
+  }
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+  await expect(zoomChip()).toHaveCount(0)
+  await expect.poll(focusedPaneIndex).toBe(2)
+  await expect.poll(async () => (await paneLook(2)).cols).toBe(cols)
+})
+
+/** The `tick-<n>` numbers pane `index` shows, in order. */
+const ticks = async (index: number): Promise<number[]> =>
+  (await bufferLines(index)).flatMap((line) => {
+    const tick = /^tick-(\d+)$/.exec(line)
+    return tick ? [Number(tick[1])] : []
+  })
+
+test('#48 AC2: a hidden pane keeps running; its output shows when the zoom ends', async () => {
+  await apiWithPanes(3)
+  await panes().nth(1).click()
+  await run(1, 'for i in $(seq 1 600); do echo tick-$i; sleep 0.2; done')
+  await expect.poll(async () => (await ticks(1)).length).toBeGreaterThan(1)
+  await panes().nth(2).click()
+  await expect.poll(focusedPaneIndex).toBe(2)
+
+  await zoomPane(page)
+  await expect(panes().nth(1)).toBeHidden()
+  const before = Math.max(...(await ticks(1)))
+  await page.waitForTimeout(1500)
+  await zoomPane(page)
+
+  await expect(panes().nth(1)).toBeVisible()
+  await expect.poll(async () => Math.max(...(await ticks(1)))).toBeGreaterThanOrEqual(before + 5)
+  const shown = await ticks(1)
+  expect(shown).toEqual(Array.from({ length: shown.length }, (_, i) => i + 1))
+})
+
+test('#48 AC3: the chip, a split, Close pane and the main shell exiting end the zoom', async () => {
+  await apiWithPanes(3)
+  // The chip shows all panes and gives the keyboard back to the shown pane's terminal.
+  await zoomPane(page)
+  await expect(zoomChip()).toBeVisible()
+  await zoomChip().click()
+  await expect(zoomChip()).toHaveCount(0)
+  for (const index of [0, 1, 2]) await expect(panes().nth(index)).toBeVisible()
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(focusedPaneIndex).toBe(2)
+
+  // Splitting right ends the zoom and adds a fourth pane, focused, right of the zoomed one.
+  await zoomPane(page)
+  await expect(panes().nth(0)).toBeHidden()
+  await splitRight(page)
+  await expect(panes()).toHaveCount(4)
+  await expect(zoomChip()).toHaveCount(0)
+  for (const index of [0, 1, 2, 3]) await expect(panes().nth(index)).toBeVisible()
+  await expect(panes().nth(3)).toHaveAttribute('data-focused', 'true')
+  const [zoomedOne, added] = [await box(panes().nth(2)), await box(panes().nth(3))]
+  expect(added.x).toBeGreaterThan(zoomedOne.x + zoomedOne.width - 10)
+  expect(Math.abs(added.y - zoomedOne.y)).toBeLessThanOrEqual(10)
+  await run(3, 'echo fourth-ready')
+  await expectLine(3, 'fourth-ready')
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(panes()).toHaveCount(3)
+
+  // Closing the zoomed extra pane with Close pane shows the remaining 2 panes.
+  await panes().nth(2).click()
+  await zoomPane(page)
+  await expect(zoomChip()).toHaveText('Zoomed · 3 panes')
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(panes()).toHaveCount(2)
+  await expect(zoomChip()).toHaveCount(0)
+  for (const index of [0, 1]) await expect(panes().nth(index)).toBeVisible()
+
+  // The main pane's shell exiting resets the view: a stopped card, no chip when reopened.
+  await panes().nth(0).click()
+  await zoomPane(page)
+  await expect(zoomChip()).toHaveText('Zoomed · 2 panes')
+  await run(0, 'exit')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  await openCard('api')
+  await expect(panes()).toHaveCount(1)
+  await expect(zoomChip()).toHaveCount(0)
+})
+
+test('#48 AC4: one pane never zooms, and the palette offers no Zoom pane', async () => {
+  await openApi()
+  const area = await box(page.getByTestId('card-terminal'))
+  const before = await box(panes().nth(0))
+  await zoomPane(page)
+  await page.waitForTimeout(300)
+  await expect(zoomChip()).toHaveCount(0)
+  await expect(page.getByTestId('card-terminal')).toHaveAttribute('data-zoomed', 'false')
+  expect(await box(panes().nth(0))).toEqual(before)
+  expect(before.width).toBeLessThanOrEqual(area.width)
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+Shift+P')
+  const palette = page.getByRole('dialog', { name: 'Command palette' })
+  await expect(palette).toBeVisible()
+  await expect(
+    palette.getByTestId('palette-row-title').getByText('Find', { exact: true })
+  ).toHaveCount(1)
+  await expect(
+    palette.getByTestId('palette-row-title').getByText('Zoom pane', { exact: true })
+  ).toHaveCount(0)
+})
+
+test('#48 AC5: a zoomed card is still zoomed on the same pane after Back', async () => {
+  await apiWithPanes(3)
+  await panes().nth(1).click()
+  await zoomPane(page)
+  await expect(panes().nth(0)).toBeHidden()
+
+  await back()
+  await openCard('api')
+  await expect(zoomChip()).toHaveText('Zoomed · 3 panes')
+  await expect(panes().nth(1)).toBeVisible()
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect(panes().nth(0)).toBeHidden()
+  await expect(panes().nth(2)).toBeHidden()
+  await expect.poll(focusedPaneIndex).toBe(1)
 })

@@ -1331,3 +1331,64 @@ describe('kept output (#46)', () => {
     expect(keeper.saves).toEqual([])
   })
 })
+
+describe('watchOutput (#49 D2, D5, D6)', () => {
+  /** Records what the watcher is told, in order. */
+  function watching(): string[] {
+    const seen: string[] = []
+    sessions.watchOutput({
+      output: (cardId, data) => seen.push(`${cardId} ${data}`),
+      ended: (cardId) => seen.push(`${cardId} ended`)
+    })
+    return seen
+  }
+
+  it("is given a local card's main pane output of its current start, and told when it ends", async () => {
+    const seen = watching()
+    sessions.start(card('c1'))
+    api.emitData('s1', 'before reply')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s1', 'one')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(seen).toEqual(['c1 ended', 'c1 before reply', 'c1 one', 'c1 ended'])
+
+    seen.length = 0
+    await started('c1', { ok: true, id: 's2' })
+    api.emitData('s2', 'two')
+    sessions.dispose('c1')
+    expect(seen).toEqual(['c1 ended', 'c1 two', 'c1 ended'])
+  })
+
+  it('is told when a start fails', async () => {
+    const seen = watching()
+    await started('c1', { ok: false, reason: 'nope' })
+    expect(seen).toEqual(['c1 ended', 'c1 ended'])
+  })
+
+  it("is never given an SSH card's output", async () => {
+    const seen = watching()
+    sessions.start({ ...card('c1'), host: 'me@devbox' })
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s1', 'http://localhost:5173/\r\n')
+    expect(seen).toEqual(['c1 ended'])
+  })
+
+  it('is never given kept output written above the new start (#46)', async () => {
+    const keeper: OutputKeeper = {
+      keeps: () => true,
+      scrollback: () => 100,
+      read: async () => ({ data: 'old http://localhost:1/\r\n', savedAt: 0 }),
+      save: () => {}
+    }
+    sessions = new CardSessions(api, () => new FakeScreen(), undefined, undefined, keeper)
+    const seen = watching()
+    sessions.start(card('c1'))
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s1', 'new')
+    expect(seen).toEqual(['c1 ended', 'c1 new'])
+  })
+})

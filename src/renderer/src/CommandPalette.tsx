@@ -119,7 +119,8 @@ function openView(
     running: runState.kind === 'running',
     paneCount: paneIds(layout.tree).length,
     extraPaneFocused: layout.focused !== MAIN_PANE,
-    focusedPaneHasScreen: paneScreen(open.cardId, layout.focused) !== undefined
+    focusedPaneHasScreen: paneScreen(open.cardId, layout.focused) !== undefined,
+    zoomed: layout.zoomed === true
   }
 }
 

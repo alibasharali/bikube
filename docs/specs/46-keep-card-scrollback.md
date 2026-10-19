@@ -2,7 +2,7 @@
 item: 46
 type: feature
 title: Keep a card's scrollback across restarts
-status: draft
+status: approved
 branch: claude/46-keep-card-scrollback
 ---
 

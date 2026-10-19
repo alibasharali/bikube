@@ -388,9 +388,26 @@ describeShell('bash', (bash) => {
 })
 
 describeShell('zsh', (zsh) => {
+  /**
+   * The user's `.zshenv` in `dir`, starting with `unsetopt GLOBAL_RCS`: zsh then skips the
+   * system's /etc/zsh/zprofile, zshrc, zlogin and zlogout (Ubuntu's zshrc runs compinit, which
+   * asks about insecure fpath folders on CI's runner, and isn't nounset-safe). Drovr's own
+   * `.zshenv` sources this one, so it runs before zsh would read any of them.
+   */
+  function zshenv(dir: string, lines: string[] = []): void {
+    writeFileSync(join(dir, '.zshenv'), ['unsetopt GLOBAL_RCS', ...lines].join('\n') + '\n')
+  }
+
+  /** A fresh HOME for a zsh test, kept away from the system's global rc files. */
+  function zshHome(): string {
+    const home = folder()
+    zshenv(home)
+    return home
+  }
+
   /** The user's zsh files in `dir`: a login variable, a prompt and a precmd hook. */
   function userFiles(dir: string): void {
-    writeFileSync(join(dir, '.zshenv'), 'ZSHENV_READ=yes\n')
+    zshenv(dir, ['ZSHENV_READ=yes'])
     writeFileSync(join(dir, '.zprofile'), 'export TEST_LOGIN_VAR=from-login-files\n')
     writeFileSync(
       join(dir, '.zshrc'),
@@ -404,7 +421,7 @@ describeShell('zsh', (zsh) => {
   }
 
   it('marks prompts and commands with the user files in HOME, and unsets ZDOTDIR again', async () => {
-    const home = folder()
+    const home = zshHome()
     userFiles(home)
     const sh = start(zsh, home)
     await checkScripts(sh, (status) => `user[${status}]> `)
@@ -415,7 +432,7 @@ describeShell('zsh', (zsh) => {
   })
 
   it("reads the user's own ZDOTDIR and gives it back", async () => {
-    const home = folder()
+    const home = zshHome()
     const zdotdir = join(home, 'zdotdir')
     mkdirSync(zdotdir)
     userFiles(zdotdir)
@@ -426,7 +443,7 @@ describeShell('zsh', (zsh) => {
   })
 
   it("marks the first prompt after the hooks the user's .zshrc adds (themes)", async () => {
-    const home = folder()
+    const home = zshHome()
     writeFileSync(
       join(home, '.zshrc'),
       [
@@ -481,7 +498,7 @@ describeShell('zsh', (zsh) => {
   }
 
   it('keeps a zle-line-init a later precmd hook defines', async () => {
-    const home = folder()
+    const home = zshHome()
     writeFileSync(
       join(home, '.zshrc'),
       [
@@ -497,7 +514,7 @@ describeShell('zsh', (zsh) => {
   })
 
   it('keeps a zle-line-init a later precmd hook wraps around the one it finds (zsh-vi-mode)', async () => {
-    const home = folder()
+    const home = zshHome()
     writeFileSync(
       join(home, '.zshrc'),
       [
@@ -523,9 +540,9 @@ describeShell('zsh', (zsh) => {
   })
 
   it("works under the user's `setopt nounset` without an error", async () => {
-    const home = folder()
+    const home = zshHome()
     userFiles(home)
-    writeFileSync(join(home, '.zshenv'), 'setopt nounset\nZSHENV_READ=yes\n')
+    zshenv(home, ['setopt nounset', 'ZSHENV_READ=yes'])
     const sh = start(zsh, home)
     await checkScripts(sh, (status) => `user[${status}]> `)
     expect(visible(sh.output())).not.toMatch(/parameter not set|zsh:/)

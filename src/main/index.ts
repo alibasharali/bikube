@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { boundedWait } from '../core/bounded-wait'
 import { killAtQuit, quitHold } from '../core/quit-hold'
+import { longCommandMsArg } from '../core/long-commands'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { IPC } from '../shared/api'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
@@ -33,6 +34,12 @@ const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
  */
 const hiddenForTests = !app.isPackaged && process.env['DROVR_E2E_HIDDEN'] === '1'
 
+/**
+ * The tests' shortened threshold for long command notifications (#45 D7), `DROVR_LONG_COMMAND_MS`,
+ * passed to the renderer as an argument; only the development build honours it.
+ */
+const longCommandMs = app.isPackaged ? undefined : process.env['DROVR_LONG_COMMAND_MS']
+
 function createWindow(settings: MainSettings): void {
   const mainWindow = new BrowserWindow({
     width: 1100,
@@ -54,7 +61,8 @@ function createWindow(settings: MainSettings): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      ...(hiddenForTests && { backgroundThrottling: false })
+      ...(hiddenForTests && { backgroundThrottling: false }),
+      ...(longCommandMs && { additionalArguments: [longCommandMsArg(longCommandMs)] })
     }
   })
 

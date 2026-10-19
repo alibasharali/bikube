@@ -9,7 +9,7 @@ import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen } from '../../core/card-sessions'
 import { SessionRouter } from '../../core/session-router'
-import type { PaneLayout } from '../../core/split-tree'
+import { MAIN_PANE, type PaneLayout } from '../../core/split-tree'
 import {
   knownRunState,
   knownStatus,
@@ -536,12 +536,30 @@ function startsClaudeCode(cardId: string): boolean {
     .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
 }
 
+/** Told of each new screen, with its card or shell and its pane. */
+type ScreenListener = (screen: XtermScreen, cardId: string, paneId: string) => void
+const screenListeners = new Set<ScreenListener>()
+
+/**
+ * Calls `listener` with each screen created from now on (a main pane's at each start, an extra
+ * pane's at its split), e.g. to watch its commands (#45 D7). Returns an unsubscribe function.
+ */
+export function onScreenCreated(listener: ScreenListener): () => void {
+  screenListeners.add(listener)
+  return () => screenListeners.delete(listener)
+}
+
+function created(screen: XtermScreen, cardId: string, paneId: string): XtermScreen {
+  for (const listener of screenListeners) listener(screen, cardId, paneId)
+  return screen
+}
+
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(
       window.drovr.terminal,
-      (cardId) => new XtermScreen(startsClaudeCode(cardId)),
+      (cardId) => created(new XtermScreen(startsClaudeCode(cardId)), cardId, MAIN_PANE),
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).
@@ -559,7 +577,7 @@ export function cardPanes(): CardPanes<XtermScreen> {
   paneRegistry ??= new CardPanes(
     window.drovr.terminal,
     sessionRouter(),
-    () => new XtermScreen(),
+    (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
     (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
   )
   return paneRegistry

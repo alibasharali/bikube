@@ -38,7 +38,8 @@ export class CardPanes<S extends CardScreen> {
   constructor(
     private readonly api: TerminalApi,
     private readonly router: SessionRouter,
-    private readonly createScreen: (cardId: string) => S,
+    /** A new extra pane's screen: `paneId` is the pane it will show in. */
+    private readonly createScreen: (cardId: string, paneId: string) => S,
     /** Whether the card's main shell is running: only then can it be split (D4). */
     private readonly isRunning: (cardId: string) => boolean
   ) {}
@@ -64,7 +65,7 @@ export class CardPanes<S extends CardScreen> {
     const before = this.layout(card.id)
     const after = splitFocused(before, direction, id)
     if (after === before) return undefined
-    const screen = this.createScreen(card.id)
+    const screen = this.createScreen(card.id, id)
     const pane: Pane<S> = { screen, sessionId: null, removed: false }
     let cardPanes = this.panes.get(card.id)
     if (!cardPanes) this.panes.set(card.id, (cardPanes = new Map()))

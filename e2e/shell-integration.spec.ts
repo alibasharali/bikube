@@ -2,12 +2,13 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen } from './card-view'
+import { backToBoard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Shell integration (#45): the marks a shell sends around its prompts and commands (OSC 133,
-// OSC 633, OSC 7), and what Drovr shows from them: a failed command's mark on its line (D6).
+// OSC 633, OSC 7), and what Drovr shows from them: a failed command's mark on its line (D6),
+// prompt jumps (D5), and a notification when a long command ends out of sight (D7).
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -25,14 +26,19 @@ test.afterEach(async () => {
   rmSync(root, { recursive: true, force: true })
 })
 
-/** Launches with the Shell setting `shell`, and a workspace on `root` with plain cards. */
-async function launchWithShell(shell: string): Promise<void> {
+/**
+ * Launches with the Shell setting `shell`, and a workspace on `root` with plain cards; `env` is
+ * added to the app's environment.
+ */
+async function launchWithShell(shell: string, env: Record<string, string> = {}): Promise<void> {
   dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'drovr-settings.json'),
     JSON.stringify({ version: 1, settings: { shell } })
   )
-  ;({ app, page } = await launchApp({ dataDir }))
+  const base: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) base[key] = value
+  ;({ app, page } = await launchApp({ dataDir, env: { ...base, ...env } }))
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
   await page.getByTestId('workspace-directory').fill(root)
@@ -294,4 +300,113 @@ test('AC6: Previous prompt and Next prompt scroll a prompt to the top, the shell
   await dialog.getByTestId('settings-shortcut-reset-previousPrompt').click()
   await expect(field).toHaveText('Ctrl+Shift+ArrowUp')
   await expect.poll(() => JSON.stringify(readSettings())).not.toContain('previousPrompt')
+})
+
+/** Replaces the page's `Notification` with one recording each notification sent. */
+async function stubNotifications(): Promise<void> {
+  await page.evaluate(() => {
+    const sent: { title: string; body: string; click: () => void }[] = []
+    class Recorded {
+      onclick: (() => void) | null = null
+      constructor(title: string, options: { body: string }) {
+        sent.push({ title, body: options.body, click: () => this.onclick?.() })
+      }
+    }
+    Object.assign(window, { __sent: sent, Notification: Recorded })
+  })
+}
+
+/** The notifications sent since `stubNotifications`, as title and body. */
+function notifications(): Promise<{ title: string; body: string }[]> {
+  return page.evaluate(() =>
+    (window as unknown as { __sent: { title: string; body: string }[] }).__sent.map(
+      ({ title, body }) => ({ title, body })
+    )
+  )
+}
+
+/** Pane `index`'s buffer in the open card or shell, one trimmed string per row. */
+function paneRows(index: number): Promise<string[]> {
+  return page.evaluate((index) => {
+    const panes = document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')
+    const host = panes[index]?.querySelector('[data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: {
+            buffer: {
+              active: {
+                length: number
+                getLine(i: number): { translateToString(trim: boolean): string } | undefined
+              }
+            }
+          }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const out: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      out.push(buffer.getLine(i)?.translateToString(true) ?? '')
+    }
+    return out
+  }, index)
+}
+
+/**
+ * A command marked as running about 1 s, its `C` printed `delay` s after Enter, ending with exit
+ * `code`, then `echo <done>` (quoted apart, so only its output matches).
+ */
+const longCommand = (delay: number, code: number, done: string): string =>
+  String.raw`sleep ${delay}; printf '\033]133;C\007'; sleep 1; printf '\033]133;D;` +
+  `${code}` +
+  String.raw`\007'; echo ${done.slice(0, 2)}"${done.slice(2)}"`
+
+test('AC7: a long command ending out of sight sends a notification; in the focused pane in view, or with Notifications off, none', async () => {
+  // Commands of 0.5 s or more count (development build only), so the test needn't wait 10 s.
+  await launchWithShell('/bin/sh', { DROVR_LONG_COMMAND_MS: '500' })
+  await stubNotifications()
+  await openDefaultShell()
+  await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.focus())
+  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true)
+  const panes = page.getByTestId('card-view').getByTestId('pane')
+
+  // Started in the extra pane, which loses the focus before it ends.
+  await splitRight(page)
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+  await run(longCommand(1, 4, 'extra-done'))
+  await panes.nth(0).click()
+  await expect(panes.nth(0)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(async () => (await paneRows(1)).includes('extra-done')).toBe(true)
+  await expect
+    .poll(() => notifications())
+    .toEqual([{ title: 'Default', body: 'Command failed (exit 4) · alpha' }])
+
+  // Clicking it from the board opens the shell with that pane focused.
+  await backToBoard(page)
+  await page.evaluate(() =>
+    (window as unknown as { __sent: { click: () => void }[] }).__sent[0]!.click()
+  )
+  await expectCardOpen(page, 'Default')
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+
+  // In the focused pane of the open shell, in the focused window: none.
+  await panes.nth(0).click()
+  await expect(panes.nth(0)).toHaveAttribute('data-focused', 'true')
+  await run(longCommand(0, 4, 'main-done'))
+  await expect.poll(async () => (await paneRows(0)).includes('main-done')).toBe(true)
+  expect(await notifications()).toHaveLength(1)
+
+  // With Notifications off: none, though the pane is out of sight.
+  await page.keyboard.press('Control+,')
+  const dialog = page.getByTestId('settings-dialog')
+  await dialog.getByTestId('settings-section-agents').click()
+  await dialog.getByTestId('settings-notifications').uncheck()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await panes.nth(1).click()
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+  await run(longCommand(1, 4, 'off-done'))
+  await panes.nth(0).click()
+  await expect(panes.nth(0)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(async () => (await paneRows(1)).includes('off-done')).toBe(true)
+  expect(await notifications()).toHaveLength(1)
 })

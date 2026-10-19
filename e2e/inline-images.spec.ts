@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deflateSync } from 'node:zlib'
@@ -14,12 +14,13 @@ import { plainCards } from './plain-cards'
 let app: ElectronApplication
 let page: Page
 let root: string
+let dataDir: string
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-images-'))
   const dir = join(root, 'alpha')
   mkdirSync(dir)
-  ;({ app, page } = await launchApp())
+  ;({ app, page, dataDir } = await launchApp())
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
   await page.getByTestId('workspace-directory').fill(dir)
@@ -255,4 +256,80 @@ test('AC8: kept output shows the text printed after an image, and no image', asy
   expect(above).toContain('kept-before')
   expect(above).toContain('kept-after')
   expect(imageRows(s)).toEqual([])
+})
+
+/** `drovr-settings.json`'s settings, or null before it is written. */
+const savedSettings = (): Record<string, unknown> | null => {
+  const path = join(dataDir, 'drovr-settings.json')
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).settings : null
+}
+
+/** Settings' terminal section, open, and its Inline images switch. */
+async function inlineImagesSwitch(): Promise<Locator> {
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-terminal').click()
+  return page.getByTestId('settings-inline-images')
+}
+
+const closeSettings = (): Promise<void> =>
+  page.getByTestId('settings-dialog').getByRole('button', { name: 'Done' }).click()
+
+/** Whether pane `index` of the open view loaded the image addon. */
+const hasImageAddon = (index = 0): Promise<boolean> =>
+  page
+    .getByTestId('card-view')
+    .locator('[data-testid=terminal]')
+    .nth(index)
+    .evaluate((host) => (host as HTMLElement & { __images?: unknown }).__images !== undefined)
+
+test('AC7: the Inline images switch is on, saves false when turned off and reads off after a restart', async () => {
+  const toggle = await inlineImagesSwitch()
+  await expect(toggle).toBeChecked()
+  await toggle.uncheck()
+  await closeSettings()
+  await expect.poll(savedSettings).toMatchObject({ inlineImages: false })
+
+  await app.close()
+  ;({ app, page } = await launchApp({ dataDir }))
+  await expect(await inlineImagesSwitch()).not.toBeChecked()
+})
+
+test('AC6: switched off, a new card holds no image and shows none of the data; an open one keeps its images', async () => {
+  await newCard('early')
+  await run(`printf 'early-before\\n${SIXEL}\\nearly-after\\n'`)
+  await expectImageBetween('early-before', 'early-after', { width: 20, height: 20 })
+  await backToBoard(page)
+
+  const toggle = await inlineImagesSwitch()
+  await toggle.uncheck()
+  await closeSettings()
+  await expect.poll(savedSettings).toMatchObject({ inlineImages: false })
+
+  // The terminal open before keeps its image, and still shows the ones it prints.
+  await openCard('early')
+  await expectImageBetween('early-before', 'early-after', { width: 20, height: 20 })
+  await run(`printf 'early-iip\\n${IIP}\\nearly-iip-after\\n'`)
+  await expect
+    .poll(async () => {
+      const s = await screen()
+      return s.rows.includes('early-iip-after') && s.imageCols[s.rows.lastIndexOf('early-iip') + 1]
+    })
+    .toEqual([0])
+  await backToBoard(page)
+
+  await newCard('late')
+  await run(`printf 'off-before\\n${SIXEL}\\noff-middle\\n${IIP}\\noff-after\\n'`)
+  await expect.poll(async () => (await screen()).rows.includes('off-after')).toBe(true)
+  expect(await hasImageAddon()).toBe(false)
+  const s = await screen()
+  expect(imageRows(s)).toEqual([])
+  // Each sequence printed nothing: only the empty line its newline ends follows each marker.
+  const before = s.rows.lastIndexOf('off-before')
+  expect(s.rows.slice(before, before + 5)).toEqual([
+    'off-before',
+    '',
+    'off-middle',
+    '',
+    'off-after'
+  ])
 })

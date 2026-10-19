@@ -230,9 +230,12 @@ export class XtermScreen implements CardScreen {
     this.term.loadAddon(this.serializer)
     // Sixel and iTerm2 inline images (#52 D1, D2), decoded while detached too (default cell size
     // until opened), so an image printed while the board shows is there when the card is opened.
-    const images = new ImageAddon(IMAGE_OPTIONS)
-    this.term.loadAddon(images)
-    this.host.__images = images
+    // Read once here (D3): switching the setting never touches an open terminal.
+    if (settingsStore.get().inlineImages) {
+      const images = new ImageAddon(IMAGE_OPTIONS)
+      this.term.loadAddon(images)
+      this.host.__images = images
+    }
     const clipboard = window.drovr.clipboard
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.

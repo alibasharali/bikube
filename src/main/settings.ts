@@ -30,6 +30,8 @@ export interface MainSettings {
   editor(): Pick<Settings, 'editor' | 'editorCommand' | 'shell'>
   /** The Claude Code status updates setting. */
   claudeStatus(): boolean
+  /** The Shell integration setting (#45 D4). */
+  shellIntegration(): boolean
   /** The sync folder kept in the settings file (#13 D10), or null when sync is off. */
   syncFolder(): string | null
   /** Keeps `folder` (already checked) as the sync folder, or null for off, and writes the file. */
@@ -102,6 +104,7 @@ export function registerSettings(): MainSettings {
   return {
     shell: () => file.load().shell,
     claudeStatus: () => file.load().claudeStatus,
+    shellIntegration: () => file.load().shellIntegration,
     editor: () => {
       const { editor, editorCommand, shell } = file.load()
       return { editor, editorCommand, shell }

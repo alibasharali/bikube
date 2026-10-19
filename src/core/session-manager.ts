@@ -14,6 +14,11 @@ export interface SpawnOptions {
    * `exec ssh …` line (#12 D5).
    */
   command?: string
+  /**
+   * An interactive shell's arguments, `-l` by default; e.g. bash's `--init-file` for shell
+   * integration (#45 D3). Not used with `command`.
+   */
+  args?: string[]
   /** Variables added to the inherited environment, e.g. the card's `board` variables (#9 D3). */
   env?: Record<string, string>
 }
@@ -84,7 +89,8 @@ export class SessionManager {
   spawn(options: SpawnOptions): SessionInfo {
     const shell = options.shell ?? SessionManager.defaultShell()
     const id = String(this.nextId++)
-    const args = options.command === undefined ? ['-l'] : ['-l', '-c', options.command]
+    const args =
+      options.command === undefined ? (options.args ?? ['-l']) : ['-l', '-c', options.command]
     const proc = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols: options.cols,

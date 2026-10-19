@@ -1,0 +1,299 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { hostname, tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { SessionManager } from './session-manager'
+import { shellIntegrationStart } from './shell-integration'
+
+// #45 AC4: Drovr's zsh, bash and fish integration scripts in real shells, started as Drovr starts
+// them (`shellIntegrationStart`, `SessionManager.spawn`), with a home folder whose login files
+// set a variable, a prompt showing the last status, and a hook printing the status it sees.
+// A shell that isn't installed is skipped, except in CI, which installs all three.
+
+const scriptsDir = resolve(__dirname, '..', '..', 'resources', 'shell-integration')
+
+const OSC = (body: string): string => `\x1b]${body}\x07`
+
+function installed(shell: string): string | null {
+  try {
+    return execFileSync('/bin/sh', ['-c', `command -v ${shell}`], { encoding: 'utf8' }).trim()
+  } catch {
+    return null
+  }
+}
+
+/** Skipped when the shell is missing locally; in CI a missing shell fails instead. */
+function describeShell(name: string, body: (path: string) => void): void {
+  const path = installed(name)
+  if (path === null && process.env['CI']) {
+    describe(name, () => {
+      it('is installed in CI', () => {
+        expect.fail(`${name} is missing: CI must install it for #45 AC4`)
+      })
+    })
+    return
+  }
+  describe.skipIf(path === null)(`${name} with Drovr's integration`, { timeout: 30_000 }, () =>
+    body(path ?? name)
+  )
+}
+
+const managers: SessionManager[] = []
+const folders: string[] = []
+afterEach(async () => {
+  await Promise.all(managers.splice(0).map((m) => m.killAll()))
+  for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true })
+})
+
+function folder(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'drovr-shell-integration-'))
+  folders.push(dir)
+  return dir
+}
+
+/** The test process's variables kept out of the shells: only `start`'s environment counts. */
+const STRIPPED = [
+  'ZDOTDIR',
+  'XDG_DATA_DIRS',
+  'XDG_CONFIG_HOME',
+  'PROMPT_COMMAND',
+  'ENV',
+  'BASH_ENV'
+]
+
+interface Shell {
+  output(): string
+  /** Types `line` and Enter. */
+  run(line: string): void
+  until(what: string, test: (output: string) => boolean): Promise<void>
+}
+
+/** Starts `shell` as Drovr does, in `home`, with `env` as the environment Drovr starts from. */
+function start(shell: string, home: string, env: Record<string, string> = {}): Shell {
+  const base: Record<string, string> = { HOME: home, SHELL: shell, ...env }
+  const integration = shellIntegrationStart(shell, { enabled: true, scriptsDir, env: base })
+  const m = new SessionManager()
+  managers.push(m)
+  let output = ''
+  // The test's own environment (its SHELL, a developer's ZDOTDIR) stays out of the shell.
+  const saved = Object.fromEntries(STRIPPED.map((key) => [key, process.env[key]]))
+  for (const key of STRIPPED) delete process.env[key]
+  let id: string
+  try {
+    ;({ id } = m.spawn({
+      shell,
+      cols: 200,
+      rows: 50,
+      cwd: home,
+      args: integration.args,
+      env: { ...base, ...integration.env }
+    }))
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value !== undefined) process.env[key] = value
+    }
+  }
+  m.on('data', (_, data) => {
+    output += data
+    // A terminal's answer to the primary device attributes query, which fish may wait for.
+    if (data.includes('\x1b[c') || data.includes('\x1b[0c')) m.write(id, '\x1b[?62;22c')
+  })
+  return {
+    output: () => output,
+    run: (line) => m.write(id, `${line}\r`),
+    until: async (what, test) => {
+      const deadline = Date.now() + 8_000
+      while (!test(output)) {
+        if (Date.now() > deadline) {
+          throw new Error(`timed out waiting for ${what}; output:\n${JSON.stringify(output)}`)
+        }
+        await new Promise((r) => setTimeout(r, 20))
+      }
+    }
+  }
+}
+
+/** The output as the user sees it: escape sequences and carriage returns removed. */
+function visible(output: string): string {
+  return (
+    output
+      // eslint-disable-next-line no-control-regex
+      .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+      // eslint-disable-next-line no-control-regex
+      .replace(/\x1b\[[0-9;?<=>]*[ -/]*[@-~]/g, '')
+      // eslint-disable-next-line no-control-regex
+      .replace(/\x1b[()][A-Z0-9]|\x1b[=>]/g, '')
+      .replace(/\r/g, '')
+  )
+}
+
+/** The OSC 133 and OSC 7 marks in `output`, in order. */
+function marks(output: string): string[] {
+  // eslint-disable-next-line no-control-regex
+  return [...output.matchAll(/\x1b\](133;[^\x07]*|7;[^\x07]*)\x07/g)].map((m) => m[1]!)
+}
+
+const OSC7_TMP = OSC(`7;file://${hostname()}/tmp`)
+
+/**
+ * Runs `true`, `false` and `cd /tmp`, then checks the marks (A, B, C, D;0, then D;1, OSC 7 for
+ * /tmp), the user's prompt showing the status it saw, and the login files' variable.
+ */
+async function checkScripts(sh: Shell, prompt: (status: number) => string): Promise<void> {
+  await sh.until('the first prompt', (o) => visible(o).includes(prompt(0)))
+  sh.run('true')
+  await sh.until('D;0', (o) => o.includes(OSC('133;D;0')))
+  sh.run('false')
+  await sh.until('D;1', (o) => o.includes(OSC('133;D;1')))
+  sh.run('cd /tmp')
+  await sh.until('OSC 7 for /tmp', (o) => o.includes(OSC7_TMP))
+  const seen = marks(sh.output())
+  const a = seen.indexOf('133;A')
+  const b = seen.indexOf('133;B', a)
+  const c = seen.indexOf('133;C', b)
+  const d0 = seen.indexOf('133;D;0', c)
+  const d1 = seen.indexOf('133;D;1', d0)
+  expect([a, b, c, d0, d1].every((i) => i >= 0)).toBe(true)
+  // The prompt after `false` shows the user's own prompt with the status it saw.
+  expect(visible(sh.output())).toContain(prompt(1))
+  sh.run('echo "login=$TEST_LOGIN_VAR"')
+  await sh.until('the login variable', (o) => visible(o).includes('login=from-login-files'))
+}
+
+/**
+ * The environment of a shell started from `sh` (`<nested> -c env`), checked to hold none of
+ * Drovr's injection variables, and a `ZDOTDIR` and `XDG_DATA_DIRS` without Drovr's folder.
+ */
+async function nestedEnv(sh: Shell, nested: string): Promise<Record<string, string>> {
+  sh.run(`${nested} -c 'echo nested-"start"; env; echo nested-"end"'`)
+  await sh.until('the nested shell', (o) => /nested-start\n[^]*nested-end\n/.test(visible(o)))
+  const lines = visible(sh.output())
+    .match(/nested-start\n([^]*)nested-end\n/)![1]!
+    .split('\n')
+  const env: Record<string, string> = {}
+  for (const line of lines) {
+    const eq = line.indexOf('=')
+    if (eq > 0) env[line.slice(0, eq)] = line.slice(eq + 1)
+  }
+  expect(Object.keys(env).filter((key) => key.startsWith('DROVR_'))).toEqual([])
+  expect(env['ZDOTDIR'] ?? '').not.toContain(scriptsDir)
+  expect(env['XDG_DATA_DIRS'] ?? '').not.toContain(scriptsDir)
+  return env
+}
+
+describeShell('bash', (bash) => {
+  it('marks prompts and commands, keeps the login files, the prompt and $?', async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.bash_profile'),
+      [
+        'export TEST_LOGIN_VAR=from-login-files',
+        "PS1='user[$?]> '",
+        'PROMPT_COMMAND=\'echo "hook-saw-$?"\''
+      ].join('\n') + '\n'
+    )
+    // Not read: bash reads only the first login file that exists.
+    writeFileSync(join(home, '.profile'), 'export TEST_LOGIN_VAR=wrong-file\n')
+    const sh = start(bash, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).toContain('hook-saw-1\n')
+    expect(await nestedEnv(sh, bash)).not.toHaveProperty('PROMPT_COMMAND')
+  })
+  it("keeps the user's DEBUG trap and an array PROMPT_COMMAND, and marks commands inside functions once", async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.profile'),
+      [
+        'export TEST_LOGIN_VAR=from-login-files',
+        "PS1='user[$?]> '",
+        // bash 5.1's array form; on an older bash only its first element runs.
+        'PROMPT_COMMAND=(\'echo "hook-saw-$?"\' \'echo "second-saw-$?"\')',
+        'trap \'s=$?; [ "$BASH_COMMAND" = "echo traced" ] && echo "user-trap-saw-$s"\' DEBUG'
+      ].join('\n') + '\n'
+    )
+    const sh = start(bash, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).toContain('hook-saw-1\nsecond-saw-1\n')
+    sh.run('false; echo traced')
+    await sh.until('the user trap', (o) => visible(o).includes('user-trap-saw-1'))
+    sh.run('set -T; f() { true; true; }; f')
+    await sh.until('the function', (o) => o.split(OSC('133;C')).length === 7)
+    await sh.until('its end', (o) => o.split(OSC('133;D;0')).length === 6)
+    // One C for the whole line, none for the commands inside `f`.
+    expect(sh.output().split(OSC('133;C')).length).toBe(7)
+  })
+})
+
+describeShell('zsh', (zsh) => {
+  /** The user's zsh files in `dir`: a login variable, a prompt and a precmd hook. */
+  function userFiles(dir: string): void {
+    writeFileSync(join(dir, '.zshenv'), 'ZSHENV_READ=yes\n')
+    writeFileSync(join(dir, '.zprofile'), 'export TEST_LOGIN_VAR=from-login-files\n')
+    writeFileSync(
+      join(dir, '.zshrc'),
+      [
+        "PS1='user[%?]> '",
+        // A hook returning something else, so a later hook would see the wrong status if it leaked.
+        'user_hook() { echo "hook-saw-$?"; return 7 }',
+        'precmd_functions+=(user_hook)'
+      ].join('\n') + '\n'
+    )
+  }
+
+  it('marks prompts and commands with the user files in HOME, and unsets ZDOTDIR again', async () => {
+    const home = folder()
+    userFiles(home)
+    const sh = start(zsh, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).toContain('hook-saw-1\n')
+    sh.run('echo "zshenv=$ZSHENV_READ"')
+    await sh.until('the .zshenv variable', (o) => visible(o).includes('zshenv=yes'))
+    expect(await nestedEnv(sh, zsh)).not.toHaveProperty('ZDOTDIR')
+  })
+
+  it("reads the user's own ZDOTDIR and gives it back", async () => {
+    const home = folder()
+    const zdotdir = join(home, 'zdotdir')
+    mkdirSync(zdotdir)
+    userFiles(zdotdir)
+    const sh = start(zsh, home, { ZDOTDIR: zdotdir })
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).toContain('hook-saw-1\n')
+    expect((await nestedEnv(sh, zsh))['ZDOTDIR']).toBe(zdotdir)
+  })
+})
+
+describeShell('fish', (fish) => {
+  /** The user's config: a login variable, a prompt showing $status and a postexec handler. */
+  function userConfig(home: string): void {
+    const dir = join(home, '.config', 'fish')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'config.fish'),
+      [
+        'set -gx TEST_LOGIN_VAR from-login-files',
+        'function fish_greeting; end',
+        'function fish_prompt; printf "user[%s]> " $status; end',
+        'function user_hook --on-event fish_postexec; echo "hook-saw-$status"; end'
+      ].join('\n') + '\n'
+    )
+  }
+
+  it('marks prompts and commands, and takes its folder out of XDG_DATA_DIRS again', async () => {
+    const home = folder()
+    userConfig(home)
+    const sh = start(fish, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).toContain('hook-saw-1\n')
+    await nestedEnv(sh, fish)
+  })
+
+  it('gives back an XDG_DATA_DIRS that was set', async () => {
+    const home = folder()
+    userConfig(home)
+    const sh = start(fish, home, { XDG_DATA_DIRS: '/usr/share/test-data:/usr/share' })
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect((await nestedEnv(sh, fish))['XDG_DATA_DIRS']).toContain('/usr/share/test-data')
+  })
+})

@@ -69,6 +69,13 @@ describe('SessionManager', () => {
     await until(() => /x=card-7\r?\n/.test(output.get(id) ?? ''), 'env output')
   })
 
+  it('starts an interactive shell with the given arguments instead of -l (#45 D3)', async () => {
+    const m = create()
+    const { output } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24, args: ['-c', 'echo "a"rgs-$0'] })
+    await until(() => /args-\/bin\/sh\r?\n/.test(output.get(id) ?? ''), 'args output')
+  })
+
   it('runs the login shell with -c and a command, in the home directory (#12 D5)', async () => {
     const m = create()
     const { output, exits } = collect(m)

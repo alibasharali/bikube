@@ -1,8 +1,8 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expectCardOpen } from './card-view'
+import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -12,6 +12,7 @@ import { plainCards } from './plain-cards'
 let app: ElectronApplication | undefined
 let page: Page
 let root: string
+let dataDir: string
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-shell-integration-'))
@@ -26,7 +27,7 @@ test.afterEach(async () => {
 
 /** Launches with the Shell setting `shell`, and a workspace on `root` with plain cards. */
 async function launchWithShell(shell: string): Promise<void> {
-  const dataDir = newDataDir()
+  dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'drovr-settings.json'),
     JSON.stringify({ version: 1, settings: { shell } })
@@ -38,6 +39,15 @@ async function launchWithShell(shell: string): Promise<void> {
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+}
+
+/** The saved settings file. */
+function readSettings(): unknown {
+  try {
+    return JSON.parse(readFileSync(join(dataDir, 'drovr-settings.json'), 'utf8'))
+  } catch {
+    return null
+  }
 }
 
 /** Opens the workspace's Default shell and focuses its terminal. */
@@ -139,4 +149,50 @@ test('AC2: a failed command gets a mark on its line with its exit code; one that
   expect(bar.x).toBeLessThan(screen.x + 2)
   expect(tag.x + tag.width).toBeGreaterThan(screen.x + screen.width - 2)
   expect(Math.abs(tag.y - bar.y)).toBeLessThan(1)
+
+  // A command ending with 0 after the failed one adds nothing.
+  await run(`${marked('0')}; echo again-done`)
+  await expect
+    .poll(async () => (await rows()).some((row) => /^\$ again-done$/.test(row)))
+    .toBe(true)
+  await expect(badge).toHaveCount(1)
+  await expect(failed).toHaveCount(1)
+})
+
+test('AC5: bash with Shell integration marks a failed command; with it off a new shell does not', async () => {
+  await launchWithShell('/bin/bash')
+  await openDefaultShell()
+  const badge = page.getByTestId('command-failed-badge')
+
+  await run('false')
+  await expect(badge).toHaveCount(1)
+  await expect(badge).toHaveText('✗ 1')
+  // On the line `false` was typed on, the prompt's.
+  const line = Number(await badge.getAttribute('data-line'))
+  expect(await lineEndingAt(line)).toMatch(/false$/)
+  await run('true')
+  await run('echo first-"done"')
+  await expect.poll(async () => (await rows()).includes('first-done')).toBe(true)
+  await expect(badge).toHaveCount(1)
+
+  // Off: saved, and only a shell started afterwards goes without.
+  await backToBoard(page)
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-terminal').click()
+  const toggle = page.getByTestId('settings-shell-integration')
+  await expect(toggle).toBeChecked()
+  await toggle.uncheck()
+  await page.getByTestId('settings-dialog').getByRole('button', { name: 'Done' }).click()
+  await expect.poll(() => readSettings()).toMatchObject({ settings: { shellIntegration: false } })
+  await page
+    .locator('[data-testid="shell"][data-shell-name="Default"]')
+    .getByTestId('shell-menu')
+    .click()
+  await page.getByTestId('shell-menu-restart').click()
+  await openDefaultShell()
+  await run('false; echo second-"done"')
+  await expect.poll(async () => (await rows()).includes('second-done')).toBe(true)
+  await run('echo "debug=[$(trap -p DEBUG)]"')
+  await expect.poll(async () => (await rows()).includes('debug=[]')).toBe(true)
+  await expect(badge).toHaveCount(0)
 })

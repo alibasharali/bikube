@@ -100,7 +100,8 @@ function startApp(): void {
     boardShellEnvFor(socketPath),
     sshBoard.sockets,
     () => settings.shell(),
-    () => settings.claudeStatus()
+    () => settings.claudeStatus(),
+    () => settings.shellIntegration()
   )
   registerClipboard()
   registerLinks()

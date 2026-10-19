@@ -474,20 +474,20 @@ test('AC8: a split starts in the directory the shell reported, unless it is gone
 
   // OSC 7 for /tmp, with this machine's host name.
   await run(String.raw`printf '\033]7;file://%s/tmp\007' "$(hostname)"; echo r"eported"`)
-  await expect.poll(async () => (await paneRows(0)).includes('reported')).toBe(true)
+  await expect.poll(() => paneRows(0)).toContain('reported')
   expect(await splitDirectory()).toBe('/tmp')
 
   // A reported directory removed since: the shell's own directory, with no Couldn't start.
   const gone = join(root, 'gone')
   await run(String.raw`mkdir ${gone}; printf '\033]7;file://${gone}\007'; rmdir ${gone}`)
   await run('echo g"one"')
-  await expect.poll(async () => (await paneRows(0)).includes('gone')).toBe(true)
+  await expect.poll(() => paneRows(0)).toContain('gone')
   expect(own).toContain(await splitDirectory())
   expect((await paneRows(0)).some((row) => row.includes("Couldn't start"))).toBe(false)
 
   // Another machine's /tmp: the shell's own directory.
   await run(String.raw`printf '\033]7;file://other-host.invalid/tmp\007'; echo o"ther"`)
-  await expect.poll(async () => (await paneRows(0)).includes('other')).toBe(true)
+  await expect.poll(() => paneRows(0)).toContain('other')
   expect(own).toContain(await splitDirectory())
 })
 

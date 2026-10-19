@@ -540,8 +540,13 @@ async function setStartup(
 async function restartAndStop(dir: string, expected: string): Promise<void> {
   await openCard('sh')
   await expect.poll(async () => (await bufferLines()).some((l) => l.endsWith(expected))).toBe(true)
+  // The fake claude of this start: kept output (#46) above can hold an earlier start's.
   await expect
-    .poll(async () => (await bufferLines()).some((l) => l.startsWith('fake-claude')))
+    .poll(async () => {
+      const lines = await bufferLines()
+      const typed = lines.findLastIndex((l) => l.endsWith(expected))
+      return lines.slice(typed + 1).some((l) => l.startsWith('fake-claude'))
+    })
     .toBe(true)
   await page.keyboard.press('Enter')
   await run('pwd')

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { KeyLike } from './clipboard'
-import { isShiftEnter, SHIFT_ENTER, shiftEnterIsNewLine } from './terminal-keys'
+import {
+  CLAUDE_CODE_PROBE_OSC,
+  isShiftEnter,
+  SHIFT_ENTER,
+  shiftEnterIsNewLine
+} from './terminal-keys'
 
 const key = (over: Partial<KeyLike>): KeyLike => ({
   type: 'keydown',
@@ -40,5 +45,24 @@ describe('shiftEnterIsNewLine', () => {
     expect(shiftEnterIsNewLine(true, false)).toBe(false)
     expect(shiftEnterIsNewLine(false, true)).toBe(false)
     expect(shiftEnterIsNewLine(false, false)).toBe(false)
+  })
+
+  it("is a new line in any pane that saw Claude Code's probe, while focus reporting is on (#58 D1)", () => {
+    expect(shiftEnterIsNewLine(false, true, true)).toBe(true)
+    expect(shiftEnterIsNewLine(true, true, true)).toBe(true)
+  })
+
+  it('stays Enter after the probe once focus reporting is off', () => {
+    expect(shiftEnterIsNewLine(false, false, true)).toBe(false)
+    expect(shiftEnterIsNewLine(true, false, true)).toBe(false)
+  })
+
+  it('keeps the card rule without the probe (#58 D2)', () => {
+    expect(shiftEnterIsNewLine(true, true, false)).toBe(true)
+    expect(shiftEnterIsNewLine(false, true, false)).toBe(false)
+  })
+
+  it("names Claude Code's probe OSC 7501", () => {
+    expect(CLAUDE_CODE_PROBE_OSC).toBe(7501)
   })
 })

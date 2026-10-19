@@ -16,10 +16,21 @@ export function isShiftEnter(event: KeyLike): boolean {
 }
 
 /**
- * Whether Shift+Enter sends ESC CR rather than xterm's plain CR: only in a Claude Code card's main
- * pane, while focus reporting is on (Claude Code turns it on while it runs and off when it
- * exits). Anywhere else ESC CR would misfire, e.g. bash beeps and runs nothing.
+ * The OSC Claude Code sends at startup as its program-status query (checked on 2.1.303): a
+ * terminal that receives it is running Claude Code (#58 D1). It gets no reply (D3).
  */
-export function shiftEnterIsNewLine(claudeCodePane: boolean, focusReporting: boolean): boolean {
-  return claudeCodePane && focusReporting
+export const CLAUDE_CODE_PROBE_OSC = 7501
+
+/**
+ * Whether Shift+Enter sends ESC CR rather than xterm's plain CR: only while focus reporting is on
+ * (Claude Code turns it on while it runs and off when it exits), in a Claude Code card's main pane
+ * (#58 D2) or in any pane that saw Claude Code's probe (`sawProbe`, D1). Anywhere else ESC CR
+ * would misfire, e.g. bash beeps and runs nothing.
+ */
+export function shiftEnterIsNewLine(
+  claudeCodePane: boolean,
+  focusReporting: boolean,
+  sawProbe = false
+): boolean {
+  return (claudeCodePane || sawProbe) && focusReporting
 }

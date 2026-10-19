@@ -7,9 +7,10 @@ import { fakeClaudeHome } from './fake-claude'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// Shift+Enter (not specced: the terminal polish pass). It sends ESC CR, which Claude Code takes
-// as a new line, only in a Claude Code card's main pane while Claude Code runs there (focus
-// reporting on); everywhere else it is xterm's plain CR, since ESC CR misfires in bash.
+// Shift+Enter (the terminal polish pass, #58). It sends ESC CR, which Claude Code takes as a new
+// line, while focus reporting is on in a Claude Code card's main pane or in any pane that saw
+// Claude Code's probe (OSC 7501) since focus reporting was last turned off: a workspace's shells,
+// extra panes. Everywhere else it is xterm's plain CR, since ESC CR misfires in bash.
 
 /** ESC right before the newline in `od -c`'s output; a focus report (`033 [ I`) is not it. */
 const ESC_CR = /033\s+\\n/
@@ -27,11 +28,21 @@ printf '\\033[?1004l'
 echo claude-done
 `
 
+// Claude Code as any pane sees it (#58 D1): focus reporting on and the probe, then off (as one of
+// several modes) when it exits.
+const PROBE = `printf '\\033[?1004h\\033]7501;?\\007'
+echo probe-ready
+od -c
+printf '\\033[?1004;1000l'
+echo probe-done
+`
+
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-shift-enter-'))
   const fake = fakeClaudeHome(root)
   writeFileSync(join(fake.home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(fake.home, 'bin', 'claude'), 0o755)
+  writeFileSync(join(root, 'probe.sh'), PROBE)
   ;({ app, page } = await launchApp({ env: fake.env }))
 })
 
@@ -115,6 +126,18 @@ test("Shift+Enter is ESC CR while Claude Code runs in its card's main pane, Ente
   expect(await shell()).not.toMatch(ESC_CR)
 })
 
+test("Shift+Enter is ESC CR in a Claude Code card's extra pane that saw Claude Code's probe", async () => {
+  await addWorkspace(false)
+  await newCard('agent')
+  await after('claude-ready')
+  await splitRight(page)
+  const pane = await shiftEnterAtShell(
+    'pane-ready',
+    String.raw`printf '\033[?1004h\033]7501;?\007'; `
+  )
+  await expect.poll(pane).toMatch(ESC_CR)
+})
+
 test("Shift+Enter is Enter in a Claude Code card's extra pane, focus reporting or not", async () => {
   await addWorkspace(false)
   await newCard('agent')
@@ -130,6 +153,29 @@ test('Shift+Enter is Enter in a card that does not start Claude Code', async () 
   await newCard('plain')
   await expect.poll(focusedText, { timeout: 15_000 }).toMatch(/\S/)
   const shell = await shiftEnterAtShell('plain-ready', String.raw`printf '\033[?1004h'; `)
+  await expect.poll(shell).toMatch(/\\n/)
+  expect(await shell()).not.toMatch(ESC_CR)
+})
+
+test("Shift+Enter is ESC CR in a workspace's shell while Claude Code runs there, Enter once it exits", async () => {
+  await addWorkspace(true)
+  await page
+    .locator('[data-testid="shell"][data-shell-name="Default"]')
+    .getByTestId('shell-open')
+    .click()
+  await expectCardOpen(page, 'Default')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await expect.poll(focusedText, { timeout: 15_000 }).toMatch(/\S/)
+  await page.keyboard.type('sh probe.sh')
+  await page.keyboard.press('Enter')
+  const program = await after('probe-ready')
+  await page.keyboard.press('Shift+Enter')
+  await page.keyboard.press('Control+D')
+  await expect.poll(program).toMatch(ESC_CR)
+
+  // Focus reporting off ended it: turned on again without the probe, Shift+Enter is a plain CR.
+  await after('probe-done')
+  const shell = await shiftEnterAtShell('shell-ready', String.raw`printf '\033[?1004h'; `)
   await expect.poll(shell).toMatch(/\\n/)
   expect(await shell()).not.toMatch(ESC_CR)
 })

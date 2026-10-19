@@ -19,7 +19,12 @@ import {
 import { clipboardShortcut, copySelection, pasteFromClipboard } from '../../core/clipboard'
 import { FIND_HIGHLIGHT_LIMIT, isValidRegex, type FindResults } from '../../core/find'
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
-import { isShiftEnter, SHIFT_ENTER, shiftEnterIsNewLine } from '../../core/terminal-keys'
+import {
+  CLAUDE_CODE_PROBE_OSC,
+  isShiftEnter,
+  SHIFT_ENTER,
+  shiftEnterIsNewLine
+} from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
@@ -137,6 +142,8 @@ export class XtermScreen implements CardScreen {
   private webgl: WebglAddon | undefined
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
+  /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
+  private sawProbe = false
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
@@ -188,6 +195,16 @@ export class XtermScreen implements CardScreen {
     })
     this.term.onBell(() => ringBell(this.host))
     this.host.addEventListener('animationend', () => this.host.classList.remove('terminal-bell'))
+    // Claude Code runs here from its probe until focus reporting is next turned off (#58 D1).
+    // Both handlers return false, so xterm's own still see the sequence (D3).
+    this.term.parser.registerOscHandler(CLAUDE_CODE_PROBE_OSC, () => {
+      this.sawProbe = true
+      return false
+    })
+    this.term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
+      if (params.flat().includes(1004)) this.sawProbe = false
+      return false
+    })
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18).
@@ -195,7 +212,7 @@ export class XtermScreen implements CardScreen {
       if (workspaceShortcut(event, window.drovr.platform) !== null) return false
       if (
         isShiftEnter(event) &&
-        shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode)
+        shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode, this.sawProbe)
       ) {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin)

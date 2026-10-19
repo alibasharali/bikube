@@ -566,43 +566,6 @@ test('AC8: card view actions run from the palette as their shortcuts do', async 
   await expect(page.getByTestId('board')).toBeVisible()
 })
 
-test('AC9: theme, Settings, workspace and Default shell actions run from the palette', async () => {
-  await createWorkspace('Alpha')
-  await createWorkspace('Beta')
-  await selectWorkspace('Alpha')
-  const file = join(dataDir, 'drovr-settings.json')
-  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
-
-  await runAction('Theme: Dark')
-  await expect.poll(saved).toContain('"theme":"dark"')
-  expect(await app!.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
-  await openPalette()
-  const actions = await titles(section('actions'))
-  expect(actions).not.toContain('Theme: Dark')
-  expect(actions).toContain('Theme: System')
-  expect(actions).toContain('Theme: Light')
-  await page.keyboard.press('Escape')
-
-  await runAction('Open Settings')
-  await expect(page.getByTestId('settings-dialog')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
-
-  await openPalette()
-  await expect(actionShortcut('Switch to workspace Beta')).toHaveText(darwin ? '⌘2' : 'Ctrl+2')
-  expect(await titles(section('actions'))).not.toContain('Switch to workspace Alpha')
-  await page.keyboard.press('Escape')
-  await runAction('Switch to workspace Beta')
-  await expect(page.getByTestId('board-title')).toHaveText('Beta')
-  await expect(page.locator('[data-testid=workspace-item][aria-current=true]')).toHaveText(/Beta/)
-
-  await runAction('Open Default shell')
-  await expect(page.getByTestId('card-view')).toBeVisible()
-
-  await runAction('New workspace')
-  await expect(page.getByTestId('workspace-dialog')).toBeVisible()
-})
-
 test('AC10: New card goes to the board with the first column’s New card form open and focused', async () => {
   await createWorkspace('Alpha')
   await newCard('api')

@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, closeCard, expectCardOpen } from './card-view'
@@ -7,15 +7,21 @@ import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Cards waiting for the user (#41): each workspace's row in the sidebar counts its cards and
-// shells whose activity is Waiting for you or Needs your answer, set with `board activity`.
+// shells whose activity is Waiting for you or Needs your answer, set with `board activity`, and
+// Next waiting card (Cmd+J on macOS, Ctrl+Shift+J elsewhere) opens the one that waited longest.
+
+const darwin = process.platform === 'darwin'
+const NEXT = darwin ? 'Meta+J' : 'Control+Shift+J'
 
 let app: ElectronApplication | undefined
 let page: Page
 let root: string
+let dataDir: string
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-waiting-'))
-  ;({ app, page } = await launchApp({ dataDir: newDataDir() }))
+  dataDir = newDataDir()
+  ;({ app, page } = await launchApp({ dataDir }))
 })
 
 test.afterEach(async () => {
@@ -144,4 +150,164 @@ test('AC2: the collapsed sidebar shows the count as a dot on the badge', async (
   await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
   await expect(row('Beta').getByTestId('workspace-waiting-dot')).toHaveCount(0)
   await expect(pill('Beta')).toHaveText('2')
+})
+
+/** The active workspace's sidebar row reads `name`. */
+async function expectActive(name: 'Alpha' | 'Beta'): Promise<void> {
+  await expect(page.locator('[data-testid=workspace-item][aria-current=true]')).toHaveText(
+    new RegExp(name)
+  )
+}
+
+/** Card `title` is open at full size in workspace `name`. */
+async function expectOpenIn(name: 'Alpha' | 'Beta', title: string): Promise<void> {
+  await expectCardOpen(page, title)
+  await expectActive(name)
+}
+
+/** Lets a press that should do nothing have its chance to act. */
+const settle = (): Promise<void> => page.waitForTimeout(500)
+
+/** The open card's terminal, wrapped rows joined, one trimmed string per line. */
+function bufferLines(): Promise<string[]> {
+  return page.evaluate(() => {
+    type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const lines: string[] = []
+    let current = ''
+    for (let i = 0; i < buffer.length; i++) {
+      const next = buffer.getLine(i + 1)
+      current += buffer.getLine(i)?.translateToString(!next?.isWrapped) ?? ''
+      if (!next?.isWrapped) {
+        lines.push(current.trim())
+        current = ''
+      }
+    }
+    return lines
+  })
+}
+
+/** Alpha with card a1, Beta with `one` waiting before `two` needs an answer; Alpha's board shown. */
+async function oneThenTwoInBeta(): Promise<void> {
+  await createWorkspace('Alpha')
+  await newCard('a1')
+  await createWorkspace('Beta')
+  await newCard('one')
+  await newCard('two')
+  await setActivity('one', 'waiting', 'Waiting for you')
+  await setActivity('two', 'question', 'Needs your answer')
+  await selectWorkspace('Alpha')
+}
+
+test('AC3: the shortcut opens the longest-waiting card in any workspace, then the next', async () => {
+  await oneThenTwoInBeta()
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Beta', 'one')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Beta', 'two')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Beta', 'one')
+})
+
+test('AC4: a change between waiting and question keeps the place; working and back moves it last', async () => {
+  await oneThenTwoInBeta()
+  await selectWorkspace('Beta')
+  await setActivity('one', 'question', 'Needs your answer')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Beta', 'one')
+
+  await backToBoard(page)
+  await setActivity('one', 'working', 'Working')
+  await setActivity('one', 'waiting', 'Waiting for you')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Beta', 'two')
+})
+
+test('AC5: with nothing waiting the shortcut does nothing; with only the open card, it stays', async () => {
+  await createWorkspace('Alpha')
+  await newCard('a1')
+  await page.keyboard.press(NEXT)
+  await settle()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expectActive('Alpha')
+
+  await setActivity('a1', 'waiting', 'Waiting for you')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Alpha', 'a1')
+  await page.keyboard.press(NEXT)
+  await settle()
+  await expectOpenIn('Alpha', 'a1')
+})
+
+test('AC6: from a focused terminal the shell gets no keys; with Settings open nothing happens', async () => {
+  await createWorkspace('Alpha')
+  await newCard('a1')
+  await newCard('a2')
+  await setActivity('a2', 'waiting', 'Waiting for you')
+
+  await openCard('a1')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Alpha', 'a2')
+
+  await backToBoard(page)
+  await openCard('a1')
+  await page.keyboard.type('echo ok')
+  await page.keyboard.press('Enter')
+  await expect.poll(bufferLines).toContain('ok')
+  expect((await bufferLines()).filter((line) => line.endsWith('echo ok'))).toHaveLength(1)
+
+  const settings = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await expect(settings).toBeVisible()
+  await page.keyboard.press(NEXT)
+  await settle()
+  await expect(settings).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expectOpenIn('Alpha', 'a1')
+})
+
+test('AC8: a recorded shortcut replaces the default, is saved, and Reset brings the default back', async () => {
+  await createWorkspace('Alpha')
+  await createWorkspace('Beta')
+  await newCard('b1')
+  await setActivity('b1', 'waiting', 'Waiting for you')
+  await selectWorkspace('Alpha')
+
+  const settings = page.getByTestId('settings-dialog')
+  const field = settings.getByTestId('settings-shortcut-nextWaiting')
+  const file = join(dataDir, 'drovr-settings.json')
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-shortcuts').click()
+  await expect(settings.getByRole('group', { name: 'Shortcuts' })).toContainText(
+    'Next waiting card'
+  )
+  await expect(field).toHaveText(darwin ? 'Cmd+J' : 'Ctrl+Shift+J')
+  await field.click()
+  await page.keyboard.press('Control+Alt+J')
+  await expect(field).toHaveText('Ctrl+Alt+J')
+  await expect.poll(saved).toContain('"nextWaiting":"Ctrl+Alt+J"')
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+
+  await page.keyboard.press(NEXT)
+  await settle()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expectActive('Alpha')
+  await page.keyboard.press('Control+Alt+J')
+  await expectOpenIn('Beta', 'b1')
+
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-shortcuts').click()
+  await settings.getByTestId('settings-shortcut-reset-nextWaiting').click()
+  await expect(field).toHaveText(darwin ? 'Cmd+J' : 'Ctrl+Shift+J')
+  await expect.poll(saved).not.toContain('nextWaiting')
 })

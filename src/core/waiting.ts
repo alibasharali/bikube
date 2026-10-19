@@ -72,3 +72,21 @@ export function withoutDeleted(
   const kept = queue.filter((id) => owner.has(id))
   return kept.length === queue.length ? queue : kept
 }
+
+/**
+ * The card or shell the Next waiting card shortcut opens (D4) and its workspace (D5), from the
+ * queue without deleted cards; null when nothing would open.
+ */
+export function nextWaitingCard(
+  queue: readonly string[],
+  openId: string | null,
+  workspaces: readonly Workspace[]
+): { workspaceId: string; cardId: string } | null {
+  const owner = owners(workspaces)
+  const cardId = nextWaiting(
+    queue.filter((id) => owner.has(id)),
+    openId
+  )
+  const workspaceId = cardId === null ? undefined : owner.get(cardId)
+  return cardId === null || workspaceId === undefined ? null : { workspaceId, cardId }
+}

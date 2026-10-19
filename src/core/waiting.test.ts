@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { defaultShellId, type Card, type Workspace } from './workspace-store'
-import { nextWaiting, waitingCounts, withActivity, withoutDeleted } from './waiting'
+import {
+  nextWaiting,
+  nextWaitingCard,
+  waitingCounts,
+  withActivity,
+  withoutDeleted
+} from './waiting'
 
 function card(id: string): Card {
   return {
@@ -111,5 +117,43 @@ describe('waiting per workspace (#41 D6)', () => {
   it('returns the same queue when nothing was deleted', () => {
     const queue = ['b1', defaultShellId('beta')]
     expect(withoutDeleted(queue, [alpha, beta])).toBe(queue)
+  })
+})
+
+describe('the next waiting card and its workspace (#41 D4, D5)', () => {
+  it('names the workspace of the card or shell to open, the Default shell included', () => {
+    const queue = ['b1', defaultShellId('beta'), 'a2']
+    expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: 'b1'
+    })
+    expect(nextWaitingCard(queue, 'b1', [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: defaultShellId('beta')
+    })
+    expect(nextWaitingCard(queue, 'a2', [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: 'b1'
+    })
+  })
+
+  it('skips deleted cards and opens nothing when only the open one waits', () => {
+    expect(nextWaitingCard(['gone', 'a1'], null, [alpha, beta])).toEqual({
+      workspaceId: 'alpha',
+      cardId: 'a1'
+    })
+    expect(nextWaitingCard(['gone', 'a1'], 'a1', [alpha, beta])).toBeNull()
+    expect(nextWaitingCard([], null, [alpha, beta])).toBeNull()
+  })
+})
+
+describe('a waiting Default shell (#41 AC7)', () => {
+  it('counts 1 for its workspace and is the one the picker opens', () => {
+    const queue = [defaultShellId('beta')]
+    expect(waitingCounts(queue, [alpha, beta])).toEqual(new Map([['beta', 1]]))
+    expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: defaultShellId('beta')
+    })
   })
 })

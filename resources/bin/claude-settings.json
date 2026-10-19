@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; \"$DROVR_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; case $s in *'\"source\":\"resume\"'*|*'\"source\": \"resume\"'*) i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$DROVR_BIN/board\" session . \"$i\" >/dev/null 2>&1;; esac; [ \"$DROVR_CLAUDE_STATUS\" = 0 ] || cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
+            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; [ -e \"$t\" ] || t=/dev/null; \"$DROVR_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; case $s in *'\"source\":\"resume\"'*|*'\"source\": \"resume\"'*) i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$DROVR_BIN/board\" session . \"$i\" >/dev/null 2>&1;; esac; [ \"$DROVR_CLAUDE_STATUS\" = 0 ] || cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
             "timeout": 5
           }
         ]

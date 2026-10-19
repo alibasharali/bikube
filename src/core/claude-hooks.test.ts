@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -265,17 +265,37 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
       expect(loggedLines(1)).toEqual(['activity . waiting'])
     })
 
+    /** An existing transcript in the test's folder, its path with a space. */
+    const existing = (): string => {
+      const path = join(dir, 'x y', 't.jsonl')
+      mkdirSync(join(dir, 'x y'))
+      writeFileSync(path, '')
+      return path
+    }
+
     for (const source of ['startup', 'resume', 'clear', 'compact']) {
       it(`reports the transcript at SessionStart (${source}), still printing the instruction`, () => {
-        const input = { ...transcript, hook_event_name: 'SessionStart', source }
+        const path = existing()
+        const input = {
+          ...transcript,
+          transcript_path: path,
+          hook_event_name: 'SessionStart',
+          source
+        }
         expect(run('/bin/sh', 'SessionStart', input)).toEqual({
           status: 0,
           stdout: `${CLAUDE_INSTRUCTION}\n`,
           stderr: ''
         })
-        expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+        expect(usageLines(1)).toEqual([`usage . ${path}`])
       })
     }
+
+    it("reports a transcript that doesn't exist yet at SessionStart as /dev/null, so /clear clears", () => {
+      const input = { ...transcript, hook_event_name: 'SessionStart', source: 'clear' }
+      expect(run('/bin/sh', 'SessionStart', input).status).toBe(0)
+      expect(usageLines(1)).toEqual(['usage . /dev/null'])
+    })
 
     it("reads Claude's spaced JSON too", () => {
       const spaced = JSON.stringify({ ...transcript, hook_event_name: 'Stop' }, null, 1)
@@ -297,11 +317,17 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     })
 
     it("returns before board usage finishes, so Claude doesn't wait", () => {
-      const input = { ...transcript, hook_event_name: 'SessionStart', source: 'startup' }
+      const path = existing()
+      const input = {
+        ...transcript,
+        transcript_path: path,
+        hook_event_name: 'SessionStart',
+        source: 'startup'
+      }
       const start = Date.now()
       expect(run('/bin/sh', 'SessionStart', input, { FAKE_BOARD_SLEEP: '2' }).status).toBe(0)
       expect(Date.now() - start).toBeLessThan(1500)
-      expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+      expect(usageLines(1)).toEqual([`usage . ${path}`])
     })
   })
 

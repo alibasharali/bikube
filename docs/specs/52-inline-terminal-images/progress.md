@@ -17,4 +17,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- todo
+- ALL PASS (2026-10-19): AC1–AC8 by Vitest and e2e on the built app; AC9 full smoke 423 passed (3 timing/root-only failures, 2 green with --workers=1), sustained benchmark within budget.

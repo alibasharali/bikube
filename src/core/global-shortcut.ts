@@ -34,7 +34,7 @@ export type GlobalShortcutState = 'none' | 'registered' | 'failed'
 
 /** `globalShortcut`'s calls the registration needs, injected so tests can refuse (AC7). */
 export interface GlobalShortcutOs {
-  /** Whether the OS took `accelerator`; `onPress` runs on each press. */
+  /** Whether the OS took `accelerator`; `onPress` runs on each press. A throw reads as refused. */
   register(accelerator: string, onPress: () => void): boolean
   unregister(accelerator: string): void
 }
@@ -94,10 +94,19 @@ export class GlobalShortcut {
       this.current = 'none'
       return
     }
-    if (this.os.register(accelerator, this.onPress)) {
+    if (this.tryRegister(accelerator)) {
       this.held = accelerator
       this.current = 'registered'
     } else this.current = 'failed'
+  }
+
+  /** The OS's answer, false when it throws: Electron throws on an accelerator it can't parse. */
+  private tryRegister(accelerator: string): boolean {
+    try {
+      return this.os.register(accelerator, this.onPress)
+    } catch {
+      return false
+    }
   }
 
   private release(): void {

@@ -28,7 +28,8 @@ const TEST_HOOK = '__drovrGlobalShortcutPress'
 
 /**
  * The global shortcut (#51): registered at once from the saved settings and again after each save
- * that changes it (D8), unregistered while a shortcut field records (D6) and at quit (D10). A
+ * that changes it (D8), unregistered while a shortcut field records (D6: until it ends, the window loses focus or
+ * its page is gone) and at quit (D10). A
  * press hides the focused window or brings it forward (D3), and then, with Open the next waiting
  * card on, tells the renderer (`app:globalShow`, D4). A window created by a press gets no message:
  * its page isn't loaded yet. Call once the app is ready; `createWindow` makes the window when
@@ -100,4 +101,10 @@ export function registerGlobalShortcut(settings: MainSettings, createWindow: () 
   })
   // Recording ends when the window loses focus (D6), even if the page never says so.
   app.on('browser-window-blur', () => shortcut.resume())
+  // And when the page that recorded is gone: a reload, a committed main-frame navigation (one the
+  // navigation lock cancels never commits) or a crash (D6).
+  app.on('browser-window-created', (_, window) => {
+    window.webContents.on('did-navigate', () => shortcut.resume())
+    window.webContents.on('render-process-gone', () => shortcut.resume())
+  })
 }

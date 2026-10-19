@@ -247,6 +247,27 @@ test('AC5: with Open the next waiting card off, only the window comes forward', 
   await expect(page.getByTestId('board-title')).toHaveText('Alpha')
 })
 
+test('D4: with a dialog open, the press only brings the window forward', async () => {
+  await launchWith({ globalShortcut: SHORTCUT })
+  await alphaAndBeta()
+  await selectWorkspace('Beta')
+  await setWaiting('one')
+  await selectWorkspace('Alpha')
+
+  // Opening Settings records nothing, so the shortcut stays registered.
+  await page.getByTestId('settings-open').click()
+  await expect(page.getByTestId('settings-dialog')).toBeVisible()
+  expect(await isRegistered(ACCELERATOR)).toBe(true)
+
+  await putAway()
+  await pressGlobal()
+  await expectInFront()
+  await settle()
+  await expectActive('Alpha')
+  await expect(page.getByTestId('settings-dialog')).toBeVisible()
+  await expect(page.getByTestId('board-title')).toHaveText('Alpha')
+})
+
 test('AC8: a bad global shortcut in the file registers nothing', async () => {
   test.setTimeout(120_000)
   const candidates = ['D', 'Control+Shift+P', ACCELERATOR]
@@ -406,6 +427,20 @@ test.describe('the Settings row', () => {
     await settingsDialog().getByTestId('settings-done').click()
     await expect(settingsDialog()).toHaveCount(0)
     await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(true)
+  })
+
+  test('D6: a page reload while recording registers the global shortcut again', async () => {
+    await launchWith({ globalShortcut: SHORTCUT })
+    await openShortcuts()
+    await globalField().click()
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(false)
+    expect(await shortcutState()).toBe('registered')
+
+    // The page never says recording ended: main sees the reload.
+    await page.reload()
+    await expect(page.getByTestId('settings-open')).toBeVisible()
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(true)
+    expect(await shortcutState()).toBe('registered')
   })
 
   test('AC7: a shortcut the OS refuses stays saved and the row says why', async () => {

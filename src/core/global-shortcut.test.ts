@@ -103,6 +103,16 @@ describe('GlobalShortcut (#51 D2, D6, D8)', () => {
     expect([...os.registered.keys()]).toEqual(['Control+Alt+Shift+D'])
   })
 
+  it("reports failed when the OS throws on an accelerator it can't parse (D8)", () => {
+    const os = fakeOs()
+    os.register = () => {
+      throw new TypeError('Error processing argument at index 0')
+    }
+    const shortcut = new GlobalShortcut(os, 'linux', () => {})
+    expect(() => shortcut.set('Ctrl+Alt+Shift+D')).not.toThrow()
+    expect(shortcut.state()).toBe('failed')
+  })
+
   it('unregisters while suspended and registers again on resume (D6)', () => {
     const os = fakeOs()
     const shortcut = new GlobalShortcut(os, 'linux', () => {})

@@ -726,6 +726,23 @@ test('AC8: a split pane of an SSH card connects to its host, with no startup com
   expect(claudeLogLines(fake.log)).toHaveLength(1)
 })
 
+test("#45 AC8: an SSH card's split starts in its own directory whatever its shell reported", async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await createCard('api')
+  await connected()
+  // A directory that looks local (no host) and exists on this machine too.
+  expect(await output(String.raw`printf '\033]7;file:///tmp\007'; echo reported`, 'osc')).toBe(
+    'reported'
+  )
+
+  await splitRight(page)
+  await expect.poll(sshLog).toHaveLength(2)
+  expect(sshLog()[1]).toContain(`cd '${REMOTE_DIR}' || exit 255; `)
+  await run('echo "pwd:$(pwd)"')
+  await expect.poll(() => paneLines(1)).toContain(`pwd:${REMOTE_DIR}`)
+})
+
 test('AC8: a pane whose ssh fails keeps its error and SSH failed until Close pane', async () => {
   await launch({ FAKE_SSH_FAIL_AFTER: '1' })
   await createSsh('me@devbox', REMOTE_DIR, 'remote')

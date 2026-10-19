@@ -185,3 +185,41 @@ function remove<T>(list: T[], item: T): void {
   const index = list.indexOf(item)
   if (index >= 0) list.splice(index, 1)
 }
+
+/** Where a new split starts and what decides it (#45 D8). */
+export interface SplitPlace {
+  /** The card's or shell's own directory. */
+  cardDirectory: string
+  /** The card's or shell's SSH host; absent for a local one. */
+  sshHost?: string
+  /** This machine's host name, which OSC 7 may name for a local path. */
+  localHostName: string
+}
+
+/**
+ * The directory a new split tries first (#45 D8): the focused pane's last reported directory when
+ * it is a local absolute path (OSC 7's host empty, `localhost` or this machine's, any OSC 633
+ * `Cwd`), else the card's own; an SSH card's always. Whether it still exists is main's check.
+ */
+export function splitDirectory(
+  reported: ShellDirectory | undefined,
+  { cardDirectory, sshHost, localHostName }: SplitPlace
+): string {
+  if (sshHost !== undefined || !reported?.path.startsWith('/')) return cardDirectory
+  const host = reported.host?.toLowerCase()
+  const local =
+    host === undefined ||
+    host === '' ||
+    host === 'localhost' ||
+    host === localHostName.toLowerCase()
+  return local ? reported.path : cardDirectory
+}
+
+const HOST_NAME_ARG = '--drovr-host-name='
+
+/** The renderer's argument carrying this machine's host name (#45 D8), which it can't read. */
+export const hostNameArg = (name: string): string => `${HOST_NAME_ARG}${name}`
+
+/** This machine's host name in `argv`; empty without one. */
+export const parseHostName = (argv: readonly string[]): string =>
+  argv.find((a) => a.startsWith(HOST_NAME_ARG))?.slice(HOST_NAME_ARG.length) ?? ''

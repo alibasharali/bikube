@@ -1,8 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { hostname } from 'node:os'
 import { boundedWait } from '../core/bounded-wait'
 import { killAtQuit, quitHold } from '../core/quit-hold'
 import { longCommandMsArg } from '../core/long-commands'
+import { hostNameArg } from '../core/shell-marks'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { IPC } from '../shared/api'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
@@ -62,7 +64,11 @@ function createWindow(settings: MainSettings): void {
       nodeIntegration: false,
       sandbox: true,
       ...(hiddenForTests && { backgroundThrottling: false }),
-      ...(longCommandMs && { additionalArguments: [longCommandMsArg(longCommandMs)] })
+      // This machine's host name, which the sandboxed renderer can't read (#45 D8).
+      additionalArguments: [
+        hostNameArg(hostname()),
+        ...(longCommandMs ? [longCommandMsArg(longCommandMs)] : [])
+      ]
     }
   })
 

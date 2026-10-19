@@ -31,6 +31,7 @@ import {
   parseShellMark,
   SHELL_MARK_OSCS,
   ShellMarks,
+  splitDirectory,
   type ShellCommand
 } from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
@@ -578,7 +579,19 @@ export function cardPanes(): CardPanes<XtermScreen> {
     window.drovr.terminal,
     sessionRouter(),
     (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
-    (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
+    (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
+    // A new split starts where the focused pane's shell last said it was (#45 D8).
+    (card, focused) => {
+      const screen =
+        focused === MAIN_PANE
+          ? cardTerminals().screen(card.id)
+          : paneRegistry?.screen(card.id, focused)
+      return splitDirectory(screen?.marks.directory(), {
+        cardDirectory: card.directory,
+        sshHost: card.host,
+        localHostName: window.drovr.hostName
+      })
+    }
   )
   return paneRegistry
 }

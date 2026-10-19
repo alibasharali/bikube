@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { parseShellMark, ShellMarks, type ShellCommand, type ShellMarkFamily } from './shell-marks'
+import {
+  parseShellMark,
+  hostNameArg,
+  parseHostName,
+  ShellMarks,
+  splitDirectory,
+  type ShellCommand,
+  type ShellMarkFamily
+} from './shell-marks'
 
 /** Feeds `sequences` (an OSC family and its payload) to a fresh mark state, one row each. */
 function fed(sequences: [ShellMarkFamily, string][]): {
@@ -170,5 +178,38 @@ describe('ShellMarks (#45 D1, D2)', () => {
     unsubscribe()
     marks.feed({ kind: 'command-end', exitCode: 1 }, 1, () => 0)
     expect(calls).toEqual([])
+  })
+})
+
+describe('splitDirectory (#45 D8)', () => {
+  const local = { cardDirectory: '/home/me/project', localHostName: 'Box' }
+
+  it.each(['', 'localhost', 'box', 'BOX'])("takes a path reported for host '%s'", (host) => {
+    expect(splitDirectory({ host, path: '/tmp' }, local)).toBe('/tmp')
+  })
+
+  it("takes OSC 633's Cwd, which names no host", () => {
+    expect(splitDirectory({ path: '/srv/app' }, local)).toBe('/srv/app')
+  })
+
+  it("keeps the card's directory for another host, nothing reported or a relative path", () => {
+    expect(splitDirectory({ host: 'other-host.invalid', path: '/tmp' }, local)).toBe(
+      '/home/me/project'
+    )
+    expect(splitDirectory(undefined, local)).toBe('/home/me/project')
+    expect(splitDirectory({ path: 'tmp' }, local)).toBe('/home/me/project')
+  })
+
+  it("always keeps an SSH card's directory", () => {
+    expect(splitDirectory({ host: '', path: '/tmp' }, { ...local, sshHost: 'dev@box' })).toBe(
+      '/home/me/project'
+    )
+  })
+})
+
+describe("this machine's host name for the renderer (#45 D8)", () => {
+  it('round-trips through an argument, and is empty without one', () => {
+    expect(parseHostName(['electron', hostNameArg('my-box.local')])).toBe('my-box.local')
+    expect(parseHostName(['electron'])).toBe('')
   })
 })

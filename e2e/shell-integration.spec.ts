@@ -1,8 +1,8 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen, splitRight } from './card-view'
+import { backToBoard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -409,4 +409,91 @@ test('AC7: a long command ending out of sight sends a notification; in the focus
   await expect(panes.nth(0)).toHaveAttribute('data-focused', 'true')
   await expect.poll(async () => (await paneRows(1)).includes('off-done')).toBe(true)
   expect(await notifications()).toHaveLength(1)
+})
+
+/** Pane `index`'s lines in the open card or shell, wrapped rows joined, each trimmed. */
+function paneLines(index: number): Promise<string[]> {
+  return page.evaluate((index) => {
+    const panes = document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')
+    const host = panes[index]?.querySelector('[data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: {
+            buffer: {
+              active: {
+                length: number
+                getLine(
+                  i: number
+                ): { isWrapped: boolean; translateToString(trim: boolean): string } | undefined
+              }
+            }
+          }
+        })
+      | null
+    const buffer = host?.__xterm?.buffer.active
+    if (!buffer) return []
+    const lines: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      const text = line?.translateToString(!buffer.getLine(i + 1)?.isWrapped) ?? ''
+      if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text
+      else lines.push(text)
+    }
+    return lines.map((line) => line.trim())
+  }, index)
+}
+
+/** Runs `echo at=<the shell's directory>` in the focused pane: its output reads `at=<dir>`. */
+const printDirectory = (): Promise<void> => run('echo "a""t=$(pwd)"')
+
+/** Splits right, prints the new pane's directory and closes it again, returning that directory. */
+async function splitDirectory(): Promise<string> {
+  const panes = page.getByTestId('card-view').getByTestId('pane')
+  await splitRight(page)
+  await expect(panes).toHaveCount(2)
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+  await printDirectory()
+  let found = ''
+  await expect
+    .poll(async () => {
+      found = (await paneLines(1)).find((line) => line.startsWith('at='))?.slice(3) ?? ''
+      return found
+    })
+    .not.toBe('')
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(panes).toHaveCount(1)
+  return found
+}
+
+test('AC8: a split starts in the directory the shell reported, unless it is gone or on another host', async () => {
+  await launchWithShell('/bin/sh')
+  await openDefaultShell()
+  const own = [root, realpathSync(root)]
+
+  // OSC 7 for /tmp, with this machine's host name.
+  await run(String.raw`printf '\033]7;file://%s/tmp\007' "$(hostname)"; echo r"eported"`)
+  await expect.poll(async () => (await paneRows(0)).includes('reported')).toBe(true)
+  expect(await splitDirectory()).toBe('/tmp')
+
+  // A reported directory removed since: the shell's own directory, with no Couldn't start.
+  const gone = join(root, 'gone')
+  await run(String.raw`mkdir ${gone}; printf '\033]7;file://${gone}\007'; rmdir ${gone}`)
+  await run('echo g"one"')
+  await expect.poll(async () => (await paneRows(0)).includes('gone')).toBe(true)
+  expect(own).toContain(await splitDirectory())
+  expect((await paneRows(0)).some((row) => row.includes("Couldn't start"))).toBe(false)
+
+  // Another machine's /tmp: the shell's own directory.
+  await run(String.raw`printf '\033]7;file://other-host.invalid/tmp\007'; echo o"ther"`)
+  await expect.poll(async () => (await paneRows(0)).includes('other')).toBe(true)
+  expect(own).toContain(await splitDirectory())
+})
+
+test('AC8: with bash and Shell integration, a split after cd starts in that directory', async () => {
+  await launchWithShell('/bin/bash')
+  await openDefaultShell()
+  await run('cd /tmp')
+  // Its prompt reports the directory (OSC 7), before the next command's output.
+  await run('echo c"d-done"')
+  await expect.poll(async () => (await paneRows(0)).includes('cd-done')).toBe(true)
+  expect(await splitDirectory()).toBe('/tmp')
 })

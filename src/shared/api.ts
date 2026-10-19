@@ -355,6 +355,8 @@ export interface DrovrApi {
    * shorter one only the development build takes from `DROVR_LONG_COMMAND_MS`, for the tests.
    */
   longCommandMs: number
+  /** This machine's host name (`os.hostname()`), for OSC 7's host (#45 D8); empty if unknown. */
+  hostName: string
   terminal: TerminalApi
   clipboard: ClipboardApi
   link: LinkApi

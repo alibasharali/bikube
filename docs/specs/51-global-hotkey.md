@@ -2,7 +2,7 @@
 item: 51
 type: feature
 title: 'Global hotkey'
-status: draft
+status: approved
 branch: claude/51-global-hotkey
 ---
 

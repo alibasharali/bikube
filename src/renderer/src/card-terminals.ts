@@ -8,6 +8,7 @@ import {
   type ITheme
 } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { ImageAddon } from '@xterm/addon-image'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -140,8 +141,14 @@ export type MarkLine = IMarker | undefined
 const samePosition = (a: IBufferRange, b: IBufferRange): boolean =>
   a.start.x === b.start.x && a.start.y === b.start.y && a.end.x === b.end.x && a.end.y === b.end.y
 
-/** The element the smoke tests read the buffer from. */
-export type TerminalHost = HTMLDivElement & { __xterm?: XTerm }
+/** The element the smoke tests read the buffer and its inline images (#52) from. */
+export type TerminalHost = HTMLDivElement & { __xterm?: XTerm; __images?: ImageAddon }
+
+/**
+ * Inline images' limits (#52 D4): 32 MB of image data per terminal, oldest dropped; the pixel
+ * and sixel limits are the addon's defaults, and size reports stay on so programs can size images.
+ */
+const IMAGE_OPTIONS = { storageLimit: 32, enableSizeReports: true }
 
 /**
  * A card's xterm.js screen for one start (#5 D6, D7), discarded when the card is Stopped. It
@@ -224,6 +231,14 @@ export class XtermScreen implements CardScreen {
     this.term.loadAddon(new WebLinksAddon(openLink))
     this.term.loadAddon(this.search)
     this.term.loadAddon(this.serializer)
+    // Sixel and iTerm2 inline images (#52 D1, D2), decoded while detached too (default cell size
+    // until opened), so an image printed while the board shows is there when the card is opened.
+    // Read once here (D3): switching the setting never touches an open terminal.
+    if (settingsStore.get().inlineImages) {
+      const images = new ImageAddon(IMAGE_OPTIONS)
+      this.term.loadAddon(images)
+      this.host.__images = images
+    }
     const clipboard = window.drovr.clipboard
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.

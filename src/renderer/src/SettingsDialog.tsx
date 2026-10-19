@@ -663,6 +663,13 @@ function TerminalBehaviourRows(): React.JSX.Element {
         checked={settings.shellIntegration}
         onChange={(shellIntegration) => settingsStore.update({ shellIntegration })}
       />
+      <SwitchRow
+        label="Inline images"
+        hint="Show sixel and iTerm2 images in terminals. Applies to new terminals."
+        testId="settings-inline-images"
+        checked={settings.inlineImages}
+        onChange={(inlineImages) => settingsStore.update({ inlineImages })}
+      />
     </>
   )
 }

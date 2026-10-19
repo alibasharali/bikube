@@ -203,8 +203,13 @@ test('AC3: output of a shell that exited by itself is above the separator', asyn
 test('D1: the separator starts below the last old line, wherever the old cursor was', async () => {
   await newCard('api')
   // Scrollback, a cleared screen, three lines and the cursor back up on the first (an agent's
-  // input box above its footer): the blank rows below and the cursor's place are not kept.
-  await run(String.raw`seq 1 60; printf '\033[H\033[2Jkept-a\nkept-b\nkept-c\033[2A'`)
+  // input box above its footer): the blank rows below and the cursor's place are not kept. The
+  // shell is replaced by a `sleep` still running at Close, as an agent would be: its next prompt
+  // there, or zsh's hangup warnings at Close, would be written from kept-a's row, and zsh clears
+  // below its prompt (#62).
+  await run(
+    String.raw`seq 1 60; printf '\033[H\033[2Jkept-a\nkept-b\nkept-c\033[2A'; exec sleep 30`
+  )
   await expect.poll(bufferLines).toContain('kept-c')
   await closeOpenCard('api')
 

@@ -66,6 +66,20 @@ function cardId(title: string): string {
   return cards.find((c: { title: string }) => c.title === title).id
 }
 
+/** `cardId` once the state file holds the card: a new card is saved a moment after it shows. */
+async function savedCardId(title: string): Promise<string> {
+  await expect
+    .poll(() => {
+      try {
+        return cardId(title)
+      } catch {
+        return undefined
+      }
+    })
+    .toBeTruthy()
+  return cardId(title)
+}
+
 const fileOf = (id: string): string => createHash('sha256').update(id).digest('hex')
 
 async function newCard(title: string): Promise<void> {
@@ -354,7 +368,7 @@ test('AC2, AC10: a running card at quit shows its output after a restart; none o
   await newCard('api')
   await run('echo kept-46-quit')
   await expect.poll(bufferLines).toContain('kept-46-quit')
-  const id = cardId('api')
+  const id = await savedCardId('api')
   await expect
     .poll(() => (existsSync(syncFile) ? readFileSync(syncFile, 'utf8') : ''))
     .toContain('"api"')
@@ -386,7 +400,7 @@ test('AC6: at launch, saves of cards not on the board and stray temporary files 
   await run('echo kept-46-prune')
   await expect.poll(bufferLines).toContain('kept-46-prune')
   await closeOpenCard('api')
-  const kept = fileOf(cardId('api'))
+  const kept = fileOf(await savedCardId('api'))
   await expect.poll(keptFiles).toEqual([kept])
   await app.close()
 

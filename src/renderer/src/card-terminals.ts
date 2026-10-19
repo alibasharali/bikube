@@ -174,6 +174,8 @@ export class XtermScreen implements CardScreen {
   }
   /** Removes the pointer listeners from the window the screen is attached in (`attach`). */
   private unlistenWindow: (() => void) | undefined
+  /** The window the screen was last shown in (#53 D2). */
+  private shownIn: Window | undefined
   private webgl: WebglAddon | undefined
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
@@ -402,6 +404,8 @@ export class XtermScreen implements CardScreen {
     // Opens it the first time; after that only points xterm at the host's window.
     this.term.open(this.host)
     this.followDocument(container.ownerDocument)
+    if (this.shownIn && this.shownIn !== view) this.dropPendingFrames(this.shownIn)
+    this.shownIn = view
     this.listenTo(view)
     this.fitNow()
     this.loadWebgl()
@@ -430,6 +434,37 @@ export class XtermScreen implements CardScreen {
     const current = core?._document as { nodeType?: unknown } | null | undefined
     if (core && typeof current === 'object' && current !== null && current.nodeType === 9) {
       if (current !== doc) core._document = doc
+    }
+  }
+
+  /**
+   * xterm 6 asks the window it is shown in for animation frames, and keeps each pending one's id
+   * until it runs: its render debouncer (which then skips every refresh), overview ruler and
+   * selection. A frame `previous` still owes never runs once that window closes, and the screen
+   * would never draw again, there or anywhere (#53 D2). Each pending frame is cancelled there and
+   * forgotten, so the next refresh asks this window. The debouncer keeps its rows and refresh
+   * callbacks: the full refresh after it covers every row and runs them. Private fields, each
+   * checked first, so another xterm version only loses this.
+   */
+  private dropPendingFrames(previous: Window): void {
+    const core = (this.term as unknown as { _core?: Record<string, unknown> })._core
+    const renderService = core?._renderService as Record<string, unknown> | undefined
+    const pending: [unknown, string][] = [
+      [renderService?._renderDebouncer, '_animationFrame'],
+      [core?._overviewRulerRenderer, '_animationFrame'],
+      [core?._selectionService, '_refreshAnimationFrame']
+    ]
+    for (const [owner, field] of pending) {
+      if (typeof owner !== 'object' || owner === null) continue
+      const fields = owner as Record<string, unknown>
+      const id = fields[field]
+      if (typeof id !== 'number') continue
+      try {
+        previous.cancelAnimationFrame(id)
+      } catch {
+        // A closed window has no frames left to cancel.
+      }
+      fields[field] = undefined
     }
   }
 

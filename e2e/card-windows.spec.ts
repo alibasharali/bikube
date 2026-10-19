@@ -804,3 +804,66 @@ test('D10: the Files tab in a card window refreshes while only that window is fo
   writeFileSync(join(dir, 'later.txt'), '')
   await expect(row('later.txt')).toBeVisible({ timeout: 4000 })
 })
+
+/** The text xterm has drawn in `on`'s card view terminal (its DOM rows, not its buffer). */
+const drawnRows = (on: Page): Promise<string> =>
+  on.evaluate(
+    () => document.querySelector('[data-testid=card-view] .xterm-rows')?.textContent ?? ''
+  )
+
+/** `on`'s terminal keeps drawing what its shell prints: its drawn rows change over time. */
+async function expectRedrawing(on: Page): Promise<void> {
+  await expect
+    .poll(async () => {
+      const before = await drawnRows(on)
+      await on.waitForTimeout(300)
+      return before !== (await drawnRows(on))
+    })
+    .toBe(true)
+}
+
+const STREAM = 'while :; do echo $RANDOM$RANDOM; sleep 0.003; done'
+
+test('D2: a card whose window closes while it prints keeps drawing where it shows next', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  let window = await openInWindow('Agent A')
+  await run(window, STREAM)
+  await expectRedrawing(window)
+  // Closed mid-stream: a redraw xterm asked that window for never comes.
+  await window.close()
+  await card('Agent A').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Agent A')
+  await expectRedrawing(page)
+
+  await backToBoard(page)
+  window = await openInWindow('Agent A')
+  await expectRedrawing(window)
+  await window.close()
+  window = await openInWindow('Agent A')
+  await expectRedrawing(window)
+})
+
+test('D4: a file or link dropped on the card window opens nothing', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  // Whether the window let each event's default action (opening what was dropped) run.
+  const allowed = await window.evaluate(() => {
+    const data = new DataTransfer()
+    data.setData('text/uri-list', 'https://example.com/')
+    data.setData('text/plain', 'https://example.com/')
+    data.items.add(new File(['x'], 'dropped.txt', { type: 'text/plain' }))
+    const target = document.querySelector('[data-testid=terminal]')!
+    return ['dragover', 'drop'].map((type) =>
+      target.dispatchEvent(
+        new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data })
+      )
+    )
+  })
+  expect(allowed).toEqual([false, false])
+  await window.waitForTimeout(300)
+  expect(window.url()).toBe('about:blank')
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
+  await expect(window.getByTestId('terminal')).toBeVisible()
+})

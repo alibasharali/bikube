@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -83,6 +84,17 @@ const terminalFocused = (on: Page): Promise<boolean> =>
   on.evaluate(
     () => document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
   )
+
+/** A page's card view terminal selection in pane `pane`; '' for none. */
+function selection(on: Page, pane = 0): Promise<string> {
+  return on.evaluate((index) => {
+    const hosts = document.querySelectorAll('[data-testid=card-view] [data-testid=terminal]')
+    const host = hosts[index] as
+      (HTMLElement & { __xterm?: { hasSelection(): boolean; getSelection(): string } }) | undefined
+    const term = host?.__xterm
+    return term?.hasSelection() ? term.getSelection() : ''
+  }, pane)
+}
 
 /** Types a command into the page's focused terminal and presses Enter. */
 async function run(on: Page, command: string): Promise<void> {
@@ -294,7 +306,15 @@ test("AC6: deleting the card's workspace closes its window", async () => {
   await gone
 })
 
-test('AC7: split, zoom, Find and Close card act in the card window', async () => {
+test('AC7: split, zoom, Find, Copy command output and Close card act in the card window', async () => {
+  // Shell /bin/sh: no shell integration of its own, so the printf marks below are the only ones.
+  await page.getByTestId('settings-open').click()
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-shell').click()
+  await settings.getByTestId('settings-shell').selectOption('/bin/sh')
+  await expect(settings.getByTestId('settings-shell')).toHaveValue('/bin/sh')
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
   await newCard('Agent A')
   await backToBoard(page)
   const window = await openInWindow('Agent A')
@@ -317,6 +337,17 @@ test('AC7: split, zoom, Find and Close card act in the card window', async () =>
   await window.keyboard.press('Escape')
   await expect(window.getByTestId('find-bar')).toHaveCount(0)
   await expect.poll(() => terminalFocused(window)).toBe(true)
+
+  // Copy command output (#60 D2) in the focused main pane: a command marked with printf (OSC 133).
+  await recordClipboardWrites(app)
+  await run(
+    window,
+    String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007copied-60\n\033]133;D;0\007'`
+  )
+  await expect.poll(() => bufferLines(window)).toContain('$ copied-60')
+  await window.keyboard.press(darwin ? 'Meta+Shift+A' : 'Control+Shift+A')
+  await expect.poll(() => clipboardWrites(app)).toEqual(['copied-60'])
+  expect(await selection(window)).toBe('copied-60')
 
   await window.keyboard.press(SHORTCUTS.closeCard)
   await expect(window.getByTestId('confirm-dialog')).toBeVisible()

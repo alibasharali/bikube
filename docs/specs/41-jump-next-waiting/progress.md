@@ -17,4 +17,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS (AC7 unit level only), waiting/palette/settings e2e 45/45

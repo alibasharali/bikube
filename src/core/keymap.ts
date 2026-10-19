@@ -309,17 +309,17 @@ export function modifierMessage(platform: string): string {
   return `Use ${platform === 'darwin' ? 'Cmd' : 'Ctrl'} or Alt with a key`
 }
 
+/** The global shortcut's name in refusals (#51 D5). */
+export const GLOBAL_SHORTCUT_LABEL = 'Show or hide Drovr'
+
 /**
- * The outcome of a press while `action`'s field records (D8): a modifier alone keeps recording,
- * Escape cancels, a key without Cmd, Ctrl or Alt or a combination already used (a fixed shortcut
- * or another action's in `keymap`) is refused, anything else is the new shortcut.
+ * The shortcut a press makes while a field records (D8), or the result that ends there: a
+ * modifier alone keeps recording, Escape cancels, a key without Cmd, Ctrl or Alt is refused.
  */
-export function recordPress(
+export function recordedShortcut(
   event: KeyEventLike,
-  action: ShortcutAction,
-  keymap: Keymap,
   platform: string
-): RecordResult {
+): { kind: 'shortcut'; shortcut: string } | RecordResult {
   const commanded = event.ctrlKey || event.altKey || event.metaKey
   if (event.key === 'Escape' && !commanded) return { kind: 'cancel' }
   const key = eventKey(event)
@@ -332,36 +332,69 @@ export function recordPress(
     cmd: event.metaKey,
     key
   })
-  const owner = shortcutOwner(shortcut, action, keymap, platform)
+  return { kind: 'shortcut', shortcut }
+}
+
+/**
+ * The outcome of a press while `action`'s field records (D8): a modifier alone keeps recording,
+ * Escape cancels, a key without Cmd, Ctrl or Alt or a combination already used (a fixed shortcut,
+ * another action's in `keymap` or the global shortcut, #51 D5) is refused, anything else is the
+ * new shortcut.
+ */
+export function recordPress(
+  event: KeyEventLike,
+  action: ShortcutAction,
+  keymap: Keymap,
+  platform: string,
+  globalShortcut?: string
+): RecordResult {
+  const recorded = recordedShortcut(event, platform)
+  if (recorded.kind !== 'shortcut') return recorded
+  const { shortcut } = recorded
+  const owner = shortcutOwner(shortcut, action, keymap, platform, globalShortcut)
   if (owner !== undefined) return { kind: 'refused', message: `Already used by ${owner}` }
   return { kind: 'set', shortcut }
 }
 
-/** What else holds `shortcut` (a fixed shortcut or another action), named as D8 shows it. */
-function shortcutOwner(
+/**
+ * What else holds `shortcut` (a fixed shortcut, another action, or the global shortcut, #51 D5),
+ * named as D8 shows it; `action` null asks about every action.
+ */
+export function shortcutOwner(
   shortcut: string,
-  action: ShortcutAction,
+  action: ShortcutAction | null,
   keymap: Keymap,
-  platform: string
+  platform: string,
+  globalShortcut?: string
 ): string | undefined {
   return (
     fixedShortcuts(platform).get(shortcut) ??
     SHORTCUT_ACTIONS.filter((other) => other !== action && keymap[other] === shortcut).map(
       (other) => SHORTCUT_LABELS[other]
-    )[0]
+    )[0] ??
+    (globalShortcut !== undefined && globalShortcut === shortcut
+      ? GLOBAL_SHORTCUT_LABEL
+      : undefined)
   )
 }
 
 /**
- * Why Reset can't bring back `action`'s default (D8): another action holds it now, e.g.
- * `Already used by Split right`; null when Reset may apply it.
+ * Why Reset can't bring back `action`'s default (D8): another action or the global shortcut
+ * (#51 D5) holds it now, e.g. `Already used by Split right`; null when Reset may apply it.
  */
 export function resetRefusal(
   action: ShortcutAction,
   keymap: Keymap,
-  platform: string
+  platform: string,
+  globalShortcut?: string
 ): string | null {
-  const owner = shortcutOwner(defaultKeymap(platform)[action], action, keymap, platform)
+  const owner = shortcutOwner(
+    defaultKeymap(platform)[action],
+    action,
+    keymap,
+    platform,
+    globalShortcut
+  )
   return owner === undefined ? null : `Already used by ${owner}`
 }
 

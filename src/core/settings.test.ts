@@ -590,3 +590,83 @@ describe('the Keep output preference (#46 D8)', () => {
     expect(validateSettings({ ...base, keepOutput: 'no' }, 'linux')).toBeNull()
   })
 })
+
+describe('the global shortcut in the settings file (#51 D9, AC8)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is none by default and written only when set', () => {
+    expect(DEFAULT_SETTINGS.globalShortcut).toBeUndefined()
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('globalShortcut')
+    const settings: Settings = { ...base, globalShortcut: 'Ctrl+Alt+Shift+D' }
+    const text = serializeSettings(settings)
+    expect(JSON.parse(text).settings.globalShortcut).toBe('Ctrl+Alt+Shift+D')
+    expect(parseSettingsFile(text, 'linux')).toEqual({ settings, replaced: [] })
+  })
+
+  it('reads a key alone, an in-app shortcut, a fixed one or a non-string as none, reported', () => {
+    for (const value of ['D', 'Ctrl+Shift+P', 'Ctrl+Shift+C', 'Ctrl+MediaPlayPause', 42]) {
+      const parsed = parseSettingsFile(file({ ...base, globalShortcut: value }), 'linux')
+      expect(parsed.settings).toEqual(base)
+      expect(parsed.replaced).toEqual(['globalShortcut'])
+    }
+  })
+
+  it('checks it against the in-app shortcuts as read, and the OS it runs on', () => {
+    // The palette moved away, so its default is free.
+    const moved = parseSettingsFile(
+      file({ ...base, shortcuts: { palette: 'Ctrl+Alt+P' }, globalShortcut: 'Ctrl+Shift+P' }),
+      'linux'
+    )
+    expect(moved.settings.globalShortcut).toBe('Ctrl+Shift+P')
+    // A bad override falls back to the default, which then holds it.
+    const fellBack = parseSettingsFile(
+      file({ ...base, shortcuts: { palette: 'P' }, globalShortcut: 'Ctrl+Shift+P' }),
+      'linux'
+    )
+    expect(fellBack.settings.globalShortcut).toBeUndefined()
+    expect(fellBack.replaced).toEqual(['shortcuts', 'globalShortcut'])
+    expect(
+      parseSettingsFile(file({ ...base, globalShortcut: 'Cmd+K' }), 'darwin').settings
+        .globalShortcut
+    ).toBeUndefined()
+  })
+
+  it('saves a valid one and refuses a save with an invalid one', () => {
+    expect(validateSettings({ ...base, globalShortcut: 'Ctrl+Alt+Shift+D' }, 'linux')).toEqual({
+      ...base,
+      globalShortcut: 'Ctrl+Alt+Shift+D'
+    })
+    expect(validateSettings({ ...base, globalShortcut: undefined }, 'linux')).toEqual(base)
+    for (const value of ['D', 'Ctrl+Shift+P', 'Ctrl+Shift+C', 'Ctrl+MediaPlayPause', 42, '']) {
+      expect(validateSettings({ ...base, globalShortcut: value }, 'linux')).toBeNull()
+    }
+    // An in-app shortcut taking it is refused too.
+    expect(
+      validateSettings(
+        { ...base, globalShortcut: 'Ctrl+Alt+R', shortcuts: { splitRight: 'Ctrl+Alt+R' } },
+        'linux'
+      )
+    ).toBeNull()
+  })
+})
+
+describe('the Open the next waiting card preference (#51 D9, AC8)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is on by default and written only when off', () => {
+    expect(DEFAULT_SETTINGS.openWaitingOnShow).toBe(true)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('openWaitingOnShow')
+    const text = serializeSettings({ ...base, openWaitingOnShow: false })
+    expect(JSON.parse(text).settings.openWaitingOnShow).toBe(false)
+    expect(parseSettingsFile(text, 'linux').settings.openWaitingOnShow).toBe(false)
+  })
+
+  it('reads a value that is not a boolean as on, and refuses it in a save', () => {
+    const parsed = parseSettingsFile(file({ ...base, openWaitingOnShow: 'no' }), 'linux')
+    expect(parsed.settings.openWaitingOnShow).toBe(true)
+    expect(parsed.replaced).toEqual(['openWaitingOnShow'])
+    expect(validateSettings({ ...base, openWaitingOnShow: 'no' }, 'linux')).toBeNull()
+  })
+})

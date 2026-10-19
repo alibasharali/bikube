@@ -2,11 +2,12 @@
  * App-wide settings (#10 D1) and their file format (D6, D7). Plain TS with no Electron or Node
  * imports, so main and the renderer can both use it. The file holds
  * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily", "shell", "terminalThemeDark",
- * "terminalThemeLight", "useGhosttyTheme", "shortcuts"?, "syncFolder"? } }`; a file from before
- * the shell and terminal theme fields gets their defaults.
+ * "terminalThemeLight", "useGhosttyTheme", "shortcuts"?, "globalShortcut"?, "syncFolder"? } }`;
+ * a file from before the shell and terminal theme fields gets their defaults.
  *
  * `shortcuts` (#31 D9) holds only the shortcuts that differ from this OS's default (absent when
- * none do), so reading and checking it needs the platform the app runs on.
+ * none do), so reading and checking it needs the platform the app runs on. So does
+ * `globalShortcut` (#51 D9), absent when none is set, which no in-app shortcut may share.
  *
  * `syncFolder` (#13 D10) is kept per machine in the same file but is not part of `Settings`:
  * `settings:save` never carries or changes it, only the sync channels do. It is written only while
@@ -16,7 +17,8 @@
  * becomes the default (D4), so the file and every reader see the actual family.
  */
 
-import { readShortcuts, validateShortcuts, type ShortcutOverrides } from './keymap'
+import { isGlobalShortcut } from './global-hotkey'
+import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides } from './keymap'
 import { DROVR_DARK, DROVR_LIGHT, isTerminalThemeName } from './terminal-themes'
 
 export const SETTINGS_FILE_NAME = 'drovr-settings.json'
@@ -40,6 +42,8 @@ export interface Settings extends Preferences {
   useGhosttyTheme: boolean
   /** The shortcuts that differ from this OS's default (#31 D9); absent when none do. */
   shortcuts?: ShortcutOverrides
+  /** The system-wide shortcut that shows or hides Drovr (#51 D9), as D7 text; absent when none. */
+  globalShortcut?: string
 }
 
 export const CURSOR_STYLES = ['block', 'bar', 'underline'] as const
@@ -94,6 +98,8 @@ export interface Preferences {
   editorCommand: string
   /** A card's main pane output is kept on this machine when it stops (#46 D8). */
   keepOutput: boolean
+  /** Bringing Drovr forward with the global shortcut opens the next waiting card (#51 D4). */
+  openWaitingOnShow: boolean
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -114,7 +120,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   sidePanelWidth: 280,
   editor: 'vscode',
   editorCommand: '',
-  keepOutput: true
+  keepOutput: true,
+  openWaitingOnShow: true
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -152,7 +159,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   editor: oneOf(EDITORS),
   editorCommand: (v): v is string =>
     typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v),
-  keepOutput: isBoolean
+  keepOutput: isBoolean,
+  openWaitingOnShow: isBoolean
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]
@@ -222,7 +230,8 @@ export function normalizeFontFamily(value: unknown): string | null {
 /**
  * Checks a `settings:save` payload: every field must be valid (D1), else null and nothing is
  * applied (D6). The result holds only D1's fields, with the family normalized, and the shortcuts
- * that differ from `platform`'s default when the whole set is valid (#31 D9).
+ * that differ from `platform`'s default when the whole set is valid (#31 D9), and the global
+ * shortcut when one is set and no in-app shortcut has it (#51 D9).
  */
 export function validateSettings(value: unknown, platform: string): Settings | null {
   if (!isObject(value)) return null
@@ -240,6 +249,13 @@ export function validateSettings(value: unknown, platform: string): Settings | n
   }
   const shortcuts = validateShortcuts(value.shortcuts, platform)
   if (shortcuts === null) return null
+  const { globalShortcut } = value
+  if (
+    globalShortcut !== undefined &&
+    !isGlobalShortcut(globalShortcut, resolveKeymap(shortcuts, platform), platform)
+  ) {
+    return null
+  }
   // A missing preference is its default; an invalid one rejects the whole save (D6).
   const preferences = { ...PREFERENCE_DEFAULTS } as Record<keyof Preferences, unknown>
   for (const key of PREFERENCE_KEYS) {
@@ -247,7 +263,7 @@ export function validateSettings(value: unknown, platform: string): Settings | n
     if (!PREFERENCE_CHECKS[key](value[key])) return null
     preferences[key] = value[key]
   }
-  return withShortcuts(
+  const settings = withShortcuts(
     {
       theme: value.theme,
       fontSize: value.fontSize,
@@ -260,6 +276,7 @@ export function validateSettings(value: unknown, platform: string): Settings | n
     },
     shortcuts
   )
+  return globalShortcut === undefined ? settings : { ...settings, globalShortcut }
 }
 
 /** `settings` with `shortcuts`, left out when there are none. */
@@ -273,7 +290,7 @@ export interface ParsedSettings {
   syncFolder?: string
   /**
    * The fields that were invalid or missing and took their default (D7); `shortcuts` when any
-   * shortcut did (#31 D9).
+   * shortcut did (#31 D9), `globalShortcut` when it was dropped (#51 D9).
    */
   replaced: (keyof Settings)[]
   /** Why the whole file was ignored, when it was. */
@@ -283,7 +300,8 @@ export interface ParsedSettings {
 /**
  * Reads the file's contents (D7): not JSON, not an object or another version gives all
  * defaults; otherwise each field is checked on its own and an invalid or missing one takes its
- * default while the valid ones are kept; so is each shortcut, against `platform`'s defaults (#31 D9).
+ * default while the valid ones are kept; so is each shortcut, against `platform`'s defaults (#31 D9),
+ * and then the global shortcut, against the shortcuts as read (#51 D9).
  */
 export function parseSettingsFile(text: string, platform: string): ParsedSettings {
   let file: unknown
@@ -326,13 +344,17 @@ export function parseSettingsFile(text: string, platform: string): ParsedSetting
   const { shortcuts, dropped } = readShortcuts(raw.shortcuts, platform)
   settings = withShortcuts(settings, shortcuts)
   if (dropped.length > 0) replaced.push('shortcuts')
+  if (isGlobalShortcut(raw.globalShortcut, resolveKeymap(shortcuts, platform), platform)) {
+    settings.globalShortcut = raw.globalShortcut
+  } else if ('globalShortcut' in raw) replaced.push('globalShortcut')
   if (isSyncFolderPath(raw.syncFolder)) return { settings, replaced, syncFolder: raw.syncFolder }
   return { settings, replaced }
 }
 
 /**
  * The file contents for `settings`, fields in D6's order, then the shortcuts that differ from the
- * default (#31 D9) and the sync folder (#13 D10) when sync is on.
+ * default (#31 D9), the global shortcut when set (#51 D9) and the sync folder (#13 D10) when sync
+ * is on.
  */
 export function serializeSettings(settings: Settings, syncFolder: string | null = null): string {
   const { theme, fontSize, fontFamily, shell, terminalThemeDark, terminalThemeLight, shortcuts } =
@@ -354,6 +376,7 @@ export function serializeSettings(settings: Settings, syncFolder: string | null 
         ])
       ),
       ...(shortcuts !== undefined && Object.keys(shortcuts).length > 0 && { shortcuts }),
+      ...(settings.globalShortcut !== undefined && { globalShortcut: settings.globalShortcut }),
       ...(syncFolder !== null && { syncFolder })
     }
   })

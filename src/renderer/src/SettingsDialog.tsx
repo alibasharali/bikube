@@ -203,7 +203,10 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           {section === 'editor' && <EditorField />}
           {section === 'agents' && <AgentsSection />}
           {section === 'shortcuts' && (
-            <ShortcutsSection keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)} />
+            <ShortcutsSection
+              keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)}
+              globalShortcut={settings.globalShortcut}
+            />
           )}
           {section === 'sync' && <SyncFolderField id={`${id}-sync`} errorId={`${id}-sync-error`} />}
           {section === 'about' && <AboutSection onCheck={close} />}
@@ -1128,7 +1131,14 @@ export default SettingsDialog
  * stops recording; a press that can't be a shortcut, or is already used, shows why and keeps
  * recording. A new shortcut or a Reset applies and saves at once, like the dialog's other fields.
  */
-function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
+function ShortcutsSection({
+  keymap,
+  globalShortcut
+}: {
+  keymap: Keymap
+  /** Refused to every in-app action (#51 D5). */
+  globalShortcut?: string
+}): React.JSX.Element {
   const platform = window.drovr.platform
   const defaults = defaultKeymap(platform)
   const id = useId()
@@ -1154,7 +1164,7 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
     // The press is the field's alone: it never closes the dialog or reaches anything else.
     event.preventDefault()
     event.stopPropagation()
-    const result = recordPress(event.nativeEvent, action, keymap, platform)
+    const result = recordPress(event.nativeEvent, action, keymap, platform, globalShortcut)
     if (result.kind === 'cancel') stop()
     else if (result.kind === 'refused') setRefusal({ action, message: result.message })
     else if (result.kind === 'set') {
@@ -1210,7 +1220,7 @@ function ShortcutsSection({ keymap }: { keymap: Keymap }): React.JSX.Element {
               onClick={() => {
                 if (isRecording) stop()
                 // The default may be another action's shortcut now: refused, the value stays.
-                const message = resetRefusal(action, keymap, platform)
+                const message = resetRefusal(action, keymap, platform, globalShortcut)
                 if (message !== null) {
                   setRefusal({ action, message })
                   return

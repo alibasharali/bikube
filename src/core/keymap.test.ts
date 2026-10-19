@@ -417,6 +417,26 @@ describe('recordPress (#31 D8, AC7)', () => {
     ).toEqual(refused('Already used by Close card'))
   })
 
+  it('refuses the global shortcut (#51 D5, AC3)', () => {
+    expect(
+      recordPress(
+        press('D', { ctrlKey: true, altKey: true, shiftKey: true }),
+        'splitRight',
+        linux,
+        'linux',
+        'Ctrl+Alt+Shift+D'
+      )
+    ).toEqual(refused('Already used by Show or hide Drovr'))
+    expect(
+      recordPress(
+        press('D', { ctrlKey: true, altKey: true, shiftKey: true }),
+        'splitRight',
+        linux,
+        'linux'
+      )
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+Shift+D' })
+  })
+
   it('refuses the fixed shortcuts of each OS', () => {
     for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
       expect(record(press(key, { altKey: true }))).toEqual(refused('Already used by Move card'))
@@ -686,6 +706,14 @@ describe('resetRefusal (#31 D8)', () => {
     expect(resetRefusal('closeCard', keymap, 'linux')).toBe('Already used by Split right')
     // Split right's own default is free again, so its Reset may apply.
     expect(resetRefusal('splitRight', keymap, 'linux')).toBeNull()
+  })
+
+  it('refuses a default the global shortcut holds now (#51 D5)', () => {
+    const keymap = { ...defaultKeymap('linux'), splitRight: 'Ctrl+Alt+R' }
+    expect(resetRefusal('splitRight', keymap, 'linux', 'Ctrl+Shift+D')).toBe(
+      'Already used by Show or hide Drovr'
+    )
+    expect(resetRefusal('splitRight', keymap, 'linux', 'Ctrl+Alt+Shift+D')).toBeNull()
   })
 
   it('lets Reset apply a default nobody else holds', () => {

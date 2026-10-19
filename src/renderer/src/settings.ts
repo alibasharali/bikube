@@ -37,6 +37,8 @@ export function createSettingsStore(
       const keys = (Object.keys(next) as (keyof Settings)[]).filter((key) => key !== 'shortcuts')
       if (
         keys.every((key) => next[key] === current[key]) &&
+        // Absent when cleared, so not among `next`'s keys (#51 D5).
+        next.globalShortcut === current.globalShortcut &&
         sameShortcuts(next.shortcuts, current.shortcuts)
       ) {
         return true

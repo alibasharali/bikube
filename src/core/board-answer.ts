@@ -14,6 +14,7 @@ import {
   resolveColumn
 } from './board-commands'
 import type { BoardReply } from './board-protocol'
+import type { ClaudeUsage } from './claude-pricing'
 import type { Card, WorkspaceStore } from './workspace-store'
 
 /**
@@ -22,7 +23,8 @@ import type { Card, WorkspaceStore } from './workspace-store'
  * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it;
  * `activity` likewise hands its value to `setActivity`, null for `none` (#31 D12). `setup` acts
  * only on the calling card, which must be running with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
- * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it.
+ * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it. `usage`
+ * needs a running card and hands the usage to `setUsage`, which keeps it runtime only (#50 D5, D7).
  */
 export function answerBoardCommand(
   store: Pick<WorkspaceStore, 'getState' | 'moveCard' | 'setAgentSession' | 'clearCardSetup'>,
@@ -31,7 +33,8 @@ export function answerBoardCommand(
   isRunning: (cardId: string) => boolean,
   setAgentStatus: (cardId: string, text: string) => void,
   setActivity: (cardId: string, activity: Activity | null) => void = () => {},
-  setupAnswered: (card: Card, result: SetupResult) => void = () => {}
+  setupAnswered: (card: Card, result: SetupResult) => void = () => {},
+  setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {}
 ): BoardReply {
   const workspace = findCallingWorkspace(store.getState(), callingCardId)
   if (!workspace.ok) return workspace
@@ -60,6 +63,11 @@ export function answerBoardCommand(
     const cleared = store.clearCardSetup(ws.id, card.value.id)
     if (!cleared.ok) return { ok: false, error: `board: ${cleared.error.message}` }
     setupAnswered(cleared.value, 'ok')
+    return { ok: true }
+  }
+  if (command.command === 'usage') {
+    if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
+    setUsage(card.value.id, command.usage)
     return { ok: true }
   }
   if (command.command === 'activity') {

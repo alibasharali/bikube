@@ -42,6 +42,7 @@ import DeleteWorktreeCardDialog from './DeleteWorktreeCardDialog'
 import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
 import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 import { workspaceStore } from './store'
+import { useCardUsage } from './usage'
 
 /**
  * The card's startup command on the board (#5 D12, #21 D5): `Claude` for Claude Code, a preset's
@@ -265,6 +266,7 @@ interface CardItemProps {
 function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
   const running = useCardRunState(card.id).kind === 'running'
+  const usage = useCardUsage(card.id)
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [editingStartup, setEditingStartup] = useState(false)
@@ -375,7 +377,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             onCommit={(title) => workspaceStore.renameCard(workspaceId, card.id, title)}
             onDone={() => setRenaming(false)}
           />
-          <CardLines status={status} />
+          <CardLines status={status} usage={usage} />
         </div>
       ) : (
         <button
@@ -405,7 +407,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>
-          <CardLines status={status} />
+          <CardLines status={status} usage={usage} />
         </button>
       )}
       {card.worktree && <PullRequestChip worktree={card.worktree} />}

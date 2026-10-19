@@ -56,6 +56,8 @@ function commandOf(request: BoardRequest): BoardCommand {
       return { command: 'session', card: request.card, session: request.session }
     case 'setup':
       return { command: 'setup', card: request.card, result: request.result }
+    case 'usage':
+      return { command: 'usage', card: request.card, usage: request.usage }
   }
 }
 

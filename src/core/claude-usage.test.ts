@@ -140,6 +140,30 @@ describe('readClaudeUsage', () => {
     expect(usage.model).toBe('claude-sonnet-4-5')
   })
 
+  it('reads a count that is not a non-negative safe integer as 0', async () => {
+    const usage = (fields: Record<string, unknown>): string =>
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: 'claude-sonnet-4-5',
+          usage: { input_tokens: 1, output_tokens: 1, ...fields }
+        }
+      })
+    const path = transcript([
+      usage({ input_tokens: -5 }),
+      usage({ output_tokens: 1.5 }),
+      usage({ cache_creation_input_tokens: 2 ** 53 }),
+      usage({ cache_read_input_tokens: 1e300 })
+    ])
+    const read = await readClaudeUsage(path)
+    expect(read).toMatchObject({ input: 3, output: 3, cacheWrite: 0, cacheRead: 0, tokens: 6 })
+  })
+
+  it('cuts a model longer than 200 characters to 200', async () => {
+    const path = transcript([entry({ model: 'm'.repeat(300), input: 1 })])
+    expect((await readClaudeUsage(path)).model).toBe('m'.repeat(200))
+  })
+
   it('leaves the cost unknown when any counted entry has no price, keeping tokens and context', async () => {
     const path = transcript([entry({ model: 'gpt-x', input: 1000, output: 1000 })])
     const usage = await readClaudeUsage(path)

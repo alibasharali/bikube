@@ -105,4 +105,20 @@ describe('parseBoardArgs', () => {
   it("keeps setup out of the usage text: it is Drovr's own plumbing (#39 D4)", () => {
     expect(BOARD_USAGE).not.toContain('setup')
   })
+
+  it('parses usage with a card and a transcript path to read; any other shape is usage (#50 D5)', () => {
+    expect(parseBoardArgs(['usage', '.', '/tmp/x y/t.jsonl'])).toEqual({
+      kind: 'transcript',
+      card: '.',
+      path: '/tmp/x y/t.jsonl'
+    })
+    for (const argv of [['usage', '.'], ['usage'], ['usage', '.', 't.jsonl', 'x']]) {
+      expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
+    }
+  })
+
+  it("keeps usage out of the usage text: Drovr's hooks run it (#50 D5)", () => {
+    expect(BOARD_USAGE).not.toMatch(/board usage/)
+    expect(BOARD_USAGE).not.toMatch(/^ +usage\b/m)
+  })
 })

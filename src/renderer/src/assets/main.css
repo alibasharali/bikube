@@ -1174,11 +1174,12 @@ button {
    the card's rows (subgrid), so the ⋯ menu sits beside the title row and the stop button (D10)
    beside the status row, though neither may be inside the button. Rows: title, a worktree card's
    PR chip (#38 D8) and action line (#38 D6, both also outside the button), status, agent status,
-   last output line, dev server chips (#49 D7, outside the button too). */
+   last output line, Claude Code usage (#50 D8), dev server chips (#49 D7, outside the button
+   too). */
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: repeat(7, auto);
+  grid-template-rows: repeat(8, auto);
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1271,6 +1272,13 @@ button {
   grid-row: 6;
 }
 
+/* The card's Claude Code usage (#50 D8): dim, last of its lines, running or not. */
+.card-body > .card-usage {
+  grid-column: 1 / -1;
+  grid-row: 7;
+  margin-top: var(--space-1);
+}
+
 /* A worktree card's PR chip (#38 D8), under its branch: `#12` with its CI dot, or merged/closed. */
 .card-pr {
   grid-column: 1;
@@ -1318,7 +1326,7 @@ button {
 /* A card's dev server chips (#49 D7, D8), under its status lines: `localhost:5173`, then `+N`. */
 .dev-servers {
   grid-column: 1 / -1;
-  grid-row: 7;
+  grid-row: 8;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -1449,7 +1457,8 @@ button.dev-server-chip:focus-visible {
 
 .card-status,
 .card-agent-status,
-.card-status-line {
+.card-status-line,
+.card-usage {
   color: var(--text-muted);
   font-size: var(--text-xs);
   line-height: 1.4;
@@ -1457,7 +1466,8 @@ button.dev-server-chip:focus-visible {
 }
 
 .card-status,
-.card-status-line {
+.card-status-line,
+.card-usage {
   display: block;
   text-overflow: ellipsis;
   white-space: nowrap;

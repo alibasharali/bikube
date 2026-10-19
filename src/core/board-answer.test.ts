@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { answerBoardCommand } from './board-answer'
 import { NOT_IN_A_CARD } from './board-commands'
+import type { ClaudeUsage } from './claude-pricing'
 import {
   InMemoryWorkspaceStore,
   type Card,
@@ -249,6 +250,46 @@ describe('answerBoardCommand', () => {
       ['c-web', 'waiting'],
       ['c-api', 'question'],
       ['c-api', null]
+    ])
+    expect(store.getState()).toBe(before)
+  })
+
+  it("hands the card's usage on, only for a running card, and saves nothing (#50 D5, D7)", () => {
+    const store = setup()
+    const before = store.getState()
+    const set: [string, ClaudeUsage][] = []
+    const usage: ClaudeUsage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 0,
+      cacheRead: 0,
+      tokens: 3,
+      context: 1,
+      model: null
+    }
+    const report = (card: string): unknown =>
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'usage', card, usage },
+        running,
+        () => {},
+        () => {},
+        () => {},
+        (id, next) => {
+          set.push([id, next])
+        }
+      )
+    expect(report('.')).toEqual({ ok: true })
+    expect(report('web')).toEqual({ ok: true })
+    expect(report('old')).toEqual({ ok: false, error: 'board: "old" is not running' })
+    expect(report('other')).toEqual({
+      ok: false,
+      error: 'board: no card "other" in this workspace'
+    })
+    expect(set).toEqual([
+      ['c-api', usage],
+      ['c-web', usage]
     ])
     expect(store.getState()).toBe(before)
   })

@@ -21,9 +21,12 @@ interface Entry {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-/** A count that isn't a number is 0 (D2). */
+/** Longest model name kept (D2, D5): longer ones are cut, so main's check always passes. */
+export const MAX_MODEL_LENGTH = 200
+
+/** A count that isn't a non-negative safe integer is 0 (D2). */
 const count = (value: unknown): number =>
-  typeof value === 'number' && Number.isFinite(value) ? value : 0
+  Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : 0
 
 const parse = (line: string): unknown => {
   try {
@@ -56,7 +59,7 @@ function readEntry(line: string): { key: string | null; entry: Entry } | null {
     key: id === null && requestId === null ? null : `${id ?? ''}\n${requestId ?? ''}`,
     entry: {
       counts,
-      model: typeof message.model === 'string' ? message.model : null,
+      model: typeof message.model === 'string' ? message.model.slice(0, MAX_MODEL_LENGTH) : null,
       sidechain: value.isSidechain === true
     }
   }

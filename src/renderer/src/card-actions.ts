@@ -4,6 +4,7 @@ import type { FirstStart } from '../../core/startup-command'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
+import { clearCardUsage } from './usage'
 
 /**
  * Starts the card if its shell isn't running, with its current startup command (#5 D7, D8);
@@ -60,12 +61,14 @@ export function closeCard(cardId: string): void {
 
 /**
  * Stops every pane's process of a card being deleted and frees its screens (#11 D6), and removes
- * its kept output (#46 D7; a shell has none, and removing none does nothing).
+ * its kept output (#46 D7; a shell has none, and removing none does nothing) and its usage
+ * (#50 D7).
  */
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
   window.drovr.scrollback.delete(cardId)
+  clearCardUsage(cardId)
 }
 
 /** Deletes a card and stops its processes, freeing its terminals (#4 D13, #11 D6). */

@@ -20,4 +20,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- running
+- done: AC1–AC10 pass (verifier); `e2e/worktree-setup.spec.ts:313` fails under zsh on main too (pre-existing, filed as #61), passes under bash (CI).

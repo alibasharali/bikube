@@ -457,10 +457,10 @@ function isCard(cardId: string): boolean {
   return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
 }
 
-/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
 /** Nothing is read or saved while Keep output after a card stops is off (#46 D8). */
 const keepingOutput = (): boolean => settingsStore.get().keepOutput
 
+/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
 const outputKeeper: OutputKeeper = {
   keeps: (cardId) => keepingOutput() && isCard(cardId),
   scrollback: () => settingsStore.get().scrollback,

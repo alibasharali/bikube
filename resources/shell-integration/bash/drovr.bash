@@ -71,21 +71,21 @@ if [[ $- == *i* ]] && [ -z "${__drovr_integration-}" ]; then
   }
 
   # The command number into __drovr_line_n: it grows once per command line bash read, never for an
-  # empty Enter, whatever history keeps. Read as the prompt's \# from bash 4.4; before that (macOS's
-  # bash 3.2) HISTCMD, which misses a line history leaves out (HISTCONTROL, HISTIGNORE).
+  # empty Enter, whatever history keeps. Read as the prompt's \# through ${…@P}, from bash 4.4;
+  # before that (macOS's bash 3.2) there is none, and a whole-subshell line goes unmarked.
   if [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; then
     __drovr_line_fmt='\#'
     eval '__drovr_line() { __drovr_line_n=${__drovr_line_fmt@P}; }'
   else
     __drovr_line() {
-      __drovr_line_n=${HISTCMD-}
+      :
     }
   fi
 
   # D for the command line that ran, if one did; $? is its status, given back. A line that is one
   # whole subshell `( … )` runs no simple command in this shell, so no DEBUG trap (nor
-  # bash-preexec's preexec) sent its C: a new command number since the last prompt says it ran,
-  # and its C goes out here, late, before its D.
+  # bash-preexec's preexec) sent its C: a new command number since the last prompt (bash 4.4+)
+  # says it ran, and its C goes out here, late, before its D.
   __drovr_end() {
     __drovr_status=$?
     local before=$__drovr_line_n

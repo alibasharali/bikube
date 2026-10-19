@@ -59,14 +59,9 @@ if (( ! ${+__drovr_integration} )); then
     fi
     if [[ ${precmd_functions[-1]} == __drovr_prompt ]] || [[ ! -o promptpercent ]] ||
       [[ ! -o zle ]]; then
-      builtin print -rn -- $'\e]133;A\a'
-      if [[ -o promptpercent ]]; then
-        __drovr_ps1=$PS1
-        __drovr_ps1_marked=$PS1$'%{\e]133;B\a%}'
-        PS1=$__drovr_ps1_marked
-      fi
-    else
-      __drovr_defer
+      __drovr_mark
+    elif ! __drovr_defer; then
+      __drovr_mark
     fi
     if [[ ${precmd_functions[1]} != __drovr_precmd || ${precmd_functions[-1]} != __drovr_prompt ]]; then
       precmd_functions=(
@@ -76,10 +71,22 @@ if (( ! ${+__drovr_integration} )); then
     return ret
   }
 
+  # A now, and B at the end of PS1 (only with prompt % escapes).
+  __drovr_mark() {
+    builtin print -rn -- $'\e]133;A\a'
+    if [[ -o promptpercent ]]; then
+      __drovr_ps1=$PS1
+      __drovr_ps1_marked=$PS1$'%{\e]133;B\a%}'
+      PS1=$__drovr_ps1_marked
+    fi
+  }
+
   # This prompt's A and B from zle-line-init, the user's own widget (if any) run first and put
-  # back: its PS1 is final then, and redrawing it puts A where the prompt starts.
+  # back: its PS1 is final then, and redrawing it puts A where the prompt starts. Not while an
+  # earlier deferral's user widget is still kept aside (a widget defined since wraps Drovr's).
   __drovr_defer() {
     zmodload -i zsh/zleparameter 2>/dev/null
+    (( ! ${+widgets[__drovr_user_line_init]} )) || return 1
     if (( ${+widgets[zle-line-init]} )); then
       zle -A zle-line-init __drovr_user_line_init
       __drovr_deferred=user
@@ -89,24 +96,34 @@ if (( ! ${+__drovr_integration} )); then
     zle -N zle-line-init __drovr_line_init
   }
 
-  # A deferral not undone yet (zle-line-init not run since): the user's widget back.
+  # A deferral not undone yet: the user's widget back, only while zle-line-init is still Drovr's.
+  # A widget defined since (a later precmd hook, a plugin's lazy init) stays, and the user's
+  # widget kept aside stays too, for Drovr's to call through when that one wraps it.
   __drovr_undefer() {
-    case $__drovr_deferred in
-      user)
-        zle -A __drovr_user_line_init zle-line-init
-        zle -D __drovr_user_line_init
-        ;;
-      none) zle -D zle-line-init ;;
-    esac
+    if [[ -n $__drovr_deferred && ${widgets[zle-line-init]-} == user:__drovr_line_init ]]; then
+      case $__drovr_deferred in
+        user)
+          zle -A __drovr_user_line_init zle-line-init
+          zle -D __drovr_user_line_init
+          ;;
+        none) zle -D zle-line-init ;;
+      esac
+    fi
     __drovr_deferred=
   }
 
+  # zle-line-init while deferred, or a copy of it a widget defined since keeps calling: the user's
+  # widget it stands for runs first; the marks only while this prompt's are deferred.
   __drovr_line_init() {
-    local had_user=$__drovr_deferred
+    local deferred=$__drovr_deferred mine=
+    [[ ${widgets[zle-line-init]-} != user:__drovr_line_init ]] || mine=1
     __drovr_undefer
-    if [[ $had_user == user ]]; then
+    if [[ -n $mine && $deferred == user ]]; then
       zle zle-line-init -- "$@"
+    elif (( ${+widgets[__drovr_user_line_init]} )); then
+      zle __drovr_user_line_init -- "$@"
     fi
+    [[ -n $deferred ]] || return 0
     emulate -L zsh
     if [[ $PS1 == $__drovr_ps1_marked ]]; then
       PS1=$__drovr_ps1

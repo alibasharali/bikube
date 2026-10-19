@@ -183,7 +183,7 @@ async function nestedEnv(sh: Shell, nested: string): Promise<Record<string, stri
 }
 
 describeShell('bash', (bash) => {
-  /** bash's major and minor version: `\#` read through `${…@P}` needs 4.4. */
+  /** bash's major and minor version: `\#` read through `${…@P}` (late subshell marks) needs 4.4. */
   const version = execFileSync(bash, ['-c', 'echo "${BASH_VERSINFO[0]} ${BASH_VERSINFO[1]}"'], {
     encoding: 'utf8'
   })
@@ -194,21 +194,24 @@ describeShell('bash', (bash) => {
 
   /**
    * A command line that is one whole subshell runs no simple command in the shell itself (no
-   * DEBUG trap): its C and D come at the next prompt. An empty Enter after it sends neither.
-   * With HISTCONTROL=ignoreboth in the login files, a line starting with a space too (bash 4.4+).
+   * DEBUG trap): from bash 4.4 its C and D come at the next prompt, also for a line starting with
+   * a space under HISTCONTROL=ignoreboth (in the login files); before 4.4 it gets none. An empty
+   * Enter sends neither.
    */
   async function checkSubshell(sh: Shell): Promise<void> {
     const ends = (part: string): string[] =>
       marks(part).filter((m) => m === '133;C' || m.startsWith('133;D'))
     let from = sh.output().length
     sh.run('(exit 7)')
-    await sh.until('D;7', (o) => o.slice(from).includes(OSC('133;D;7')))
-    await sh.until('the next prompt', (o) => {
-      const part = o.slice(from)
-      return part.indexOf(OSC('133;A'), part.indexOf(OSC('133;D;7'))) > 0
-    })
-    expect(ends(sh.output().slice(from))).toEqual(['133;C', '133;D;7'])
-    from = sh.output().length
+    if (promptExpansion) {
+      await sh.until('D;7', (o) => o.slice(from).includes(OSC('133;D;7')))
+      await sh.until('the next prompt', (o) => {
+        const part = o.slice(from)
+        return part.indexOf(OSC('133;A'), part.indexOf(OSC('133;D;7'))) > 0
+      })
+      expect(ends(sh.output().slice(from))).toEqual(['133;C', '133;D;7'])
+      from = sh.output().length
+    }
     sh.run('')
     await sh.until('the prompt after Enter', (o) => o.slice(from).includes(OSC('133;A')))
     sh.run('echo after-"enter"')
@@ -457,6 +460,66 @@ describeShell('zsh', (zsh) => {
     expect(part.indexOf('header', d)).toBeLessThan(part.indexOf(OSC('133;A')))
     expect(part.indexOf('header', d)).toBeGreaterThan(d)
     expect(visible(part)).toContain('T[1]')
+  })
+
+  /**
+   * After a themed first prompt and two commands, the user's `zle-line-init` (defined by a
+   * precmd hook after Drovr deferred its marks) ran at all three prompts and is still the widget.
+   */
+  async function checkLineInit(sh: Shell, counts: string, expected: string): Promise<void> {
+    await sh.until('the first prompt', (o) => visible(o).includes('header'))
+    for (const n of [1, 2]) {
+      sh.run('true')
+      await sh.until(`command ${n}`, (o) => o.split(OSC('133;D;0')).length === n + 1)
+    }
+    sh.run(`echo "${counts}"; zle -lL | grep -- zle-line-init; echo "listed"`)
+    await sh.until('the widget list', (o) => visible(o).includes('\nlisted\n'))
+    const out = visible(sh.output())
+    expect(out).toContain(`\n${expected}\n`)
+    expect(out).toMatch(/\nzle -N zle-line-init myinit\n/)
+    expect(out).not.toContain('__drovr')
+  }
+
+  it('keeps a zle-line-init a later precmd hook defines', async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.zshrc'),
+      [
+        'theme() { PS1="T%# "; print "\\nheader"; }',
+        'typeset -gi inits=0',
+        'myinit() { (( inits++ )) }',
+        // Defines the widget once, at the first prompt, after Drovr's hook (lazy plugins).
+        'lazy() { zle -N zle-line-init myinit; precmd_functions=(${precmd_functions:#lazy}); }',
+        'precmd_functions+=(theme lazy)'
+      ].join('\n') + '\n'
+    )
+    await checkLineInit(start(zsh, home), 'inits=$inits', 'inits=3')
+  })
+
+  it('keeps a zle-line-init a later precmd hook wraps around the one it finds (zsh-vi-mode)', async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.zshrc'),
+      [
+        'theme() { PS1="T%# "; print "\\nheader"; }',
+        'typeset -gi inits=0 bases=0',
+        'base() { (( bases++ )) }',
+        'zle -N zle-line-init base',
+        'myinit() { (( inits++ )); zle orig-line-init -- "$@" }',
+        'wrap() {',
+        '  zle -A zle-line-init orig-line-init',
+        '  zle -N zle-line-init myinit',
+        '  precmd_functions=(${precmd_functions:#wrap})',
+        '}',
+        'precmd_functions+=(theme wrap)'
+      ].join('\n') + '\n'
+    )
+    const sh = start(zsh, home)
+    await checkLineInit(sh, 'inits=$inits bases=$bases', 'inits=3 bases=3')
+    // Drovr's widget, wrapped, still marked the first prompt after the header.
+    const out = sh.output()
+    expect(out.indexOf(OSC('133;A'))).toBeGreaterThan(out.indexOf('header'))
+    expect(out.indexOf(OSC('133;B'))).toBeGreaterThan(out.indexOf(OSC('133;A')))
   })
 
   it("works under the user's `setopt nounset` without an error", async () => {

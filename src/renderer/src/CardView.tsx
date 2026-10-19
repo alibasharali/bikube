@@ -186,6 +186,13 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
           setFind((open) => ({ paneId: focusedPane, request: (open?.request ?? 0) + 1 }))
         }
       }
+      // The focused pane scrolls to its previous or next prompt (#45 D5); its shell never gets the
+      // keys, also when nothing happens.
+      else if (action === 'previousPrompt' || action === 'nextPrompt') {
+        paneScreen(card.id, focusedPane)?.jumpToPrompt(
+          action === 'previousPrompt' ? 'previous' : 'next'
+        )
+      }
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
         if (splittable) cardPanes().split(card, action === 'splitRight' ? 'right' : 'down')

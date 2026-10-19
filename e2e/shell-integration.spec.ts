@@ -196,3 +196,102 @@ test('AC5: bash with Shell integration marks a failed command; with it off a new
   await expect.poll(async () => (await rows()).includes('debug=[]')).toBe(true)
   await expect(badge).toHaveCount(0)
 })
+
+/** The open terminal's viewport: its top row, the bottom it scrolls to, and its row count. */
+function viewport(): Promise<{ top: number; bottom: number; rows: number }> {
+  return page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { rows: number; buffer: { active: { viewportY: number; baseY: number } } }
+        })
+      | null
+    const term = host!.__xterm!
+    return {
+      top: term.buffer.active.viewportY,
+      bottom: term.buffer.active.baseY,
+      rows: term.rows
+    }
+  })
+}
+
+test('AC6: Previous prompt and Next prompt scroll a prompt to the top, the shell getting none of the keys', async () => {
+  test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
+  await launchWithShell('/bin/sh')
+  await openDefaultShell()
+
+  // 3 commands, each a marked prompt followed by 100 lines of output.
+  await run(
+    String.raw`for i in 1 2 3; do printf '\033]133;A\007$ p%s\033]133;B\007\n\033]133;C\007' $i; seq 1 100 | sed "s/^/out$i-/"; printf '\033]133;D;0\007'; done`
+  )
+  await expect.poll(async () => (await rows()).includes('out3-100')).toBe(true)
+  const all = await rows()
+  const prompt = (n: number): number => all.indexOf(`$ p${n}`)
+  expect([1, 2, 3].map(prompt).every((row) => row >= 0)).toBe(true)
+  const { bottom, rows: height } = await viewport()
+  expect(height).toBeLessThan(100)
+  await expect.poll(async () => (await viewport()).top).toBe(bottom)
+
+  const PREVIOUS = 'Control+Shift+ArrowUp'
+  const NEXT = 'Control+Shift+ArrowDown'
+  await page.keyboard.press(PREVIOUS)
+  await expect.poll(async () => (await viewport()).top).toBe(prompt(3))
+  await page.keyboard.press(PREVIOUS)
+  await expect.poll(async () => (await viewport()).top).toBe(prompt(2))
+  await page.keyboard.press(NEXT)
+  await expect.poll(async () => (await viewport()).top).toBe(prompt(3))
+  await page.keyboard.press(NEXT)
+  await expect.poll(async () => (await viewport()).top).toBe(bottom)
+  // At the first prompt Previous does nothing, and the shell still gets nothing.
+  for (let i = 0; i < 4; i++) await page.keyboard.press(PREVIOUS)
+  await expect.poll(async () => (await viewport()).top).toBe(prompt(1))
+
+  // None of the keys reached the shell: the line typed next runs as typed.
+  await run('echo after-"jumps"')
+  await expect.poll(async () => (await rows()).includes('after-jumps')).toBe(true)
+  expect((await rows()).some((row) => row.includes('not found'))).toBe(false)
+
+  // Not in the command palette (D5).
+  await page.keyboard.press('Control+Shift+P')
+  const palette = page.getByRole('dialog', { name: 'Command palette' })
+  await expect(palette).toBeVisible()
+  await expect(palette).not.toContainText('Previous prompt')
+  await expect(palette).not.toContainText('Next prompt')
+  await page.keyboard.press('Escape')
+  await expect(palette).toHaveCount(0)
+
+  // Recordable and Reset in Settings' Shortcuts section.
+  const dialog = page.getByTestId('settings-dialog')
+  const field = dialog.getByTestId('settings-shortcut-previousPrompt')
+  await page.keyboard.press('Control+,')
+  await dialog.getByTestId('settings-section-shortcuts').click()
+  const group = dialog.getByRole('group', { name: 'Shortcuts' })
+  await expect(group).toContainText('Previous prompt')
+  await expect(group).toContainText('Next prompt')
+  await expect(field).toHaveText('Ctrl+Shift+ArrowUp')
+  await expect(dialog.getByTestId('settings-shortcut-nextPrompt')).toHaveText(
+    'Ctrl+Shift+ArrowDown'
+  )
+  await field.click()
+  await page.keyboard.press('Control+Shift+ArrowDown')
+  await expect(dialog.getByTestId('settings-shortcut-error-previousPrompt')).toHaveText(
+    'Already used by Next prompt'
+  )
+  await page.keyboard.press('Control+Alt+ArrowUp')
+  await expect(field).toHaveText('Ctrl+Alt+ArrowUp')
+  await expect
+    .poll(() => readSettings())
+    .toMatchObject({ settings: { shortcuts: { previousPrompt: 'Ctrl+Alt+ArrowUp' } } })
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await expect.poll(async () => (await viewport()).top).toBe((await viewport()).bottom)
+  await page.keyboard.press('Control+Alt+ArrowUp')
+  await expect.poll(async () => (await viewport()).top).toBe(prompt(3))
+
+  await page.keyboard.press('Control+,')
+  await dialog.getByTestId('settings-section-shortcuts').click()
+  await dialog.getByTestId('settings-shortcut-reset-previousPrompt').click()
+  await expect(field).toHaveText('Ctrl+Shift+ArrowUp')
+  await expect.poll(() => JSON.stringify(readSettings())).not.toContain('previousPrompt')
+})

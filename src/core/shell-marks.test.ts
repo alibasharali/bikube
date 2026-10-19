@@ -147,6 +147,21 @@ describe('ShellMarks (#45 D1, D2)', () => {
     expect(ended.map((c) => c.exitCode)).toEqual([1, 2])
   })
 
+  it('keeps no row xterm gave no handle for (the alt screen), still ending its command', () => {
+    const marks = new ShellMarks<number | undefined>()
+    const ended: ShellCommand<number | undefined>[] = []
+    marks.onCommandEnded((command) => ended.push(command))
+    for (const kind of ['prompt-start', 'prompt-end', 'output-start'] as const) {
+      marks.feed({ kind }, 0, () => undefined)
+    }
+    marks.feed({ kind: 'command-end', exitCode: 1 }, 1, () => undefined)
+    expect(marks.prompts()).toEqual([])
+    marks.feed({ kind: 'prompt-end' }, 2, () => undefined)
+    expect(marks.prompts()).toEqual([])
+    expect(marks.commands()).toEqual([])
+    expect(ended.map((c) => c.exitCode)).toEqual([1])
+  })
+
   it('stops calling a listener once unsubscribed', () => {
     const marks = new ShellMarks<number>()
     const calls: number[] = []

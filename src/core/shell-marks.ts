@@ -103,14 +103,15 @@ export class ShellMarks<Line> {
 
   /**
    * Takes in a mark parsed at `time` (ms); `line` gives the row it arrived on, and is called only
-   * when the mark needs it.
+   * when the mark needs it. A row it gives as undefined (xterm has no marker on the alt screen)
+   * is never kept: no prompt and no listed command, which could never be forgotten.
    */
   feed(mark: ShellMark, time: number, line: () => Line): void {
     switch (mark.kind) {
       case 'prompt-start': {
         const row = line()
         this.sawPromptStart = true
-        this.promptStarts.push(row)
+        if (row !== undefined) this.promptStarts.push(row)
         this.latestStart = row
         // A new prompt: a `B` of an earlier one is no command line of the next command.
         this.latestEnd = undefined
@@ -118,7 +119,7 @@ export class ShellMarks<Line> {
       }
       case 'prompt-end': {
         const row = line()
-        this.promptEnds.push(row)
+        if (row !== undefined) this.promptEnds.push(row)
         this.latestEnd = row
         return
       }
@@ -135,7 +136,7 @@ export class ShellMarks<Line> {
         this.running = undefined
         command.end = time
         command.exitCode = mark.exitCode
-        this.ended.push(command)
+        if (command.line !== undefined) this.ended.push(command)
         for (const listener of this.listeners) listener(command)
         return
       }

@@ -26,6 +26,7 @@ import {
   shiftEnterIsNewLine
 } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
+import { promptJumpTarget, type PromptJump } from '../../core/prompt-jumps'
 import {
   parseShellMark,
   SHELL_MARK_OSCS,
@@ -441,6 +442,21 @@ export class XtermScreen implements CardScreen {
     this.dropWebgl()
     this.host.remove()
     this.term.dispose()
+  }
+
+  /**
+   * Previous prompt, Next prompt (#45 D5): scrolls so a prompt is the top row, Next to the bottom
+   * past the last one; Previous with no prompt above the top does nothing, and so do both on the
+   * alt screen, which has no scrollback and whose rows aren't the prompts'.
+   */
+  jumpToPrompt(jump: PromptJump): void {
+    const buffer = this.term.buffer.active
+    if (buffer.type !== 'normal') return
+    const rows = this.marks
+      .prompts()
+      .flatMap((marker) => (marker && !marker.isDisposed && marker.line >= 0 ? [marker.line] : []))
+    const target = promptJumpTarget(jump, rows, buffer.viewportY, buffer.baseY)
+    if (target !== null) this.term.scrollToLine(target)
   }
 
   /** The row the cursor is on, as a marker that follows scrolling (#45 D1). */

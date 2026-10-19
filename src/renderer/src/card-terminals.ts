@@ -1,5 +1,11 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { Terminal as XTerm, type IBufferRange, type IMarker } from '@xterm/xterm'
+import {
+  Terminal as XTerm,
+  type IBuffer,
+  type IBufferRange,
+  type IDisposable,
+  type IMarker
+} from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
@@ -149,6 +155,8 @@ export class XtermScreen implements CardScreen {
   private sawProbe = false
   /** The new session's first row, below a restored previous run (#46 D5a); none when none. */
   private sessionStart: IMarker | undefined
+  /** What watches the cursor while `sessionStart` is set. */
+  private sessionListeners: IDisposable[] = []
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
@@ -258,7 +266,8 @@ export class XtermScreen implements CardScreen {
   screen(): { lines: string[]; cursorRow: number } {
     const buffer = this.term.buffer.active
     // Rows above the new session's first are a previous run's (#46 D5a); a marker trimmed off
-    // the scrollback has line -1. The alternate screen is all this session's.
+    // the scrollback or erased (xterm disposes it) has line -1, and one the cursor went above
+    // is gone (`markSessionStart`). The alternate screen is all this session's.
     const first = buffer.type === 'normal' ? (this.sessionStart?.line ?? -1) : -1
     const lines: string[] = []
     for (let row = 0; row < this.term.rows; row++) {
@@ -268,9 +277,56 @@ export class XtermScreen implements CardScreen {
     return { lines, cursorRow: buffer.cursorY }
   }
 
+  /**
+   * Marks the cursor's row as the new session's first (#46 D5a). Once this session's cursor goes
+   * above it, as a repaint from the top does, it has written there and the mark is dropped: on
+   * each cursor move, and on each cursor-positioning sequence going up, since a repaint can come
+   * back below the row within one write.
+   */
   markSessionStart(): void {
+    this.dropSessionStart()
+    const marker = this.term.registerMarker(0)
+    this.sessionStart = marker
+    const buffer = (): IBuffer => this.term.buffer.active
+    const goesAbove = (row: number): boolean =>
+      buffer().type === 'normal' && buffer().baseY + row < marker.line
+    const check = (row: number): void => {
+      if (this.sessionStart === marker && goesAbove(row)) this.dropSessionStart()
+    }
+    const first = (params: (number | number[])[]): number => {
+      const value = params[0]
+      return (typeof value === 'number' ? value : value?.[0]) || 1
+    }
+    // Where each cursor-positioning sequence going up takes the cursor's row: CUP and HVP
+    // (row, column), VPA (row), CUU and CPL (rows up).
+    const targets: [string, (params: (number | number[])[]) => number][] = [
+      ['H', (p) => first(p) - 1],
+      ['f', (p) => first(p) - 1],
+      ['d', (p) => first(p) - 1],
+      ['A', (p) => buffer().cursorY - first(p)],
+      ['F', (p) => buffer().cursorY - first(p)]
+    ]
+    this.sessionListeners = [
+      // Erased or trimmed off the scrollback: every row is this session's.
+      marker.onDispose(() => {
+        if (this.sessionStart === marker) this.dropSessionStart()
+      }),
+      this.term.onCursorMove(() => check(buffer().cursorY)),
+      // Run before xterm's own handlers, which still move the cursor since these return false.
+      ...targets.map(([final, target]) =>
+        this.term.parser.registerCsiHandler({ final }, (params) => {
+          check(target(params))
+          return false
+        })
+      )
+    ]
+  }
+
+  private dropSessionStart(): void {
+    this.sessionListeners.forEach((listener) => listener.dispose())
+    this.sessionListeners = []
     this.sessionStart?.dispose()
-    this.sessionStart = this.term.registerMarker(0)
+    this.sessionStart = undefined
   }
 
   setReadOnly(): void {

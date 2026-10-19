@@ -12,7 +12,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, closeCard, expectCardOpen, splitRight } from './card-view'
+import { backToBoard, checkOnBoard, closeCard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -200,6 +200,41 @@ test('D1: the separator starts below the last old line, wherever the old cursor 
   expect(lastIndex(lines, 'kept-b')).toBeGreaterThan(0)
   expect(lastIndex(lines, 'kept-c')).toBe(lastIndex(lines, 'kept-b') + 1)
   expect(lastIndex(lines, SEPARATOR)).toBe(lastIndex(lines, 'kept-c') + 1)
+})
+
+test('D5a, D9: the board reads only the new session, also after it clears the screen', async () => {
+  await newCard('api')
+  await run('echo kept-46-status')
+  await expect.poll(bufferLines).toContain('kept-46-status')
+  await closeOpenCard('api')
+
+  await openCard('api')
+  await expect.poll(async () => lastIndex(await bufferLines(), SEPARATOR)).toBeGreaterThan(0)
+  // Neither the separator nor a restored line: empty, or the new prompt.
+  await checkOnBoard(page, 'api', async (c) => {
+    await expect(c.getByTestId('card-status-label')).toHaveText('Running')
+    const line = c.getByTestId('card-status-line')
+    if (await line.count()) {
+      await expect(line).not.toContainText('Previous output')
+      await expect(line).not.toContainText('kept-46-status')
+    }
+  })
+
+  // A repaint from the top writes above the separator's old row: line by line (an agent's
+  // `CSI H` then `CSI K` on each row) with the cursor back below that row in the same write,
+  // and erasing the screen (`clear`, Ctrl+L) first.
+  const rows = String.raw`\n\033[K`.repeat(15)
+  await run(String.raw`printf '\033[Hrepaint\033[K${rows}'; sleep 30`)
+  await expect.poll(bufferLines).toContain('repaint')
+  await checkOnBoard(page, 'api', (c) =>
+    expect(c.getByTestId('card-status-line')).toHaveText('repaint')
+  )
+  await page.keyboard.press('Control+c')
+  await run(String.raw`printf '\033[H\033[2Jafter'; sleep 30`)
+  await expect.poll(bufferLines).toContain('after')
+  await checkOnBoard(page, 'api', (c) =>
+    expect(c.getByTestId('card-status-line')).toHaveText('after')
+  )
 })
 
 test('AC5: colours are kept, terminal modes are not', async () => {

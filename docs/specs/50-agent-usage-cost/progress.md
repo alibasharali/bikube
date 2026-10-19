@@ -8,8 +8,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 |---|---|---|---|---|
 | S1 | done | `7131203..c7459d4` | CLEAN | `ClaudeUsage` (claude-pricing.ts), `readClaudeUsage(path)` (claude-usage.ts, rejects when unreadable), `usageLine`, `usageTooltip`, `workspaceUsage`, `hasUsage` (usage-format.ts) |
 | S2 | done | `5a34fb6..820a0d8` | CLEAN | renderer `usage.ts`: `cardUsage`, `setCardUsage`, `clearCardUsage`, `subscribeUsage`, `useCardUsage`; `BoardCommand` usage; `CardLines` `usage` prop |
-| S3 | running | | | |
-| S4 | todo | | | |
+| S3 | done | `e23fda7..b3af84b` | CLEAN | Stop/SessionStart run `board usage . <transcript>` |
+| S4 | running | | | |
 
 ## Rulings
 

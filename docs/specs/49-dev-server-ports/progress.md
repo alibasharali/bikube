@@ -17,4 +17,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- done: ALL PASS (e2e 8/8, Vitest seams)

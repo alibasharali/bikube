@@ -661,7 +661,7 @@ function AgentsSection(): React.JSX.Element {
     <>
       <SwitchRow
         label="Notifications"
-        hint="When an agent is waiting for you or needs your answer, unless its card is in view. The Dock shows how many are waiting."
+        hint="When an agent is waiting for you or needs your answer, unless its card is in view, and when a command that ran 10 s or more ends out of sight. The Dock shows how many are waiting."
         testId="settings-notifications"
         checked={settings.notifications}
         onChange={(notifications) => settingsStore.update({ notifications })}

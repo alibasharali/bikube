@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
@@ -705,4 +705,102 @@ test('AC13: Settings lists Open in new window, recorded, refused, saved and rese
   await expect.poll(fontSize).toBe(18)
   await page.keyboard.press('Escape')
   await expect(settings).toHaveCount(0)
+})
+
+// Looking at a card in its own window (#53 S3, D10).
+
+/** Replaces the main page's `Notification` with one recording each notification sent. */
+async function stubNotifications(): Promise<void> {
+  await page.evaluate(() => {
+    const sent: { title: string; body: string; click: () => void }[] = []
+    class Recorded {
+      onclick: (() => void) | null = null
+      constructor(title: string, options: { body: string }) {
+        sent.push({ title, body: options.body, click: () => this.onclick?.() })
+      }
+    }
+    Object.assign(window, { __sent: sent, Notification: Recorded })
+  })
+}
+
+/** The notifications sent since `stubNotifications`, as title and body. */
+function notifications(): Promise<{ title: string; body: string }[]> {
+  return page.evaluate(() =>
+    (window as unknown as { __sent: { title: string; body: string }[] }).__sent.map(
+      ({ title, body }) => ({ title, body })
+    )
+  )
+}
+
+/**
+ * Gives `on` the focus and takes it from `other`, as the page sees it: `document.hasFocus()` and
+ * the window's `focus` event. Not the OS's: Playwright makes every page read as focused, and the
+ * apps of parallel test files share xvfb's one display, so a real focus could move under a test.
+ */
+async function focusWindow(on: Page, other: Page): Promise<void> {
+  await other.evaluate(() => (document.hasFocus = () => false))
+  await on.evaluate(() => {
+    document.hasFocus = () => true
+    dispatchEvent(new FocusEvent('focus'))
+  })
+}
+
+test("AC12: a card waiting in its focused window notifies nothing; with the main window focused it does, and the click focuses the card's window", async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const mainTitle = await page.title()
+  const window = await openInWindow('Agent A')
+  await expect.poll(() => window.title()).toBe(`Agent A · ${WORKSPACE}`)
+  await stubNotifications()
+  const activity = card('Agent A').getByTestId('card-activity')
+
+  // Its own window focused: the user is looking at it.
+  await focusWindow(window, page)
+  await run(window, 'board activity . waiting')
+  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  await expect(activity).toHaveText('Waiting for you', { timeout: 15_000 })
+  await page.waitForTimeout(300)
+  expect(await notifications()).toEqual([])
+  await run(window, 'board activity . working')
+  await expect(activity).toHaveText('Working')
+
+  // The main window focused instead: a notification.
+  await focusWindow(page, window)
+  await run(window, 'board activity . waiting')
+  await expect(activity).toHaveText('Waiting for you')
+  await expect
+    .poll(() => notifications())
+    .toEqual([{ title: 'Agent A', body: `Waiting for you · ${WORKSPACE}` }])
+
+  // Clicking it brings the card's window forward; the main window keeps its board.
+  const focusCalls = await spyOnFocus(`Agent A · ${WORKSPACE}`)
+  const mainFocusCalls = await spyOnFocus(mainTitle)
+  await page.evaluate(() =>
+    (globalThis as unknown as { __sent: { click: () => void }[] }).__sent[0]!.click()
+  )
+  await expect.poll(focusCalls).toBe(1)
+  expect(await mainFocusCalls()).toBe(0)
+  await page.waitForTimeout(300)
+  expect(app.windows()).toHaveLength(2)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test('D10: the Files tab in a card window refreshes while only that window is focused', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await expect.poll(() => window.title()).toBe(`Agent A · ${WORKSPACE}`)
+  const row = (path: string): Locator =>
+    window.locator(`[data-testid=files-tab] [data-testid=files-row][data-path="${path}"]`)
+  await expect(row('')).toBeVisible()
+
+  // The main window focused, then the card's: a focus there reads the tree again.
+  await focusWindow(page, window)
+  writeFileSync(join(dir, 'on-focus.txt'), '')
+  await focusWindow(window, page)
+  await expect(row('on-focus.txt')).toBeVisible({ timeout: 1000 })
+  // And every 3 s while it stays focused.
+  writeFileSync(join(dir, 'later.txt'), '')
+  await expect(row('later.txt')).toBeVisible({ timeout: 4000 })
 })

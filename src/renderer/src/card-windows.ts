@@ -7,6 +7,7 @@ import { startCard } from './card-actions'
 import CardWindow from './CardWindow'
 import { workspaceStore } from './store'
 import { loadSymbolsFont } from './symbols-font'
+import { addCardWindow, removeCardWindow } from './window-focus'
 
 /** A card (or shell) shown in its own window (#53 D1, D2). */
 interface OpenWindow {
@@ -67,6 +68,7 @@ export function closeCardWindow(cardId: string): void {
   const open = windows.get(cardId)
   if (!open) return
   windows.delete(cardId)
+  removeCardWindow(cardId)
   changed()
   // After the current task's React work: this may run from the view's own effects (Back, a stop).
   queueMicrotask(() => {
@@ -88,6 +90,8 @@ export function openCardWindow(workspaceId: string, cardId: string): void {
   if (!view) return
   const open: OpenWindow = { workspaceId, view, root: null }
   windows.set(cardId, open)
+  // Its focus counts as the app's: notifications, long commands, refreshes (D10).
+  addCardWindow(cardId, view)
   watchStore()
   changed()
   // The user closed the window (its close button, Close Window on macOS).

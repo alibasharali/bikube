@@ -1,9 +1,11 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { onAnyWindowFocus } from './window-focus'
 
 /**
  * The current branch of each local workspace's folder, for the sidebar and the title bar: read
- * when first shown, every few seconds while shown, and when the window gets the focus, since the
- * user (or an agent) switches branches in a terminal. One store for every folder shown.
+ * when first shown, every few seconds while shown, and when a Drovr window gets the focus (a card's
+ * own window too, #53 D10), since the user (or an agent) switches branches in a terminal. One store
+ * for every folder shown.
  */
 
 /** A branch name; `detached` for a detached HEAD; null outside a git repository. */
@@ -15,6 +17,7 @@ const branches = new Map<string, Branch>()
 const watched = new Map<string, number>()
 const listeners = new Set<() => void>()
 let timer: ReturnType<typeof setInterval> | null = null
+let stopFocus: (() => void) | null = null
 
 function read(dir: string): void {
   void window.drovr.worktree.info(dir).then((info) => {
@@ -34,7 +37,7 @@ function watch(dir: string): () => void {
   if (watched.get(dir) === 1) read(dir)
   if (!timer) {
     timer = setInterval(readAll, REFRESH_MS)
-    window.addEventListener('focus', readAll)
+    stopFocus = onAnyWindowFocus(readAll)
   }
   return () => {
     const count = (watched.get(dir) ?? 1) - 1
@@ -46,7 +49,8 @@ function watch(dir: string): () => void {
     if (watched.size === 0 && timer) {
       clearInterval(timer)
       timer = null
-      window.removeEventListener('focus', readAll)
+      stopFocus?.()
+      stopFocus = null
     }
   }
 }

@@ -5,6 +5,7 @@ import { openErrorLine, type OpenResult } from '../../core/open-result'
 import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
 import { SMALL_ICON } from './icons'
+import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /** How often the shown folder is read again while the tab shows and the window is focused (D12). */
 const REFRESH_MS = 3000
@@ -17,20 +18,20 @@ const folderName = (folder: string): string =>
     .pop() || folder
 
 /**
- * Reads `folder`'s tree at once, every 3 seconds while the window is focused, and when the window
- * gains the focus (D12); nothing once the tab is gone (panel hidden, card or shell closed).
+ * Reads `folder`'s tree at once, every 3 seconds while a Drovr window is focused, and when one
+ * gains the focus (D12, #53 D10: a card's own window counts); nothing once the tab is gone (panel
+ * hidden, card or shell closed).
  */
 function useRefresh(folder: string): void {
   useEffect(() => {
     void refreshTree(folder)
     const timer = setInterval(() => {
-      if (document.hasFocus()) void refreshTree(folder)
+      if (anyWindowFocused()) void refreshTree(folder)
     }, REFRESH_MS)
-    const onFocus = (): void => void refreshTree(folder)
-    window.addEventListener('focus', onFocus)
+    const stopFocus = onAnyWindowFocus(() => void refreshTree(folder))
     return () => {
       clearInterval(timer)
-      window.removeEventListener('focus', onFocus)
+      stopFocus()
     }
   }, [folder])
 }

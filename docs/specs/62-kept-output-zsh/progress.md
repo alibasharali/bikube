@@ -1,9 +1,17 @@
-# #62 progress
+# Progress #62 kept-output e2e "D1" fails under zsh
 
-| Slice | Status | Commit |
-|---|---|---|
-| S1 – A running process at Close | done | fix(e2e) |
+Ledger for the orchestrator. Survives compaction and session restarts: the `item` skill resumes from here. Commit with each slice.
+
+## Slices
+
+| Slice | Status | Commits | Review | Interfaces for later slices |
+|---|---|---|---|---|
+| S1 | done | `47d13c8..a59eb84` | CLEAN after `fix(review)` (kept-a asserted) | none |
+
+## Rulings
+
+None.
 
 ## Verification
 
-done: D1 12/12 under zsh, bash and sh (`--repeat-each=12`); the whole `e2e/kept-output.spec.ts` 10/10 under zsh and bash and sh.
+- done (all 2 ACs pass): D1 12/12 under zsh, bash and sh; `e2e/kept-output.spec.ts` 10/10 under zsh, bash and sh

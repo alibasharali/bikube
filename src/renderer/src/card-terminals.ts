@@ -458,11 +458,16 @@ function isCard(cardId: string): boolean {
 }
 
 /** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
+/** Nothing is read or saved while Keep output after a card stops is off (#46 D8). */
+const keepingOutput = (): boolean => settingsStore.get().keepOutput
+
 const outputKeeper: OutputKeeper = {
-  keeps: isCard,
+  keeps: (cardId) => keepingOutput() && isCard(cardId),
   scrollback: () => settingsStore.get().scrollback,
-  read: (cardId) => window.drovr.scrollback.read(cardId),
-  save: (cardId, data) => window.drovr.scrollback.save(cardId, data)
+  read: async (cardId) => (keepingOutput() ? window.drovr.scrollback.read(cardId) : null),
+  save: (cardId, data) => {
+    if (keepingOutput()) window.drovr.scrollback.save(cardId, data)
+  }
 }
 
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */

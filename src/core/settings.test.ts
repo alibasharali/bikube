@@ -546,3 +546,19 @@ describe('the editor preferences (#55 D14)', () => {
     expect(parsed.replaced).toEqual(['editor', 'editorCommand'])
   })
 })
+
+describe('the Keep output preference (#46 D8)', () => {
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is on by default and written only when off, as "keepOutput": false', () => {
+    expect(DEFAULT_SETTINGS.keepOutput).toBe(true)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('keepOutput')
+    const text = serializeSettings({ ...base, keepOutput: false })
+    expect(JSON.parse(text).settings.keepOutput).toBe(false)
+    expect(parseSettingsFile(text, 'linux').settings.keepOutput).toBe(false)
+  })
+
+  it('refuses a value that is not a boolean', () => {
+    expect(validateSettings({ ...base, keepOutput: 'no' }, 'linux')).toBeNull()
+  })
+})

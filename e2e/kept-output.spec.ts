@@ -352,3 +352,57 @@ test('AC6: at launch, saves of cards not on the board and stray temporary files 
   const lines = await bufferLines()
   expect(lastIndex(lines, 'kept-46-prune')).toBeLessThan(lastIndex(lines, SEPARATOR))
 })
+
+test('AC7: turning Keep output off deletes every save, saves nothing more, and is kept', async () => {
+  await newCard('api')
+  await run('echo kept-46-switch')
+  await expect.poll(bufferLines).toContain('kept-46-switch')
+  await closeOpenCard('api')
+  await expect.poll(keptFiles).toHaveLength(1)
+
+  const settings = page.getByTestId('settings-dialog')
+  const keepOutput = settings.getByTestId('settings-keep-output')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-terminal').click()
+  await expect(settings.getByText('Keep output after a card stops')).toBeVisible()
+  await expect(keepOutput).toBeChecked()
+  await keepOutput.uncheck()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expect.poll(keptFiles).toEqual([])
+  const settingsFile = join(dataDir, 'drovr-settings.json')
+  const keptSetting = (): unknown =>
+    existsSync(settingsFile)
+      ? JSON.parse(readFileSync(settingsFile, 'utf8')).settings.keepOutput
+      : undefined
+  await expect.poll(keptSetting).toBe(false)
+
+  // Nothing restored, and the next Close saves nothing.
+  await openCard('api')
+  await run('echo off-run')
+  await expect.poll(bufferLines).toContain('off-run')
+  let lines = await bufferLines()
+  expect(lines.some((l) => l.startsWith(SEPARATOR))).toBe(false)
+  expect(lines).not.toContain('kept-46-switch')
+  await closeOpenCard('api')
+  expect(keptFiles()).toEqual([])
+  await openCard('api')
+  await run('echo off-again')
+  await expect.poll(bufferLines).toContain('off-again')
+  lines = await bufferLines()
+  expect(lines.some((l) => l.startsWith(SEPARATOR))).toBe(false)
+  expect(lines).not.toContain('off-run')
+  expect(keptFiles()).toEqual([])
+
+  // Kept across a restart.
+  await app.close()
+  expect(keptFiles()).toEqual([])
+  expect(keptSetting()).toBe(false)
+  ;({ app, page } = await launchApp({ dataDir }))
+  await expect(page.getByTestId('board')).toBeVisible()
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-dialog').getByTestId('settings-section-terminal').click()
+  await expect(page.getByTestId('settings-keep-output')).not.toBeChecked()
+  expect(keptSetting()).toBe(false)
+  expect(keptFiles()).toEqual([])
+})

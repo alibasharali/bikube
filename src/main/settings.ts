@@ -30,6 +30,10 @@ export interface MainSettings {
   editor(): Pick<Settings, 'editor' | 'editorCommand' | 'shell'>
   /** The Claude Code status updates setting. */
   claudeStatus(): boolean
+  /** The Keep output after a card stops setting (#46 D8). */
+  keepOutput(): boolean
+  /** Calls `listener` each time a settings save turns Keep output off (#46 D8). */
+  onKeepOutputOff(listener: () => void): void
   /** The sync folder kept in the settings file (#13 D10), or null when sync is off. */
   syncFolder(): string | null
   /** Keeps `folder` (already checked) as the sync folder, or null for off, and writes the file. */
@@ -65,10 +69,14 @@ export function registerSettings(): MainSettings {
     if (!fromMainFrame(event)) throw new Error('settings:load rejected: untrusted sender')
     return file.load()
   })
+  let keepOutputOff = (): void => {}
   ipcMain.on(IPC.settingsSave, (event, settings: unknown) => {
     if (!fromMainFrame(event)) return
+    const keptOutput = file.load().keepOutput
     const kept = file.save(settings)
-    if (kept) applyTheme(kept)
+    if (!kept) return
+    applyTheme(kept)
+    if (keptOutput && !kept.keepOutput) keepOutputOff()
   })
 
   ipcMain.handle(IPC.settingsShells, async (event): Promise<ShellChoices> => {
@@ -102,6 +110,10 @@ export function registerSettings(): MainSettings {
   return {
     shell: () => file.load().shell,
     claudeStatus: () => file.load().claudeStatus,
+    keepOutput: () => file.load().keepOutput,
+    onKeepOutputOff: (listener) => {
+      keepOutputOff = listener
+    },
     editor: () => {
       const { editor, editorCommand, shell } = file.load()
       return { editor, editorCommand, shell }

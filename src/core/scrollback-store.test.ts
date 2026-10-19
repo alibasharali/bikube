@@ -137,3 +137,26 @@ describe('ScrollbackStore (#46 D4)', () => {
     expect(fs.existsSync(dir)).toBe(false)
   })
 })
+
+describe('ScrollbackStore with Keep output off (#46 D8)', () => {
+  it('saves nothing and reads nothing while the switch is off, and saves again once on', () => {
+    let on = true
+    const gated = new ScrollbackStore({ dir, fs: recordingFs(), log: () => {}, keeps: () => on })
+    gated.save('card-1', 'before')
+    on = false
+    expect(gated.save('card-2', 'while off')).toBe(false)
+    expect(gated.read('card-1')).toBeNull()
+    expect(readdirSync(dir)).toEqual([hash('card-1')])
+    on = true
+    expect(gated.save('card-2', 'after')).toBe(true)
+    expect(gated.read('card-2')?.data).toBe('after')
+  })
+
+  it('clears every save and temporary file when the switch turns off', () => {
+    store.save('card-1', 'x')
+    store.save('card-2', 'y')
+    writeFileSync(join(dir, `${hash('card-1')}.tmp`), 'half')
+    store.clear()
+    expect(readdirSync(dir)).toEqual([])
+  })
+})

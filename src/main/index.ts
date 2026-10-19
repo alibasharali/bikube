@@ -107,10 +107,16 @@ function startApp(): void {
     () => settings.shell(),
     () => settings.claudeStatus()
   )
-  const scrollback = registerScrollback()
-  // Saves of cards on neither the local board nor the one after the launch read go (#46 D7).
+  const scrollback = registerScrollback(() => settings.keepOutput())
+  // Saves of cards on neither the local board nor the one after the launch read go (#46 D7), and
+  // every save goes while Keep output is off, or when it is turned off (D8).
   const localBoard = state.load()
-  void sync.launched.then(() => scrollback.store.prune(cardIds(localBoard, state.load())))
+  void sync.launched.then(() =>
+    settings.keepOutput()
+      ? scrollback.store.prune(cardIds(localBoard, state.load()))
+      : scrollback.store.clear()
+  )
+  settings.onKeepOutputOff(() => scrollback.store.clear())
   registerClipboard()
   registerLinks()
   registerDirectories()

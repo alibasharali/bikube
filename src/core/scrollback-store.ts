@@ -29,6 +29,8 @@ export interface ScrollbackStoreOptions {
   dir: string
   fs: ScrollbackFs
   log?: (message: string) => void
+  /** The Keep output switch (#46 D8): while it reads false nothing is saved or read. On if absent. */
+  keeps?: () => boolean
 }
 
 /** The file name of a card's save: the sha256 of its id, hex, so any id is a safe name. */
@@ -41,7 +43,7 @@ export class ScrollbackStore {
 
   /** The card's save, or null when it has none (or it can't be read, or is too long). */
   read(cardId: unknown): KeptOutput | null {
-    if (!isCardId(cardId)) return null
+    if (!isCardId(cardId) || !this.keeps()) return null
     const path = this.path(cardId)
     try {
       const data = this.options.fs.readFileSync(path, 'utf8')
@@ -54,10 +56,11 @@ export class ScrollbackStore {
 
   /**
    * Replaces the card's save with `data`; false, writing nothing, for an invalid id, data that
-   * isn't a string or is longer than `MAX_KEPT_CHARS` (D3), or a failed write.
+   * isn't a string or is longer than `MAX_KEPT_CHARS` (D3), a failed write, or Keep output off.
    */
   save(cardId: unknown, data: unknown): boolean {
     if (!isCardId(cardId) || typeof data !== 'string' || data.length > MAX_KEPT_CHARS) return false
+    if (!this.keeps()) return false
     const { fs, dir } = this.options
     const path = this.path(cardId)
     const tmp = `${path}.tmp`
@@ -114,6 +117,15 @@ export class ScrollbackStore {
         this.log(`kept output not removed: ${String(err)}`)
       }
     }
+  }
+
+  /** Removes every save and temporary file, when Keep output is turned off (D8). */
+  clear(): void {
+    this.prune([])
+  }
+
+  private keeps(): boolean {
+    return this.options.keeps?.() ?? true
   }
 
   private path(cardId: string): string {

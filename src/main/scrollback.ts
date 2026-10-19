@@ -28,11 +28,13 @@ export interface MainScrollback {
 
 /**
  * Cards' kept output (#46 D4) in `<userData>/scrollback`: only the window's own top-level page
- * may read, save or delete, as with `state:*`.
+ * may read, save or delete, as with `state:*`. Nothing is read or saved while `keeps` (the Keep
+ * output setting, D8) reads false.
  */
-export function registerScrollback(): MainScrollback {
+export function registerScrollback(keeps: () => boolean): MainScrollback {
   const store = new ScrollbackStore({
     dir: join(app.getPath('userData'), 'scrollback'),
+    keeps,
     fs: {
       mkdirSync,
       chmodSync,

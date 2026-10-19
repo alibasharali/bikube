@@ -14,6 +14,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
+import { MAIN_PANE } from '../../core/dev-servers'
 import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
 import { keptRange } from '../../core/kept-output'
 import { SessionRouter } from '../../core/session-router'
@@ -36,6 +37,7 @@ import {
 import { opensLink } from '../../core/terminal-links'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
+import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
 import { currentKeymap, settingsStore } from './settings'
 import { workspaceStore } from './store'
@@ -559,6 +561,11 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
     registry.onEnded((cardId) => cardPanes().dispose(cardId))
+    // A local main pane's output shows its dev servers' chips (#49 D2, D5, D6).
+    registry.watchOutput({
+      output: (cardId, data) => devServers().output(cardId, MAIN_PANE, data),
+      ended: (cardId) => devServers().paneEnded(cardId, MAIN_PANE)
+    })
     // Every running card's output is saved as the app starts quitting, before main stops the
     // shells (#46 D2).
     const cards = registry

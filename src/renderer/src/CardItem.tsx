@@ -22,6 +22,7 @@ import { dismissCardGitAction, runCardGitAction, useCardGitAction } from './card
 import { refreshPullRequest, usePullRequest } from './pull-requests'
 import CardLines from './CardLines'
 import CloseCardDialog from './CloseCardDialog'
+import DevServerChips from './DevServerChips'
 import ConfirmDialog from './ConfirmDialog'
 import InlineInput from './InlineInput'
 import MergeCardDialog, { type MergeChoice } from './MergeCardDialog'
@@ -409,6 +410,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
       )}
       {card.worktree && <PullRequestChip worktree={card.worktree} />}
       {card.worktree && <CardGitActionLine cardId={card.id} />}
+      {running && <DevServerChips cardId={card.id} />}
       {running && (
         <button
           type="button"

@@ -15,6 +15,9 @@ const api: DrovrApi = {
   link: {
     open: (url) => ipcRenderer.send(IPC.linkOpen, url)
   },
+  ports: {
+    probe: (ports) => ipcRenderer.invoke(IPC.portsProbe, ports)
+  },
   fs: {
     isDirectory: (path) => ipcRenderer.invoke(IPC.fsIsDirectory, path)
   },

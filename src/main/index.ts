@@ -11,6 +11,7 @@ import { registerDirectories } from './directories'
 import { registerFiles } from './files'
 import { registerGit } from './git'
 import { registerLinks } from './links'
+import { registerPorts } from './ports'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { cardIds, registerScrollback } from './scrollback'
@@ -119,6 +120,7 @@ function startApp(): void {
   settings.onKeepOutputOff(() => scrollback.store.clear())
   registerClipboard()
   registerLinks()
+  registerPorts()
   registerDirectories()
   registerAttention()
   registerWorktrees()

@@ -1174,11 +1174,11 @@ button {
    the card's rows (subgrid), so the ⋯ menu sits beside the title row and the stop button (D10)
    beside the status row, though neither may be inside the button. Rows: title, a worktree card's
    PR chip (#38 D8) and action line (#38 D6, both also outside the button), status, agent status,
-   last output line. */
+   last output line, dev server chips (#49 D7, outside the button too). */
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: repeat(6, auto);
+  grid-template-rows: repeat(7, auto);
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1313,6 +1313,41 @@ button {
 
 .card-pr[data-ci='pending'] .card-pr-dot {
   background: var(--pill-question-text);
+}
+
+/* A card's dev server chips (#49 D7, D8), under its status lines: `localhost:5173`, then `+N`. */
+.dev-servers {
+  grid-column: 1 / -1;
+  grid-row: 7;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.dev-server-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+button.dev-server-chip:hover,
+button.dev-server-chip:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.dev-server-more {
+  cursor: default;
 }
 
 /* A worktree card's action line (#38 D6): Pushing…, its note, or git's message with Dismiss. */

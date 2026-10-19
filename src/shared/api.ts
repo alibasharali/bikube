@@ -25,6 +25,7 @@ export const IPC = {
   clipboardRead: 'clipboard:read',
   clipboardWrite: 'clipboard:write',
   linkOpen: 'link:open',
+  portsProbe: 'ports:probe',
   fsIsDirectory: 'fs:isDirectory',
   dialogPickDirectory: 'dialog:pickDirectory',
   stateLoad: 'state:load',
@@ -131,6 +132,15 @@ export interface ClipboardApi {
 /** A terminal link, opened in the default browser by main (http and https only). */
 export interface LinkApi {
   open(url: string): void
+}
+
+/** Dev server ports, probed by main on the loopback interface (#49 D9). */
+export interface PortsApi {
+  /**
+   * The ports among `ports` something accepts TCP connections on, at `127.0.0.1` or `::1`: only
+   * integers from 1 to 65535 among the first 32 are probed.
+   */
+  probe(ports: number[]): Promise<number[]>
 }
 
 /** Filesystem checks, run by main. */
@@ -376,6 +386,7 @@ export interface DrovrApi {
   terminal: TerminalApi
   clipboard: ClipboardApi
   link: LinkApi
+  ports: PortsApi
   fs: FsApi
   dialog: DialogApi
   state: StateApi

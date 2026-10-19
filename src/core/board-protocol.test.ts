@@ -52,6 +52,84 @@ describe('serializeRequest / parseRequestLine', () => {
     expect(parseRequestLine(line(bad))).toEqual({ ok: false, error: INVALID_REQUEST })
   })
 
+  describe('usage (#50 D5)', () => {
+    const usage = {
+      input: 1010,
+      output: 700,
+      cacheWrite: 2000,
+      cacheRead: 3000,
+      tokens: 6710,
+      context: 3010,
+      model: 'claude-sonnet-4-5',
+      cost: 0.02193
+    }
+    const request = (u: unknown): Record<string, unknown> => ({
+      v: 1,
+      cardId: 'c1',
+      command: 'usage',
+      card: '.',
+      usage: u
+    })
+
+    it('round-trips a usage, with or without a cost and a model', () => {
+      const s = serializeRequest('c1', { command: 'usage', card: '.', usage })
+      expect(s).toBe(`${line(request(usage))}\n`)
+      expect(parseRequestLine(s)).toEqual({ ok: true, request: request(usage) })
+      const noCost: Record<string, unknown> = { ...usage }
+      delete noCost.cost
+      const unknown = { ...noCost, model: null }
+      expect(parseRequestLine(line(request(unknown)))).toEqual({
+        ok: true,
+        request: request(unknown)
+      })
+      const zero = { ...unknown, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, tokens: 0 }
+      expect(parseRequestLine(line(request({ ...zero, context: 0, cost: 0 })))).toEqual({
+        ok: true,
+        request: request({ ...zero, context: 0, cost: 0 })
+      })
+    })
+
+    it('rejects a negative, fractional, unsafe or mistyped count', () => {
+      for (const key of ['input', 'output', 'cacheWrite', 'cacheRead', 'tokens', 'context']) {
+        for (const bad of [-1, 1.5, 2 ** 53, '5', null, undefined]) {
+          expect(parseRequestLine(line(request({ ...usage, [key]: bad })))).toEqual({
+            ok: false,
+            error: INVALID_REQUEST
+          })
+        }
+      }
+    })
+
+    it('rejects a negative or mistyped cost and a model that is not a short string or null', () => {
+      for (const bad of [
+        { ...usage, cost: -0.01 },
+        { ...usage, cost: '1' },
+        { ...usage, cost: null },
+        { ...usage, model: 'm'.repeat(201) },
+        { ...usage, model: 5 },
+        { ...usage, extra: 1 },
+        [],
+        null,
+        'usage'
+      ]) {
+        expect(parseRequestLine(line(request(bad)))).toEqual({ ok: false, error: INVALID_REQUEST })
+      }
+      const noModel: Record<string, unknown> = { ...usage }
+      delete noModel.model
+      expect(parseRequestLine(line(request(noModel)))).toEqual({
+        ok: false,
+        error: INVALID_REQUEST
+      })
+      expect(parseRequestLine(line({ ...request(usage), extra: 'x' }))).toEqual({
+        ok: false,
+        error: INVALID_REQUEST
+      })
+      expect(parseRequestLine(line(request({ ...usage, model: 'm'.repeat(200) })))).toMatchObject({
+        ok: true
+      })
+    })
+  })
+
   it('round-trips an activity, still version 1 (#31 D12)', () => {
     const a = serializeRequest('c1', { command: 'activity', card: '.', activity: 'working' })
     const activity = { v: 1, cardId: 'c1', command: 'activity', card: '.', activity: 'working' }

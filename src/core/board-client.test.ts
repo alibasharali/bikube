@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -85,6 +85,62 @@ describe('runBoard', () => {
   it('prints usage to stdout for help and exits 0, to stderr for a wrong shape and exits 2 (#9 D1)', async () => {
     expect(await board([], {})).toEqual({ code: 0, stdout: BOARD_USAGE, stderr: '' })
     expect(await board(['frob'], {})).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+  })
+
+  it('reads the transcript and sends its usage for the card (#50 D5)', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    const transcript = join(dir, 't.jsonl')
+    await writeFile(
+      transcript,
+      `${JSON.stringify({
+        type: 'assistant',
+        message: {
+          model: 'gpt-x',
+          usage: { input_tokens: 1000, output_tokens: 1000 }
+        }
+      })}\n`
+    )
+    expect(await board(['usage', '.', transcript])).toEqual({ code: 0, stdout: '', stderr: '' })
+    expect(handler).toHaveBeenCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'usage',
+      card: '.',
+      usage: {
+        input: 1000,
+        output: 1000,
+        cacheWrite: 0,
+        cacheRead: 0,
+        tokens: 2000,
+        context: 1000,
+        model: 'gpt-x'
+      }
+    })
+  })
+
+  it("prints can't read for an unreadable transcript, exits 1 and sends nothing (#50 D5)", async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    expect(await board(['usage', '.', '/nope.jsonl'])).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: "board: can't read /nope.jsonl\n"
+    })
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('checks for a card before reading a transcript, so outside one it reads nothing (#50 D5)', async () => {
+    expect(await board(['usage', '.', '/nope.jsonl'], {})).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: `${NOT_IN_A_CARD}\n`
+    })
+    expect(await board(['usage', '.', '/nope.jsonl'], { DROVR_CARD_ID: 'c1' })).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: `${NOT_RUNNING}\n`
+    })
   })
 
   it('refuses without a card id (#9 D3, AC8)', async () => {

@@ -62,6 +62,20 @@ describe('BoardRelay', () => {
     expect(sent[0].command).toEqual({ command: 'setup', card: '.', result: 'failed' })
   })
 
+  it('forwards a usage command with its usage (#50 D5)', () => {
+    const usage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 0,
+      cacheRead: 0,
+      tokens: 3,
+      context: 1,
+      model: null
+    }
+    void relay.handle({ v: 1, cardId: 'c1', command: 'usage', card: '.', usage })
+    expect(sent[0].command).toEqual({ command: 'usage', card: '.', usage })
+  })
+
   it('refuses a card with no live session without asking any window (#9 D3)', async () => {
     await expect(relay.handle({ ...request, cardId: 'gone' })).resolves.toEqual({
       ok: false,

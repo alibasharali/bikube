@@ -3,8 +3,9 @@
  * to main's socket, print the outcome. Plain Node; the CLI entry wires it to the process.
  */
 import { createConnection } from 'node:net'
-import { parseBoardArgs } from './board-args'
+import { parseBoardArgs, type BoardCommand } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
+import { readClaudeUsage } from './claude-usage'
 import {
   ANSWER_TIMEOUT_MS,
   NO_ANSWER,
@@ -59,7 +60,10 @@ export function sendBoardRequest(
   })
 }
 
-/** Runs `board <argv>` with `env`'s `DROVR_CARD_ID` and `DROVR_SOCKET`; resolves with the exit code. */
+/**
+ * Runs `board <argv>` with `env`'s `DROVR_CARD_ID` and `DROVR_SOCKET`; resolves with the exit code.
+ * `board usage` reads its transcript first (#50 D5): one that can't be read sends nothing.
+ */
 export async function runBoard(
   argv: readonly string[],
   env: Record<string, string | undefined>,
@@ -77,11 +81,23 @@ export async function runBoard(
   }
   const cardId = env.DROVR_CARD_ID
   const socketPath = env.DROVR_SOCKET
-  const reply: BoardReply = !cardId
-    ? { ok: false, error: NOT_IN_A_CARD }
-    : !socketPath
-      ? { ok: false, error: NOT_RUNNING }
-      : await sendBoardRequest(socketPath, serializeRequest(cardId, args.command), timeoutMs)
+  // Checked before a transcript is read: outside a card, `board usage` reads nothing.
+  if (!cardId || !socketPath) {
+    out.stderr(`${cardId ? NOT_RUNNING : NOT_IN_A_CARD}\n`)
+    return 1
+  }
+  let command: BoardCommand
+  if (args.kind === 'transcript') {
+    try {
+      command = { command: 'usage', card: args.card, usage: await readClaudeUsage(args.path) }
+    } catch {
+      out.stderr(`board: can't read ${args.path}\n`)
+      return 1
+    }
+  } else {
+    command = args.command
+  }
+  const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), timeoutMs)
   if (reply.ok) return 0
   out.stderr(`${reply.error}\n`)
   return 1

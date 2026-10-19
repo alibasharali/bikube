@@ -9,6 +9,7 @@ import { useBranch } from './branches'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
 import { settingsStore, useSettings } from './settings'
+import { useWorkspaceUsage } from './usage'
 
 /**
  * The app's own title bar, above the sidebar and the main area: it drags the window, leaves room
@@ -68,6 +69,7 @@ function TitleBar({
                 {workspace.name}
               </span>
             )}
+            {!card && <WorkspaceUsageChip workspace={workspace} />}
             {!card && <WorkspaceLocation workspace={workspace} />}
             {!card && dir && branch && <BranchChip key={dir} dir={dir} branch={branch} />}
             {card && (
@@ -108,6 +110,20 @@ function TitleBar({
         )}
       </div>
     </header>
+  )
+}
+
+/**
+ * The Claude Code usage of the workspace's cards (#50 D9): the sum of their known costs, else of
+ * their tokens. Nothing when no card has usage.
+ */
+function WorkspaceUsageChip({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const usage = useWorkspaceUsage(workspace.cards.map((c) => c.id))
+  if (!usage) return null
+  return (
+    <span className="titlebar-usage" data-testid="titlebar-usage" title={usage.tooltip}>
+      {usage.text}
+    </span>
   )
 }
 

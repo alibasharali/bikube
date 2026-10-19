@@ -4,6 +4,7 @@
  */
 
 import { isActivityValue, type ActivityValue } from './activity'
+import type { ClaudeUsage } from './claude-pricing'
 
 export const BOARD_USAGE = `usage: board move <card> <column>
        board status <card> <text>
@@ -24,6 +25,8 @@ export type BoardCommand =
   | { command: 'session'; card: string; session: string }
   /** Typed by a worktree card's setup line (#39 D3, D4); not in the usage text. */
   | { command: 'setup'; card: string; result: SetupResult }
+  /** Sent by `board usage` after reading the transcript (#50 D5); not in the usage text. */
+  | { command: 'usage'; card: string; usage: ClaudeUsage }
 
 /** What a setup line reports (#39 D4). */
 export type SetupResult = 'ok' | 'failed'
@@ -35,6 +38,8 @@ export type BoardArgs =
   | { kind: 'help'; stdout: string; exitCode: 0 }
   | { kind: 'usage'; stderr: string; exitCode: 2 }
   | { kind: 'command'; command: BoardCommand }
+  /** `board usage <card> <transcript>` (#50 D5): the client reads the transcript, then sends. */
+  | { kind: 'transcript'; card: string; path: string }
 
 /** What `board <argv...>` asks for: usage (help or a wrong shape) or one command. */
 export function parseBoardArgs(argv: readonly string[]): BoardArgs {
@@ -53,6 +58,7 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
       return { kind: 'command', command: { command: 'session', card, session: value } }
     if (name === 'setup' && isSetupResult(value))
       return { kind: 'command', command: { command: 'setup', card, result: value } }
+    if (name === 'usage') return { kind: 'transcript', card, path: value }
   }
   return { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
 }

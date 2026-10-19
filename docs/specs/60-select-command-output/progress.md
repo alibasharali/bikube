@@ -8,7 +8,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 |---|---|---|---|---|
 | S1 | done | `41a6b63..10c3597` | CLEAN | `ShellMarks.feed(mark,time,line,column?)`, `ShellMarks.outputs()`; `src/core/command-output.ts`: `endedOutputs(outputs,row)`, `outputRange`, `rangeLength(range,cols)`, `chooseCommandOutput(commands,{top,rows,bottom,cols},hasOutput)`; XtermScreen feeds `cursorX` |
 | S2 | done | `8b6d16e..b946bfe` | fixed r1 (e2e records clipboard writes) | action `copyCommandOutput` (keymap `SHORTCUT_ACTIONS`, label `Copy command output`, `CardViewAction`); `XtermScreen.copyCommandOutput()`; `textRange` in command-output.ts; App.tsx already routes card-view ids to `runCardViewAction`; e2e helper `recordClipboardWrites()` |
-| S3 | running | | | |
+| S3 | done | `badb1db..HEAD` | fixed r1 (shared `e2e/clipboard-writes.ts`) | palette action `{ id: 'copyCommandOutput' }` |
 
 ## Rulings
 
@@ -16,4 +16,4 @@ None yet.
 
 ## Verification
 
-- todo
+- running

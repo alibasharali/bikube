@@ -2,7 +2,7 @@
 item: 53
 type: feature
 title: Open a card in its own window
-status: draft
+status: approved
 branch: claude/53-card-own-window
 ---
 

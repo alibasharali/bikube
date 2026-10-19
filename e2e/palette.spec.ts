@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -592,27 +593,6 @@ test('#48 AC6: with a split card open the palette lists Zoom pane with its short
   await expect(page.getByTestId('pane').first()).toBeVisible()
 })
 
-/**
- * Records each text the app writes to the clipboard from now on, still writing it: the system
- * clipboard is shared by every test on xvfb's display, so the tests read what this app wrote.
- */
-const recordClipboardWrites = (): Promise<void> =>
-  app!.evaluate(({ clipboard }) => {
-    const writes: string[] = []
-    const write = clipboard.writeText.bind(clipboard)
-    Object.assign(globalThis, { __clipboardWrites: writes })
-    clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
-      writes.push(text)
-      write(text, type)
-    }
-  })
-
-/** The texts the app wrote to the clipboard since `recordClipboardWrites`. */
-const clipboardWrites = (): Promise<string[]> =>
-  app!.evaluate(() => [
-    ...(globalThis as unknown as { __clipboardWrites: string[] }).__clipboardWrites
-  ])
-
 test('#60 AC6: Copy command output is listed with its shortcut and copies as the shortcut does', async () => {
   // Shell /bin/sh, so only the marks the test prints reach the terminal (no shell integration).
   await app?.close()
@@ -625,7 +605,7 @@ test('#60 AC6: Copy command output is listed with its shortcut and copies as the
   const shortcut = await settingsShortcut('copyCommandOutput')
   expect(shortcut).toBe(darwin ? 'Shift+Cmd+A' : 'Ctrl+Shift+A')
   await newCard('api')
-  await recordClipboardWrites()
+  await recordClipboardWrites(app!)
   // A marked command (prompt `$ `, then its output `three` between its C and D;0).
   await run(
     String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007three\n\033]133;D;0\007'`
@@ -638,7 +618,7 @@ test('#60 AC6: Copy command output is listed with its shortcut and copies as the
   await expect(actionShortcut('Copy command output')).toHaveText(shortcut)
   await page.keyboard.press('Enter')
   await expect(palette()).toHaveCount(0)
-  await expect.poll(clipboardWrites).toEqual(['three'])
+  await expect.poll(() => clipboardWrites(app!)).toEqual(['three'])
   await expect.poll(terminalFocused).toBe(true)
 })
 

@@ -10,6 +10,7 @@ import {
   splitRight,
   zoomPane
 } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -894,20 +895,7 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
   const darwin = process.platform === 'darwin'
   const defaultText = darwin ? 'Shift+Cmd+A' : 'Ctrl+Shift+A'
-  // What the app writes to the clipboard, recorded: xvfb's clipboard is every test's.
-  const clipboardWrites = (): Promise<string[]> =>
-    app!.evaluate(() => [
-      ...(globalThis as unknown as { __clipboardWrites: string[] }).__clipboardWrites
-    ])
-  await app.evaluate(({ clipboard }) => {
-    const writes: string[] = []
-    const write = clipboard.writeText.bind(clipboard)
-    Object.assign(globalThis, { __clipboardWrites: writes })
-    clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
-      writes.push(text)
-      write(text, type)
-    }
-  })
+  await recordClipboardWrites(app)
   await alphaWithApi(page)
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type(
@@ -935,7 +923,7 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   await expect(dialog(page)).toHaveCount(0)
 
   await page.keyboard.press('Control+Alt+O')
-  await expect.poll(clipboardWrites).toEqual(['copied'])
+  await expect.poll(() => clipboardWrites(app!)).toEqual(['copied'])
 
   await page.keyboard.press(SHORTCUT)
   await dialog(page).getByTestId('settings-section-shortcuts').click()
@@ -945,5 +933,5 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
   await page.keyboard.press(darwin ? 'Meta+Shift+A' : 'Control+Shift+A')
-  await expect.poll(clipboardWrites).toEqual(['copied', 'copied'])
+  await expect.poll(() => clipboardWrites(app!)).toEqual(['copied', 'copied'])
 })

@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `ff29f46..f03e031` | CLEAN | `PaneLayout.zoomed?: true`, `toggleZoom(layout)`, `CardPanes.toggleZoom(cardId)`, `zoomPane` shortcut/card view/palette action, chip `data-testid="pane-zoom"`, `zoomPane(page)` in e2e/card-view.ts |
+| S2 | done | docs only | — | — |
 
 ## Rulings
 

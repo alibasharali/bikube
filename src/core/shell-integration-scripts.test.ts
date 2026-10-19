@@ -223,6 +223,109 @@ describeShell('bash', (bash) => {
     // One C for the whole line, none for the commands inside `f`.
     expect(sh.output().split(OSC('133;C')).length).toBe(7)
   })
+
+  it('percent-encodes OSC 7 by bytes and gives LC_ALL back as it was', async () => {
+    for (const lcAll of [undefined, 'C.UTF-8']) {
+      const home = folder()
+      mkdirSync(join(home, 'a b é'))
+      writeFileSync(join(home, '.bash_profile'), "PS1='user[$?]> '\n")
+      const sh = start(bash, home, { LANG: 'C.UTF-8', ...(lcAll && { LC_ALL: lcAll }) })
+      await sh.until('the first prompt', (o) => visible(o).includes('user[0]> '))
+      sh.run(`cd 'a b é'`)
+      await sh.until('OSC 7', (o) => o.includes(`${home}/a%20b%20%C3%A9\x07`))
+      sh.run('echo "lc=[${LC_ALL-unset}]"')
+      await sh.until('LC_ALL', (o) => visible(o).includes(`\nlc=[${lcAll ?? 'unset'}]\n`))
+    }
+  })
+
+  it("works under the login files' `set -u` without an error", async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.bash_profile'),
+      ['set -u', 'export TEST_LOGIN_VAR=from-login-files', "PS1='user[$?]> '"].join('\n') + '\n'
+    )
+    const sh = start(bash, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).not.toMatch(/unbound|bash:/)
+  })
+
+  describe('with bash-preexec (starship, atuin)', () => {
+    const preexec = resolve(__dirname, 'fixtures', 'bash-preexec.sh')
+    /** The user's hooks, through bash-preexec's arrays. */
+    const hooks = ['preexec() { echo "user-preexec:$1"; }', 'precmd() { echo "user-precmd-$?"; }']
+
+    function profile(lines: string[]): string {
+      const home = folder()
+      writeFileSync(
+        join(home, '.bash_profile'),
+        [
+          'set -u',
+          'export TEST_LOGIN_VAR=from-login-files',
+          "PS1='user[$?]> '",
+          ...lines,
+          ...hooks
+        ].join('\n') + '\n'
+      )
+      return home
+    }
+
+    /**
+     * Runs one command and the user's preexec hook sees it once, with one C and one D for it,
+     * then `false` reaches the user's precmd hook as 1 with D;1.
+     */
+    async function checkHooks(sh: Shell): Promise<void> {
+      const count = (text: string, part: string): number => text.split(part).length - 1
+      let from = sh.output().length
+      sh.run('echo marker-"x"')
+      await sh.until('the marked command', (o) => o.slice(from).includes(OSC('133;D;0')))
+      let part = sh.output().slice(from)
+      expect(count(part, OSC('133;C'))).toBe(1)
+      expect(count(part, OSC('133;D;0'))).toBe(1)
+      expect(count(visible(part), '\nuser-preexec:echo marker-"x"\n')).toBe(1)
+      expect(visible(part)).toContain('\nmarker-x\n')
+      from = sh.output().length
+      sh.run('false')
+      await sh.until('D;1', (o) => o.slice(from).includes(OSC('133;D;1')))
+      await sh.until('the precmd hook', (o) => visible(o.slice(from)).includes('user-precmd-1\n'))
+      part = sh.output().slice(from)
+      expect(count(part, OSC('133;C'))).toBe(1)
+      expect(count(part, OSC('133;A'))).toBe(1)
+      expect(visible(sh.output())).not.toMatch(/unbound|bash:/)
+    }
+
+    it('sourced by the login files, installing at the first prompt', async () => {
+      const sh = start(bash, profile([`. '${preexec}'`]))
+      await checkScripts(sh, (status) => `user[${status}]> `)
+      await checkHooks(sh)
+    })
+
+    it('sourced and installed at once by the login files', async () => {
+      const sh = start(
+        bash,
+        profile([
+          `__bp_delay_install=1`,
+          `. '${preexec}'`,
+          'unset __bp_delay_install',
+          '__bp_install'
+        ])
+      )
+      await checkScripts(sh, (status) => `user[${status}]> `)
+      await checkHooks(sh)
+    })
+
+    it('sourced at the prompt after Drovr loaded, keeping a DEBUG trap of the user', async () => {
+      const sh = start(
+        bash,
+        profile(['trap \'[ "$BASH_COMMAND" = "echo traced" ] && echo "user-trap-ran"\' DEBUG'])
+      )
+      await checkScripts(sh, (status) => `user[${status}]> `)
+      sh.run(`. '${preexec}'`)
+      await sh.until('its install', (o) => visible(o).includes('user-precmd-0\n'))
+      await checkHooks(sh)
+      sh.run('echo traced')
+      await sh.until('the user trap', (o) => visible(o).includes('\nuser-trap-ran\n'))
+    })
+  })
 })
 
 describeShell('zsh', (zsh) => {
@@ -261,6 +364,15 @@ describeShell('zsh', (zsh) => {
     await checkScripts(sh, (status) => `user[${status}]> `)
     expect(visible(sh.output())).toContain('hook-saw-1\n')
     expect((await nestedEnv(sh, zsh))['ZDOTDIR']).toBe(zdotdir)
+  })
+
+  it("works under the user's `setopt nounset` without an error", async () => {
+    const home = folder()
+    userFiles(home)
+    writeFileSync(join(home, '.zshenv'), 'setopt nounset\nZSHENV_READ=yes\n')
+    const sh = start(zsh, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    expect(visible(sh.output())).not.toMatch(/parameter not set|zsh:/)
   })
 })
 

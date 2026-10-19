@@ -93,12 +93,6 @@ export class DevServers {
     this.forgotten()
   }
 
-  /** The card or shell stopped, restarted or was deleted: every pane's ports are forgotten (D5). */
-  cardEnded(cardId: string): void {
-    if (!this.cards.delete(cardId)) return
-    this.forgotten()
-  }
-
   /**
    * The card's listening ports (D3, D4): its panes' ports, the main pane first, each port once.
    * The same array until it changes, for `useSyncExternalStore`.

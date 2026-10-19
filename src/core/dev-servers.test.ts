@@ -95,7 +95,7 @@ describe('DevServers (#49 D3–D5, AC10)', () => {
     ])
   })
 
-  it("forgets a pane's ports when it ends, and a card's when the card ends", async () => {
+  it("forgets a pane's ports when it ends, and the card's once every pane has", async () => {
     const { servers, settle, probes } = setup([1, 2])
     servers.output('c', MAIN_PANE, 'http://localhost:1/\n')
     servers.output('c', 'p1', 'http://localhost:2/\n')
@@ -103,7 +103,7 @@ describe('DevServers (#49 D3–D5, AC10)', () => {
     expect(ports(servers, 'c')).toEqual([1, 2])
     servers.paneEnded('c', 'p1')
     expect(ports(servers, 'c')).toEqual([1])
-    servers.cardEnded('c')
+    servers.paneEnded('c', MAIN_PANE)
     expect(ports(servers, 'c')).toEqual([])
 
     // Printed again: probed again before it shows.
@@ -160,7 +160,7 @@ describe('DevServers (#49 D3–D5, AC10)', () => {
     expect(ports(servers, 'c')).toEqual([2])
 
     // Nothing known: the interval stops.
-    servers.cardEnded('c')
+    servers.paneEnded('c', MAIN_PANE)
     expect(timers.size).toBe(0)
   })
 
@@ -190,7 +190,7 @@ describe('DevServers (#49 D3–D5, AC10)', () => {
     await settle()
     expect(calls).toBe(2)
     unsubscribe()
-    servers.cardEnded('c')
+    servers.paneEnded('c', MAIN_PANE)
     expect(calls).toBe(2)
   })
 
@@ -204,7 +204,7 @@ describe('DevServers (#49 D3–D5, AC10)', () => {
       clearInterval: () => {}
     })
     servers.output('c', MAIN_PANE, 'http://localhost:1/\n')
-    servers.cardEnded('c')
+    servers.paneEnded('c', MAIN_PANE)
     servers.output('c', MAIN_PANE, 'http://localhost:1/\n')
     answers[1]([])
     answers[0]([1])

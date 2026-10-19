@@ -171,6 +171,7 @@ test('AC1: Close from the menu asks, stops the shell, and keeps the card in plac
     'Review',
     'Done',
     'Startup command…',
+    'Open in new window',
     'Close',
     'Delete'
   ])

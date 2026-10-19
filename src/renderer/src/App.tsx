@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import type { PaletteAction } from '../../core/palette'
@@ -18,6 +18,7 @@ import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
+import { focusCardWindow, subscribeCardWindows, windowedKey } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
@@ -72,7 +73,10 @@ function App(): React.JSX.Element {
       )
     }
   }
-  const openedId = activeId ? openedCard(views, activeId) : null
+  // A card is shown in one place at a time: one in its own window isn't open here (#53 D7).
+  const windowed = useSyncExternalStore(subscribeCardWindows, () => windowedKey())
+  const remembered = activeId ? openedCard(views, activeId) : null
+  const openedId = remembered && !windowed.split('\n').includes(remembered) ? remembered : null
   // The open terminal: one of the board's cards, or one of the workspace's shells.
   const openCard = openedId
     ? (active?.cards.find((c) => c.id === openedId) ??
@@ -84,10 +88,11 @@ function App(): React.JSX.Element {
   const closeCard = useCallback(() => {
     if (activeId) setViews((v) => forgetView(v, activeId))
   }, [activeId, setViews])
-  // Opening a card whose shell isn't running starts it first (#5 D7).
+  // Opening a card whose shell isn't running starts it first (#5 D7). A card in its own window
+  // has that window brought forward instead, and nothing changes here (#53 D7).
   const onOpenCard = useCallback(
     (cardId: string) => {
-      if (!activeId) return
+      if (!activeId || focusCardWindow(cardId)) return
       startCard(activeId, cardId)
       setViews((v) => rememberCard(v, activeId, cardId))
     },

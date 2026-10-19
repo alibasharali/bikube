@@ -8,14 +8,17 @@ import { hasUsage, usageLine, usageTooltip } from '../../core/usage-format'
  * the agent status (#9 D8) on up to 2 lines with its full text as tooltip and the last output
  * line in the terminal font, and last the Claude Code usage line (#50 D8) when it has usage,
  * running or not, its token breakdown as tooltip. The stop button (D10) sits beside the status
- * row, outside the card's open button (see `CardItem`).
+ * row, outside the card's open button (see `CardItem`). A card shown in its own window has the
+ * `In window` chip on its status row (#53 D7).
  */
 function CardLines({
   status,
-  usage
+  usage,
+  inWindow = false
 }: {
   status: CardStatus
   usage?: ClaudeUsage
+  inWindow?: boolean
 }): React.JSX.Element {
   const pill = cardPill(status)
   return (
@@ -42,6 +45,11 @@ function CardLines({
               {pill.label}
             </span>
           )
+        )}
+        {inWindow && (
+          <span className="card-in-window" data-testid="card-in-window">
+            In window
+          </span>
         )}
       </span>
       {status.agentStatus && (

@@ -1,13 +1,7 @@
-import {
-  app,
-  BrowserWindow,
-  globalShortcut,
-  ipcMain,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent
-} from 'electron'
+import { app, globalShortcut, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { GlobalShortcut, globalPressAction, withFeature } from '../core/global-shortcut'
 import { IPC } from '../shared/api'
+import { appWindow } from './card-windows'
 import type { MainSettings } from './settings'
 
 /** Chromium's feature that lets a Wayland desktop with the portal grant global shortcuts (#51 D8). */
@@ -37,7 +31,8 @@ const TEST_HOOK = '__drovrGlobalShortcutPress'
  */
 export function registerGlobalShortcut(settings: MainSettings, createWindow: () => void): void {
   const press = (): void => {
-    const [window] = BrowserWindow.getAllWindows()
+    // The main window, never a card window (#53 D3).
+    const window = appWindow()
     const look = window
       ? {
           visible: window.isVisible(),

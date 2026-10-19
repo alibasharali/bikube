@@ -2,7 +2,7 @@
 item: 42
 type: feature
 title: Move cards automatically on activity
-status: draft
+status: approved
 branch: claude/42-auto-move-cards
 ---
 

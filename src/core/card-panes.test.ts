@@ -34,6 +34,13 @@ class FakeScreen implements CardScreen {
   setReadOnly(): void {
     this.readOnly = true
   }
+  sessionStarts = 0
+  markSessionStart(): void {
+    this.sessionStarts++
+  }
+  serialize(): string {
+    return this.text
+  }
   dispose(): void {
     this.disposed = true
   }

@@ -83,3 +83,12 @@ export async function expectStatusOnBoard(
     expect(card.getByTestId('card-status-label')).toHaveText(status)
   )
 }
+
+/**
+ * The lines below the newest `── Previous output ·` separator (#46 D5), so a reopened card's new
+ * screen can be told from the output restored above it; all of them when there is none.
+ */
+export function belowSeparator(lines: string[]): string[] {
+  const separator = lines.findLastIndex((l) => l.startsWith('── Previous output ·'))
+  return lines.slice(separator + 1)
+}

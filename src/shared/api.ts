@@ -1,6 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
+import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
@@ -28,6 +29,10 @@ export const IPC = {
   dialogPickDirectory: 'dialog:pickDirectory',
   stateLoad: 'state:load',
   stateSave: 'state:save',
+  scrollbackRead: 'scrollback:read',
+  scrollbackSave: 'scrollback:save',
+  scrollbackDelete: 'scrollback:delete',
+  scrollbackQuitSaved: 'scrollback:quitSaved',
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   settingsShells: 'settings:shells',
@@ -146,6 +151,24 @@ export interface StateApi {
   load(): Promise<WorkspaceState>
   /** Main validates `state`, ignores it when invalid, and writes it within 200 ms. */
   save(state: WorkspaceState): void
+}
+
+/**
+ * Cards' kept output (#46 D4), stored by main in `<userData>/scrollback`, one file per card; the
+ * renderer only names a card id.
+ */
+export interface ScrollbackApi {
+  /** The card's save and when it was saved; null when it has none. */
+  read(cardId: string): Promise<KeptOutput | null>
+  /** Replaces the card's save; main ignores data longer than `MAX_KEPT_CHARS` (D3). */
+  save(cardId: string, data: string): void
+  /** Removes the card's save, if any (D7). */
+  delete(cardId: string): void
+  /**
+   * Sent once every running card's quit save (D2) was sent: main stops the shells after it, or
+   * after a bound.
+   */
+  quitSaved(): void
 }
 
 /** App-wide settings, stored by main in `userData/drovr-settings.json` (#10 D6). */
@@ -363,6 +386,7 @@ export interface DrovrApi {
   fs: FsApi
   dialog: DialogApi
   state: StateApi
+  scrollback: ScrollbackApi
   settings: SettingsApi
   board: BoardApi
   sync: SyncApi

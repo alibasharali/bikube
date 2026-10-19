@@ -16,6 +16,7 @@ import { registerGit } from './git'
 import { registerLinks } from './links'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
+import { cardIds, registerScrollback } from './scrollback'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
@@ -27,6 +28,9 @@ import { registerWorktrees } from './worktrees'
  * (#26 D5): the kill's grace period + 1 s.
  */
 const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
+
+/** The longest a quit waits for the window's quit saves before stopping the shells (#46 D2). */
+const QUIT_SAVE_WAIT_MS = 1_000
 
 /**
  * Smoke tests on macOS run with the window never shown and no Dock icon (`DROVR_E2E_HIDDEN=1`, set
@@ -118,6 +122,16 @@ function startApp(): void {
     () => settings.claudeStatus(),
     () => settings.shellIntegration()
   )
+  const scrollback = registerScrollback(() => settings.keepOutput())
+  // Saves of cards on neither the local board nor the one after the launch read go (#46 D7), and
+  // every save goes while Keep output is off, or when it is turned off (D8).
+  const localBoard = state.load()
+  void sync.launched.then(() =>
+    settings.keepOutput()
+      ? scrollback.store.prune(cardIds(localBoard, state.load()))
+      : scrollback.store.clear()
+  )
+  settings.onKeepOutputOff(() => scrollback.store.clear())
   registerClipboard()
   registerLinks()
   registerDirectories()
@@ -144,9 +158,14 @@ function startApp(): void {
   /** Whether the sync folder was busy when the quit that went through began (before its flush). */
   let busyAtLastQuit = false
   app.on('before-quit', (event) => {
-    // Told before any shell is stopped, so no card moves on its stop at quit (#42 D4).
+    // Told before any shell is stopped, so no card moves on its stop at quit (#42 D4) and every
+    // running card's output is saved first (#46 D2).
+    const quitSaved = scrollback.quitSaved()
+    let told = false
     for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.webContents.isDestroyed()) window.webContents.send(IPC.appQuitting)
+      if (window.webContents.isDestroyed()) continue
+      window.webContents.send(IPC.appQuitting)
+      told = true
     }
     state.flush()
     settings.flush()
@@ -158,7 +177,8 @@ function startApp(): void {
     if (!hold.hold) return
     holds++
     event.preventDefault()
-    const done = hold.shells ? Promise.all([terminals.killAll(), synced]) : synced
+    const saved = told ? boundedWait(quitSaved, QUIT_SAVE_WAIT_MS) : Promise.resolve()
+    const done = hold.shells ? Promise.all([saved.then(() => terminals.killAll()), synced]) : synced
     void boundedWait(done, QUIT_WAIT_MS).then(() => app.quit())
   })
 

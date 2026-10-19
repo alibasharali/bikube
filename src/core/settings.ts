@@ -92,6 +92,8 @@ export interface Preferences {
   editor: Editor
   /** The Custom command editor's one-line command, run by the user's shell with the file appended. */
   editorCommand: string
+  /** A card's main pane output is kept on this machine when it stops (#46 D8). */
+  keepOutput: boolean
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -111,7 +113,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   sidePanelOpen: true,
   sidePanelWidth: 280,
   editor: 'vscode',
-  editorCommand: ''
+  editorCommand: '',
+  keepOutput: true
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -148,7 +151,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     v <= MAX_SIDE_PANEL_WIDTH,
   editor: oneOf(EDITORS),
   editorCommand: (v): v is string =>
-    typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v)
+    typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v),
+  keepOutput: isBoolean
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

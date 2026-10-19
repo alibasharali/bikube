@@ -620,6 +620,13 @@ function TerminalBehaviourRows(): React.JSX.Element {
         options={SCROLLBACK_CHOICES.map((n) => [String(n), `${n.toLocaleString('en-US')} lines`])}
         onChange={(v) => settingsStore.update({ scrollback: Number(v) })}
       />
+      <SwitchRow
+        label="Keep output after a card stops"
+        hint="A card's output stays on this machine and is shown above its next start. Turning this off deletes all kept output."
+        testId="settings-keep-output"
+        checked={settings.keepOutput}
+        onChange={(keepOutput) => settingsStore.update({ keepOutput })}
+      />
       <SegmentedRow
         label="Bell"
         testId="settings-bell"

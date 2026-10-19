@@ -1,13 +1,22 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { Terminal as XTerm, type IBufferRange, type IMarker, type ITheme } from '@xterm/xterm'
+import {
+  Terminal as XTerm,
+  type IBuffer,
+  type IBufferRange,
+  type IDisposable,
+  type IMarker,
+  type ITheme
+} from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
-import { CardSessions, type CardScreen } from '../../core/card-sessions'
+import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
+import { keptRange } from '../../core/kept-output'
 import { SessionRouter } from '../../core/session-router'
 import { MAIN_PANE, type PaneLayout } from '../../core/split-tree'
 import {
@@ -143,6 +152,7 @@ export class XtermScreen implements CardScreen {
   private palette: TerminalAppearance['theme']
   private readonly host: TerminalHost = document.createElement('div')
   private readonly fit = new FitAddon()
+  private readonly serializer = new SerializeAddon()
   // One more than the bar counts, so it can tell "more than 1,000" from exactly 1,000 (#35 D7).
   private readonly search = new SearchAddon({ highlightLimit: FIND_HIGHLIGHT_LIMIT + 1 })
   /** A find is applied (#35): from its first search until it is cleared. */
@@ -172,6 +182,12 @@ export class XtermScreen implements CardScreen {
    * directory, gone with the screen. Rows are xterm markers, forgotten as they leave the scrollback.
    */
   readonly marks = new ShellMarks<MarkLine>()
+  /** A previous run's output is being written (#46 D5): its marks are not this run's (#45 D7). */
+  private restoring = false
+  /** The new session's first row, below a restored previous run (#46 D5a); none when none. */
+  private sessionStart: IMarker | undefined
+  /** What watches the cursor while `sessionStart` is set. */
+  private sessionListeners: IDisposable[] = []
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
@@ -203,6 +219,7 @@ export class XtermScreen implements CardScreen {
     this.term.loadAddon(this.fit)
     this.term.loadAddon(new WebLinksAddon(openLink))
     this.term.loadAddon(this.search)
+    this.term.loadAddon(this.serializer)
     const clipboard = window.drovr.clipboard
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.
@@ -240,7 +257,7 @@ export class XtermScreen implements CardScreen {
     for (const family of SHELL_MARK_OSCS) {
       this.term.parser.registerOscHandler(family, (data) => {
         const mark = parseShellMark(family, data)
-        if (mark) this.marks.feed(mark, Date.now(), () => this.markRow())
+        if (mark && !this.restoring) this.marks.feed(mark, Date.now(), () => this.markRow())
         return false
       })
     }
@@ -281,6 +298,14 @@ export class XtermScreen implements CardScreen {
     this.term.write(data, done)
   }
 
+  restore(data: string, done: () => void): void {
+    this.restoring = true
+    this.term.write(data, () => {
+      this.restoring = false
+      done()
+    })
+  }
+
   onInput(listener: (data: string) => void): void {
     this.term.onData(listener)
   }
@@ -291,15 +316,82 @@ export class XtermScreen implements CardScreen {
 
   screen(): { lines: string[]; cursorRow: number } {
     const buffer = this.term.buffer.active
+    // Rows above the new session's first are a previous run's (#46 D5a); a marker trimmed off
+    // the scrollback or erased (xterm disposes it) has line -1, and one the cursor went above
+    // is gone (`markSessionStart`). The alternate screen is all this session's.
+    const first = buffer.type === 'normal' ? (this.sessionStart?.line ?? -1) : -1
     const lines: string[] = []
     for (let row = 0; row < this.term.rows; row++) {
-      lines.push(buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? '')
+      const line = buffer.baseY + row
+      lines.push(line < first ? '' : (buffer.getLine(line)?.translateToString(true) ?? ''))
     }
     return { lines, cursorRow: buffer.cursorY }
   }
 
+  /**
+   * Marks the cursor's row as the new session's first (#46 D5a). Once this session's cursor goes
+   * above it, as a repaint from the top does, it has written there and the mark is dropped: on
+   * each cursor move, and on each cursor-positioning sequence going up, since a repaint can come
+   * back below the row within one write.
+   */
+  markSessionStart(): void {
+    this.dropSessionStart()
+    const marker = this.term.registerMarker(0)
+    this.sessionStart = marker
+    const buffer = (): IBuffer => this.term.buffer.active
+    const goesAbove = (row: number): boolean =>
+      buffer().type === 'normal' && buffer().baseY + row < marker.line
+    const check = (row: number): void => {
+      if (this.sessionStart === marker && goesAbove(row)) this.dropSessionStart()
+    }
+    const first = (params: (number | number[])[]): number => {
+      const value = params[0]
+      return (typeof value === 'number' ? value : value?.[0]) || 1
+    }
+    // Where each cursor-positioning sequence going up takes the cursor's row: CUP and HVP
+    // (row, column), VPA (row), CUU and CPL (rows up).
+    const targets: [string, (params: (number | number[])[]) => number][] = [
+      ['H', (p) => first(p) - 1],
+      ['f', (p) => first(p) - 1],
+      ['d', (p) => first(p) - 1],
+      ['A', (p) => buffer().cursorY - first(p)],
+      ['F', (p) => buffer().cursorY - first(p)]
+    ]
+    this.sessionListeners = [
+      // Erased or trimmed off the scrollback: every row is this session's.
+      marker.onDispose(() => {
+        if (this.sessionStart === marker) this.dropSessionStart()
+      }),
+      this.term.onCursorMove(() => check(buffer().cursorY)),
+      // Run before xterm's own handlers, which still move the cursor since these return false.
+      ...targets.map(([final, target]) =>
+        this.term.parser.registerCsiHandler({ final }, (params) => {
+          check(target(params))
+          return false
+        })
+      )
+    ]
+  }
+
+  private dropSessionStart(): void {
+    this.sessionListeners.forEach((listener) => listener.dispose())
+    this.sessionListeners = []
+    this.sessionStart?.dispose()
+    this.sessionStart = undefined
+  }
+
   setReadOnly(): void {
     this.term.options.disableStdin = true
+  }
+
+  serialize(scrollback: number): string {
+    // A range ends at the last row with text and leaves out the final cursor move (#46 D1).
+    const buffer = this.term.buffer.normal
+    let last = buffer.length - 1
+    while (last >= 0 && !buffer.getLine(last)?.translateToString(true).trim()) last--
+    const range = keptRange(last, scrollback, this.term.rows)
+    if (!range) return ''
+    return this.serializer.serialize({ range, excludeModes: true, excludeAltBuffer: true })
   }
 
   /** Shows the screen in `container`, fitted and kept fitted; returns the detach function. */
@@ -555,6 +647,24 @@ function created(screen: XtermScreen, cardId: string, paneId: string): XtermScre
   return screen
 }
 
+/** Whether `cardId` is a card (not a shell) on the board. */
+function isCard(cardId: string): boolean {
+  return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
+}
+
+/** Nothing is read or saved while Keep output after a card stops is off (#46 D8). */
+const keepingOutput = (): boolean => settingsStore.get().keepOutput
+
+/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
+const outputKeeper: OutputKeeper = {
+  keeps: (cardId) => keepingOutput() && isCard(cardId),
+  scrollback: () => settingsStore.get().scrollback,
+  read: async (cardId) => (keepingOutput() ? window.drovr.scrollback.read(cardId) : null),
+  save: (cardId, data) => {
+    if (keepingOutput()) window.drovr.scrollback.save(cardId, data)
+  }
+}
+
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
@@ -564,11 +674,19 @@ export function cardTerminals(): CardSessions<XtermScreen> {
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).
-      (spawn) => setTimeout(spawn, 0)
+      (spawn) => setTimeout(spawn, 0),
+      outputKeeper
     )
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
     registry.onEnded((cardId) => cardPanes().dispose(cardId))
+    // Every running card's output is saved as the app starts quitting, before main stops the
+    // shells (#46 D2).
+    const cards = registry
+    window.drovr.app.onQuitting(() => {
+      cards.keepRunning()
+      window.drovr.scrollback.quitSaved()
+    })
   }
   return registry
 }

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { ClaudeUsage } from '../../core/claude-pricing'
+import { workspaceUsage, type WorkspaceUsage } from '../../core/usage-format'
 
 /**
  * Each card's Claude Code usage (#50 D7), as its last `board usage` report gave it: runtime only,
@@ -8,8 +9,11 @@ import type { ClaudeUsage } from '../../core/claude-pricing'
  */
 const usages = new Map<string, ClaudeUsage>()
 const listeners = new Set<() => void>()
+/** Bumped on every change, the stable snapshot for hooks reading many cards. */
+let version = 0
 
 function changed(): void {
+  version++
   for (const listener of [...listeners]) listener()
 }
 
@@ -41,4 +45,10 @@ export function subscribeUsage(listener: () => void): () => void {
 /** The card's usage, live. */
 export function useCardUsage(cardId: string): ClaudeUsage | undefined {
   return useSyncExternalStore(subscribeUsage, () => cardUsage(cardId))
+}
+
+/** The total of the cards' usage for the title bar (D9), live; null when none has usage. */
+export function useWorkspaceUsage(cardIds: readonly string[]): WorkspaceUsage | null {
+  useSyncExternalStore(subscribeUsage, () => version)
+  return workspaceUsage(cardIds.map(cardUsage))
 }

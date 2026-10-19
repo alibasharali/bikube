@@ -2716,6 +2716,16 @@ button.dev-server-chip:focus-visible {
   -webkit-app-region: drag;
 }
 
+/* The workspace's Claude Code usage in the title bar (#50 D9), after its name. */
+.titlebar-usage {
+  flex: none;
+  margin-left: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* The workspace's folder (or SSH location) in the title bar, before its branch. */
 .titlebar-location {
   display: inline-flex;

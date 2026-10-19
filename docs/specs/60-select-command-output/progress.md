@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `41a6b63..10c3597` | CLEAN | `ShellMarks.feed(mark,time,line,column?)`, `ShellMarks.outputs()`; `src/core/command-output.ts`: `endedOutputs(outputs,row)`, `outputRange`, `rangeLength(range,cols)`, `chooseCommandOutput(commands,{top,rows,bottom,cols},hasOutput)`; XtermScreen feeds `cursorX` |
+| S2 | running | | | |
 | S3 | todo | | | |
 
 ## Rulings

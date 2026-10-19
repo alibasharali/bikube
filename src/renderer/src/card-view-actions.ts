@@ -3,7 +3,15 @@
  * (#40 D6) through the same code: the card view registers what runs them while it is shown.
  */
 export type CardViewAction =
-  'back' | 'splitRight' | 'splitDown' | 'closePane' | 'closeCard' | 'find' | 'zoomPane'
+  | 'back'
+  | 'splitRight'
+  | 'splitDown'
+  | 'closePane'
+  | 'closeCard'
+  | 'find'
+  | 'previousPrompt'
+  | 'nextPrompt'
+  | 'zoomPane'
 
 const CARD_VIEW_ACTIONS: readonly string[] = [
   'back',
@@ -12,6 +20,8 @@ const CARD_VIEW_ACTIONS: readonly string[] = [
   'closePane',
   'closeCard',
   'find',
+  'previousPrompt',
+  'nextPrompt',
   'zoomPane'
 ] satisfies CardViewAction[]
 

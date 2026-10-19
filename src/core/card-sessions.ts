@@ -43,6 +43,12 @@ export interface CardScreen {
    * now on `screen()` reads those rows as blank, so the status reads only this session's rows.
    */
   markSessionStart(): void
+  /**
+   * Writes a previous run's restored output (#46 D5), like `write`, where nothing in it counts as
+   * this run's shell integration marks (#45 D7: no notice for a command that ended before);
+   * without it, the restored output goes through `write`.
+   */
+  restore?(data: string, done: () => void): void
   /** Stops taking input: the shell couldn't start (#5 D8). */
   setReadOnly(): void
   /**
@@ -287,9 +293,12 @@ export class CardSessions<S extends CardScreen> {
         .then((kept) => {
           if (!current()) return
           if (kept) {
-            screen.write(restoredText(kept), () => {
+            const restored = restoredText(kept)
+            const done = (): void => {
               if (current()) screen.markSessionStart()
-            })
+            }
+            if (screen.restore) screen.restore(restored, done)
+            else screen.write(restored, done)
           }
           spawn()
         })

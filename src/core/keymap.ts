@@ -17,6 +17,8 @@ export const SHORTCUT_ACTIONS = [
   'find',
   'palette',
   'nextWaiting',
+  'previousPrompt',
+  'nextPrompt',
   'zoomPane'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
@@ -42,6 +44,8 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   find: 'Cmd+F',
   palette: 'Cmd+K',
   nextWaiting: 'Cmd+J',
+  previousPrompt: 'Cmd+ArrowUp',
+  nextPrompt: 'Cmd+ArrowDown',
   // Ghostty's and iTerm2's key; not Shift+Cmd+Z, redo in editors (#48 D3).
   zoomPane: 'Shift+Cmd+Enter'
 })
@@ -61,6 +65,9 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   palette: 'Ctrl+Shift+P',
   // Not Ctrl+J: it stays the shell's (a newline) (#41 D3).
   nextWaiting: 'Ctrl+Shift+J',
+  // Not Ctrl+Up/Down: they stay the shell's (#45 D5).
+  previousPrompt: 'Ctrl+Shift+ArrowUp',
+  nextPrompt: 'Ctrl+Shift+ArrowDown',
   zoomPane: 'Ctrl+Shift+Enter'
 })
 
@@ -217,6 +224,8 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   find: 'Find',
   palette: 'Command palette',
   nextWaiting: 'Next waiting card',
+  previousPrompt: 'Previous prompt',
+  nextPrompt: 'Next prompt',
   zoomPane: 'Zoom pane'
 })
 

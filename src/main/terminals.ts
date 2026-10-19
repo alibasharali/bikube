@@ -1,5 +1,12 @@
-import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import {
+  app,
+  ipcMain,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  type WebContents
+} from 'electron'
 import { accessSync, constants, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { acknowledgeRequest } from '../core/ack-request'
 import { FlowControl } from '../core/flow-control'
 import {
@@ -15,6 +22,7 @@ import { SessionCards } from '../core/session-cards'
 import { SessionManager } from '../core/session-manager'
 import { SessionOwners } from '../core/session-owners'
 import type { SessionSockets } from '../core/session-sockets'
+import { shellIntegrationStart } from '../core/shell-integration'
 import { shellToStart } from '../core/shells'
 import { spawnInDirectory } from '../core/terminal-spawn'
 import { IPC, type TerminalExit } from '../shared/api'
@@ -43,13 +51,17 @@ export interface Terminals {
  * (#12 D5): each SSH session instead gets its own socket from `sessionSockets`, forwarded by
  * `ssh -R` (#25 D1, D2), closed when the session exits. A local shell is the Shell setting's
  * (`shellSetting`, '' for the login shell); the local shell running `ssh` is always the login shell.
+ * A local zsh, bash or fish starts with Drovr's integration script while `shellIntegration` is on
+ * (#45 D3, D4), read at each spawn so a change applies to new terminals only.
  */
 export function registerTerminals(
   shellEnv: (cardId: string) => Record<string, string>,
   sessionSockets?: SessionSockets,
   shellSetting: () => string = () => '',
-  claudeStatus: () => boolean = () => true
+  claudeStatus: () => boolean = () => true,
+  shellIntegration: () => boolean = () => false
 ): Terminals {
+  const scriptsDir = shellIntegrationDir()
   const manager = new SessionManager()
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
   const flow = new FlowControl(manager)
@@ -139,16 +151,27 @@ export function registerTerminals(
           if (shell !== undefined && !isExecutableSync(shell)) {
             throw new Error(`shell not found: ${shell}`)
           }
+          // Only a local shell: the one running `ssh` gets no integration (#45 D4).
+          const integration =
+            shell === undefined
+              ? undefined
+              : shellIntegrationStart(shell, {
+                  enabled: shellIntegration(),
+                  scriptsDir,
+                  env: process.env
+                })
           const info = manager.spawn({
             ...options,
             shell,
+            args: integration?.args,
             // Programs that start "your shell" (editors, agents) read `$SHELL`.
             env: local
               ? {
                   ...shellEnv(cardId),
                   ...(shell && { SHELL: shell }),
                   // Read by the Claude Code session start hook (claude-hooks.ts).
-                  DROVR_CLAUDE_STATUS: claudeStatus() ? '1' : '0'
+                  DROVR_CLAUDE_STATUS: claudeStatus() ? '1' : '0',
+                  ...integration?.env
                 }
               : undefined
           })
@@ -202,6 +225,13 @@ export function registerTerminals(
     onWindowGone: (listener) => goneListeners.push(listener),
     onPageGone: (listener) => pageGoneListeners.push(listener)
   }
+}
+
+/** Drovr's shell integration scripts (#45 D3): `resources/shell-integration`, packaged beside `bin`. */
+function shellIntegrationDir(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'shell-integration')
+    : join(app.getAppPath(), 'resources', 'shell-integration')
 }
 
 function isExecutableSync(path: string): boolean {

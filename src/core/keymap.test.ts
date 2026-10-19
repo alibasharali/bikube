@@ -38,6 +38,8 @@ describe('defaultKeymap (#31 D6)', () => {
       find: 'Cmd+F',
       palette: 'Cmd+K',
       nextWaiting: 'Cmd+J',
+      previousPrompt: 'Cmd+ArrowUp',
+      nextPrompt: 'Cmd+ArrowDown',
       zoomPane: 'Shift+Cmd+Enter'
     })
     for (const platform of ['linux', 'win32']) {
@@ -53,6 +55,8 @@ describe('defaultKeymap (#31 D6)', () => {
         find: 'Ctrl+Shift+F',
         palette: 'Ctrl+Shift+P',
         nextWaiting: 'Ctrl+Shift+J',
+        previousPrompt: 'Ctrl+Shift+ArrowUp',
+        nextPrompt: 'Ctrl+Shift+ArrowDown',
         zoomPane: 'Ctrl+Shift+Enter'
       })
     }
@@ -117,6 +121,53 @@ describe('Next waiting card (#41 D3)', () => {
       dropped: []
     })
     expect(resetRefusal('nextWaiting', next, 'linux')).toBeNull()
+  })
+})
+
+describe('Previous prompt, Next prompt (#45 D5)', () => {
+  it('are configurable actions: Cmd+Up/Down on macOS, Ctrl+Shift+Up/Down elsewhere', () => {
+    expect(SHORTCUT_LABELS.previousPrompt).toBe('Previous prompt')
+    expect(SHORTCUT_LABELS.nextPrompt).toBe('Next prompt')
+    const mac = defaultKeymap('darwin')
+    expect(keymapAction(press('ArrowUp', { metaKey: true }), mac)).toBe('previousPrompt')
+    expect(keymapAction(press('ArrowDown', { metaKey: true }), mac)).toBe('nextPrompt')
+    const linux = defaultKeymap('linux')
+    expect(keymapAction(press('ArrowUp', { ctrlKey: true, shiftKey: true }), linux)).toBe(
+      'previousPrompt'
+    )
+    expect(keymapAction(press('ArrowDown', { ctrlKey: true, shiftKey: true }), linux)).toBe(
+      'nextPrompt'
+    )
+    // Off macOS Ctrl+Up stays the shell's, and Alt+Up moves cards.
+    expect(keymapAction(press('ArrowUp', { ctrlKey: true }), linux)).toBeNull()
+    expect(keymapAction(press('ArrowUp', { altKey: true }), linux)).toBeNull()
+  })
+
+  it('can be recorded as another key, saved only when it differs, and Reset (AC6)', () => {
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(
+        press('ArrowUp', { ctrlKey: true, altKey: true }),
+        'previousPrompt',
+        keymap,
+        'linux'
+      )
+    ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+ArrowUp' })
+    expect(
+      recordPress(
+        press('ArrowUp', { ctrlKey: true, shiftKey: true }),
+        'nextPrompt',
+        keymap,
+        'linux'
+      )
+    ).toEqual({ kind: 'refused', message: 'Already used by Previous prompt' })
+    const next = resolveKeymap({ previousPrompt: 'Ctrl+Alt+ArrowUp' }, 'linux')
+    expect(shortcutOverrides(next, 'linux')).toEqual({ previousPrompt: 'Ctrl+Alt+ArrowUp' })
+    expect(readShortcuts({ nextPrompt: 'Ctrl+Alt+ArrowDown' }, 'linux')).toEqual({
+      shortcuts: { nextPrompt: 'Ctrl+Alt+ArrowDown' },
+      dropped: []
+    })
+    expect(resetRefusal('previousPrompt', next, 'linux')).toBeNull()
   })
 })
 

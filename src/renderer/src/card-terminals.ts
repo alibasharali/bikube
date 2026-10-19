@@ -4,7 +4,8 @@ import {
   type IBuffer,
   type IBufferRange,
   type IDisposable,
-  type IMarker
+  type IMarker,
+  type ITheme
 } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
@@ -14,11 +15,10 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
-import { MAIN_PANE } from '../../core/dev-servers'
 import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
 import { keptRange } from '../../core/kept-output'
 import { SessionRouter } from '../../core/session-router'
-import type { PaneLayout } from '../../core/split-tree'
+import { MAIN_PANE, type PaneLayout } from '../../core/split-tree'
 import {
   knownRunState,
   knownStatus,
@@ -35,6 +35,14 @@ import {
   shiftEnterIsNewLine
 } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
+import { promptJumpTarget, type PromptJump } from '../../core/prompt-jumps'
+import {
+  parseShellMark,
+  SHELL_MARK_OSCS,
+  ShellMarks,
+  splitDirectory,
+  type ShellCommand
+} from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
 import { devServers } from './dev-servers'
@@ -114,6 +122,21 @@ const FIND_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
   activeMatchColorOverviewRuler: AMBER
 }
 
+/** A failed command's red (#45 D6), in the overview ruler; the bar and badge use `--danger`. */
+const FAILED_RED = '#E5484D'
+
+/**
+ * The xterm theme for a palette: the overview ruler (#35 D8, #45 D6) draws no outline of its own,
+ * so the scrollbar's side looks as it did without it.
+ */
+const xtermTheme = (theme: TerminalAppearance['theme']): ITheme => ({
+  ...theme,
+  overviewRulerBorder: '#00000000'
+})
+
+/** A row of a terminal, as its marks keep it: undefined where xterm gives no marker (alt screen). */
+export type MarkLine = IMarker | undefined
+
 const samePosition = (a: IBufferRange, b: IBufferRange): boolean =>
   a.start.x === b.start.x && a.start.y === b.start.y && a.end.x === b.end.x && a.end.y === b.end.y
 
@@ -155,6 +178,13 @@ export class XtermScreen implements CardScreen {
   private cell = ''
   /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
   private sawProbe = false
+  /**
+   * The shell integration marks of this start (#45 D1, D2): its commands, prompts and last
+   * directory, gone with the screen. Rows are xterm markers, forgotten as they leave the scrollback.
+   */
+  readonly marks = new ShellMarks<MarkLine>()
+  /** A previous run's output is being written (#46 D5): its marks are not this run's (#45 D7). */
+  private restoring = false
   /** The new session's first row, below a restored previous run (#46 D5a); none when none. */
   private sessionStart: IMarker | undefined
   /** What watches the cursor while `sessionStart` is set. */
@@ -172,8 +202,11 @@ export class XtermScreen implements CardScreen {
     this.term = new XTerm({
       fontFamily,
       fontSize,
-      theme: { ...theme },
+      theme: xtermTheme(theme),
       ...behaviour,
+      // Width of xterm's own scrollbar, so the fit is unchanged: find matches (#35 D8) and failed
+      // commands (#45 D6) show in it.
+      overviewRuler: { width: 14 },
       linkHandler: { activate: openLink },
       // The search addon's match highlights are decorations (#35 D8).
       allowProposedApi: true
@@ -221,6 +254,15 @@ export class XtermScreen implements CardScreen {
       if (params.flat().includes(1004)) this.sawProbe = false
       return false
     })
+    // Shell integration marks (#45 D1), watched the same way: never swallowed, never answered.
+    for (const family of SHELL_MARK_OSCS) {
+      this.term.parser.registerOscHandler(family, (data) => {
+        const mark = parseShellMark(family, data)
+        if (mark && !this.restoring) this.marks.feed(mark, Date.now(), () => this.markRow())
+        return false
+      })
+    }
+    this.marks.onCommandEnded((command) => this.markFailed(command))
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18).
@@ -255,6 +297,14 @@ export class XtermScreen implements CardScreen {
 
   write(data: string, done?: () => void): void {
     this.term.write(data, done)
+  }
+
+  restore(data: string, done: () => void): void {
+    this.restoring = true
+    this.term.write(data, () => {
+      this.restoring = false
+      done()
+    })
   }
 
   onInput(listener: (data: string) => void): void {
@@ -459,7 +509,7 @@ export class XtermScreen implements CardScreen {
     const options = this.term.options
     if (this.palette !== theme) {
       this.palette = theme
-      options.theme = { ...theme }
+      options.theme = xtermTheme(theme)
     }
     // Only what changed: setting an option, even to its value, makes xterm redraw.
     for (const key of Object.keys(behaviour) as (keyof typeof behaviour)[]) {
@@ -486,6 +536,58 @@ export class XtermScreen implements CardScreen {
     this.dropWebgl()
     this.host.remove()
     this.term.dispose()
+  }
+
+  /**
+   * Previous prompt, Next prompt (#45 D5): scrolls so a prompt is the top row, Next to the bottom
+   * past the last one; Previous with no prompt above the top does nothing, and so do both on the
+   * alt screen, which has no scrollback and whose rows aren't the prompts'.
+   */
+  jumpToPrompt(jump: PromptJump): void {
+    const buffer = this.term.buffer.active
+    if (buffer.type !== 'normal') return
+    const rows = this.marks
+      .prompts()
+      .flatMap((marker) => (marker && !marker.isDisposed && marker.line >= 0 ? [marker.line] : []))
+    const target = promptJumpTarget(jump, rows, buffer.viewportY, buffer.baseY)
+    if (target !== null) this.term.scrollToLine(target)
+  }
+
+  /** The row the cursor is on, as a marker that follows scrolling (#45 D1). */
+  private markRow(): MarkLine {
+    const marker = this.term.registerMarker(0)
+    marker?.onDispose(() => this.marks.forget(marker))
+    return marker
+  }
+
+  /**
+   * A failed command's marks on its line (#45 D6): a red bar on its first cell and a `✗ <code>`
+   * badge on its last ones, both with the exit code as their tooltip, and a red mark in the
+   * overview ruler. xterm moves them with the line and drops them with it.
+   */
+  private markFailed({ line, exitCode }: ShellCommand<MarkLine>): void {
+    if (!exitCode || !line || line.isDisposed) return
+    const label = `✗ ${exitCode}`
+    const tooltip = `Exit code ${exitCode}`
+    // xterm calls these on every render of the line; it keeps the element and its own styles.
+    const show = (element: HTMLElement, testid: string, text = ''): void => {
+      element.dataset.line = String(line.line)
+      if (element.dataset.testid) return
+      element.dataset.testid = testid
+      element.dataset.exitCode = String(exitCode)
+      element.title = tooltip
+      element.classList.add(testid)
+      if (!text) return
+      const content = document.createElement('span')
+      content.textContent = text
+      element.replaceChildren(content)
+    }
+    this.term
+      .registerDecoration({ marker: line, overviewRulerOptions: { color: FAILED_RED } })
+      ?.onRender((element) => show(element, 'command-failed'))
+    this.term
+      .registerDecoration({ marker: line, anchor: 'right', width: label.length + 1 })
+      ?.onRender((element) => show(element, 'command-failed-badge', label))
   }
 
   private fitNow(): void {
@@ -528,6 +630,24 @@ function startsClaudeCode(cardId: string): boolean {
     .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
 }
 
+/** Told of each new screen, with its card or shell and its pane. */
+type ScreenListener = (screen: XtermScreen, cardId: string, paneId: string) => void
+const screenListeners = new Set<ScreenListener>()
+
+/**
+ * Calls `listener` with each screen created from now on (a main pane's at each start, an extra
+ * pane's at its split), e.g. to watch its commands (#45 D7). Returns an unsubscribe function.
+ */
+export function onScreenCreated(listener: ScreenListener): () => void {
+  screenListeners.add(listener)
+  return () => screenListeners.delete(listener)
+}
+
+function created(screen: XtermScreen, cardId: string, paneId: string): XtermScreen {
+  for (const listener of screenListeners) listener(screen, cardId, paneId)
+  return screen
+}
+
 /** Whether `cardId` is a card (not a shell) on the board. */
 function isCard(cardId: string): boolean {
   return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
@@ -551,7 +671,7 @@ export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(
       window.drovr.terminal,
-      (cardId) => new XtermScreen(startsClaudeCode(cardId)),
+      (cardId) => created(new XtermScreen(startsClaudeCode(cardId)), cardId, MAIN_PANE),
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).
@@ -583,8 +703,20 @@ export function cardPanes(): CardPanes<XtermScreen> {
     paneRegistry = new CardPanes(
       window.drovr.terminal,
       sessionRouter(),
-      () => new XtermScreen(),
-      (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
+      (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
+      (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
+      // A new split starts where the focused pane's shell last said it was (#45 D8).
+      (card, focused) => {
+        const screen =
+          focused === MAIN_PANE
+            ? cardTerminals().screen(card.id)
+            : paneRegistry?.screen(card.id, focused)
+        return splitDirectory(screen?.marks.directory(), {
+          cardDirectory: card.directory,
+          sshHost: card.host,
+          localHostName: window.drovr.hostName
+        })
+      }
     )
     // A local extra pane's output shows its dev servers' chips too (#49 D3, D5, D6).
     paneRegistry.watchOutput({

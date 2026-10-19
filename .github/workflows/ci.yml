@@ -17,6 +17,9 @@ jobs:
       - run: npm ci
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      # The shell integration tests run real zsh and fish (#45); bash is on the runner.
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
       - run: .claude/check.sh
       - name: Electron smoke test
         run: xvfb-run -a npm run test:smoke

@@ -383,6 +383,13 @@ export interface UpdateApi {
 /** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
 export interface DrovrApi {
   platform: NodeJS.Platform
+  /**
+   * How long a command must run for its notification, in ms (#45 D7): `LONG_COMMAND_MS`, or a
+   * shorter one only the development build takes from `DROVR_LONG_COMMAND_MS`, for the tests.
+   */
+  longCommandMs: number
+  /** This machine's host name (`os.hostname()`), for OSC 7's host (#45 D8); empty if unknown. */
+  hostName: string
   terminal: TerminalApi
   clipboard: ClipboardApi
   link: LinkApi

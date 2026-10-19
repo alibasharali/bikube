@@ -1,8 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import { ACTIVITY_LABELS, type Activity } from '../../core/activity'
+import { longCommandNotice } from '../../core/long-commands'
+import type { ShellCommand } from '../../core/shell-marks'
 import { isWaiting, withActivity, withoutDeleted } from '../../core/waiting'
+import { findShellCard } from '../../core/workspace-shells'
 import { playTone } from './bell'
-import { cardTerminals } from './card-terminals'
+import { startCard } from './card-actions'
+import { cardPanes, cardTerminals, onScreenCreated } from './card-terminals'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 
@@ -10,6 +14,7 @@ import { workspaceStore } from './store'
  * Telling the user when an agent needs them: a notification (with a tone, when on) as a card's
  * activity becomes Waiting for you or Needs your answer, unless that card is open in the focused
  * window; the Dock badge counts the cards waiting. Clicking a notification opens its card.
+ * A long command that ends out of sight gets one too (#45 D7), changing nothing else here.
  * The waiting cards and shells, oldest first (#41 D2), are a queue the sidebar follows.
  */
 
@@ -92,6 +97,54 @@ function notify(cardId: string, activity: Activity): void {
   window.drovr.app.requestAttention()
 }
 
+/** Card or shell `id`'s title and workspace, the Default shell (never stored) included. */
+function terminalOf(id: string): { workspaceId: string; workspace: string; title: string } | null {
+  for (const workspace of workspaceStore.getState().workspaces) {
+    const card = workspace.cards.find((c) => c.id === id) ?? findShellCard(workspace, id)
+    if (card) return { workspaceId: workspace.id, workspace: workspace.name, title: card.title }
+  }
+  return null
+}
+
+/**
+ * A command ended in pane `paneId` of card or shell `cardId` (#45 D7): tells of it when it ran
+ * long and the user isn't looking at that pane. No activity, waiting queue or badge changes.
+ */
+function notifyLongCommand(cardId: string, paneId: string, command: ShellCommand<unknown>): void {
+  const settings = settingsStore.get()
+  if (!settings.notifications) return
+  const terminal = terminalOf(cardId)
+  if (!terminal) return
+  const viewing = {
+    windowFocused: document.hasFocus(),
+    openId: lookingAt,
+    focusedPane: cardPanes().layout(cardId).focused
+  }
+  const at = { cardId, paneId }
+  const notice = longCommandNotice(
+    command,
+    at,
+    viewing,
+    terminal.workspace,
+    window.drovr.longCommandMs
+  )
+  if (!notice) return
+  try {
+    const notification = new Notification(terminal.title, { body: notice.body, silent: true })
+    notification.onclick = () => {
+      window.drovr.app.focus()
+      // As a click on it would: started when stopped, in its workspace; then the pane, if still there.
+      startCard(terminal.workspaceId, cardId)
+      openRequest?.(terminal.workspaceId, cardId)
+      cardPanes().focus(cardId, paneId)
+    }
+  } catch {
+    // Notifications unavailable.
+  }
+  if (settings.notificationSound) playTone(660, 0.18)
+  window.drovr.app.requestAttention()
+}
+
 /** Watches every card's activity; called once, before the first render. */
 export function startAttention(): void {
   if (started) return
@@ -100,6 +153,9 @@ export function startAttention(): void {
     setWaiting(withActivity(waiting, cardId, activity))
     if (activity && isWaiting(activity)) notify(cardId, activity)
   })
+  onScreenCreated((screen, cardId, paneId) =>
+    screen.marks.onCommandEnded((command) => notifyLongCommand(cardId, paneId, command))
+  )
   // A deleted card or shell no longer waits; a workspace's Default shell isn't stored, but stays.
   workspaceStore.subscribe(() => {
     setWaiting(withoutDeleted(waiting, workspaceStore.getState().workspaces))

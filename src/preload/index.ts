@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BoardCommand } from '../core/board-args'
+import { LONG_COMMAND_MS, parseLongCommandMs } from '../core/long-commands'
+import { parseHostName } from '../core/shell-marks'
 import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import type { SyncStatus } from '../core/sync-status'
 import type { UpdateState } from '../core/updates'
@@ -8,6 +10,9 @@ import { IPC, type DrovrApi, type TerminalExit } from '../shared/api'
 
 const api: DrovrApi = {
   platform: process.platform,
+  // Main passes a shortened threshold only in the development build (#45 D7).
+  longCommandMs: parseLongCommandMs(process.argv) ?? LONG_COMMAND_MS,
+  hostName: parseHostName(process.argv),
   clipboard: {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
     write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text)

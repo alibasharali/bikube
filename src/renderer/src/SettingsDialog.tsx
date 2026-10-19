@@ -587,7 +587,7 @@ function SegmentedRow<T extends string>({
   )
 }
 
-/** The terminal's behaviour: cursor, bold colours, scrollback, bell and input. */
+/** The terminal's behaviour: cursor, bold colours, scrollback, bell, input and shell integration. */
 function TerminalBehaviourRows(): React.JSX.Element {
   const settings = useSettings()
   return (
@@ -650,6 +650,13 @@ function TerminalBehaviourRows(): React.JSX.Element {
           onChange={(optionAsMeta) => settingsStore.update({ optionAsMeta })}
         />
       )}
+      <SwitchRow
+        label="Shell integration"
+        hint="Prompt marks and command status in zsh, bash and fish. Applies to new terminals."
+        testId="settings-shell-integration"
+        checked={settings.shellIntegration}
+        onChange={(shellIntegration) => settingsStore.update({ shellIntegration })}
+      />
     </>
   )
 }
@@ -661,7 +668,7 @@ function AgentsSection(): React.JSX.Element {
     <>
       <SwitchRow
         label="Notifications"
-        hint="When an agent is waiting for you or needs your answer, unless its card is in view. The Dock shows how many are waiting."
+        hint="When an agent is waiting for you or needs your answer, unless its card is in view, and when a command that ran 10 s or more ends out of sight. The Dock shows how many are waiting."
         testId="settings-notifications"
         checked={settings.notifications}
         onChange={(notifications) => settingsStore.update({ notifications })}

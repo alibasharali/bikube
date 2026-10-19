@@ -82,6 +82,8 @@ export interface Preferences {
   notificationSound: boolean
   /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
   claudeStatus: boolean
+  /** Local zsh, bash and fish shells start with Drovr's integration scripts (#45 D3, D4). */
+  shellIntegration: boolean
   /** The side panel shows (#55 D3), beside the board and every card or shell at once (#57 D3). */
   sidePanelOpen: boolean
   /** The side panel's width in pixels as last dragged (#55 D4), 200 to 4000. */
@@ -107,6 +109,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   notifications: true,
   notificationSound: true,
   claudeStatus: true,
+  shellIntegration: true,
   sidePanelOpen: true,
   sidePanelWidth: 280,
   editor: 'vscode',
@@ -139,6 +142,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   notifications: isBoolean,
   notificationSound: isBoolean,
   claudeStatus: isBoolean,
+  shellIntegration: isBoolean,
   sidePanelOpen: isBoolean,
   sidePanelWidth: (v): v is number =>
     typeof v === 'number' &&

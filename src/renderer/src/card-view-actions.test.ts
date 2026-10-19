@@ -7,6 +7,9 @@ describe('card view actions', () => {
       expect(isCardViewAction(action)).toBe(true)
     }
     expect(isCardViewAction('find')).toBe(true)
+    // Prompt jumps act on the focused pane (#45 D5).
+    expect(isCardViewAction('previousPrompt')).toBe(true)
+    expect(isCardViewAction('nextPrompt')).toBe(true)
     // Toggle panel works on the board too, so the app runs it (#57 D4).
     for (const action of ['settings', 'openShell', 'palette', 'togglePanel', null]) {
       expect(isCardViewAction(action)).toBe(false)

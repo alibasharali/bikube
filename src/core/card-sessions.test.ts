@@ -34,6 +34,12 @@ class FakeScreen implements CardScreen {
   onResize(listener: (size: { cols: number; rows: number }) => void): void {
     this.resizeListener = listener
   }
+  /** What each `restore` wrote: a previous run's output (#46 D5), never this run's marks (#45). */
+  restored: string[] = []
+  restore(data: string, done: () => void): void {
+    this.restored.push(data)
+    this.write(data, done)
+  }
   /** The line the new session starts on (#46 D5a); lines above it read as blank. */
   sessionStart = 0
   markSessionStart(): void {
@@ -1191,6 +1197,12 @@ describe('kept output (#46)', () => {
     await vi.advanceTimersByTimeAsync(0)
     api.emitData('s1', 'new prompt')
     expect(screen.text).toBe(`${restoredText(KEPT)}new prompt`)
+  })
+
+  it('writes the save through restore, so no shell mark in it counts as this run (#45 D7)', async () => {
+    await startedKept('c1', KEPT, 's1')
+    api.emitData('s1', 'new prompt')
+    expect(screens.get('c1')!.restored).toEqual([restoredText(KEPT)])
   })
 
   it('starts on an empty screen when there is no save or the read fails (D5)', async () => {

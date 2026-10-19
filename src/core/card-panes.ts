@@ -6,7 +6,7 @@
  * the leaf `MAIN_PANE`. Sessions go through the router shared with `CardSessions`, so early
  * output is never lost to a second listener. Plain TS, like `CardSessions`.
  */
-import type { TerminalApi, TerminalExit } from '../shared/api'
+import type { SpawnResult, TerminalApi, TerminalExit } from '../shared/api'
 import { MAX_TYPEAHEAD_CHARS, type CardRef, type CardScreen } from './card-sessions'
 import type { SessionRouter } from './session-router'
 import {
@@ -49,9 +49,16 @@ export class CardPanes<S extends CardScreen> {
   constructor(
     private readonly api: TerminalApi,
     private readonly router: SessionRouter,
-    private readonly createScreen: (cardId: string) => S,
+    /** A new extra pane's screen: `paneId` is the pane it will show in. */
+    private readonly createScreen: (cardId: string, paneId: string) => S,
     /** Whether the card's main shell is running: only then can it be split (D4). */
-    private readonly isRunning: (cardId: string) => boolean
+    private readonly isRunning: (cardId: string) => boolean,
+    /**
+     * Where a new pane's shell tries to start, from the pane focused when it was split (#45 D8);
+     * a refused one falls back to the card's directory. The card's directory by default.
+     */
+    private readonly startDirectory: (card: CardRef, focusedPane: string) => string = (card) =>
+      card.directory
   ) {}
 
   /** The card's panes and which is focused; just the main pane for a card with no extras. */
@@ -75,7 +82,7 @@ export class CardPanes<S extends CardScreen> {
     const before = this.layout(card.id)
     const after = splitFocused(before, direction, id)
     if (after === before) return undefined
-    const screen = this.createScreen(card.id)
+    const screen = this.createScreen(card.id, id)
     const pane: Pane<S> = { screen, sessionId: null, removed: false, watched: false }
     let cardPanes = this.panes.get(card.id)
     if (!cardPanes) this.panes.set(card.id, (cardPanes = new Map()))
@@ -98,50 +105,57 @@ export class CardPanes<S extends CardScreen> {
     pane.watched = watcher !== null
     watcher?.opened(card.id, id)
     // An SSH card's pane connects to the card's host too (#12 D8).
-    this.router.spawn(
-      cols,
-      rows,
-      card.directory,
-      card.id,
-      (result) => {
-        const typed = typeahead
-        typeahead = null
-        if (pane.removed) return result.ok ? this.api.kill(result.id) : undefined
-        if (!result.ok) {
-          // Read-only, and it stays until closed (D5, #5 D8).
-          screen.write(`Couldn't start: ${result.reason}\r\n`)
-          return screen.setReadOnly()
-        }
-        pane.sessionId = result.id
-        const exited = ({ exitCode }: TerminalExit): void => {
-          // An SSH pane whose ssh failed keeps its screen, read-only, until closed (#12 D8).
-          if (card.host === undefined || exitCode !== 255) return this.remove(card.id, id)
-          pane.sessionId = null
-          screen.write('\r\nSSH failed\r\n')
-          screen.setReadOnly()
-        }
-        const early = this.router.adopt(result.id, {
-          // Acknowledged once the screen has parsed it (#16 D4).
-          output: (data, parsed) => {
-            watcher?.output(card.id, id, data)
-            screen.write(data, parsed)
-          },
-          exited
-        })
-        // The view may have fitted the screen while the shell was starting.
-        if (screen.cols !== cols || screen.rows !== rows) {
-          this.api.resize(result.id, screen.cols, screen.rows)
-        }
-        if (!early.exit) typed?.forEach((data) => this.api.write(result.id, data))
-        early.data.forEach((data) => {
+    const spawn = (directory: string): void =>
+      this.router.spawn(
+        cols,
+        rows,
+        directory,
+        card.id,
+        (result) => settle(directory, result),
+        card.host ?? null
+      )
+    const settle = (directory: string, result: SpawnResult): void => {
+      // A directory the focused shell reported may be gone: the card's own is tried instead.
+      if (!result.ok && !pane.removed && directory !== card.directory) {
+        return spawn(card.directory)
+      }
+      const typed = typeahead
+      typeahead = null
+      if (pane.removed) return result.ok ? this.api.kill(result.id) : undefined
+      if (!result.ok) {
+        // Read-only, and it stays until closed (D5, #5 D8).
+        screen.write(`Couldn't start: ${result.reason}\r\n`)
+        return screen.setReadOnly()
+      }
+      pane.sessionId = result.id
+      const exited = ({ exitCode }: TerminalExit): void => {
+        // An SSH pane whose ssh failed keeps its screen, read-only, until closed (#12 D8).
+        if (card.host === undefined || exitCode !== 255) return this.remove(card.id, id)
+        pane.sessionId = null
+        screen.write('\r\nSSH failed\r\n')
+        screen.setReadOnly()
+      }
+      const early = this.router.adopt(result.id, {
+        // Acknowledged once the screen has parsed it (#16 D4).
+        output: (data, parsed) => {
           watcher?.output(card.id, id, data)
-          screen.write(data, this.router.ackWhenParsed(result.id, data))
-        })
-        // A shell that exits by itself takes its pane with it (D5).
-        if (early.exit) exited(early.exit)
-      },
-      card.host ?? null
-    )
+          screen.write(data, parsed)
+        },
+        exited
+      })
+      // The view may have fitted the screen while the shell was starting.
+      if (screen.cols !== cols || screen.rows !== rows) {
+        this.api.resize(result.id, screen.cols, screen.rows)
+      }
+      if (!early.exit) typed?.forEach((data) => this.api.write(result.id, data))
+      early.data.forEach((data) => {
+        watcher?.output(card.id, id, data)
+        screen.write(data, this.router.ackWhenParsed(result.id, data))
+      })
+      // A shell that exits by itself takes its pane with it (D5).
+      if (early.exit) exited(early.exit)
+    }
+    spawn(this.startDirectory(card, before.focused))
     this.setLayout(card.id, after)
     return id
   }

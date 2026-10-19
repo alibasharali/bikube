@@ -30,6 +30,8 @@ export interface MainSettings {
   editor(): Pick<Settings, 'editor' | 'editorCommand' | 'shell'>
   /** The Claude Code status updates setting. */
   claudeStatus(): boolean
+  /** The Shell integration setting (#45 D4). */
+  shellIntegration(): boolean
   /** The Keep output after a card stops setting (#46 D8). */
   keepOutput(): boolean
   /** Calls `listener` each time a settings save turns Keep output off (#46 D8). */
@@ -110,6 +112,7 @@ export function registerSettings(): MainSettings {
   return {
     shell: () => file.load().shell,
     claudeStatus: () => file.load().claudeStatus,
+    shellIntegration: () => file.load().shellIntegration,
     keepOutput: () => file.load().keepOutput,
     onKeepOutputOff: (listener) => {
       keepOutputOff = listener

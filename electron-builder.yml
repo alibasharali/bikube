@@ -15,6 +15,9 @@ asarUnpack:
 extraResources:
   - from: resources/bin
     to: bin
+  # The zsh, bash and fish shell integration scripts every local shell starts with (#45 D3).
+  - from: resources/shell-integration
+    to: shell-integration
   # Licences of the bundled themes and symbols font.
   - from: THIRD_PARTY_NOTICES
     to: THIRD_PARTY_NOTICES

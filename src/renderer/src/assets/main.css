@@ -2592,6 +2592,45 @@ button.dev-server-chip:focus-visible {
   }
 }
 
+/*
+ * A failed command's marks on its line (#45 D6), xterm decorations over the text: a red bar on the
+ * first cell's left edge and a `✗ <code>` badge on the last cells. Only the bar's strip and the
+ * badge take the pointer, for their tooltip; a click there still reaches xterm, their parent.
+ */
+.xterm .command-failed {
+  pointer-events: none;
+}
+
+.xterm .command-failed::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--danger);
+  pointer-events: auto;
+}
+
+/* xterm sets no `right` for a right-anchored decoration at x 0 (6.0.0). */
+.xterm .command-failed-badge {
+  right: 0;
+}
+
+.xterm .command-failed-badge > span {
+  position: absolute;
+  inset: 1px 2px 1px auto;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  border-radius: 3px;
+  background: var(--danger);
+  color: var(--danger-text);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* An on/off switch: a real checkbox over a sliding track, for the keyboard and screen readers. */
 .switch {
   position: relative;

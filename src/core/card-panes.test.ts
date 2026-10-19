@@ -144,6 +144,68 @@ describe('CardPanes.split', () => {
   })
 })
 
+describe("CardPanes starting in the focused shell's directory (#45 D8)", () => {
+  let asked: [string, string][]
+  beforeEach(() => {
+    asked = []
+    panes = new CardPanes(
+      api,
+      new SessionRouter(api),
+      () => {
+        const screen = new FakeScreen()
+        screens.push(screen)
+        return screen
+      },
+      () => mainRunning,
+      (card, focused) => {
+        asked.push([card.id, focused])
+        return '/tmp/reported'
+      }
+    )
+  })
+
+  it('spawns in the directory picked for the focused pane', async () => {
+    const id = panes.split(API, 'right')!
+    expect(asked).toEqual([[API.id, MAIN_PANE]])
+    expect(api.spawns).toMatchObject([{ cwd: '/tmp/reported' }])
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    panes.split(API, 'down')
+    expect(asked[1]).toEqual([API.id, id])
+  })
+
+  it("falls back to the card's directory when that one is refused, with no Couldn't start", async () => {
+    const id = panes.split(API, 'right')!
+    screens[0].inputListener?.('ls\r')
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    await flush()
+    expect(api.spawns.map((s) => s.cwd)).toEqual(['/tmp/reported', API.directory])
+    api.spawns[1].resolve({ ok: true, id: 's1' })
+    await flush()
+    expect(screens[0].text).toBe('')
+    expect(api.writes).toEqual([['s1', 'ls\r']])
+    expect(paneIds(panes.layout(API.id).tree)).toEqual([MAIN_PANE, id])
+  })
+
+  it("shows the card directory's refusal when both are refused", async () => {
+    panes.split(API, 'right')
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    await flush()
+    api.spawns[1].resolve({ ok: false, reason: 'invalid working directory' })
+    await flush()
+    expect(api.spawns).toHaveLength(2)
+    expect(screens[0].text).toBe("Couldn't start: invalid working directory\r\n")
+  })
+
+  it('tries nothing more for a pane closed while its first spawn was refused', async () => {
+    const id = panes.split(API, 'right')!
+    panes.close(API.id, id)
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    await flush()
+    expect(api.spawns).toHaveLength(1)
+  })
+})
+
 describe('CardPanes with CardSessions on one router', () => {
   it('keeps output that arrives before the spawn reply, with one listener for both', async () => {
     api = new FakeApi()

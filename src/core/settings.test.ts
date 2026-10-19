@@ -547,6 +547,34 @@ describe('the editor preferences (#55 D14)', () => {
   })
 })
 
+describe('the Shell integration preference (#45 D4)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is on by default and not written while on', () => {
+    expect(DEFAULT_SETTINGS.shellIntegration).toBe(true)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('shellIntegration')
+    expect(parseSettingsFile(file(base), 'linux').settings.shellIntegration).toBe(true)
+  })
+
+  it('is written as false when off and read back', () => {
+    const settings: Settings = { ...base, shellIntegration: false }
+    const text = serializeSettings(settings)
+    expect(JSON.parse(text).settings.shellIntegration).toBe(false)
+    expect(parseSettingsFile(text, 'linux')).toEqual({ settings, replaced: [] })
+  })
+
+  it('takes only a boolean', () => {
+    expect(validateSettings({ ...base, shellIntegration: false }, 'linux')?.shellIntegration).toBe(
+      false
+    )
+    expect(validateSettings({ ...base, shellIntegration: 'no' }, 'linux')).toBeNull()
+    const parsed = parseSettingsFile(file({ ...base, shellIntegration: 0 }), 'linux')
+    expect(parsed.settings.shellIntegration).toBe(true)
+    expect(parsed.replaced).toEqual(['shellIntegration'])
+  })
+})
+
 describe('the Keep output preference (#46 D8)', () => {
   const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
 

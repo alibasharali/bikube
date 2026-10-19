@@ -2,7 +2,7 @@
 item: 52
 type: feature
 title: Inline images in terminals
-status: draft
+status: approved
 branch: claude/52-inline-terminal-images
 ---
 

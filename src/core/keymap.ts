@@ -19,7 +19,8 @@ export const SHORTCUT_ACTIONS = [
   'nextWaiting',
   'previousPrompt',
   'nextPrompt',
-  'zoomPane'
+  'zoomPane',
+  'copyCommandOutput'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 
@@ -47,7 +48,9 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   previousPrompt: 'Cmd+ArrowUp',
   nextPrompt: 'Cmd+ArrowDown',
   // Ghostty's and iTerm2's key; not Shift+Cmd+Z, redo in editors (#48 D3).
-  zoomPane: 'Shift+Cmd+Enter'
+  zoomPane: 'Shift+Cmd+Enter',
+  // iTerm2's Select Output of Last Command (#60 D5).
+  copyCommandOutput: 'Shift+Cmd+A'
 })
 
 const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
@@ -68,7 +71,9 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   // Not Ctrl+Up/Down: they stay the shell's (#45 D5).
   previousPrompt: 'Ctrl+Shift+ArrowUp',
   nextPrompt: 'Ctrl+Shift+ArrowDown',
-  zoomPane: 'Ctrl+Shift+Enter'
+  zoomPane: 'Ctrl+Shift+Enter',
+  // Not Ctrl+A: it stays the shell's (#60 D5).
+  copyCommandOutput: 'Ctrl+Shift+A'
 })
 
 /** This OS's default shortcuts (D6). */
@@ -226,7 +231,8 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   nextWaiting: 'Next waiting card',
   previousPrompt: 'Previous prompt',
   nextPrompt: 'Next prompt',
-  zoomPane: 'Zoom pane'
+  zoomPane: 'Zoom pane',
+  copyCommandOutput: 'Copy command output'
 })
 
 /** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */

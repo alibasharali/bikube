@@ -222,6 +222,9 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
           action === 'previousPrompt' ? 'previous' : 'next'
         )
       }
+      // Selects and copies a command's output in the focused pane (#60 D2); nothing without one
+      // (D4), and the shell never gets the keys.
+      else if (action === 'copyCommandOutput') paneScreen(card.id, focusedPane)?.copyCommandOutput()
       // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
       else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); it ends a

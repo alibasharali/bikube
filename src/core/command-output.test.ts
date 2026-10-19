@@ -4,6 +4,7 @@ import {
   endedOutputs,
   outputRange,
   rangeLength,
+  textRange,
   type EndedOutput,
   type OutputViewport
 } from './command-output'
@@ -114,5 +115,32 @@ describe('endedOutputs (#60 D1)', () => {
     expect(
       endedOutputs([output(1, 2, 3), output(3, 4, 5)], (line: number) => rows.get(line))
     ).toEqual([{ line: 10, start: { x: 2, y: 11 }, end: { x: 0, y: 15 } }])
+  })
+})
+
+describe('textRange (#60 D1)', () => {
+  // Rows 10 to 13: `one`, `two`, two empty rows; read from column `from` up to `to`.
+  const rows: Record<number, string> = { 10: 'xxone', 11: 'two', 12: '', 13: '' }
+  const text = (y: number, from: number, to: number): string =>
+    (rows[y] ?? '').slice(from, to).trimEnd()
+
+  it('ends at the last row with text, so trailing empty lines are dropped', () => {
+    expect(textRange({ start: { x: 2, y: 10 }, end: { x: cols, y: 13 } }, cols, text)).toEqual({
+      start: { x: 2, y: 10 },
+      end: { x: cols, y: 11 }
+    })
+  })
+
+  it('keeps the end on a row with text, and reads the first and last rows only within the range', () => {
+    expect(textRange({ start: { x: 2, y: 10 }, end: { x: 2, y: 11 } }, cols, text)).toEqual({
+      start: { x: 2, y: 10 },
+      end: { x: 2, y: 11 }
+    })
+    // The first row's text before the C is not the output's.
+    expect(textRange({ start: { x: 5, y: 10 }, end: { x: 0, y: 11 } }, cols, text)).toBeNull()
+  })
+
+  it('is none when every row is empty', () => {
+    expect(textRange({ start: { x: 0, y: 12 }, end: { x: cols, y: 13 } }, cols, text)).toBeNull()
   })
 })

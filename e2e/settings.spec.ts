@@ -882,3 +882,57 @@ test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then z
   await page.keyboard.press(SHORTCUTS.zoomPane)
   await expect(chip).toHaveText('Zoomed · 2 panes')
 })
+
+test('#60 AC6: Copy command output shows its default, can be recorded to a key that then copies, and Reset', async () => {
+  const dataDir = newDataDir()
+  const file = join(dataDir, 'drovr-settings.json')
+  // sh sends no marks of its own: the command's marks are printed.
+  writeFileSync(file, JSON.stringify({ version: 1, settings: { shell: '/bin/sh' } }))
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+  const darwin = process.platform === 'darwin'
+  const defaultText = darwin ? 'Shift+Cmd+A' : 'Ctrl+Shift+A'
+  const clipboard = (): Promise<string> => app!.evaluate(({ clipboard }) => clipboard.readText())
+  await alphaWithApi(page)
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type(
+    String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007copied\n\033]133;D;0\007'`
+  )
+  await page.keyboard.press('Enter')
+  await expect.poll(() => bufferLines(page)).toContain('$ copied')
+
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await expect(dialog(page).getByRole('group', { name: 'Shortcuts' })).toContainText(
+    'Copy command output'
+  )
+  const field = shortcutField(page, 'copyCommandOutput')
+  await expect(field).toHaveText(defaultText)
+  await expect(shortcutReset(page, 'copyCommandOutput')).toBeDisabled()
+  await field.click()
+  // Another action's shortcut is refused.
+  await page.keyboard.press(darwin ? 'Meta+F' : 'Control+Shift+F')
+  await expect(shortcutError(page, 'copyCommandOutput')).toHaveText('Already used by Find')
+  await page.keyboard.press('Control+Alt+O')
+  await expect(field).toHaveText('Ctrl+Alt+O')
+  await expect.poll(saved).toContain('"copyCommandOutput":"Ctrl+Alt+O"')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+
+  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
+  await page.keyboard.press('Control+Alt+O')
+  await expect.poll(clipboard).toBe('copied')
+
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await shortcutReset(page, 'copyCommandOutput').click()
+  await expect(field).toHaveText(defaultText)
+  await expect.poll(saved).not.toContain('copyCommandOutput')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
+  await page.keyboard.press(darwin ? 'Meta+Shift+A' : 'Control+Shift+A')
+  await expect.poll(clipboard).toBe('copied')
+})

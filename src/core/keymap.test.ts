@@ -40,7 +40,8 @@ describe('defaultKeymap (#31 D6)', () => {
       nextWaiting: 'Cmd+J',
       previousPrompt: 'Cmd+ArrowUp',
       nextPrompt: 'Cmd+ArrowDown',
-      zoomPane: 'Shift+Cmd+Enter'
+      zoomPane: 'Shift+Cmd+Enter',
+      copyCommandOutput: 'Shift+Cmd+A'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -57,7 +58,8 @@ describe('defaultKeymap (#31 D6)', () => {
         nextWaiting: 'Ctrl+Shift+J',
         previousPrompt: 'Ctrl+Shift+ArrowUp',
         nextPrompt: 'Ctrl+Shift+ArrowDown',
-        zoomPane: 'Ctrl+Shift+Enter'
+        zoomPane: 'Ctrl+Shift+Enter',
+        copyCommandOutput: 'Ctrl+Shift+A'
       })
     }
   })
@@ -212,6 +214,41 @@ describe('Zoom pane (#48 D3, AC9)', () => {
     expect(
       recordPress(press('Enter', { ctrlKey: true, altKey: true }), 'zoomPane', keymap, 'linux')
     ).toEqual({ kind: 'set', shortcut: 'Ctrl+Alt+Enter' })
+  })
+})
+
+describe('Copy command output (#60 D5, AC6)', () => {
+  it('is a configurable action named Copy command output: Shift+Cmd+A on macOS, Ctrl+Shift+A elsewhere', () => {
+    expect(SHORTCUT_LABELS.copyCommandOutput).toBe('Copy command output')
+    expect(defaultKeymap('darwin').copyCommandOutput).toBe('Shift+Cmd+A')
+    expect(defaultKeymap('linux').copyCommandOutput).toBe('Ctrl+Shift+A')
+    expect(defaultKeymap('win32').copyCommandOutput).toBe('Ctrl+Shift+A')
+    expect(
+      keymapAction(press('A', { metaKey: true, shiftKey: true }), defaultKeymap('darwin'))
+    ).toBe('copyCommandOutput')
+    expect(
+      keymapAction(press('A', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('copyCommandOutput')
+    // Ctrl+A stays the shell's.
+    expect(keymapAction(press('a', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+    expect(fixedShortcuts('linux').has('Ctrl+Shift+A')).toBe(false)
+    expect(fixedShortcuts('darwin').has('Shift+Cmd+A')).toBe(false)
+  })
+
+  it('reads the default from a saved keymap without it and saves it only when changed', () => {
+    for (const platform of ['darwin', 'linux']) {
+      const { shortcuts } = readShortcuts({ find: 'Ctrl+Alt+F' }, platform)
+      expect(resolveKeymap(shortcuts, platform).copyCommandOutput).toBe(
+        defaultKeymap(platform).copyCommandOutput
+      )
+      expect(shortcutOverrides(defaultKeymap(platform), platform)).toEqual({})
+    }
+    const changed = resolveKeymap({ copyCommandOutput: 'Ctrl+Alt+O' }, 'linux')
+    expect(shortcutOverrides(changed, 'linux')).toEqual({ copyCommandOutput: 'Ctrl+Alt+O' })
+    expect(validateShortcuts({ copyCommandOutput: 'Ctrl+Alt+O' }, 'linux')).toEqual({
+      copyCommandOutput: 'Ctrl+Alt+O'
+    })
+    expect(resetRefusal('copyCommandOutput', changed, 'linux')).toBeNull()
   })
 })
 

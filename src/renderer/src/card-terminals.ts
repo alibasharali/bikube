@@ -38,6 +38,13 @@ import {
 import { opensLink } from '../../core/terminal-links'
 import { promptJumpTarget, type PromptJump } from '../../core/prompt-jumps'
 import {
+  chooseCommandOutput,
+  endedOutputs,
+  rangeLength,
+  textRange,
+  type OutputRange
+} from '../../core/command-output'
+import {
   parseShellMark,
   SHELL_MARK_OSCS,
   ShellMarks,
@@ -173,6 +180,8 @@ export class XtermScreen implements CardScreen {
   private findOptions = ''
   /** Where the match Find last selected is, so stepping goes on from it (#35 D6). */
   private activeMatch: IBufferRange | undefined
+  /** Copy command output is selecting (#60 D2): the selection is the user's, copied once. */
+  private selectingOutput = false
   /** The query of the applied find: a query extending it keeps the active match (D5). */
   private findQuery = ''
   private disposed = false
@@ -248,12 +257,14 @@ export class XtermScreen implements CardScreen {
     // Copy on select: a finished selection goes to the clipboard as it is made, unless Find made
     // it, also when the addon re-searches on new output (#35 D9).
     this.term.onSelectionChange(() => {
-      const byFind = this.finding && !this.pointerSelecting
+      // Copy command output's selection is the user's too, and copies itself (#60 D2).
+      const byFind = this.finding && !this.pointerSelecting && !this.selectingOutput
       this.findSelected = byFind && this.term.hasSelection()
       if (byFind) {
         this.activeMatch = this.term.getSelectionPosition()
         return
       }
+      if (this.selectingOutput) return
       if (!settingsStore.get().copyOnSelect || !this.term.hasSelection()) return
       void clipboard.write(this.term.getSelection())
     })
@@ -574,6 +585,40 @@ export class XtermScreen implements CardScreen {
       .flatMap((marker) => (marker && !marker.isDisposed && marker.line >= 0 ? [marker.line] : []))
     const target = promptJumpTarget(jump, rows, buffer.viewportY, buffer.baseY)
     if (target !== null) this.term.scrollToLine(target)
+  }
+
+  /**
+   * Copy command output (#60 D2–D4): selects the output of the ended command the viewport picks
+   * (D3) as the user's selection and writes its text to the clipboard, without scrolling. Nothing
+   * on the alternate screen, before the screen is shown, or with no command with output.
+   */
+  copyCommandOutput(): void {
+    const buffer = this.term.buffer.active
+    if (!this.opened || buffer.type !== 'normal') return
+    const { cols, rows } = this.term
+    const text = (y: number, from: number, to: number): string =>
+      buffer.getLine(y)?.translateToString(true, from, to) ?? ''
+    const withText = (range: OutputRange): OutputRange | null => textRange(range, cols, text)
+    const chosen = chooseCommandOutput(
+      endedOutputs(this.marks.outputs(), (marker) =>
+        marker && !marker.isDisposed && marker.line >= 0 ? marker.line : undefined
+      ),
+      { top: buffer.viewportY, rows, bottom: buffer.baseY, cols },
+      (range) => withText(range) !== null
+    )
+    const range = chosen && withText(chosen)
+    if (!range) return
+    // Ends at its last text, so the selection and the copied text agree (D1). `select` neither
+    // scrolls nor waits: its change event comes within this call.
+    this.selectingOutput = true
+    try {
+      this.term.select(range.start.x, range.start.y, rangeLength(range, cols))
+    } finally {
+      this.selectingOutput = false
+    }
+    // Find's selection is gone: the next Find step selects its match again (#35 D6, #60 D2).
+    this.findSelected = false
+    void window.drovr.clipboard.write(this.term.getSelection())
   }
 
   /** The row the cursor is on, as a marker that follows scrolling (#45 D1). */

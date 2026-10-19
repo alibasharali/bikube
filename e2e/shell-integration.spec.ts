@@ -497,3 +497,174 @@ test('AC8: with bash and Shell integration, a split after cd starts in that dire
   await expect.poll(async () => (await paneRows(0)).includes('cd-done')).toBe(true)
   expect(await splitDirectory()).toBe('/tmp')
 })
+
+// Copy command output (#60): the output of the command chosen by the viewport selected in the
+// focused pane and copied, the shell getting none of the keys.
+
+const darwin = process.platform === 'darwin'
+/** Copy command output's default (#60 D5) as a Playwright press. */
+const COPY_OUTPUT = darwin ? 'Meta+Shift+A' : 'Control+Shift+A'
+const PREVIOUS_PROMPT = darwin ? 'Meta+ArrowUp' : 'Control+Shift+ArrowUp'
+
+/**
+ * A command marked as sh can't mark it, its output `body` (a printf format) between its `C` and
+ * its `D;0`: the prompt `$ `, then the output from the same row.
+ */
+const markedOutput = (body: string): string =>
+  String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007` +
+  body +
+  String.raw`\033]133;D;0\007'`
+
+/** Pane `index`'s selection in the open card or shell; '' for none. */
+function paneSelection(index = 0): Promise<string> {
+  return page.evaluate((index) => {
+    const panes = document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')
+    const host = panes[index]?.querySelector('[data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { hasSelection(): boolean; getSelection(): string } }) | null
+    const term = host?.__xterm
+    return term?.hasSelection() ? term.getSelection() : ''
+  }, index)
+}
+
+const readClipboard = (): Promise<string> => app!.evaluate(({ clipboard }) => clipboard.readText())
+const writeClipboard = (text: string): Promise<void> =>
+  app!.evaluate(({ clipboard }, text) => clipboard.writeText(text), text)
+
+/** Runs `echo after-copy` (quoted apart) and waits for its output: no key reached the shell. */
+async function shellGotNoKeys(): Promise<void> {
+  await run('echo after-"copy"')
+  await expect.poll(async () => (await rows()).includes('after-copy')).toBe(true)
+  expect((await rows()).some((row) => row.includes('not found'))).toBe(false)
+}
+
+test("#60 AC2: Copy command output selects and copies the last command's output", async () => {
+  await launchWithShell('/bin/sh')
+  await openDefaultShell()
+  await writeClipboard('before')
+  await run(markedOutput(String.raw`one\ntwo\n`))
+  await run(markedOutput(String.raw`three\n`))
+  await expect.poll(async () => (await rows()).includes('$ three')).toBe(true)
+  const { top } = await viewport()
+
+  await page.keyboard.press(COPY_OUTPUT)
+  await expect.poll(readClipboard).toBe('three')
+  expect(await paneSelection()).toBe('three')
+  // The view does not scroll (D2).
+  expect((await viewport()).top).toBe(top)
+
+  // A selection like any other: Copy copies it again (D2).
+  await writeClipboard('stale')
+  await page.keyboard.press(darwin ? 'Meta+C' : 'Control+Shift+C')
+  await expect.poll(readClipboard).toBe('three')
+  await shellGotNoKeys()
+})
+
+test("#60 AC3: after Previous prompt, the output of the command at the viewport's top", async () => {
+  await launchWithShell('/bin/sh')
+  await openDefaultShell()
+  await run(markedOutput(String.raw`one\ntwo\n`))
+  // The second command's output: 100 lines, so the first one's prompt scrolls out of view.
+  await run(
+    String.raw`printf '\033]133;A\007$ \033]133;B\007\033]133;C\007'; seq 1 100 | sed 's/^/l/'; printf 'three\n\033]133;D;0\007'`
+  )
+  await expect.poll(async () => (await rows()).includes('three')).toBe(true)
+  const first = (await rows()).indexOf('$ one')
+  expect(first).toBeGreaterThanOrEqual(0)
+  await expect.poll(async () => (await viewport()).top).toBe((await viewport()).bottom)
+
+  await page.keyboard.press(PREVIOUS_PROMPT)
+  await page.keyboard.press(PREVIOUS_PROMPT)
+  await expect.poll(async () => (await viewport()).top).toBe(first)
+  await page.keyboard.press(COPY_OUTPUT)
+  await expect.poll(readClipboard).toBe('one\ntwo')
+  expect(await paneSelection()).toBe('one\ntwo')
+  expect((await viewport()).top).toBe(first)
+})
+
+test('#60 AC4: with nothing to copy the clipboard and selection stay as they were', async () => {
+  await launchWithShell('/bin/sh')
+  await openDefaultShell()
+  await run('echo no-"marks"')
+  await expect.poll(async () => (await rows()).includes('no-marks')).toBe(true)
+  await writeClipboard('before')
+
+  await page.keyboard.press(COPY_OUTPUT)
+  await page.waitForTimeout(300)
+  expect(await readClipboard()).toBe('before')
+  expect(await paneSelection()).toBe('')
+
+  // A marked command with empty output (its C and D together), then one printing empty lines.
+  await run(markedOutput(''))
+  await run(markedOutput(String.raw`\n\n`))
+  await run('echo empty-"done"')
+  await expect.poll(async () => (await rows()).includes('empty-done')).toBe(true)
+  await page.keyboard.press(COPY_OUTPUT)
+  await page.waitForTimeout(300)
+  expect(await readClipboard()).toBe('before')
+  expect(await paneSelection()).toBe('')
+  await shellGotNoKeys()
+})
+
+test("#60 AC5: in bash with Shell integration, a card's focused extra pane copies its command's output", async () => {
+  await launchWithShell('/bin/bash')
+  await page
+    .getByTestId('column')
+    .filter({ has: page.getByRole('heading', { name: 'Backlog', exact: true }) })
+    .getByTestId('new-card')
+    .click()
+  await page.getByTestId('new-card-input').fill('api')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'api')
+  const panes = page.getByTestId('card-view').getByTestId('pane')
+  await splitRight(page)
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(async () => (await paneRows(1)).some((row) => row.trim() !== '')).toBe(true)
+
+  await run(String.raw`printf 'x\ny\n'`)
+  await expect.poll(async () => (await paneRows(1)).includes('y')).toBe(true)
+  await page.keyboard.press(COPY_OUTPUT)
+  await expect.poll(readClipboard).toBe('x\ny')
+  expect(await paneSelection(1)).toBe('x\ny')
+  expect(await paneSelection(0)).toBe('')
+})
+
+test("#60 AC7: with Find open, the selection is the command's output, not the match; Copy on select copies it", async () => {
+  await launchWithShell('/bin/sh')
+  const dialog = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await dialog.getByTestId('settings-section-terminal').click()
+  await dialog.getByTestId('settings-copy-on-select').check()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await openDefaultShell()
+  await run(markedOutput(String.raw`\141lpha\nbeta\n`))
+  await run(markedOutput(String.raw`\141lpha\ngamma\n`))
+  await expect.poll(async () => (await rows()).includes('gamma')).toBe(true)
+  await writeClipboard('before')
+
+  await page.keyboard.press(darwin ? 'Meta+F' : 'Control+Shift+F')
+  const input = page.getByTestId('find-input')
+  await expect(input).toBeFocused()
+  await input.fill('alpha')
+  await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
+  // The first command's match active: the output copied next holds the other one.
+  await input.press('Enter')
+  await expect(page.getByTestId('find-result')).toHaveText('1 of 2')
+  expect(await paneSelection()).toBe('alpha')
+
+  await page.keyboard.press(COPY_OUTPUT)
+  await expect.poll(readClipboard).toBe('alpha\ngamma')
+  expect(await paneSelection()).toBe('alpha\ngamma')
+  // Find's highlights stay, and its next step selects its match again.
+  await expect(
+    page.locator('[data-testid=card-view] .xterm-find-result-decoration')
+  ).not.toHaveCount(0)
+  await expect(page.getByTestId('find-bar')).toBeVisible()
+  // Upwards from the first match, not from the selected output: wrapping to the newest.
+  await input.press('Enter')
+  await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
+  expect(await paneSelection()).toBe('alpha')
+  // Find's selection is never copied (#35 D9).
+  await page.waitForTimeout(300)
+  expect(await readClipboard()).toBe('alpha\ngamma')
+})

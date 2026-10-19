@@ -67,6 +67,26 @@ export function rangeLength({ start, end }: OutputRange, cols: number): number {
   return (end.y - start.y) * cols + end.x - start.x
 }
 
+/**
+ * The part of `range` that holds text (#60 D1): it ends at the end of its last row with text, so
+ * the selection and its text leave out trailing empty lines; null when no row has any. `text`
+ * reads row `y` from column `from` up to `to`, with its line end trimmed, as xterm's selection
+ * does.
+ */
+export function textRange(
+  range: OutputRange,
+  cols: number,
+  text: (y: number, from: number, to: number) => string
+): OutputRange | null {
+  const { start, end } = range
+  for (let y = end.y; y >= start.y; y--) {
+    const from = y === start.y ? start.x : 0
+    const to = y === end.y ? end.x : cols
+    if (text(y, from, to) !== '') return { start, end: { x: to, y } }
+  }
+  return null
+}
+
 const before = (a: BufferPoint, b: BufferPoint): boolean => a.y < b.y || (a.y === b.y && a.x < b.x)
 
 /**

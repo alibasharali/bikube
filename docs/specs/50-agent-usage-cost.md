@@ -2,7 +2,7 @@
 item: 50
 type: feature
 title: 'Agent usage and cost per card'
-status: draft
+status: approved
 branch: claude/50-agent-usage-cost
 ---
 

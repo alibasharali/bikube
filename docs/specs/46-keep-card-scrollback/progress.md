@@ -8,7 +8,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 |---|---|---|---|---|
 | S1 | done | `bd9ed79..1188112` | fixed r1 | `CardScreen.serialize(rows)`; `OutputKeeper {keeps, scrollback, read, save}` 5th `CardSessions` arg, renderer's `outputKeeper` in card-terminals.ts; `kept-output.ts`: `KeptOutput`, `MAX_KEPT_CHARS`, `keptOutput`, `restoredText`; `ScrollbackStore {read, save, delete}` (sync) returned by `registerScrollback()` in src/main/scrollback.ts; IPC `scrollback:read/save/delete` as `window.drovr.scrollback`; save deleted in `disposeCard`; e2e helper `belowSeparator` in e2e/card-view.ts |
 | S2 | done | `1af9675..a7c3301` | CLEAN | `ScrollbackStore.prune(keepIds)`; `CardSessions.keepRunning()`; `registerScrollback()` returns `MainScrollback { store, quitSaved() }`; IPC `scrollback:quitSaved` as `window.drovr.scrollback.quitSaved()`; before-quit waits ≤1 s (`QUIT_SAVE_WAIT_MS`) for it |
-| S3 | running | | | |
+| S3 | done | `0276781..0d028ca` | fixed r1 | `Preferences.keepOutput`; `ScrollbackStore.clear()`, store `keeps` option; `MainSettings.keepOutput()`/`onKeepOutputOff`; switch test id `settings-keep-output` |
 
 ## Rulings
 
@@ -20,4 +20,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- running

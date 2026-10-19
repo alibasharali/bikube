@@ -7,7 +7,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `9d6278b..e6028ab` | CLEAN | `DevServers` (src/core/dev-servers.ts; app instance `devServers()` in src/renderer/src/dev-servers.ts): `paneOpened/output/paneEnded(cardId,paneId)`, `cardEnded`, `ports`, `subscribe`; `MAIN_PANE`. `CardSessions.watchOutput` feeds local main panes. IPC `ports:probe` → `window.drovr.ports.probe`. `<DevServerChips cardId>` (testids dev-servers, dev-server-chip, dev-server-more). |
-| S2 | running | | | |
+| S2 | done | `3fb721b..10c03d4` | CLEAN | `CardPanes.watchOutput(PaneOutputWatcher)` feeds local extra panes; shell chips in ShellStrip. |
 
 ## Rulings
 

@@ -28,6 +28,8 @@ import {
   type Keymap,
   type ShortcutAction
 } from '../../core/keymap'
+import { recordGlobalPress } from '../../core/global-hotkey'
+import type { GlobalShortcutState } from '../../core/global-shortcut'
 import {
   DEFAULT_FONT_FAMILY,
   EDITORS,
@@ -206,6 +208,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
             <ShortcutsSection
               keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)}
               globalShortcut={settings.globalShortcut}
+              openWaitingOnShow={settings.openWaitingOnShow}
             />
           )}
           {section === 'sync' && <SyncFolderField id={`${id}-sync`} errorId={`${id}-sync-error`} />}
@@ -1125,38 +1128,83 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
 
 export default SettingsDialog
 
+/** Main couldn't register the saved global shortcut (#51 D8). */
+export const GLOBAL_SHORTCUT_FAILED =
+  "Couldn't register this shortcut: another app may use it, or the desktop doesn't allow global shortcuts"
+
+/** The field being recorded: an in-app action's, or the global shortcut's (#51 D5). */
+type Recording = ShortcutAction | 'global'
+
 /**
- * The Shortcuts section (#31 D8): each configurable action with its shortcut and a Reset button.
+ * The Shortcuts section (#31 D8): each configurable action with its shortcut and a Reset button,
+ * below the Global group (#51 D5): the global shortcut with Clear, the Open the next waiting card
+ * switch and, when main couldn't register it, why (D8).
  * Clicking a field records the next press with Cmd, Ctrl or Alt; Escape (or leaving the field)
  * stops recording; a press that can't be a shortcut, or is already used, shows why and keeps
- * recording. A new shortcut or a Reset applies and saves at once, like the dialog's other fields.
+ * recording. A new shortcut, a Reset or a Clear applies and saves at once, like the dialog's other
+ * fields. While any field records, main holds no global shortcut (#51 D6), so its press reaches
+ * the recorder.
  */
 function ShortcutsSection({
   keymap,
-  globalShortcut
+  globalShortcut,
+  openWaitingOnShow
 }: {
   keymap: Keymap
   /** Refused to every in-app action (#51 D5). */
   globalShortcut?: string
+  openWaitingOnShow: boolean
 }): React.JSX.Element {
   const platform = window.drovr.platform
   const defaults = defaultKeymap(platform)
   const id = useId()
-  const [recording, setRecording] = useState<ShortcutAction | null>(null)
-  // A refusal belongs to one action: the field being recorded, or the Reset just pressed.
-  const [refusal, setRefusal] = useState<{ action: ShortcutAction; message: string } | null>(null)
+  const [recording, setRecording] = useState<Recording | null>(null)
+  // A refusal belongs to one field: the one being recorded, or the Reset just pressed.
+  const [refusal, setRefusal] = useState<{ action: Recording; message: string } | null>(null)
+  // Main's registration (#51 D8), read when the section shows and after each change and recording.
+  const [registration, setRegistration] = useState<GlobalShortcutState>('none')
+  const shown = useRef(true)
+
+  const readRegistration = (): void => {
+    void window.drovr.globalShortcut.state().then((state) => {
+      if (shown.current) setRegistration(state)
+    })
+  }
+  useEffect(() => {
+    shown.current = true
+    readRegistration()
+    return () => {
+      shown.current = false
+    }
+  }, [])
 
   const stop = (): void => {
     setRecording(null)
     setRefusal(null)
   }
+
+  // While any field records main lets go of the global shortcut (#51 D6), and takes it again when
+  // recording ends: a press, Escape, leaving the field or the window, or Settings closing. Its
+  // state is read only then, after a new one is saved: suspended, it reads `none`.
+  const anyRecording = recording !== null
+  useEffect(() => {
+    if (!anyRecording) return
+    window.drovr.globalShortcut.suspend(true)
+    window.addEventListener('blur', stop)
+    return () => {
+      window.removeEventListener('blur', stop)
+      window.drovr.globalShortcut.suspend(false)
+      readRegistration()
+    }
+  }, [anyRecording])
+
   const apply = (action: ShortcutAction, shortcut: string): void => {
     settingsStore.update({
       shortcuts: shortcutOverrides({ ...keymap, [action]: shortcut }, platform)
     })
   }
 
-  const onKeyDown = (action: ShortcutAction, event: React.KeyboardEvent): void => {
+  const onKeyDown = (action: Recording, event: React.KeyboardEvent): void => {
     if (recording !== action) return
     const { key, ctrlKey, altKey, metaKey } = event
     // Tab still moves the focus out of the field, which stops recording.
@@ -1164,47 +1212,131 @@ function ShortcutsSection({
     // The press is the field's alone: it never closes the dialog or reaches anything else.
     event.preventDefault()
     event.stopPropagation()
-    const result = recordPress(event.nativeEvent, action, keymap, platform, globalShortcut)
+    const result =
+      action === 'global'
+        ? recordGlobalPress(event.nativeEvent, keymap, platform)
+        : recordPress(event.nativeEvent, action, keymap, platform, globalShortcut)
     if (result.kind === 'cancel') stop()
     else if (result.kind === 'refused') setRefusal({ action, message: result.message })
     else if (result.kind === 'set') {
-      apply(action, result.shortcut)
+      if (action === 'global') settingsStore.update({ globalShortcut: result.shortcut })
+      else apply(action, result.shortcut)
       stop()
     }
   }
 
+  const fieldProps = (
+    action: Recording
+  ): React.ButtonHTMLAttributes<HTMLButtonElement> & { 'data-recording': boolean } => ({
+    type: 'button',
+    className: 'shortcut-field',
+    'data-recording': recording === action,
+    'aria-labelledby': `${id}-${action} ${id}-${action}-value`,
+    'aria-describedby': refusal?.action === action ? `${id}-${action}-error` : undefined,
+    'aria-pressed': recording === action,
+    onClick: () => {
+      setRecording(action)
+      setRefusal(null)
+    },
+    onKeyDown: (event) => onKeyDown(action, event),
+    onBlur: () => {
+      if (recording === action) stop()
+    }
+  })
+  const errorLine = (action: Recording, testId: string): React.JSX.Element | null =>
+    refusal?.action === action ? (
+      <p
+        className="field-error shortcut-error"
+        id={`${id}-${action}-error`}
+        role="alert"
+        data-testid={testId}
+      >
+        {refusal.message}
+      </p>
+    ) : null
+
+  const globalRecording = recording === 'global'
+  const globalRefused = refusal?.action === 'global'
+  const failed =
+    globalShortcut !== undefined && registration === 'failed' && !globalRecording && !globalRefused
   return (
-    <fieldset className="field shortcuts" data-testid="settings-shortcuts">
-      <legend className="visually-hidden">Shortcuts</legend>
-      {SHORTCUT_ACTIONS.map((action) => {
-        const labelId = `${id}-${action}`
-        const errorId = `${id}-${action}-error`
-        const isRecording = recording === action
-        const error = refusal?.action === action ? refusal.message : null
-        return (
+    <>
+      <fieldset className="field shortcuts" data-testid="settings-shortcuts-global">
+        <legend>Global</legend>
+        <div className="shortcut-row">
+          <span id={`${id}-global`} className="shortcut-label">
+            Show or hide Drovr (from any app)
+          </span>
+          <button
+            {...fieldProps('global')}
+            {...(failed && { 'aria-describedby': `${id}-global-failed` })}
+            data-testid="settings-shortcut-global"
+          >
+            <span id={`${id}-global-value`}>
+              {globalRecording && !globalRefused ? (
+                'Press a shortcut…'
+              ) : globalShortcut === undefined ? (
+                'None'
+              ) : (
+                <ShortcutKeys shortcut={globalShortcut} platform={platform} />
+              )}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-small shortcut-reset"
+            data-testid="settings-shortcut-clear-global"
+            aria-label="Clear Show or hide Drovr"
+            disabled={globalShortcut === undefined}
+            onClick={() => {
+              if (globalRecording) stop()
+              setRefusal(null)
+              settingsStore.update({ globalShortcut: undefined })
+              readRegistration()
+            }}
+          >
+            Clear
+          </button>
+          {errorLine('global', 'settings-shortcut-error-global')}
+          {failed && (
+            <p
+              className="field-error shortcut-error"
+              id={`${id}-global-failed`}
+              role="alert"
+              data-testid="settings-global-shortcut-failed"
+            >
+              {GLOBAL_SHORTCUT_FAILED}
+            </p>
+          )}
+        </div>
+        <div className="shortcut-row">
+          <label className="shortcut-label" htmlFor={`${id}-open-waiting`}>
+            Open the next waiting card
+          </label>
+          <span className="switch shortcut-switch">
+            <input
+              id={`${id}-open-waiting`}
+              type="checkbox"
+              role="switch"
+              data-testid="settings-open-waiting-on-show"
+              checked={openWaitingOnShow}
+              onChange={(e) => settingsStore.update({ openWaitingOnShow: e.target.checked })}
+            />
+            <span className="switch-track" aria-hidden="true" />
+          </span>
+        </div>
+      </fieldset>
+      {/* Named Shortcuts for assistive tech, as before the Global group (#31). */}
+      <fieldset className="field shortcuts" data-testid="settings-shortcuts" aria-label="Shortcuts">
+        <legend>In Drovr</legend>
+        {SHORTCUT_ACTIONS.map((action) => (
           <div key={action} className="shortcut-row">
-            <span id={labelId} className="shortcut-label">
+            <span id={`${id}-${action}`} className="shortcut-label">
               {SHORTCUT_LABELS[action]}
             </span>
-            <button
-              type="button"
-              className="shortcut-field"
-              data-testid={`settings-shortcut-${action}`}
-              data-recording={isRecording}
-              aria-labelledby={`${labelId} ${id}-${action}-value`}
-              aria-describedby={error !== null ? errorId : undefined}
-              aria-pressed={isRecording}
-              onClick={() => {
-                setRecording(action)
-                setRefusal(null)
-              }}
-              onKeyDown={(event) => onKeyDown(action, event)}
-              onBlur={() => {
-                if (isRecording) stop()
-              }}
-            >
+            <button {...fieldProps(action)} data-testid={`settings-shortcut-${action}`}>
               <span id={`${id}-${action}-value`}>
-                {isRecording && error === null ? (
+                {recording === action && refusal?.action !== action ? (
                   'Press a shortcut…'
                 ) : (
                   <ShortcutKeys shortcut={keymap[action]} platform={platform} />
@@ -1218,7 +1350,7 @@ function ShortcutsSection({
               aria-label={`Reset ${SHORTCUT_LABELS[action]}`}
               disabled={keymap[action] === defaults[action]}
               onClick={() => {
-                if (isRecording) stop()
+                if (recording === action) stop()
                 // The default may be another action's shortcut now: refused, the value stays.
                 const message = resetRefusal(action, keymap, platform, globalShortcut)
                 if (message !== null) {
@@ -1231,19 +1363,10 @@ function ShortcutsSection({
             >
               Reset
             </button>
-            {error !== null && (
-              <p
-                className="field-error shortcut-error"
-                id={errorId}
-                role="alert"
-                data-testid={`settings-shortcut-error-${action}`}
-              >
-                {error}
-              </p>
-            )}
+            {errorLine(action, `settings-shortcut-error-${action}`)}
           </div>
-        )
-      })}
-    </fieldset>
+        ))}
+      </fieldset>
+    </>
   )
 }

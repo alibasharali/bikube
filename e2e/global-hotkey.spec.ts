@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen } from './card-view'
@@ -262,4 +262,184 @@ test('AC8: a bad global shortcut in the file registers nothing', async () => {
     await app!.close()
     app = undefined
   }
+})
+
+// The Settings row (#51 D5, D6, D8): the Global group in Settings > Shortcuts. The ACs name Linux
+// keys.
+
+const FAILED =
+  "Couldn't register this shortcut: another app may use it, or the desktop doesn't allow global shortcuts"
+
+const settingsDialog = (): Locator => page.getByTestId('settings-dialog')
+const globalField = (): Locator => settingsDialog().getByTestId('settings-shortcut-global')
+const globalClear = (): Locator => settingsDialog().getByTestId('settings-shortcut-clear-global')
+const globalError = (): Locator => settingsDialog().getByTestId('settings-shortcut-error-global')
+const globalFailed = (): Locator => settingsDialog().getByTestId('settings-global-shortcut-failed')
+const openWaiting = (): Locator => settingsDialog().getByTestId('settings-open-waiting-on-show')
+
+async function openShortcuts(): Promise<void> {
+  await page.getByTestId('settings-open').click()
+  await settingsDialog().getByTestId('settings-section-shortcuts').click()
+}
+
+/** The settings file's `settings`, or null while there is none. */
+function savedSettings(dataDir: string): Record<string, unknown> | null {
+  const file = join(dataDir, 'drovr-settings.json')
+  if (!existsSync(file)) return null
+  return (JSON.parse(readFileSync(file, 'utf8')) as { settings: Record<string, unknown> }).settings
+}
+
+test.describe('the Settings row', () => {
+  test.skip(darwin, 'the ACs name the Linux keys')
+
+  test('AC1: off by default, the row reads None with Clear disabled and the switch on', async () => {
+    ;({ app, page } = await launchApp())
+    expect(await isRegistered(ACCELERATOR)).toBe(false)
+    expect(await shortcutState()).toBe('none')
+    await openShortcuts()
+    await expect(globalField()).toHaveText('None')
+    await expect(globalClear()).toBeDisabled()
+    await expect(openWaiting()).toBeChecked()
+    await expect(globalFailed()).toHaveCount(0)
+  })
+
+  test('AC2: a recorded shortcut is saved and registered, across a restart; Clear removes it', async () => {
+    const dataDir = newDataDir()
+    ;({ app, page } = await launchApp({ dataDir }))
+    await openShortcuts()
+    await globalField().click()
+    await expect(globalField()).toHaveText('Press a shortcut…')
+    await page.keyboard.press('Control+Alt+Shift+D')
+    await expect(globalField()).toHaveText(SHORTCUT)
+    await expect(globalField()).toHaveAttribute('data-recording', 'false')
+    await expect(globalClear()).toBeEnabled()
+    await expect.poll(() => savedSettings(dataDir)?.['globalShortcut']).toBe(SHORTCUT)
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(true)
+
+    await app!.close()
+    ;({ app, page } = await launchApp({ dataDir }))
+    expect(await isRegistered(ACCELERATOR)).toBe(true)
+    await openShortcuts()
+    await expect(globalField()).toHaveText(SHORTCUT)
+    await globalClear().click()
+    await expect(globalField()).toHaveText('None')
+    await expect(globalClear()).toBeDisabled()
+    await expect.poll(() => 'globalShortcut' in (savedSettings(dataDir) ?? {})).toBe(false)
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(false)
+  })
+
+  test('AC3: the Global field refuses a key alone, a fixed or in-app shortcut; in-app fields refuse it', async () => {
+    const dataDir = newDataDir()
+    ;({ app, page } = await launchApp({ dataDir }))
+    await openShortcuts()
+    await globalField().click()
+    const refusals: [string, string][] = [
+      ['d', 'Use Ctrl or Alt with a key'],
+      ['Control+Shift+P', 'Already used by Command palette'],
+      ['Control+Shift+C', 'Already used by Copy']
+    ]
+    for (const [press, message] of refusals) {
+      await page.keyboard.press(press)
+      await expect(globalError()).toHaveText(message)
+      await expect(globalField()).toHaveText('None')
+      await expect(globalField()).toHaveAttribute('data-recording', 'true')
+    }
+    await page.keyboard.press('Escape')
+    await expect(globalError()).toHaveCount(0)
+    await expect(globalField()).toHaveText('None')
+    await page.waitForTimeout(300)
+    expect(savedSettings(dataDir)).toBe(null)
+
+    await globalField().click()
+    await page.keyboard.press('Control+Alt+Shift+D')
+    await expect(globalField()).toHaveText(SHORTCUT)
+    const splitRight = settingsDialog().getByTestId('settings-shortcut-splitRight')
+    await splitRight.click()
+    await page.keyboard.press('Control+Alt+Shift+D')
+    await expect(settingsDialog().getByTestId('settings-shortcut-error-splitRight')).toHaveText(
+      'Already used by Show or hide Drovr'
+    )
+    await expect(splitRight).toHaveAttribute('data-recording', 'true')
+  })
+
+  test('AC6: recording any shortcut field suspends the global shortcut until it ends', async () => {
+    await launchWith({ globalShortcut: SHORTCUT })
+    expect(await isRegistered(ACCELERATOR)).toBe(true)
+    await openShortcuts()
+
+    // The Global field, ended by Escape.
+    await globalField().click()
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(false)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(true)
+
+    // An in-app field, ended by a new shortcut.
+    const splitRight = settingsDialog().getByTestId('settings-shortcut-splitRight')
+    await splitRight.click()
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(false)
+    await page.keyboard.press('Control+Alt+Shift+R')
+    await expect(splitRight).toHaveText('Ctrl+Alt+Shift+R')
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(true)
+
+    // The Global field, ended by a new global shortcut: that one is registered.
+    await globalField().click()
+    await expect.poll(() => isRegistered(ACCELERATOR)).toBe(false)
+    await page.keyboard.press('Control+Alt+Shift+K')
+    await expect(globalField()).toHaveText('Ctrl+Alt+Shift+K')
+    await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(true)
+    expect(await isRegistered(ACCELERATOR)).toBe(false)
+
+    // Ended by the window losing focus: the field stops recording too. Playwright emulates the
+    // page's focus, so the page's own `blur` comes from the test, beside main's window blur.
+    await globalField().click()
+    await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(false)
+    await blur()
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await expect(globalField()).toHaveAttribute('data-recording', 'false')
+    await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(true)
+
+    // Ended by closing Settings.
+    await page.bringToFront()
+    await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.focus())
+    await globalField().click()
+    await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(false)
+    await settingsDialog().getByTestId('settings-done').click()
+    await expect(settingsDialog()).toHaveCount(0)
+    await expect.poll(() => isRegistered('Control+Alt+Shift+K')).toBe(true)
+  })
+
+  test('AC7: a shortcut the OS refuses stays saved and the row says why', async () => {
+    const dataDir = newDataDir()
+    ;({ app, page } = await launchApp({ dataDir }))
+    // Taken already: Electron refuses an accelerator registered once.
+    await app.evaluate(({ globalShortcut }, a) => {
+      globalShortcut.register(a, () => {})
+    }, ACCELERATOR)
+    await openShortcuts()
+    await globalField().click()
+    await page.keyboard.press('Control+Alt+Shift+D')
+    await expect(globalField()).toHaveText(SHORTCUT)
+    await expect(globalFailed()).toHaveText(FAILED)
+    expect(await shortcutState()).toBe('failed')
+    await expect.poll(() => savedSettings(dataDir)?.['globalShortcut']).toBe(SHORTCUT)
+
+    // Read when Settings opens too.
+    await settingsDialog().getByTestId('settings-done').click()
+    await openShortcuts()
+    await expect(globalFailed()).toHaveText(FAILED)
+
+    await globalClear().click()
+    await expect(globalFailed()).toHaveCount(0)
+  })
+
+  test('the Open the next waiting card switch is saved', async () => {
+    const dataDir = newDataDir()
+    ;({ app, page } = await launchApp({ dataDir }))
+    await openShortcuts()
+    await openWaiting().click()
+    await expect(openWaiting()).not.toBeChecked()
+    await expect.poll(() => savedSettings(dataDir)?.['openWaitingOnShow']).toBe(false)
+    await openWaiting().click()
+    await expect.poll(() => 'openWaitingOnShow' in (savedSettings(dataDir) ?? {})).toBe(false)
+  })
 })

@@ -1133,6 +1133,11 @@ button {
   grid-column: 2 / -1;
 }
 
+/* The global shortcut's Open the next waiting card switch (#51 D5), under its field. */
+.shortcut-switch {
+  justify-self: start;
+}
+
 .field-hint {
   margin: 0;
   color: var(--text-muted);

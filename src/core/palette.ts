@@ -101,6 +101,7 @@ export type PaletteAction =
   | { id: 'newCard' }
   | { id: 'openShell' }
   | { id: 'nextWaiting' }
+  | { id: 'zoomPane' }
   | { id: 'newWorkspace' }
   | { id: 'settings' }
   | { id: 'theme'; theme: Theme }
@@ -136,6 +137,8 @@ export interface OpenView {
   extraPaneFocused: boolean
   /** Whether the focused pane has a terminal screen to search (Find does nothing without, #35 D12). */
   focusedPaneHasScreen: boolean
+  /** Whether the view shows only its focused pane (#48 D1). */
+  zoomed?: boolean
 }
 
 export interface PaletteInput {
@@ -221,6 +224,8 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   if (view.running) rows.push(keymapRow('closeCard', keymap))
   rows.push(keymapRow('togglePanel', keymap))
   if (view.focusedPaneHasScreen) rows.push(keymapRow('find', keymap))
+  // Whenever the view has panes to zoom, or is zoomed (#48 D7).
+  if (view.paneCount > 1 || view.zoomed) rows.push(keymapRow('zoomPane', keymap))
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)

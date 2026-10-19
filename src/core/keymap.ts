@@ -16,7 +16,8 @@ export const SHORTCUT_ACTIONS = [
   'togglePanel',
   'find',
   'palette',
-  'nextWaiting'
+  'nextWaiting',
+  'zoomPane'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 
@@ -40,7 +41,9 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   togglePanel: 'Alt+Cmd+B',
   find: 'Cmd+F',
   palette: 'Cmd+K',
-  nextWaiting: 'Cmd+J'
+  nextWaiting: 'Cmd+J',
+  // Ghostty's and iTerm2's key; not Shift+Cmd+Z, redo in editors (#48 D3).
+  zoomPane: 'Shift+Cmd+Enter'
 })
 
 const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
@@ -57,7 +60,8 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   // Not Ctrl+K: it stays the shell's (readline's kill-line) (#40 D1).
   palette: 'Ctrl+Shift+P',
   // Not Ctrl+J: it stays the shell's (a newline) (#41 D3).
-  nextWaiting: 'Ctrl+Shift+J'
+  nextWaiting: 'Ctrl+Shift+J',
+  zoomPane: 'Ctrl+Shift+Enter'
 })
 
 /** This OS's default shortcuts (D6). */
@@ -212,7 +216,8 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   togglePanel: 'Toggle panel',
   find: 'Find',
   palette: 'Command palette',
-  nextWaiting: 'Next waiting card'
+  nextWaiting: 'Next waiting card',
+  zoomPane: 'Zoom pane'
 })
 
 /** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */

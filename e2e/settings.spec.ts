@@ -2,7 +2,14 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
+import {
+  backToBoard,
+  expectCardOpen,
+  expectStatusOnBoard,
+  SHORTCUTS,
+  splitRight,
+  zoomPane
+} from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -829,4 +836,49 @@ test('the Font family list offers installed fonts; a pick applies at once and is
   await page.keyboard.press('Escape')
   await page.keyboard.press(SHORTCUT)
   await expect(list).toHaveValue(font)
+})
+
+test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then zooms, and Reset', async () => {
+  const dataDir = newDataDir()
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  const file = join(dataDir, 'drovr-settings.json')
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+  const chip = page.getByTestId('pane-zoom')
+  const defaultText = process.platform === 'darwin' ? 'Shift+Cmd+Enter' : 'Ctrl+Shift+Enter'
+  await alphaWithApi(page)
+  await splitRight(page)
+  await expect(page.getByTestId('pane')).toHaveCount(2)
+
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await expect(dialog(page).getByRole('group', { name: 'Shortcuts' })).toContainText('Zoom pane')
+  const field = shortcutField(page, 'zoomPane')
+  await expect(field).toHaveText(defaultText)
+  await expect(shortcutReset(page, 'zoomPane')).toBeDisabled()
+  await field.click()
+  await page.keyboard.press('Control+Alt+Z')
+  await expect(field).toHaveText('Ctrl+Alt+Z')
+  await expect.poll(saved).toContain('"zoomPane":"Ctrl+Alt+Z"')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+
+  await page.keyboard.press('Control+Alt+Z')
+  await expect(chip).toHaveText('Zoomed · 2 panes')
+  await page.keyboard.press('Control+Alt+Z')
+  await expect(chip).toHaveCount(0)
+  await zoomPane(page)
+  await page.waitForTimeout(300)
+  await expect(chip).toHaveCount(0)
+
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await shortcutReset(page, 'zoomPane').click()
+  await expect(field).toHaveText(defaultText)
+  await expect.poll(saved).not.toContain('zoomPane')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+  await page.keyboard.press(SHORTCUTS.zoomPane)
+  await expect(chip).toHaveText('Zoomed · 2 panes')
 })

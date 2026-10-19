@@ -3,7 +3,7 @@
  * (#40 D6) through the same code: the card view registers what runs them while it is shown.
  */
 export type CardViewAction =
-  'back' | 'splitRight' | 'splitDown' | 'closePane' | 'closeCard' | 'find'
+  'back' | 'splitRight' | 'splitDown' | 'closePane' | 'closeCard' | 'find' | 'zoomPane'
 
 const CARD_VIEW_ACTIONS: readonly string[] = [
   'back',
@@ -11,7 +11,8 @@ const CARD_VIEW_ACTIONS: readonly string[] = [
   'splitDown',
   'closePane',
   'closeCard',
-  'find'
+  'find',
+  'zoomPane'
 ] satisfies CardViewAction[]
 
 export const isCardViewAction = (action: string | null): action is CardViewAction =>

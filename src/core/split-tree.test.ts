@@ -7,6 +7,7 @@ import {
   paneIds,
   removePane,
   splitFocused,
+  toggleZoom,
   type PaneLayout
 } from './split-tree'
 
@@ -89,5 +90,49 @@ describe('focusPane', () => {
     expect(focusPane(layout, MAIN_PANE)).toEqual({ tree: layout.tree, focused: MAIN_PANE })
     expect(focusPane(layout, 'p2')).toBe(layout)
     expect(focusPane(layout, 'nope')).toBe(layout)
+  })
+})
+
+describe('toggleZoom (#48 D1, AC8)', () => {
+  it('returns the same layout for a single pane', () => {
+    const layout = initialLayout()
+    expect(toggleZoom(layout)).toBe(layout)
+  })
+})
+
+describe('zoom and the other layout changes (#48 D1, D4, AC8)', () => {
+  it('zooms a split layout and gives back an equal tree and focus when unzoomed', () => {
+    const layout = threePanes()
+    const zoomed = toggleZoom(layout)
+    expect(zoomed.zoomed).toBe(true)
+    expect(zoomed.tree).toEqual(layout.tree)
+    expect(zoomed.focused).toBe('p2')
+    expect(toggleZoom(zoomed)).toEqual(layout)
+  })
+
+  it('ends the zoom when a zoomed layout is split, with the new pane focused', () => {
+    const layout = splitFocused(toggleZoom(threePanes()), 'right', 'p3')
+    expect(layout.zoomed).toBeUndefined()
+    expect(layout.focused).toBe('p3')
+    expect(paneIds(layout.tree)).toEqual([MAIN_PANE, 'p1', 'p2', 'p3'])
+  })
+
+  it('ends the zoom when the zoomed (focused) pane is removed', () => {
+    const layout = removePane(toggleZoom(threePanes()), 'p2')
+    expect(layout.zoomed).toBeUndefined()
+    expect(layout.focused).toBe(MAIN_PANE)
+  })
+
+  it('keeps the zoom when a hidden pane goes and more than one pane remains', () => {
+    const layout = removePane(toggleZoom(threePanes()), 'p1')
+    expect(layout.zoomed).toBe(true)
+    expect(layout.focused).toBe('p2')
+    expect(paneIds(layout.tree)).toEqual([MAIN_PANE, 'p2'])
+  })
+
+  it('ends the zoom when a hidden pane goes and only one pane remains', () => {
+    const two = splitFocused(initialLayout(), 'right', 'p1')
+    const layout = removePane(toggleZoom(focusPane(two, MAIN_PANE)), 'p1')
+    expect(layout).toEqual(initialLayout())
   })
 })

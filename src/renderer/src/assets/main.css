@@ -1815,6 +1815,37 @@ button {
   display: flex;
 }
 
+/* Zoom (#48 D1, D2, D5): hidden panes stay mounted but take no space; the shown one is unoutlined */
+.pane[hidden],
+.pane-split[hidden] {
+  display: none;
+}
+
+.card-view-terminal[data-zoomed='true'] .pane[data-focused='true'] {
+  outline: none;
+}
+
+.pane-zoom {
+  position: absolute;
+  top: var(--space-1);
+  left: var(--space-1);
+  z-index: 10;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.pane-zoom:hover,
+.pane-zoom:focus-visible {
+  color: var(--text);
+}
+
 .pane-close {
   position: absolute;
   top: var(--space-1);

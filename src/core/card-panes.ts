@@ -14,6 +14,7 @@ import {
   initialLayout,
   removePane,
   splitFocused,
+  toggleZoom,
   type PaneLayout,
   type SplitDirection
 } from './split-tree'
@@ -129,6 +130,11 @@ export class CardPanes<S extends CardScreen> {
   /** Focuses one of the card's panes (D3). */
   focus(cardId: string, paneId: string): void {
     this.setLayout(cardId, focusPane(this.layout(cardId), paneId))
+  }
+
+  /** Zooms the card's focused pane, or ends its zoom (#48 D1); one pane never zooms. */
+  toggleZoom(cardId: string): void {
+    this.setLayout(cardId, toggleZoom(this.layout(cardId)))
   }
 
   /**

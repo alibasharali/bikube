@@ -43,6 +43,14 @@ interface FindProps {
 }
 
 /**
+ * The view's zoom (#48 D1, D5): undefined unless zoomed, else its pane count for the chip. While
+ * zoomed only the focused pane shows; the others stay mounted, hidden (D2).
+ */
+interface ZoomProps {
+  zoomedPanes?: number
+}
+
+/**
  * One pane (#11 D1, D3, D5): its own screen, fitted to its area, focused by a click; an extra
  * pane has a close button in its top-right corner, shown while the pointer is over the pane or
  * the button has keyboard focus (#31 D3). The find bar shows in the pane it searches, left of
@@ -54,13 +62,15 @@ function Pane({
   screen,
   focused,
   find,
-  onCloseFind
+  onCloseFind,
+  zoomedPanes
 }: {
   cardId: string
   paneId: string
   screen: XtermScreen | undefined
   focused: boolean
-} & FindProps): React.JSX.Element {
+} & FindProps &
+  ZoomProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => screen?.attach(hostRef.current!), [screen])
   useEffect(() => {
@@ -71,6 +81,7 @@ function Pane({
       className="pane"
       data-testid="pane"
       data-focused={focused}
+      hidden={zoomedPanes !== undefined && !focused}
       onMouseDownCapture={(event) => {
         // Closing a pane isn't clicking into it: the focus stays where it was (D3). Using the
         // find bar is: the pane it searches is the focused one (#35 D3, D10).
@@ -79,6 +90,21 @@ function Pane({
       }}
     >
       <div className="pane-terminal" ref={hostRef} />
+      {zoomedPanes !== undefined && focused && (
+        <button
+          type="button"
+          className="pane-zoom"
+          data-testid="pane-zoom"
+          title="Show all panes"
+          onClick={() => {
+            // Ends the zoom; the keyboard goes back to the pane's terminal (#48 D5).
+            cardPanes().toggleZoom(cardId)
+            focusScreen(screen)
+          }}
+        >
+          Zoomed · {zoomedPanes} panes
+        </button>
+      )}
       {screen && find?.paneId === paneId && (
         <FindBar
           screen={screen}
@@ -117,7 +143,8 @@ function PaneTree({
   cardId: string
   tree: SplitTree
   focused: string
-} & FindProps): React.JSX.Element {
+} & FindProps &
+  ZoomProps): React.JSX.Element {
   if (tree.kind === 'leaf') {
     return (
       <Pane
@@ -129,8 +156,10 @@ function PaneTree({
       />
     )
   }
+  // While zoomed, a split without the focused pane takes no space (#48 D1).
+  const hidden = findProps.zoomedPanes !== undefined && !paneIds(tree).includes(focused)
   return (
-    <div className={`pane-split pane-split-${tree.direction}`}>
+    <div className={`pane-split pane-split-${tree.direction}`} hidden={hidden}>
       <PaneTree cardId={cardId} tree={tree.first} focused={focused} {...findProps} />
       <PaneTree cardId={cardId} tree={tree.second} focused={focused} {...findProps} />
     </div>
@@ -186,7 +215,10 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
           setFind((open) => ({ paneId: focusedPane, request: (open?.request ?? 0) + 1 }))
         }
       }
-      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4).
+      // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
+      else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
+      // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); it ends a
+      // zoom (#48 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
         if (splittable) cardPanes().split(card, action === 'splitRight' ? 'right' : 'down')
       } else if (action === 'closePane' && focusedPane !== MAIN_PANE) {
@@ -224,13 +256,18 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
   return (
     <div className="card-layout">
       <section className="card-view" data-testid="card-view" aria-label={card.title}>
-        <div className="card-view-terminal" data-testid="card-terminal">
+        <div
+          className="card-view-terminal"
+          data-testid="card-terminal"
+          data-zoomed={layout.zoomed === true}
+        >
           <PaneTree
             cardId={card.id}
             tree={layout.tree}
             focused={layout.focused}
             find={find}
             onCloseFind={closeFind}
+            zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
           />
         </div>
         {closing && (

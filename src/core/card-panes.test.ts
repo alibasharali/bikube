@@ -456,3 +456,27 @@ describe('CardPanes typing while a pane is starting', () => {
     expect(api.writes).toEqual([])
   })
 })
+
+describe('CardPanes.toggleZoom (#48 D1, D4)', () => {
+  it('zooms the focused pane and ends it, telling subscribers; a single pane never zooms', () => {
+    const changes: number[] = []
+    panes.subscribe(API.id, () => changes.push(1))
+    panes.toggleZoom(API.id)
+    expect(panes.layout(API.id).zoomed).toBeUndefined()
+    expect(changes).toEqual([])
+
+    const id = panes.split(API, 'right')!
+    panes.toggleZoom(API.id)
+    expect(panes.layout(API.id)).toMatchObject({ focused: id, zoomed: true })
+    panes.toggleZoom(API.id)
+    expect(panes.layout(API.id).zoomed).toBeUndefined()
+    expect(changes).toHaveLength(3)
+  })
+
+  it('ends the zoom when the main shell stops (#11 D6)', () => {
+    panes.split(API, 'right')
+    panes.toggleZoom(API.id)
+    panes.dispose(API.id)
+    expect(panes.layout(API.id).zoomed).toBeUndefined()
+  })
+})

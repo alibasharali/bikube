@@ -21,6 +21,11 @@ export interface PaneLayout {
   tree: SplitTree
   /** Exactly one pane is focused (D3). */
   focused: string
+  /**
+   * Set while the view shows only the focused pane, filling the pane area (#48 D1); the tree is
+   * unchanged, so unzooming shows the layout from before. Never set with one pane.
+   */
+  zoomed?: true
 }
 
 /** Just the main pane, focused: a card's view when it first opens for a start (D3). */
@@ -40,7 +45,8 @@ export function canSplit(layout: PaneLayout): boolean {
 
 /**
  * Splits the focused pane into two equal halves, the new pane `id` to its right or below it,
- * and focuses the new pane (D2, D3). At 4 panes it returns `layout` itself.
+ * and focuses the new pane (D2, D3), ending a zoom (#48 D4). At 4 panes it returns `layout`
+ * itself.
  */
 export function splitFocused(
   layout: PaneLayout,
@@ -61,13 +67,13 @@ export function splitFocused(
 /** Focuses pane `id` (D3); an unknown pane, or the focused one, returns `layout` itself. */
 export function focusPane(layout: PaneLayout, id: string): PaneLayout {
   if (layout.focused === id || !paneIds(layout.tree).includes(id)) return layout
-  return { tree: layout.tree, focused: id }
+  return { ...layout, focused: id }
 }
 
 /**
  * Removes extra pane `id`; its sibling in the tree takes the freed space (D5). The main pane
- * comes back into focus if `id` was focused (D3). The main pane, or an unknown one, returns
- * `layout` itself.
+ * comes back into focus if `id` was focused (D3), ending a zoom (#48 D4). The main pane, or an
+ * unknown one, returns `layout` itself.
  */
 export function removePane(layout: PaneLayout, id: string): PaneLayout {
   if (id === MAIN_PANE || !paneIds(layout.tree).includes(id)) return layout
@@ -77,5 +83,19 @@ export function removePane(layout: PaneLayout, id: string): PaneLayout {
     if (tree.second.kind === 'leaf' && tree.second.id === id) return tree.first
     return { ...tree, first: remove(tree.first), second: remove(tree.second) }
   }
-  return { tree: remove(layout.tree), focused: layout.focused === id ? MAIN_PANE : layout.focused }
+  const tree = remove(layout.tree)
+  if (layout.focused === id) return { tree, focused: MAIN_PANE }
+  // A hidden pane going keeps the zoom while another pane is left to hide (#48 D1, D4).
+  const zoomed = layout.zoomed && paneIds(tree).length > 1
+  return zoomed ? { tree, focused: layout.focused, zoomed } : { tree, focused: layout.focused }
+}
+
+/**
+ * Zooms the focused pane, or ends the zoom (#48 D1). A single pane is never zoomed: it returns
+ * `layout` itself.
+ */
+export function toggleZoom(layout: PaneLayout): PaneLayout {
+  if (layout.zoomed) return { tree: layout.tree, focused: layout.focused }
+  if (paneIds(layout.tree).length < 2) return layout
+  return { tree: layout.tree, focused: layout.focused, zoomed: true }
 }

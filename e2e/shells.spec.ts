@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen } from './card-view'
+import { backToBoard, expectCardOpen, splitRight, zoomPane } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -171,4 +171,25 @@ test('the title bar shows the workspace folder, and the board has no header of i
   const options = await page.getByTestId('new-card-startup').locator('option').allTextContents()
   expect(options).not.toContain('Shell')
   expect(options[0]).toBe('Claude Code')
+})
+
+test('#48 AC7: the Default shell split into 2 panes zooms its focused pane and restores it', async () => {
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Default')
+  const panes = page.getByTestId('card-view').getByTestId('pane')
+  const chip = page.getByTestId('card-view').getByTestId('pane-zoom')
+  await expect(panes).toHaveCount(1)
+  await splitRight(page)
+  await expect(panes).toHaveCount(2)
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
+
+  await zoomPane(page)
+  await expect(chip).toHaveText('Zoomed · 2 panes')
+  await expect(panes.nth(0)).toBeHidden()
+  await expect(panes.nth(1)).toBeVisible()
+  await zoomPane(page)
+  await expect(chip).toHaveCount(0)
+  await expect(panes.nth(0)).toBeVisible()
+  await expect(panes.nth(1)).toBeVisible()
+  await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
 })

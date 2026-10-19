@@ -253,6 +253,24 @@ describe('paletteItems actions (#40 D6)', () => {
     ])
   })
 
+  it('offers Zoom pane with its shortcut only when split or zoomed (#48 D7)', () => {
+    expect(labels(input(state, { view: cardView }))).not.toContain('Zoom pane')
+    const split = { ...cardView, paneCount: 3, extraPaneFocused: true }
+    const rows = paletteItems(input(state, { view: split })).actions
+    expect(rows.map((r) => r.label).slice(0, 8)).toEqual([
+      'Back to board',
+      'Split right',
+      'Split down',
+      'Close pane',
+      'Close card',
+      'Toggle panel',
+      'Find',
+      'Zoom pane'
+    ])
+    expect(rows[7]).toMatchObject({ action: { id: 'zoomPane' }, shortcut: 'Ctrl+Shift+Enter' })
+    expect(labels(input(state, { view: { ...cardView, zoomed: true } }))).toContain('Zoom pane')
+  })
+
   it('offers only the app rows without workspaces, every theme but the current one', () => {
     expect(labels(input({ workspaces: [], activeId: null }, { theme: 'dark' }))).toEqual([
       'New workspace',

@@ -2,7 +2,7 @@
 item: 60
 type: feature
 title: "Select a command's output (shell integration marks)"
-status: draft
+status: approved
 branch: claude/60-select-command-output
 ---
 

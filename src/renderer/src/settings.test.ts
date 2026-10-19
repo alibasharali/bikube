@@ -90,4 +90,19 @@ describe('createSettingsStore (#10 D6)', () => {
     expect(store.update({ shortcuts: { splitRight: 'Ctrl+Shift+B' } })).toBe(false)
     expect(save).toHaveBeenCalledTimes(2)
   })
+
+  it('sets and clears the global shortcut, saving each, and refuses an in-app one (#51 D5, D9)', () => {
+    const save = vi.fn()
+    const store = createSettingsStore({ ...DEFAULT_SETTINGS }, save, 'linux')
+    expect(store.update({ globalShortcut: 'Ctrl+Alt+Shift+D' })).toBe(true)
+    expect(save).toHaveBeenLastCalledWith({
+      ...DEFAULT_SETTINGS,
+      globalShortcut: 'Ctrl+Alt+Shift+D'
+    })
+    expect(store.update({ globalShortcut: undefined })).toBe(true)
+    expect(store.get().globalShortcut).toBeUndefined()
+    expect(save).toHaveBeenLastCalledWith(DEFAULT_SETTINGS)
+    expect(store.update({ globalShortcut: 'Ctrl+Shift+P' })).toBe(false)
+    expect(save).toHaveBeenCalledTimes(2)
+  })
 })

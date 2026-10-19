@@ -1,6 +1,7 @@
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
+import type { GlobalShortcutState } from '../core/global-shortcut'
 import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
@@ -51,6 +52,9 @@ export const IPC = {
   appHome: 'app:home',
   appReveal: 'app:reveal',
   appQuitting: 'app:quitting',
+  appGlobalShow: 'app:globalShow',
+  globalShortcutState: 'globalShortcut:state',
+  globalShortcutSuspend: 'globalShortcut:suspend',
   worktreeInfo: 'worktree:info',
   worktreeCreate: 'worktree:create',
   worktreeDirty: 'worktree:dirty',
@@ -354,6 +358,22 @@ export interface AppApi {
    * unsubscribe function.
    */
   onQuitting(listener: () => void): () => void
+  /**
+   * `listener` is called when the global shortcut brought the window forward and Open the next
+   * waiting card is on (#51 D4). Returns an unsubscribe function.
+   */
+  onGlobalShow(listener: () => void): () => void
+}
+
+/** The global shortcut registered by main (#51 D8); its text is saved with the settings. */
+export interface GlobalShortcutApi {
+  /** Whether the saved global shortcut is registered with the OS, or was refused. */
+  state(): Promise<GlobalShortcutState>
+  /**
+   * Unregisters it while a shortcut field records (true), and registers it again (false) (D6);
+   * main also registers it again when the window loses focus.
+   */
+  suspend(suspended: boolean): void
 }
 
 /** App updates from GitHub Releases, run by main (`src/main/updates.ts`). */
@@ -402,6 +422,7 @@ export interface DrovrApi {
   board: BoardApi
   sync: SyncApi
   app: AppApi
+  globalShortcut: GlobalShortcutApi
   worktree: WorktreeApi
   git: GitApi
   files: FilesApi

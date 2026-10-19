@@ -12,6 +12,7 @@ import { registerAttention } from './attention'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerFiles } from './files'
+import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
 import { registerGit } from './git'
 import { registerLinks } from './links'
 import { registerPorts } from './ports'
@@ -95,6 +96,9 @@ const userDataDir =
   process.env['DROVR_USER_DATA_DIR'] ??
   (app.isPackaged ? undefined : join(app.getPath('appData'), 'drovr-dev'))
 if (userDataDir) app.setPath('userData', userDataDir)
+
+// A Wayland desktop with the portal can grant the global shortcut (#51 D8); set before ready.
+enableGlobalShortcutsPortal()
 
 // One instance per data directory (#8 D12): a second launch hands over to the running one and
 // exits before it loads or saves anything.
@@ -216,6 +220,8 @@ function startApp(): void {
     const closeBoard = registerBoard(socketPath, terminals, sshBoard)
     app.on('will-quit', closeBoard)
     settings.applyTheme()
+    // The saved global shortcut, registered before the window opens (#51 D8).
+    registerGlobalShortcut(settings, () => createWindow(settings))
     installAppMenu(() => updates.check())
     if (hiddenForTests) app.dock?.hide()
     createWindow(settings)

@@ -113,7 +113,16 @@ const api: DrovrApi = {
       const handler = (): void => listener()
       ipcRenderer.on(IPC.appQuitting, handler)
       return () => ipcRenderer.removeListener(IPC.appQuitting, handler)
+    },
+    onGlobalShow: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on(IPC.appGlobalShow, handler)
+      return () => ipcRenderer.removeListener(IPC.appGlobalShow, handler)
     }
+  },
+  globalShortcut: {
+    state: () => ipcRenderer.invoke(IPC.globalShortcutState),
+    suspend: (suspended) => ipcRenderer.send(IPC.globalShortcutSuspend, suspended)
   },
   terminal: {
     spawn: (cols, rows, cwd, cardId, host = null) =>

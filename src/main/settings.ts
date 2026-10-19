@@ -36,6 +36,12 @@ export interface MainSettings {
   keepOutput(): boolean
   /** Calls `listener` each time a settings save turns Keep output off (#46 D8). */
   onKeepOutputOff(listener: () => void): void
+  /** The global shortcut's D7 text, undefined when none is set (#51 D9). */
+  globalShortcut(): string | undefined
+  /** The Open the next waiting card switch (#51 D4). */
+  openWaitingOnShow(): boolean
+  /** Calls `listener` with the global shortcut after each valid settings save (#51 D8). */
+  onGlobalShortcut(listener: (shortcut: string | undefined) => void): void
   /** The sync folder kept in the settings file (#13 D10), or null when sync is off. */
   syncFolder(): string | null
   /** Keeps `folder` (already checked) as the sync folder, or null for off, and writes the file. */
@@ -72,6 +78,7 @@ export function registerSettings(): MainSettings {
     return file.load()
   })
   let keepOutputOff = (): void => {}
+  let globalShortcutSaved: (shortcut: string | undefined) => void = () => {}
   ipcMain.on(IPC.settingsSave, (event, settings: unknown) => {
     if (!fromMainFrame(event)) return
     const keptOutput = file.load().keepOutput
@@ -79,6 +86,7 @@ export function registerSettings(): MainSettings {
     if (!kept) return
     applyTheme(kept)
     if (keptOutput && !kept.keepOutput) keepOutputOff()
+    globalShortcutSaved(kept.globalShortcut)
   })
 
   ipcMain.handle(IPC.settingsShells, async (event): Promise<ShellChoices> => {
@@ -116,6 +124,11 @@ export function registerSettings(): MainSettings {
     keepOutput: () => file.load().keepOutput,
     onKeepOutputOff: (listener) => {
       keepOutputOff = listener
+    },
+    globalShortcut: () => file.load().globalShortcut,
+    openWaitingOnShow: () => file.load().openWaitingOnShow,
+    onGlobalShortcut: (listener) => {
+      globalShortcutSaved = listener
     },
     editor: () => {
       const { editor, editorCommand, shell } = file.load()

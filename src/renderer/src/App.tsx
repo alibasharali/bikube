@@ -143,6 +143,14 @@ function App(): React.JSX.Element {
       if (next) onPaletteOpen(next.workspaceId, next.cardId)
     }
   })
+  // The global shortcut brought the window forward (#51 D4): the same, unless a dialog is open.
+  useEffect(
+    () =>
+      window.drovr?.app.onGlobalShow(() => {
+        if (!document.querySelector('[aria-modal="true"]')) openNextWaiting.current()
+      }),
+    []
+  )
 
   // A workspace's autostart shells start the first time it is opened in this run of the app.
   const autostarted = useRef(new Set<string>())

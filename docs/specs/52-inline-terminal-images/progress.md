@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | ef3e69b, (CSP) | | `TerminalHost.__images` (ImageAddon), `IMAGE_OPTIONS` = { storageLimit: 32, enableSizeReports: true } |
+| S1 | done | ef3e69b, 33f7677 | CLEAN | `TerminalHost.__images` (ImageAddon), `IMAGE_OPTIONS` = { storageLimit: 32, enableSizeReports: true } |
 | S2 | todo | | | |
 
 ## Rulings

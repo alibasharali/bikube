@@ -2,7 +2,7 @@
 item: 45
 type: feature
 title: "Shell integration: prompt marks and command status"
-status: draft
+status: approved
 branch: claude/45-shell-integration-marks
 ---
 

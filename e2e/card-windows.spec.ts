@@ -442,43 +442,93 @@ test('D5: Toggle panel works in a card window, for every window at once', async 
   expect(width).toBeGreaterThan(half - 20)
 })
 
-test('D2: a mouse-reporting drag in a card window reports its moves and release', async () => {
-  await newCard('Agent A')
-  await backToBoard(page)
-  const window = await openInWindow('Agent A')
-  // Button-event tracking (1002), SGR encoding (1006): a drag's moves and its release go to the
-  // program.
-  await run(window, "printf '\\033[?1002;1006h'; sleep 1000")
+/**
+ * Drags across `on`'s card view terminal, whose program asked for button-event tracking in SGR
+ * encoding, and expects both a move with the left button held (`CSI < 32;x;y M`) and its release
+ * (`CSI < 0;x;y m`) to reach it.
+ */
+async function expectDragReported(on: Page): Promise<void> {
+  const terminal = '[data-testid=card-view] [data-testid=terminal]'
   await expect
     .poll(() =>
-      window.evaluate(() => {
-        const host = document.querySelector('[data-testid=terminal]') as HTMLElement & {
+      on.evaluate((selector) => {
+        const host = document.querySelector(selector) as HTMLElement & {
           __xterm?: { modes: { mouseTrackingMode: string } }
         }
         return host.__xterm?.modes.mouseTrackingMode
-      })
+      }, terminal)
     )
     .toBe('drag')
-  await window.evaluate(() => {
-    const host = document.querySelector('[data-testid=terminal]') as HTMLElement & {
+  await on.evaluate((selector) => {
+    const host = document.querySelector(selector) as HTMLElement & {
       __xterm?: { onData(listener: (data: string) => void): void }
     }
     const sent: string[] = []
     Object.assign(globalThis, { sentByTerminal: sent })
     host.__xterm?.onData((data) => sent.push(data))
-  })
-  const box = (await window.getByTestId('terminal').boundingBox())!
-  await window.mouse.move(box.x + 40, box.y + 40)
-  await window.mouse.down()
-  await window.mouse.move(box.x + 120, box.y + 80, { steps: 4 })
-  await window.mouse.up()
+  }, terminal)
+  const box = (await on.locator(terminal).boundingBox())!
+  await on.mouse.move(box.x + 40, box.y + 40)
+  await on.mouse.down()
+  await on.mouse.move(box.x + 120, box.y + 80, { steps: 4 })
+  await on.mouse.up()
   const sent = (): Promise<string[]> =>
-    window.evaluate(() => (globalThis as unknown as { sentByTerminal: string[] }).sentByTerminal)
-  // SGR: `CSI < 32;x;y M` a move with the left button held, `CSI < 0;x;y m` its release.
+    on.evaluate(() => (globalThis as unknown as { sentByTerminal: string[] }).sentByTerminal)
   await expect
     .poll(async () => (await sent()).some((d) => d.startsWith('\x1b[<32;') && d.endsWith('M')))
     .toBe(true)
   await expect
     .poll(async () => (await sent()).some((d) => d.startsWith('\x1b[<0;') && d.endsWith('m')))
     .toBe(true)
+}
+
+/** Button-event tracking (1002) in SGR encoding (1006): a drag's moves and release are reported. */
+const TRACK_DRAGS = "printf '\\033[?1002;1006h'; sleep 1000"
+
+test('D2: a mouse-reporting drag in a card window reports its moves and release', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await run(window, TRACK_DRAGS)
+  await expectDragReported(window)
+})
+
+test('D2: back in the main window, a mouse-reporting drag reports there again', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await window.close()
+  await expect(card('Agent A').getByTestId('card-in-window')).toHaveCount(0)
+  await card('Agent A').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Agent A')
+  await run(page, TRACK_DRAGS)
+  await expectDragReported(page)
+})
+
+test("D5: Mod+digit is left alone while the card window's dialog owns its keyboard", async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await expect.poll(() => terminalFocused(window)).toBe(true)
+  // Whether each Mod+1 keydown reached the window's bubble phase un-swallowed.
+  await window.evaluate(() => {
+    const seen: boolean[] = []
+    Object.assign(globalThis, { digitSeen: seen })
+    globalThis.addEventListener('keydown', (event) => {
+      if (event.code === 'Digit1') seen.push(!event.defaultPrevented)
+    })
+  })
+  const seen = (): Promise<boolean[]> =>
+    window.evaluate(() => (globalThis as unknown as { digitSeen: boolean[] }).digitSeen)
+  const modDigit = darwin ? 'Meta+1' : 'Control+1'
+  await window.keyboard.press(SHORTCUTS.closeCard)
+  await expect(window.getByTestId('confirm-dialog')).toBeVisible()
+  await window.keyboard.press(modDigit)
+  await expect.poll(seen).toEqual([true])
+  await window.keyboard.press('Escape')
+  await expect(window.getByTestId('confirm-dialog')).toHaveCount(0)
+  // Without a dialog it is swallowed, so it never reaches the window's bubble phase.
+  await window.keyboard.press(modDigit)
+  await window.waitForTimeout(200)
+  expect(await seen()).toEqual([true])
 })

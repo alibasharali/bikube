@@ -422,11 +422,15 @@ export class XtermScreen implements CardScreen {
    * xterm 6 binds a mouse-reporting drag's `mousemove` and `mouseup` on the document it was first
    * opened in, and has no option to change it (a re-open only updates its window), so a drag in a
    * card window would report neither its moves nor its release (#53 D2). Its private field is
-   * pointed at the host's document; checked first, so another xterm version only loses this.
+   * pointed at the host's document, back and forth; checked first, so another xterm version only
+   * loses this. A document node by its type, not `instanceof`: a card window's is another realm's.
    */
   private followDocument(doc: Document): void {
     const core = (this.term as unknown as { _core?: { _document?: unknown } })._core
-    if (core && core._document instanceof Node && core._document !== doc) core._document = doc
+    const current = core?._document as { nodeType?: unknown } | null | undefined
+    if (core && typeof current === 'object' && current !== null && current.nodeType === 9) {
+      if (current !== doc) core._document = doc
+    }
   }
 
   /**

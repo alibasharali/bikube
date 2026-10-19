@@ -46,7 +46,13 @@ function CardWindow({
       const action = keymapAction(event, currentKeymap())
       // The card view's own actions are its listener's.
       if (isCardViewAction(action)) return
-      if (action === null && workspaceShortcut(event, window.drovr.platform) === null) return
+      if (action === null) {
+        // Mod+1…9, as in the main window, is left alone while a dialog owns this window's keyboard.
+        if (workspaceShortcut(event, window.drovr.platform) === null || dialogOpenIn(view)) return
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       // The side panel shows or hides everywhere at once (D5, #55 D3), unless a dialog in this
       // window owns its keyboard.
       if (action === 'togglePanel') {

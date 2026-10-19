@@ -29,6 +29,9 @@ export function allowCardWindows(mainWindow: BrowserWindow, backgroundColor: () 
   const cardIdOf = (details: { url: string; frameName: string }): string | null =>
     cardWindowOpen({ url: details.url, frameName: details.frameName, fromMainWindow: true })
 
+  // The handler's details don't say which frame opened the window (Electron 39 has no opener
+  // frame in them), so a subframe would pass too; the main page has no iframes, and the URL and
+  // name checks apply to every open.
   contents.setWindowOpenHandler((details) => {
     const cardId = cardIdOf(details)
     if (cardId === null || cardWindows.has(cardId)) return { action: 'deny' }

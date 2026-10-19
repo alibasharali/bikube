@@ -5,6 +5,7 @@ import { defaultShellId, type Card, type Workspace } from '../../core/workspace-
 import { closeCard, removeShell, restartCard } from './card-actions'
 import { useCardRunState } from './card-terminals'
 import ConfirmDialog from './ConfirmDialog'
+import DevServerChips from './DevServerChips'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import ShellDialog from './ShellDialog'
@@ -152,6 +153,8 @@ function ShellChip({
           </>
         )}
       </MenuButton>
+      {/* Its dev servers' chips, right after the shell's own chip while it runs (#49 D7). */}
+      {running && <DevServerChips cardId={shell.id} />}
       {deleting && (
         <ConfirmDialog
           title="Delete shell"

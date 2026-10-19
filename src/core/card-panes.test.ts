@@ -480,3 +480,61 @@ describe('CardPanes.toggleZoom (#48 D1, D4)', () => {
     expect(panes.layout(API.id).zoomed).toBeUndefined()
   })
 })
+
+describe('CardPanes.watchOutput (#49 D2, D3, D5, D6)', () => {
+  const REMOTE = { id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }
+  /** Records what the watcher is told, in order. */
+  function watch(): string[] {
+    const told: string[] = []
+    panes.watchOutput({
+      opened: (cardId, paneId) => told.push(`opened ${cardId} ${paneId}`),
+      output: (cardId, paneId, data) => told.push(`output ${cardId} ${paneId} ${data}`),
+      ended: (cardId, paneId) => told.push(`ended ${cardId} ${paneId}`)
+    })
+    return told
+  }
+
+  it("tells a local pane's opening, its output from before and after the reply, and its exit", async () => {
+    const told = watch()
+    const id = panes.split(API, 'right')!
+    expect(told).toEqual([`opened card-1 ${id}`])
+    api.emitData('s1', 'early')
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    api.emitData('s1', 'late')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(told).toEqual([
+      `opened card-1 ${id}`,
+      `output card-1 ${id} early`,
+      `output card-1 ${id} late`,
+      `ended card-1 ${id}`
+    ])
+  })
+
+  it('ends a pane that is closed, and every pane when the card is disposed', async () => {
+    const told = watch()
+    const first = panes.split(API, 'right')!
+    const second = panes.split(API, 'down')!
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await flush()
+    panes.close(API.id, first)
+    panes.dispose(API.id)
+    expect(told).toEqual([
+      `opened card-1 ${first}`,
+      `opened card-1 ${second}`,
+      `ended card-1 ${first}`,
+      `ended card-1 ${second}`
+    ])
+  })
+
+  it("tells nothing of an SSH card's panes", async () => {
+    const told = watch()
+    const id = panes.split(REMOTE, 'right')!
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await flush()
+    api.emitData('s1', 'http://localhost:5173/')
+    panes.close(REMOTE.id, id)
+    expect(told).toEqual([])
+  })
+})

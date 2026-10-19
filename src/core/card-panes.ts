@@ -25,6 +25,15 @@ interface Pane<S> {
   sessionId: string | null
   /** Set once the pane is closed or its shell exited: a late spawn reply is killed. */
   removed: boolean
+  /** A local card's pane, whose output the watcher reads (#49 D6). */
+  watched: boolean
+}
+
+/** Reads local extra panes' output (#49 D2, D5): each pane's opening, output and end. */
+export interface PaneOutputWatcher {
+  opened(cardId: string, paneId: string): void
+  output(cardId: string, paneId: string, data: string): void
+  ended(cardId: string, paneId: string): void
 }
 
 /** A card with no extra panes: the same object every time, for `useSyncExternalStore`. */
@@ -35,6 +44,7 @@ export class CardPanes<S extends CardScreen> {
   private readonly panes = new Map<string, Map<string, Pane<S>>>()
   private readonly listeners = new Map<string, Set<() => void>>()
   private next = 0
+  private outputWatcher: PaneOutputWatcher | null = null
 
   constructor(
     private readonly api: TerminalApi,
@@ -66,7 +76,7 @@ export class CardPanes<S extends CardScreen> {
     const after = splitFocused(before, direction, id)
     if (after === before) return undefined
     const screen = this.createScreen(card.id)
-    const pane: Pane<S> = { screen, sessionId: null, removed: false }
+    const pane: Pane<S> = { screen, sessionId: null, removed: false, watched: false }
     let cardPanes = this.panes.get(card.id)
     if (!cardPanes) this.panes.set(card.id, (cardPanes = new Map()))
     cardPanes.set(id, pane)
@@ -84,6 +94,9 @@ export class CardPanes<S extends CardScreen> {
       if (pane.sessionId) this.api.resize(pane.sessionId, cols, rows)
     })
     const { cols, rows } = screen
+    const watcher = card.host === undefined ? this.outputWatcher : null
+    pane.watched = watcher !== null
+    watcher?.opened(card.id, id)
     // An SSH card's pane connects to the card's host too (#12 D8).
     this.router.spawn(
       cols,
@@ -109,7 +122,10 @@ export class CardPanes<S extends CardScreen> {
         }
         const early = this.router.adopt(result.id, {
           // Acknowledged once the screen has parsed it (#16 D4).
-          output: (data, parsed) => screen.write(data, parsed),
+          output: (data, parsed) => {
+            watcher?.output(card.id, id, data)
+            screen.write(data, parsed)
+          },
           exited
         })
         // The view may have fitted the screen while the shell was starting.
@@ -117,7 +133,10 @@ export class CardPanes<S extends CardScreen> {
           this.api.resize(result.id, screen.cols, screen.rows)
         }
         if (!early.exit) typed?.forEach((data) => this.api.write(result.id, data))
-        early.data.forEach((data) => screen.write(data, this.router.ackWhenParsed(result.id, data)))
+        early.data.forEach((data) => {
+          watcher?.output(card.id, id, data)
+          screen.write(data, this.router.ackWhenParsed(result.id, data))
+        })
         // A shell that exits by itself takes its pane with it (D5).
         if (early.exit) exited(early.exit)
       },
@@ -163,6 +182,11 @@ export class CardPanes<S extends CardScreen> {
     this.listeners.get(cardId)?.forEach((l) => l())
   }
 
+  /** Gives `watcher` every local card's extra pane output (#49 D2, D6); one watcher. */
+  watchOutput(watcher: PaneOutputWatcher): void {
+    this.outputWatcher = watcher
+  }
+
   /** Called when the card's layout changes. Returns an unsubscribe function. */
   subscribe(cardId: string, listener: () => void): () => void {
     let set = this.listeners.get(cardId)
@@ -183,6 +207,7 @@ export class CardPanes<S extends CardScreen> {
     pane.removed = true
     this.panes.get(cardId)?.delete(paneId)
     pane.screen.dispose()
+    if (pane.watched) this.outputWatcher?.ended(cardId, paneId)
     this.setLayout(cardId, removePane(this.layout(cardId), paneId))
   }
 }

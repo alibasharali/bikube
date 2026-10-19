@@ -579,12 +579,20 @@ export function cardTerminals(): CardSessions<XtermScreen> {
 
 /** The app-wide extra panes of cards (#11 D1), with their layouts. */
 export function cardPanes(): CardPanes<XtermScreen> {
-  paneRegistry ??= new CardPanes(
-    window.drovr.terminal,
-    sessionRouter(),
-    () => new XtermScreen(),
-    (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
-  )
+  if (!paneRegistry) {
+    paneRegistry = new CardPanes(
+      window.drovr.terminal,
+      sessionRouter(),
+      () => new XtermScreen(),
+      (cardId) => cardTerminals().runState(cardId)?.kind === 'running'
+    )
+    // A local extra pane's output shows its dev servers' chips too (#49 D3, D5, D6).
+    paneRegistry.watchOutput({
+      opened: (cardId, paneId) => devServers().paneOpened(cardId, paneId),
+      output: (cardId, paneId, data) => devServers().output(cardId, paneId, data),
+      ended: (cardId, paneId) => devServers().paneEnded(cardId, paneId)
+    })
+  }
   return paneRegistry
 }
 

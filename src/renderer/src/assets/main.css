@@ -2969,6 +2969,13 @@ button.dev-server-chip:focus-visible {
   border-radius: 999px;
 }
 
+/* A shell's dev server chips (#49 D7), at the end of its pill, after its menu. */
+.shell-chip-wrap .dev-servers {
+  flex-wrap: nowrap;
+  margin: 0;
+  padding: 0 var(--space-2) 0 0;
+}
+
 .shells-add {
   border: 1px dashed var(--border);
   border-radius: 999px;

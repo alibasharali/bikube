@@ -3,13 +3,21 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, boardCard, expectCardOpen } from './card-view'
+import {
+  backToBoard,
+  boardCard,
+  cardView,
+  expectCardOpen,
+  SHORTCUTS,
+  splitRight
+} from './card-view'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// Dev server chips (#49 S1): a local card's main pane printing a localhost URL shows a
-// `localhost:<port>` chip on its board card while something listens there. The servers are Node
+// Dev server chips (#49): a local card's pane (main or extra, S2) printing a localhost URL shows
+// a `localhost:<port>` chip on its board card while something listens there, and a named shell's
+// beside it in the shell strip (S2). The servers are Node
 // HTTP servers in this test process on free ports; `shell.openExternal` is stubbed. The URLs are
 // printed with `printf` and the port as an argument, so the typed command line itself holds none.
 
@@ -99,11 +107,16 @@ async function newCard(title: string): Promise<void> {
   await expectCardOpen(page, title)
 }
 
-/** The open card's terminal buffer, one trimmed string per line, wrapped lines joined. */
-function bufferLines(): Promise<string[]> {
-  return page.evaluate(() => {
+/**
+ * The open card's terminal buffer (pane `index` in tree order, the main pane by default), one
+ * trimmed string per line, wrapped lines joined.
+ */
+function bufferLines(index = 0): Promise<string[]> {
+  return page.evaluate((index) => {
     type Line = { isWrapped: boolean; translateToString(trim: boolean): string }
-    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+    const host = document.querySelectorAll('[data-testid=card-view] [data-testid=terminal]')[
+      index
+    ] as
       | (HTMLElement & {
           __xterm?: { buffer: { active: { length: number; getLine(i: number): Line | undefined } } }
         })
@@ -119,7 +132,7 @@ function bufferLines(): Promise<string[]> {
       else rows.push(text)
     }
     return rows.map((r) => r.trim())
-  })
+  }, index)
 }
 
 const terminalFocused = (): Promise<boolean> =>
@@ -128,15 +141,15 @@ const terminalFocused = (): Promise<boolean> =>
   )
 
 /**
- * Types `command` into the open card's shell until it answers (a shell still starting, or an SSH
- * card before its session, may drop the first keys), then runs it.
+ * Types `command` into the open card's focused shell (pane `index`) until it answers (a shell
+ * still starting, or an SSH card before its session, may drop the first keys), then runs it.
  */
-async function runWhenReady(command: string): Promise<void> {
+async function runWhenReady(command: string, index = 0): Promise<void> {
   await expect.poll(terminalFocused).toBe(true)
   await expect(async () => {
     await page.keyboard.type('echo ready:$((40+2))')
     await page.keyboard.press('Enter')
-    await expect.poll(bufferLines, { timeout: 2000 }).toContain('ready:42')
+    await expect.poll(() => bufferLines(index), { timeout: 2000 }).toContain('ready:42')
   }).toPass({ timeout: 20_000 })
   await page.keyboard.type(command)
   await page.keyboard.press('Enter')
@@ -281,4 +294,63 @@ test('AC8: five listening ports show the first three in print order and +2', asy
       .map((p) => `http://127.0.0.1:${p}/`)
       .join('\n')
   )
+})
+
+test('AC5: an extra pane feeds its card, main pane first, and closing it forgets its port', async () => {
+  const [p, r] = [await listen(), await listen()]
+  await launch()
+  const opened = await recordOpenedLinks()
+  await createWorkspace()
+  await newCard('web')
+  await runWhenReady('echo main-up')
+  await splitRight(page)
+  await expect(cardView(page).getByTestId('pane')).toHaveCount(2)
+  // The extra pane prints first: the main pane's port still lists first (D3).
+  await runWhenReady(`printf 'http://127.0.0.1:%s/app\\n' ${p}`, 1)
+  await expect.poll(() => bufferLines(1)).toContain(`http://127.0.0.1:${p}/app`)
+  await cardView(page).getByTestId('pane').nth(0).getByTestId('terminal').click()
+  await runWhenReady(`printf 'http://0.0.0.0:%s\\n' ${r}`)
+  await expect.poll(() => bufferLines(0)).toContain(`http://0.0.0.0:${r}`)
+  await backToBoard(page)
+
+  await expect(chips('web')).toHaveText([`localhost:${r}`, `localhost:${p}`], { timeout: CHIP_MS })
+  await chips('web').nth(0).click()
+  await chips('web').nth(1).click()
+  await expect.poll(opened).toEqual([`http://localhost:${r}/`, `http://127.0.0.1:${p}/app`])
+
+  await boardCard(page, 'web').getByTestId('card-open').click()
+  await expectCardOpen(page, 'web')
+  await cardView(page).getByTestId('pane').nth(1).getByTestId('terminal').click()
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(cardView(page).getByTestId('pane')).toHaveCount(1)
+  await backToBoard(page)
+  await expect(chips('web')).toHaveText([`localhost:${r}`], { timeout: CHIP_MS })
+})
+
+test("AC6: a named shell's printed, listening port shows beside it in the shell strip", async () => {
+  const port = await listen()
+  await launch()
+  const opened = await recordOpenedLinks()
+  await createWorkspace()
+  await page.getByTestId('shell-add').click()
+  await page.getByTestId('shell-name').fill('Dev server')
+  await page.getByTestId('shell-command').fill(`printf 'http://localhost:%s/\\n' ${port}`)
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
+  const shell = page.locator('[data-testid="shell"][data-shell-name="Dev server"]')
+  await shell.getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Dev server')
+  await expect.poll(() => bufferLines()).toContain(`http://localhost:${port}/`)
+  await backToBoard(page)
+
+  const chip = shell.getByTestId('dev-server-chip')
+  await expect(chip).toHaveText([`localhost:${port}`], { timeout: CHIP_MS })
+  // Right after the shell's own chip (D7); the Default shell has none.
+  await expect(shell.locator('.shell-chip + .shell-menu-wrap + .dev-servers')).toHaveCount(1)
+  await expect(
+    page.locator('[data-testid="shell"][data-shell-name="Default"]').getByTestId('dev-servers')
+  ).toHaveCount(0)
+  await chip.click()
+  await expect.poll(opened).toEqual([`http://localhost:${port}/`])
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
 })

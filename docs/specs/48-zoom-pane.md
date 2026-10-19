@@ -2,7 +2,7 @@
 item: 48
 type: feature
 title: Zoom a pane
-status: draft
+status: approved
 branch: claude/48-zoom-pane
 ---
 

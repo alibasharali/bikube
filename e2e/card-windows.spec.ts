@@ -805,19 +805,34 @@ test('D10: the Files tab in a card window refreshes while only that window is fo
   await expect(row('later.txt')).toBeVisible({ timeout: 4000 })
 })
 
-/** The text xterm has drawn in `on`'s card view terminal (its DOM rows, not its buffer). */
-const drawnRows = (on: Page): Promise<string> =>
-  on.evaluate(
-    () => document.querySelector('[data-testid=card-view] .xterm-rows')?.textContent ?? ''
-  )
+/**
+ * How many times xterm has drawn `on`'s card view terminal, counted from the first call through
+ * its public `onRender` (on the host, so the count moves with the screen). Any renderer: WebGL
+ * draws no DOM rows.
+ */
+const renderCount = (on: Page): Promise<number> =>
+  on.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { onRender(listener: () => void): unknown }
+          __renders?: number
+        })
+      | null
+    if (!host?.__xterm) return -1
+    if (host.__renders === undefined) {
+      host.__renders = 0
+      host.__xterm.onRender(() => (host.__renders! += 1))
+    }
+    return host.__renders
+  })
 
-/** `on`'s terminal keeps drawing what its shell prints: its drawn rows change over time. */
+/** `on`'s terminal keeps drawing what its shell prints: its render count keeps going up. */
 async function expectRedrawing(on: Page): Promise<void> {
   await expect
     .poll(async () => {
-      const before = await drawnRows(on)
+      const before = await renderCount(on)
       await on.waitForTimeout(300)
-      return before !== (await drawnRows(on))
+      return before >= 0 && (await renderCount(on)) > before
     })
     .toBe(true)
 }

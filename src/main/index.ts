@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { boundedWait } from '../core/bounded-wait'
 import { killAtQuit, quitHold } from '../core/quit-hold'
 import { KILL_GRACE_MS } from '../core/session-manager'
+import { IPC } from '../shared/api'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerAttention } from './attention'
 import { registerClipboard } from './clipboard'
@@ -128,6 +129,10 @@ function startApp(): void {
   /** Whether the sync folder was busy when the quit that went through began (before its flush). */
   let busyAtLastQuit = false
   app.on('before-quit', (event) => {
+    // Told before any shell is stopped, so no card moves on its stop at quit (#42 D4).
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.isDestroyed()) window.webContents.send(IPC.appQuitting)
+    }
     state.flush()
     settings.flush()
     const syncBusy = sync.busy()

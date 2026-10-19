@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { startAttention } from './attention'
+import { startAutoMoves } from './auto-move'
 import { listenForBoardRequests } from './board-requests'
 import { loadGhosttyTheme } from './ghostty'
 import { loadHomeDir } from './home'
@@ -29,6 +30,7 @@ void Promise.all([
   listenForBoardRequests()
   listenForSyncBoards()
   startAttention()
+  startAutoMoves()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

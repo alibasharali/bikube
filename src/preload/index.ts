@@ -94,7 +94,12 @@ const api: DrovrApi = {
     focus: () => ipcRenderer.send(IPC.appFocus),
     requestAttention: () => ipcRenderer.send(IPC.appRequestAttention),
     home: () => ipcRenderer.invoke(IPC.appHome),
-    reveal: (path) => ipcRenderer.send(IPC.appReveal, path)
+    reveal: (path) => ipcRenderer.send(IPC.appReveal, path),
+    onQuitting: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on(IPC.appQuitting, handler)
+      return () => ipcRenderer.removeListener(IPC.appQuitting, handler)
+    }
   },
   terminal: {
     spawn: (cols, rows, cwd, cardId, host = null) =>

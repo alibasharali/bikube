@@ -3,6 +3,7 @@
  * and the renderer can both use it. The file holds `{ "version": 1, "state": WorkspaceState }`.
  */
 import { isAgentKind, type AgentKind } from './agent-presets'
+import { readAutoMove } from './auto-move'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import { isWorkspaceLogo } from './workspace-logos'
@@ -103,6 +104,12 @@ function readWorkspace(raw: unknown): Workspace | string {
   // Missing is none (#59 D2); an id this version doesn't know, from a newer one, is none too (D5).
   if (raw.logo !== undefined && typeof raw.logo !== 'string') return 'bad logo'
   const logo = isWorkspaceLogo(raw.logo) ? { logo: raw.logo } : {}
+  // Missing is every rule off; a rule naming a column this workspace lacks is off (#42 D7).
+  const autoMove = readAutoMove(
+    raw.autoMove,
+    columns.map((c) => c.id)
+  )
+  if (autoMove === 'bad') return 'bad autoMove'
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
   for (const c of raw.cards) {
@@ -122,7 +129,8 @@ function readWorkspace(raw: unknown): Workspace | string {
     nextCardNumber: nextCardNumber as number,
     defaultStartup,
     shells,
-    worktreeSetup: setup.value
+    worktreeSetup: setup.value,
+    ...(autoMove !== null && { autoMove })
   }
 }
 

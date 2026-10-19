@@ -44,6 +44,7 @@ export const IPC = {
   appRequestAttention: 'app:requestAttention',
   appHome: 'app:home',
   appReveal: 'app:reveal',
+  appQuitting: 'app:quitting',
   worktreeInfo: 'worktree:info',
   worktreeCreate: 'worktree:create',
   worktreeDirty: 'worktree:dirty',
@@ -314,6 +315,12 @@ export interface AppApi {
   home(): Promise<string>
   /** Opens a local folder in Finder or the file manager; anything but an existing folder is ignored. */
   reveal(path: string): void
+  /**
+   * `listener` is called when the app starts quitting, before main stops the shells, so their
+   * stops can be told apart from a card stopping while the app runs (#42 D4). Returns an
+   * unsubscribe function.
+   */
+  onQuitting(listener: () => void): () => void
 }
 
 /** App updates from GitHub Releases, run by main (`src/main/updates.ts`). */

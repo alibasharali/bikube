@@ -6,6 +6,7 @@
  */
 
 import type { AgentKind } from './agent-presets'
+import { keepKnownRules, rulesNameKnownColumns, type AutoMove } from './auto-move'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { isWorkspaceLogo, type WorkspaceLogoId } from './workspace-logos'
 import {
@@ -104,6 +105,11 @@ export interface Workspace {
    * none. Local workspaces only use it; an SSH workspace keeps whatever it has.
    */
   worktreeSetup: string
+  /**
+   * Its automatic move rules (#42 D2), each naming one of `columns` by id; absent when every
+   * rule is off. Deleting a column turns off the rules naming it.
+   */
+  autoMove?: AutoMove
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -180,6 +186,11 @@ export interface WorkspacePatch {
   worktreeSetup?: string
   /** A logo sets the badge's icon, null clears it (#59 D2). */
   logo?: WorkspaceLogoId | null
+  /**
+   * Replaces every automatic move rule (#42 D2, D9): a key per rule that is on, each a column id
+   * of this workspace; `{}` turns them all off.
+   */
+  autoMove?: AutoMove
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -391,6 +402,12 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       logo = checked.value
     }
+    let autoMove = current.autoMove ?? null
+    if (patch.autoMove !== undefined) {
+      const columnIds = current.columns.map((c) => c.id)
+      if (!rulesNameKnownColumns(patch.autoMove, columnIds)) return unknownColumn()
+      autoMove = keepKnownRules(patch.autoMove, columnIds)
+    }
     const updated: Workspace = { ...current, name, directory, defaultStartup, worktreeSetup }
     // A local workspace has no `host` key at all, so the saved file never gets one (#12 D10).
     if (host === null) delete updated.host
@@ -398,6 +415,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     // Likewise no `logo` key without a logo (#59 D2).
     if (logo === null) delete updated.logo
     else updated.logo = logo
+    // And no `autoMove` key with every rule off (#42 D2).
+    if (autoMove === null) delete updated.autoMove
+    else updated.autoMove = autoMove
     this.replace(updated)
     return { ok: true, value: updated }
   }
@@ -474,7 +494,18 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (ws.columns.length === 1) return fail('column', 'A board must keep at least one column')
     if (ws.cards.some((c) => c.columnId === columnId))
       return fail('column', 'Move or delete its cards first')
-    this.replace({ ...ws, columns: ws.columns.filter((c) => c.id !== columnId) })
+    const columns = ws.columns.filter((c) => c.id !== columnId)
+    const updated: Workspace = { ...ws, columns }
+    // Rules naming the deleted column turn off in the same change (#42 D2).
+    if (ws.autoMove !== undefined) {
+      const autoMove = keepKnownRules(
+        ws.autoMove,
+        columns.map((c) => c.id)
+      )
+      if (autoMove === null) delete updated.autoMove
+      else updated.autoMove = autoMove
+    }
+    this.replace(updated)
     return { ok: true, value: undefined }
   }
 

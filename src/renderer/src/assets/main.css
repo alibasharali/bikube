@@ -1848,6 +1848,18 @@ button {
   opacity: 1;
 }
 
+/* Move cards automatically (#42 D6): each rule's label and its column select on one line. */
+.auto-move {
+  gap: var(--space-2);
+}
+
+.auto-move-rule {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 12rem);
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* Startup command (#5 D9, D10, D12) */
 .inline-select,
 .field select {

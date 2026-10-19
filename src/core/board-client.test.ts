@@ -130,6 +130,19 @@ describe('runBoard', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
+  it('checks for a card before reading a transcript, so outside one it reads nothing (#50 D5)', async () => {
+    expect(await board(['usage', '.', '/nope.jsonl'], {})).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: `${NOT_IN_A_CARD}\n`
+    })
+    expect(await board(['usage', '.', '/nope.jsonl'], { DROVR_CARD_ID: 'c1' })).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: `${NOT_RUNNING}\n`
+    })
+  })
+
   it('refuses without a card id (#9 D3, AC8)', async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler)

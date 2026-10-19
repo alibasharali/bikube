@@ -79,6 +79,13 @@ export async function runBoard(
     out.stderr(args.stderr)
     return args.exitCode
   }
+  const cardId = env.DROVR_CARD_ID
+  const socketPath = env.DROVR_SOCKET
+  // Checked before a transcript is read: outside a card, `board usage` reads nothing.
+  if (!cardId || !socketPath) {
+    out.stderr(`${cardId ? NOT_RUNNING : NOT_IN_A_CARD}\n`)
+    return 1
+  }
   let command: BoardCommand
   if (args.kind === 'transcript') {
     try {
@@ -90,13 +97,7 @@ export async function runBoard(
   } else {
     command = args.command
   }
-  const cardId = env.DROVR_CARD_ID
-  const socketPath = env.DROVR_SOCKET
-  const reply: BoardReply = !cardId
-    ? { ok: false, error: NOT_IN_A_CARD }
-    : !socketPath
-      ? { ok: false, error: NOT_RUNNING }
-      : await sendBoardRequest(socketPath, serializeRequest(cardId, command), timeoutMs)
+  const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), timeoutMs)
   if (reply.ok) return 0
   out.stderr(`${reply.error}\n`)
   return 1

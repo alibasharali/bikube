@@ -78,6 +78,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
   let dir: string
   let bin: string
   let log: string
+  let usageLog: string
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'drovr-hooks-'))
@@ -85,10 +86,13 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     bin = join(dir, 'my bin')
     execFileSync('mkdir', [bin])
     log = join(dir, 'board.log')
+    // `board usage` (#50 D6) logs to its own file, so the activity and session log stays as it was.
+    usageLog = join(dir, 'usage.log')
     writeFileSync(
       join(bin, 'board'),
-      `#!/bin/sh\nsleep "\${FAKE_BOARD_SLEEP:-0}"\necho "$*" >> '${log}'\necho noise; echo oops >&2\n` +
-        `exit "\${FAKE_BOARD_EXIT:-0}"\n`
+      `#!/bin/sh\nsleep "\${FAKE_BOARD_SLEEP:-0}"\n` +
+        `case $1 in usage) echo "$*" >> '${usageLog}';; *) echo "$*" >> '${log}';; esac\n` +
+        `echo noise; echo oops >&2\nexit "\${FAKE_BOARD_EXIT:-0}"\n`
     )
     chmodSync(join(bin, 'board'), 0o755)
     writeFileSync(join(bin, CLAUDE_INSTRUCTION_FILE), `${CLAUDE_INSTRUCTION}\n`)
@@ -228,6 +232,78 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
       )
     })
   }
+
+  /** The usage log once it has `count` lines: `board usage` runs in the background (#50 D6). */
+  const usageLines = (count: number): string[] => {
+    const read = (): string[] => {
+      try {
+        return readFileSync(usageLog, 'utf8').split('\n').slice(0, -1)
+      } catch {
+        return []
+      }
+    }
+    const until = Date.now() + 5000
+    while (read().length < count && Date.now() < until) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+    }
+    return read()
+  }
+
+  describe('report the transcript with board usage at Stop and SessionStart (#50 D6, AC6)', () => {
+    const transcript = { session_id: 's', transcript_path: '/tmp/x y/t.jsonl', cwd: '/w' }
+
+    it('has no backslash in either command, and nothing on PreToolUse', () => {
+      expect(command('Stop')).not.toContain('\\')
+      expect(command('SessionStart')).not.toContain('\\')
+      expect(command('PreToolUse')).not.toContain('usage')
+    })
+
+    it('reports the transcript at Stop, still setting waiting', () => {
+      const input = { ...transcript, hook_event_name: 'Stop', stop_hook_active: false }
+      expect(run('/bin/sh', 'Stop', input)).toEqual({ status: 0, stdout: '', stderr: '' })
+      expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+      expect(loggedLines(1)).toEqual(['activity . waiting'])
+    })
+
+    for (const source of ['startup', 'resume', 'clear', 'compact']) {
+      it(`reports the transcript at SessionStart (${source}), still printing the instruction`, () => {
+        const input = { ...transcript, hook_event_name: 'SessionStart', source }
+        expect(run('/bin/sh', 'SessionStart', input)).toEqual({
+          status: 0,
+          stdout: `${CLAUDE_INSTRUCTION}\n`,
+          stderr: ''
+        })
+        expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+      })
+    }
+
+    it("reads Claude's spaced JSON too", () => {
+      const spaced = JSON.stringify({ ...transcript, hook_event_name: 'Stop' }, null, 1)
+      expect(
+        spawnSync('/bin/sh', ['-c', command('Stop')], {
+          input: spaced,
+          encoding: 'utf8',
+          env: { PATH: '/usr/bin:/bin', DROVR_BIN: bin }
+        }).status
+      ).toBe(0)
+      expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+    })
+
+    it('runs no board usage without a transcript path', () => {
+      expect(run('/bin/sh', 'Stop', { session_id: 's', hook_event_name: 'Stop' }).status).toBe(0)
+      expect(loggedLines(1)).toEqual(['activity . waiting'])
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+      expect(usageLines(0)).toEqual([])
+    })
+
+    it("returns before board usage finishes, so Claude doesn't wait", () => {
+      const input = { ...transcript, hook_event_name: 'SessionStart', source: 'startup' }
+      const start = Date.now()
+      expect(run('/bin/sh', 'SessionStart', input, { FAKE_BOARD_SLEEP: '2' }).status).toBe(0)
+      expect(Date.now() - start).toBeLessThan(1500)
+      expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])
+    })
+  })
 
   it('reads a question only from the tool name, not from what a tool is given', () => {
     const input = {

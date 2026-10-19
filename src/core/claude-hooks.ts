@@ -53,14 +53,27 @@ const REPORT_SESSION =
   '"$DROVR_BIN/board" session . "$i" >/dev/null 2>&1'
 
 /**
- * Prints the instruction, which Claude adds to its context, unless the card was started with
- * `DROVR_CLAUDE_STATUS=0` (the Claude Code status updates setting off). A `/resume` reports the
+ * Reports the conversation's usage (#50 D6): cuts `transcript_path` out of the hook's input (in `s`)
+ * like `REPORT_SESSION`, and runs `board usage` on it in the background with every stream
+ * detached, so Claude never waits for the transcript to be read. Nothing runs without a path.
+ */
+const REPORT_USAGE =
+  't=${s#*\'"transcript_path":"\'}; [ "$t" = "$s" ] && t=${s#*\'"transcript_path": "\'}; ' +
+  '[ "$t" = "$s" ] || { t=${t%%\'"\'*}; "$DROVR_BIN/board" usage . "$t" </dev/null >/dev/null 2>&1 & }'
+
+/**
+ * Reports the usage (every source: startup, resume, clear, compact) and prints the instruction,
+ * which Claude adds to its context, unless the card was started with `DROVR_CLAUDE_STATUS=0` (the
+ * Claude Code status updates setting off). A `/resume` reports the
  * resumed session, so the card resumes it next time.
  */
 const SESSION_START =
-  `s=$(cat); case $s in *'"source":"resume"'*|*'"source": "resume"'*) ${REPORT_SESSION};; esac; ` +
+  `s=$(cat); ${REPORT_USAGE}; case $s in *'"source":"resume"'*|*'"source": "resume"'*) ${REPORT_SESSION};; esac; ` +
   `[ "$DROVR_CLAUDE_STATUS" = 0 ] || cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
   'exit 0'
+
+/** Claude's turn ended: the usage so far is reported, and the card waits for the user. */
+const STOP = `s=$(cat); ${REPORT_USAGE}; ${activity('waiting')}`
 
 /** A message sent: the card has a conversation to resume (reported), and Claude is working. */
 const USER_PROMPT_SUBMIT = `s=$(cat); ${REPORT_SESSION}; "$DROVR_BIN/board" activity . working >/dev/null 2>&1; exit 0`
@@ -79,7 +92,7 @@ export function claudeSettings(): string {
       PreToolUse: [group(PRE_TOOL_USE, '*')],
       // A permission prompt or an input request, not the idle reminder.
       Notification: [group(activity('question'), 'permission_prompt|elicitation_dialog')],
-      Stop: [group(activity('waiting'))]
+      Stop: [group(STOP)]
     }
   }
   return `${JSON.stringify(settings, null, 2)}\n`

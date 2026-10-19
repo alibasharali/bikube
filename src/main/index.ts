@@ -13,6 +13,7 @@ import { registerGit } from './git'
 import { registerLinks } from './links'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
+import { registerScrollback } from './scrollback'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
@@ -103,6 +104,7 @@ function startApp(): void {
     () => settings.shell(),
     () => settings.claudeStatus()
   )
+  registerScrollback()
   registerClipboard()
   registerLinks()
   registerDirectories()

@@ -4,8 +4,10 @@ import {
   CardSessions,
   MAX_TYPEAHEAD_CHARS,
   type CardScreen,
+  type OutputKeeper,
   type StartingCard
 } from './card-sessions'
+import { restoredText, type KeptOutput } from './kept-output'
 import { READY_MARKER } from './ssh-command'
 import type { StartupCommand } from './startup-command'
 
@@ -38,6 +40,12 @@ class FakeScreen implements CardScreen {
   }
   setReadOnly(): void {
     this.readOnly = true
+  }
+  /** The rows each serialize asked for (#46 D3). */
+  serialized: number[] = []
+  serialize(scrollback: number): string {
+    this.serialized.push(scrollback)
+    return this.text
   }
   dispose(): void {
     this.disposed = true
@@ -1113,5 +1121,161 @@ describe('pending setup (#39 D3, D4)', () => {
       ['s1', SETUP_LINE]
     ])
     expect(sessions.status('c1')?.setup).toBe('running')
+  })
+})
+
+describe('kept output (#46)', () => {
+  /** Keeps cards whose id starts with `c`; reads wait until the test answers them. */
+  class FakeKeeper implements OutputKeeper {
+    reads: { cardId: string; resolve: (kept: KeptOutput | null) => void; reject: () => void }[] = []
+    saves: [string, string][] = []
+    rows = 10_000
+    keeps(cardId: string): boolean {
+      return cardId.startsWith('c')
+    }
+    scrollback(): number {
+      return this.rows
+    }
+    read(cardId: string): Promise<KeptOutput | null> {
+      return new Promise((resolve, reject) =>
+        this.reads.push({ cardId, resolve, reject: () => reject(new Error('read failed')) })
+      )
+    }
+    save(cardId: string, data: string): void {
+      this.saves.push([cardId, data])
+    }
+  }
+
+  let keeper: FakeKeeper
+  const KEPT: KeptOutput = { data: 'old run\r\n$ ', savedAt: Date.UTC(2026, 9, 19, 12, 32) }
+
+  beforeEach(() => {
+    keeper = new FakeKeeper()
+    sessions = new CardSessions(
+      api,
+      (cardId) => {
+        const screen = new FakeScreen()
+        screens.set(cardId, screen)
+        return screen
+      },
+      undefined,
+      undefined,
+      keeper
+    )
+  })
+
+  /** Starts the card, answers its read with `kept`, and resolves its spawn as `id`. */
+  async function startedKept(cardId: string, kept: KeptOutput | null, id: string): Promise<void> {
+    sessions.start(card(cardId))
+    keeper.reads[keeper.reads.length - 1].resolve(kept)
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[api.spawns.length - 1].resolve({ ok: true, id })
+    await vi.advanceTimersByTimeAsync(0)
+  }
+
+  it('reads the save before spawning, writes it with the separator, then spawns (D5, AC1)', async () => {
+    sessions.start(card('c1'))
+    expect(keeper.reads.map((r) => r.cardId)).toEqual(['c1'])
+    expect(api.spawns).toEqual([])
+    keeper.reads[0].resolve(KEPT)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.spawns).toHaveLength(1)
+    const screen = screens.get('c1')!
+    expect(screen.text).toBe(restoredText(KEPT))
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s1', 'new prompt')
+    expect(screen.text).toBe(`${restoredText(KEPT)}new prompt`)
+  })
+
+  it('starts on an empty screen when there is no save or the read fails (D5)', async () => {
+    await startedKept('c1', null, 's1')
+    expect(screens.get('c1')!.text).toBe('')
+    sessions.start(card('c2'))
+    keeper.reads[1].reject()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.spawns).toHaveLength(2)
+    expect(screens.get('c2')!.text).toBe('')
+  })
+
+  it('saves the screen once it has parsed everything, then is Stopped (D2, D3)', async () => {
+    keeper.rows = 5_000
+    await startedKept('c1', null, 's1')
+    const screen = screens.get('c1')!
+    screen.slow = true
+    api.emitData('s1', 'kept-46-exit')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(keeper.saves).toEqual([])
+    expect(screen.disposed).toBe(false)
+    screen.parsing.splice(0).forEach((done) => done())
+    expect(keeper.saves).toEqual([['c1', 'kept-46-exit']])
+    expect(screen.serialized).toEqual([5_000])
+    expect(screen.disposed).toBe(true)
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
+  })
+
+  it('saves on a Close and on SSH failed, the restored lines included (D2, D6, AC4)', async () => {
+    await startedKept('c1', KEPT, 's1')
+    api.emitData('s1', 'second-run')
+    sessions.close('c1')
+    api.emitExit({ id: 's1', exitCode: 129 })
+    expect(keeper.saves).toEqual([['c1', `${restoredText(KEPT)}second-run`]])
+    sessions.start({ ...card('c1'), host: 'me@devbox' })
+    keeper.reads[1].resolve(null)
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[1].resolve({ ok: true, id: 's2' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s2', 'ssh: connect refused')
+    api.emitExit({ id: 's2', exitCode: 255 })
+    expect(sessions.runState('c1')).toMatchObject({ sshFailed: 'ssh: connect refused' })
+    expect(keeper.saves[1]).toEqual(['c1', 'ssh: connect refused'])
+  })
+
+  it("saves nothing for a start that couldn't start, or a card deleted (D2)", async () => {
+    sessions.start(card('c1'))
+    keeper.reads[0].resolve(KEPT)
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[0].resolve({ ok: false, reason: 'working directory not found' })
+    await vi.advanceTimersByTimeAsync(0)
+    await startedKept('c2', null, 's2')
+    const screen = screens.get('c2')!
+    screen.slow = true
+    api.emitExit({ id: 's2', exitCode: 0 })
+    sessions.dispose('c2')
+    screen.parsing.splice(0).forEach((done) => done())
+    await startedKept('c3', null, 's3')
+    sessions.dispose('c3')
+    expect(keeper.saves).toEqual([])
+  })
+
+  it('a card deleted while its save is read spawns nothing and restores nothing', async () => {
+    sessions.start(card('c1'))
+    const screen = screens.get('c1')!
+    sessions.dispose('c1')
+    keeper.reads[0].resolve(KEPT)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.spawns).toEqual([])
+    expect(screen.text).toBe('')
+  })
+
+  it('a card closed while its save is read is killed once its shell arrives, then saved', async () => {
+    sessions.start(card('c1'))
+    sessions.close('c1')
+    keeper.reads[0].resolve(KEPT)
+    await vi.advanceTimersByTimeAsync(0)
+    api.spawns[0].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.kills).toEqual(['s1'])
+    api.emitExit({ id: 's1', exitCode: 129 })
+    expect(sessions.runState('c1')).toEqual({ kind: 'stopped' })
+    expect(keeper.saves).toEqual([['c1', restoredText(KEPT)]])
+  })
+
+  it('neither reads nor saves for what it does not keep, such as a shell (D1, AC9)', async () => {
+    await started('s-shell', { ok: true, id: 's1' })
+    api.emitData('s1', 'output')
+    api.emitExit({ id: 's1', exitCode: 0 })
+    expect(keeper.reads).toEqual([])
+    expect(keeper.saves).toEqual([])
   })
 })

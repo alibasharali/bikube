@@ -2,12 +2,13 @@ import { useCallback, useSyncExternalStore } from 'react'
 import { Terminal as XTerm, type IBufferRange } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
-import { CardSessions, type CardScreen } from '../../core/card-sessions'
+import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
 import { SessionRouter } from '../../core/session-router'
 import type { PaneLayout } from '../../core/split-tree'
 import {
@@ -120,6 +121,7 @@ export class XtermScreen implements CardScreen {
   private palette: TerminalAppearance['theme']
   private readonly host: TerminalHost = document.createElement('div')
   private readonly fit = new FitAddon()
+  private readonly serializer = new SerializeAddon()
   // One more than the bar counts, so it can tell "more than 1,000" from exactly 1,000 (#35 D7).
   private readonly search = new SearchAddon({ highlightLimit: FIND_HIGHLIGHT_LIMIT + 1 })
   /** A find is applied (#35): from its first search until it is cleared. */
@@ -172,6 +174,7 @@ export class XtermScreen implements CardScreen {
     this.term.loadAddon(this.fit)
     this.term.loadAddon(new WebLinksAddon(openLink))
     this.term.loadAddon(this.search)
+    this.term.loadAddon(this.serializer)
     const clipboard = window.drovr.clipboard
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.
@@ -260,6 +263,10 @@ export class XtermScreen implements CardScreen {
 
   setReadOnly(): void {
     this.term.options.disableStdin = true
+  }
+
+  serialize(scrollback: number): string {
+    return this.serializer.serialize({ scrollback, excludeModes: true, excludeAltBuffer: true })
   }
 
   /** Shows the screen in `container`, fitted and kept fitted; returns the detach function. */
@@ -445,6 +452,19 @@ function startsClaudeCode(cardId: string): boolean {
     .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
 }
 
+/** Whether `cardId` is a card (not a shell) on the board. */
+function isCard(cardId: string): boolean {
+  return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
+}
+
+/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
+const outputKeeper: OutputKeeper = {
+  keeps: isCard,
+  scrollback: () => settingsStore.get().scrollback,
+  read: (cardId) => window.drovr.scrollback.read(cardId),
+  save: (cardId, data) => window.drovr.scrollback.save(cardId, data)
+}
+
 /** The app-wide card terminals: one per card, with a fresh screen each start (#5 D7). */
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
@@ -454,7 +474,8 @@ export function cardTerminals(): CardSessions<XtermScreen> {
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).
-      (spawn) => setTimeout(spawn, 0)
+      (spawn) => setTimeout(spawn, 0),
+      outputKeeper
     )
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).

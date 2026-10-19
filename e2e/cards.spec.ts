@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   backToBoard,
+  belowSeparator,
   expectCardOpen,
   expectStatusOnBoard,
   SHORTCUTS,
@@ -275,9 +276,11 @@ async function stoppedToBoard(title: string): Promise<void> {
 
 /** The open card's buffer once the shell is idle: its non-blank lines, nothing typed yet. */
 async function settledScreen(): Promise<string[]> {
-  await expect.poll(async () => (await bufferLines()).some((l) => l !== '')).toBe(true)
+  // Below any output kept from the card's last run (#46 D5).
+  const shown = async (): Promise<string[]> => belowSeparator(await bufferLines())
+  await expect.poll(async () => (await shown()).some((l) => l !== '')).toBe(true)
   await page.waitForTimeout(500)
-  return (await bufferLines()).filter((l) => l !== '')
+  return (await shown()).filter((l) => l !== '')
 }
 
 test('#5 AC3: when the shell exits the view goes back to the board and the card is Stopped', async () => {

@@ -9,7 +9,13 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, checkOnBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
+import {
+  backToBoard,
+  belowSeparator,
+  checkOnBoard,
+  expectCardOpen,
+  expectStatusOnBoard
+} from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 import {
@@ -139,9 +145,11 @@ function bufferLines(): Promise<string[]> {
 
 /** The open card's buffer once the shell is idle: its non-blank lines. */
 async function settledScreen(): Promise<string[]> {
-  await expect.poll(async () => (await bufferLines()).some((l) => l !== '')).toBe(true)
+  // Below any output kept from the card's last run (#46 D5).
+  const shown = async (): Promise<string[]> => belowSeparator(await bufferLines())
+  await expect.poll(async () => (await shown()).some((l) => l !== '')).toBe(true)
   await page.waitForTimeout(500)
-  return (await bufferLines()).filter((l) => l !== '')
+  return (await shown()).filter((l) => l !== '')
 }
 
 const terminalFocused = (): Promise<boolean> =>
@@ -228,9 +236,12 @@ test('AC3/AC4: claude quits to a shell; exit stops the card; opening it resumes'
 
   await openCard('agent')
   const resume = claudeResumeLine(u)
-  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --resume ${u}`)
-  // A new screen: the resume was typed, none of the first run's output is left.
-  const lines = await bufferLines()
+  await expect
+    .poll(async () => belowSeparator(await bufferLines()))
+    .toContain(`fake-claude ${SETTINGS_ARGS} --resume ${u}`)
+  // A new screen below the kept output (#46 D5): the resume was typed, none of the first run's
+  // output is there.
+  const lines = belowSeparator(await bufferLines())
   expect(lines.some((l) => l.endsWith(resume))).toBe(true)
   expect(lines).not.toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
   expect(lines).not.toContain(dir)

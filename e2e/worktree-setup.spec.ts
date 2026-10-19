@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, boardCard, closeCard, expectCardOpen } from './card-view'
+import { backToBoard, belowSeparator, boardCard, closeCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -296,18 +296,19 @@ test('AC3, AC8: the setup runs first, then the startup command; once only, acros
   // It succeeded: the card has no pending setup any more, saved.
   await expect.poll(() => savedSetups(dataDir)).toEqual({ fix: undefined })
 
-  // AC8: closed and opened again, only the startup command is typed.
+  // AC8: closed and opened again, only the startup command is typed (below the kept output,
+  // #46 D5).
   await closeOpenCard(page, 'fix')
   await openOnBoard(page, 'fix')
-  await expect.poll(() => lines(page)).toContain(AGENT)
-  expect(await screenText(page)).not.toContain('SETUP-RAN')
+  await expect.poll(async () => belowSeparator(await lines(page))).toContain(AGENT)
+  expect(belowSeparator(await lines(page)).join('\n')).not.toContain('SETUP-RAN')
 
   // And after a restart.
   await quit(first.app)
   ;({ page } = await launch(dataDir))
   await openOnBoard(page, 'fix')
-  await expect.poll(() => lines(page)).toContain(AGENT)
-  expect(await screenText(page)).not.toContain('SETUP-RAN')
+  await expect.poll(async () => belowSeparator(await lines(page))).toContain(AGENT)
+  expect(belowSeparator(await lines(page)).join('\n')).not.toContain('SETUP-RAN')
 })
 
 test('AC9: a setup that failed runs again after a restart, and the startup command never runs', async () => {
@@ -520,6 +521,7 @@ test('AC7: Skip setup starts the agent and clears the setup, so a reopen types o
 
   await closeOpenCard(page, 'skip')
   await openOnBoard(page, 'skip')
-  await expect.poll(() => lines(page)).toContain(AGENT)
-  expect(await screenText(page)).not.toContain('setup . failed')
+  // Below the output kept from the run whose setup failed (#46 D5).
+  await expect.poll(async () => belowSeparator(await lines(page))).toContain(AGENT)
+  expect(belowSeparator(await lines(page)).join('\n')).not.toContain('setup . failed')
 })

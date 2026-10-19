@@ -14,6 +14,7 @@ import {
   type CardStatus,
   type SetupState
 } from './card-status'
+import { keptOutput, restoredText, type KeptOutput } from './kept-output'
 import { readyWatcher } from './ready-marker'
 import {
   firstStart,
@@ -36,6 +37,11 @@ export interface CardScreen {
   screen(): { lines: string[]; cursorRow: number }
   /** Stops taking input: the shell couldn't start (#5 D8). */
   setReadOnly(): void
+  /**
+   * The normal buffer's newest `scrollback` rows and its screen, with colours and attributes,
+   * without terminal modes or the alternate screen (#46 D1).
+   */
+  serialize(scrollback: number): string
   dispose(): void
 }
 
@@ -50,6 +56,19 @@ export interface CardRef {
 export interface StartingCard extends CardRef, StartupState {}
 
 export type { SetupState }
+
+/**
+ * Keeps a card's main pane output across its starts (#46): read before each start's spawn and
+ * written above its prompt (D5), saved each time its shell stops (D2). Only what `keeps` says is
+ * a card's main pane, never a shell (D1).
+ */
+export interface OutputKeeper {
+  keeps(cardId: string): boolean
+  /** The Scrollback setting: the most scrollback rows a save starts from (D3). */
+  scrollback(): number
+  read(cardId: string): Promise<KeptOutput | null>
+  save(cardId: string, data: string): void
+}
 
 /** The board shows a card's status at most about 4 times a second (D9). */
 export const STATUS_INTERVAL_MS = 250
@@ -96,13 +115,15 @@ export class CardSessions<S extends CardScreen> {
    * `router` is shared with the cards' extra panes (#11), or a new one over `api`. `defer` runs
    * each card's spawn: the app defers it past the current task, so the view that opens the card
    * has fitted its new screen and the shell starts at the size the user sees (#22 D1); by
-   * default the spawn runs at once.
+   * default the spawn runs at once. `keeper`, when given, keeps the output of what it keeps
+   * across starts (#46).
    */
   constructor(
     private readonly api: TerminalApi,
     private readonly createScreen: (cardId: string) => S,
     private readonly router: SessionRouter = new SessionRouter(api),
-    private readonly defer: (spawn: () => void) => void = (spawn) => spawn()
+    private readonly defer: (spawn: () => void) => void = (spawn) => spawn(),
+    private readonly keeper?: OutputKeeper
   ) {}
 
   /**
@@ -192,7 +213,9 @@ export class CardSessions<S extends CardScreen> {
     }
     // Spawned at the screen's size when the deferral ends (#22 D1). A card closed or deleted
     // meanwhile is killed once its session arrives, like one closed while starting (#22 D2).
-    this.defer(() => {
+    // A kept card's save is read and written first (#46 D5); a failed read restores nothing, and
+    // a card deleted during the read spawns nothing.
+    const spawn = (): void => {
       const { cols, rows } = screen
       this.router.spawn(
         cols,
@@ -233,6 +256,17 @@ export class CardSessions<S extends CardScreen> {
         },
         card.host ?? null
       )
+    }
+    this.defer(() => {
+      const keeper = this.keeper
+      if (!keeper?.keeps(card.id)) return spawn()
+      void new Promise<KeptOutput | null>((resolve) => resolve(keeper.read(card.id)))
+        .catch(() => null)
+        .then((kept) => {
+          if (!current()) return
+          if (kept) screen.write(restoredText(kept))
+          spawn()
+        })
     })
   }
 
@@ -396,22 +430,36 @@ export class CardSessions<S extends CardScreen> {
 
   /**
    * Stopped: the old screen and its scrollback are discarded (#5 D6). An SSH card whose shell
-   * exited by itself with `ssh`'s 255 is SSH failed with its last output line (#12 D7), read once
-   * the screen has parsed everything written to it.
+   * exited by itself with `ssh`'s 255 is SSH failed with its last output line (#12 D7), and a kept
+   * card's output is saved (#46 D2), both read once the screen has parsed everything written to it.
    */
   private exited(cardId: string, entry: Entry<S>, { id, exitCode }: TerminalExit): void {
     this.router.release(id)
     entry.sessionId = null
     entry.watch = null
     const screen = entry.screen
-    if (entry.host === undefined || exitCode !== 255 || entry.closed || !screen) {
-      return this.stopped(cardId, entry, { kind: 'stopped' })
-    }
+    const sshFailed = entry.host !== undefined && exitCode === 255 && !entry.closed
+    const keeper = this.keeper?.keeps(cardId) ? this.keeper : undefined
+    if (!screen || (!sshFailed && !keeper)) return this.stopped(cardId, entry, { kind: 'stopped' })
     screen.write('', () => {
       if (entry.disposed || entry.screen !== screen) return
+      if (keeper) this.save(cardId, screen, keeper)
+      if (!sshFailed) return this.stopped(cardId, entry, { kind: 'stopped' })
       const { lines, cursorRow } = screen.screen()
       this.stopped(cardId, entry, { kind: 'stopped', sshFailed: lastOutputLine(lines, cursorRow) })
     })
+  }
+
+  /** Saves the screen's output, trimmed to the size cap (#46 D3); a failure only loses it. */
+  private save(cardId: string, screen: S, keeper: OutputKeeper): void {
+    try {
+      keeper.save(
+        cardId,
+        keptOutput((rows) => screen.serialize(rows), keeper.scrollback())
+      )
+    } catch (err) {
+      console.error(`kept output not saved: ${String(err)}`)
+    }
   }
 
   private stopped(cardId: string, entry: Entry<S>, state: CardRunState): void {

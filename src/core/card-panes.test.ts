@@ -34,6 +34,9 @@ class FakeScreen implements CardScreen {
   setReadOnly(): void {
     this.readOnly = true
   }
+  serialize(): string {
+    return this.text
+  }
   dispose(): void {
     this.disposed = true
   }

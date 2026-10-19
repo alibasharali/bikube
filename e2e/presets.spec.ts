@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
-import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
+import { backToBoard, belowSeparator, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -286,8 +286,9 @@ test('AC4: switching a card away from a preset and back keeps it started', async
   await setStartup('sh', 'Custom…')
   await openCard('sh')
   await run('pwd')
-  await expect.poll(bufferLines).toContain(dir)
-  expect((await bufferLines()).join('\n')).not.toContain('codex')
+  // Below the output kept from the Codex run (#46 D5).
+  await expect.poll(async () => belowSeparator(await bufferLines())).toContain(dir)
+  expect(belowSeparator(await bufferLines()).join('\n')).not.toContain('codex')
   await exitShell('sh')
 
   await setStartup('sh', 'Codex')

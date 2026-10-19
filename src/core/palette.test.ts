@@ -63,6 +63,7 @@ function input(state: WorkspaceState, extra: Partial<PaletteInput> = {}): Palett
     theme: 'system',
     keymap: defaultKeymap('linux'),
     platform: 'linux',
+    waiting: [],
     ...extra
   }
 }
@@ -304,6 +305,53 @@ describe('paletteItems actions (#40 D6)', () => {
   it('shows Ctrl+<n> off macOS', () => {
     const rows = paletteItems(input(state)).actions
     expect(rows.find((r) => r.label === 'Switch to workspace Beta')?.shortcut).toBe('Ctrl+2')
+  })
+})
+
+describe('paletteItems Next waiting card (#41 D7)', () => {
+  const alpha = workspace('a', 'Alpha', [card('c1', 'build')])
+  const beta = workspace('b', 'Beta', [card('c2', 'test')])
+  const state: WorkspaceState = { workspaces: [alpha, beta], activeId: 'a' }
+  const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
+  const view: OpenView = {
+    kind: 'card',
+    workspaceId: 'a',
+    cardId: 'c1',
+    running: true,
+    paneCount: 1,
+    extraPaneFocused: false,
+    focusedPaneHasScreen: true
+  }
+
+  it('lists the row after Open Default shell with its shortcut while a card waits', () => {
+    const i = input(state, { waiting: ['c2'] })
+    const shown = labels(i)
+    expect(
+      shown.slice(shown.indexOf('Open Default shell'), shown.indexOf('New workspace'))
+    ).toEqual(['Open Default shell', 'Next waiting card'])
+    expect(paletteItems(i).actions.find((r) => r.label === 'Next waiting card')).toEqual({
+      kind: 'action',
+      action: { id: 'nextWaiting' },
+      label: 'Next waiting card',
+      shortcut: 'Ctrl+Shift+J'
+    })
+    const mac = input(state, { waiting: ['c2'], keymap: defaultKeymap('darwin') })
+    expect(paletteItems(mac).actions.find((r) => r.label === 'Next waiting card')?.shortcut).toBe(
+      'Cmd+J'
+    )
+  })
+
+  it('is not listed when nothing would open: none waiting, only the open card, a deleted one', () => {
+    expect(labels(input(state))).not.toContain('Next waiting card')
+    expect(labels(input(state, { waiting: ['c1'], view }))).not.toContain('Next waiting card')
+    expect(labels(input(state, { waiting: ['gone'] }))).not.toContain('Next waiting card')
+    expect(labels(input(state, { waiting: ['c1', 'c2'], view }))).toContain('Next waiting card')
+  })
+
+  it('is listed without an active workspace, where Open Default shell would be', () => {
+    const none: WorkspaceState = { workspaces: [alpha, beta], activeId: null }
+    const shown = labels(input(none, { waiting: ['c2'] }))
+    expect(shown.slice(0, 2)).toEqual(['Next waiting card', 'New workspace'])
   })
 })
 

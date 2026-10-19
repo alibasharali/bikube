@@ -238,6 +238,7 @@ function App(): React.JSX.Element {
         closeCard()
         requestNewCard(activeId)
       } else if (action.id === 'openShell') openDefaultShell.current()
+      else if (action.id === 'nextWaiting') openNextWaiting.current()
       else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
       else if (action.id === 'settings') setSettingsOpen(true)
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })

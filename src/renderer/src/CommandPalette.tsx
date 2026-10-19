@@ -22,6 +22,7 @@ import {
 import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import { shellCards } from '../../core/workspace-shells'
 import type { WorkspaceState } from '../../core/workspace-store'
+import { useWaitingQueue } from './attention'
 import {
   cardPanes,
   cardTerminals,
@@ -138,6 +139,8 @@ function CommandPalette({
   const listId = useId()
   const ids = terminalIds(state)
   const statusKey = useStatusKey(ids)
+  // Next waiting card follows the queue live (#41 D7).
+  const waiting = useWaitingQueue()
 
   const items = useMemo(
     () =>
@@ -148,13 +151,14 @@ function CommandPalette({
           view: openView(open, runState, layout),
           theme,
           keymap: currentKeymap(),
-          platform: window.drovr?.platform ?? ''
+          platform: window.drovr?.platform ?? '',
+          waiting
         }),
         query
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, open, runState, layout, theme, query, statusKey]
+    [state, open, runState, layout, theme, query, statusKey, waiting]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,

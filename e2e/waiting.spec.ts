@@ -311,3 +311,50 @@ test('AC8: a recorded shortcut replaces the default, is saved, and Reset brings 
   await expect(field).toHaveText(darwin ? 'Cmd+J' : 'Ctrl+Shift+J')
   await expect.poll(saved).not.toContain('nextWaiting')
 })
+
+const PALETTE = darwin ? 'Meta+K' : 'Control+Shift+P'
+const palette = (): Locator => page.getByRole('dialog', { name: 'Command palette' })
+
+/** The palette's Actions section's row titles, read with the palette opened. */
+async function paletteActions(): Promise<string[]> {
+  await page.keyboard.press(PALETTE)
+  await expect(palette()).toBeVisible()
+  return palette()
+    .locator('[data-testid=palette-section][data-section=actions]')
+    .getByTestId('palette-row-title')
+    .allTextContents()
+}
+
+test('AC9: the palette lists Next waiting card while a card waits, with its shortcut, and runs it', async () => {
+  await createWorkspace('Alpha')
+  await createWorkspace('Beta')
+  await newCard('b1')
+  await selectWorkspace('Alpha')
+
+  expect(await paletteActions()).not.toContain('Next waiting card')
+  await page.keyboard.press('Escape')
+  await expect(palette()).toHaveCount(0)
+
+  const settings = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-shortcuts').click()
+  const shortcut = (await settings.getByTestId('settings-shortcut-nextWaiting').textContent()) ?? ''
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+
+  await selectWorkspace('Beta')
+  await setActivity('b1', 'waiting', 'Waiting for you')
+  await selectWorkspace('Alpha')
+
+  const actions = await paletteActions()
+  expect(
+    actions.slice(actions.indexOf('Open Default shell'), actions.indexOf('New workspace'))
+  ).toEqual(['Open Default shell', 'Next waiting card'])
+  const nextRow = palette()
+    .getByTestId('palette-row')
+    .filter({ has: page.getByTestId('palette-row-title').getByText('Next waiting card') })
+  await expect(nextRow.getByTestId('palette-row-shortcut')).toHaveText(shortcut)
+  await nextRow.click()
+  await expect(palette()).toHaveCount(0)
+  await expectOpenIn('Beta', 'b1')
+})

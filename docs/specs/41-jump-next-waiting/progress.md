@@ -8,7 +8,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 |---|---|---|---|---|
 | S1 | done | `b6f0b0f..0d0307c` | CLEAN | `waiting.ts`: nextWaiting(queue, openId), withActivity, isWaiting, waitingCounts, withoutDeleted; `attention.ts`: waitingQueue(), subscribeWaiting(l), useWaitingQueue(); testids workspace-waiting, workspace-waiting-dot |
 | S2 | done | `643765e..a50bb1d` | CLEAN | keymap action `nextWaiting` (Settings testids settings-shortcut-nextWaiting); `waiting.ts` nextWaitingCard(queue, openId, workspaces); App `openNextWaiting.current()` for the palette |
-| S3 | running | | | |
+| S3 | done | `e526c8d..eef0421` | CLEAN | palette action `nextWaiting`; PaletteInput.waiting |
 
 ## Rulings
 

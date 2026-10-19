@@ -403,6 +403,23 @@ export class CardSessions<S extends CardScreen> {
     else entry.closing = true
   }
 
+  /**
+   * Saves every running kept card's output as its screen has it now (#46 D2), when the app starts
+   * quitting. At once, not after the screen's parse: the window may be gone before the quit's
+   * hangups end every shell, and before a parse callback runs. Only cards whose shell has spawned,
+   * so a card still reading its save never replaces it with an empty screen. The cards keep
+   * running; their stops that still arrive save again.
+   */
+  keepRunning(): void {
+    const keeper = this.keeper
+    if (!keeper) return
+    for (const [cardId, entry] of this.entries) {
+      const screen = entry.screen
+      if (entry.state.kind !== 'running' || !screen || !entry.sessionId) continue
+      if (keeper.keeps(cardId)) this.save(cardId, screen, keeper)
+    }
+  }
+
   /** Stops the card's process if it runs, frees its screen and forgets the card. */
   dispose(cardId: string): void {
     const entry = this.entries.get(cardId)

@@ -480,6 +480,13 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
     registry.onEnded((cardId) => cardPanes().dispose(cardId))
+    // Every running card's output is saved as the app starts quitting, before main stops the
+    // shells (#46 D2).
+    const cards = registry
+    window.drovr.app.onQuitting(() => {
+      cards.keepRunning()
+      window.drovr.scrollback.quitSaved()
+    })
   }
   return registry
 }

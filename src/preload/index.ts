@@ -28,7 +28,8 @@ const api: DrovrApi = {
   scrollback: {
     read: (cardId) => ipcRenderer.invoke(IPC.scrollbackRead, cardId),
     save: (cardId, data) => ipcRenderer.send(IPC.scrollbackSave, cardId, data),
-    delete: (cardId) => ipcRenderer.send(IPC.scrollbackDelete, cardId)
+    delete: (cardId) => ipcRenderer.send(IPC.scrollbackDelete, cardId),
+    quitSaved: () => ipcRenderer.send(IPC.scrollbackQuitSaved)
   },
   settings: {
     load: () => ipcRenderer.invoke(IPC.settingsLoad),

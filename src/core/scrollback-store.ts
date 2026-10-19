@@ -21,6 +21,7 @@ export interface ScrollbackFs {
   readFileSync(path: string, encoding: 'utf8'): string
   statSync(path: string): { mtimeMs: number }
   rmSync(path: string, options: { force: true }): void
+  readdirSync(path: string): string[]
 }
 
 export interface ScrollbackStoreOptions {
@@ -87,6 +88,31 @@ export class ScrollbackStore {
       this.options.fs.rmSync(this.path(cardId), { force: true })
     } catch (err) {
       this.log(`kept output not removed: ${String(err)}`)
+    }
+  }
+
+  /**
+   * At launch (D7): removes every file in the folder but the saves of `keepIds`, so saves of
+   * cards no longer on the board and temporary files a failed save left are gone. A missing
+   * folder is nothing to prune.
+   */
+  prune(keepIds: Iterable<string>): void {
+    const { fs, dir } = this.options
+    const keep = new Set<string>()
+    for (const id of keepIds) keep.add(scrollbackFileName(id))
+    let names: string[]
+    try {
+      names = fs.readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      if (keep.has(name)) continue
+      try {
+        fs.rmSync(join(dir, name), { force: true })
+      } catch (err) {
+        this.log(`kept output not removed: ${String(err)}`)
+      }
     }
   }
 

@@ -1271,6 +1271,28 @@ describe('kept output (#46)', () => {
     expect(keeper.saves).toEqual([['c1', restoredText(KEPT)]])
   })
 
+  it('keepRunning saves every running kept card at once, and nothing else (D2, AC2)', async () => {
+    await startedKept('c1', null, 's1')
+    await startedKept('c2', KEPT, 's2')
+    await startedKept('c3', null, 's3')
+    await started('s-shell', { ok: true, id: 's4' })
+    api.emitData('s1', 'kept-46-quit')
+    api.emitData('s2', 'second-run')
+    api.emitData('s4', 'shell output')
+    api.emitExit({ id: 's3', exitCode: 0 })
+    // Still reading its save: no shell yet, so its empty screen replaces nothing.
+    sessions.start(card('c4'))
+    keeper.saves = []
+    sessions.keepRunning()
+    expect(keeper.saves).toEqual([
+      ['c1', 'kept-46-quit'],
+      ['c2', `${restoredText(KEPT)}second-run`]
+    ])
+    expect(sessions.runState('c1')).toEqual({ kind: 'running' })
+    api.emitData('s1', ' more')
+    expect(screens.get('c1')!.text).toBe('kept-46-quit more')
+  })
+
   it('neither reads nor saves for what it does not keep, such as a shell (D1, AC9)', async () => {
     await started('s-shell', { ok: true, id: 's1' })
     api.emitData('s1', 'output')

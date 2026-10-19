@@ -7,7 +7,8 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  statSync
+  statSync,
+  writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -284,4 +285,70 @@ test("AC9: an extra pane and the Default shell keep nothing; only the card's mai
   await openCard('api')
   await closeOpenCard('api')
   await expect.poll(keptFiles).toEqual([fileOf(cardId('api'))])
+})
+
+test('AC2, AC10: a running card at quit shows its output after a restart; none of it in the state or sync file', async () => {
+  // A Sync folder, so the sync file holds the board (#13).
+  const folder = join(root, 'sync')
+  mkdirSync(folder)
+  const syncFile = join(folder, 'drovr-board.json')
+  const settings = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-sync').click()
+  await settings.getByTestId('settings-sync-folder').fill(folder)
+  await settings.getByTestId('settings-sync-folder').press('Enter')
+  await settings.getByTestId('settings-done').click()
+  await expect(settings).toHaveCount(0)
+
+  await newCard('api')
+  await run('echo kept-46-quit')
+  await expect.poll(bufferLines).toContain('kept-46-quit')
+  const id = cardId('api')
+  await expect
+    .poll(() => (existsSync(syncFile) ? readFileSync(syncFile, 'utf8') : ''))
+    .toContain('"api"')
+  // Quit with the card running (its quit hold included), then launch on the same data.
+  await app.close()
+  expect(keptFiles()).toEqual([fileOf(id)])
+  ;({ app, page } = await launchApp({ dataDir }))
+
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  await openCard('api')
+  await expect.poll(async () => lastIndex(await bufferLines(), SEPARATOR)).toBeGreaterThan(0)
+  const lines = await bufferLines()
+  expect(lastIndex(lines, 'kept-46-quit')).toBeGreaterThanOrEqual(0)
+  expect(lastIndex(lines, 'kept-46-quit')).toBeLessThan(lastIndex(lines, SEPARATOR))
+
+  // AC10: the board's files hold none of the kept output.
+  for (const file of [join(dataDir, 'drovr-state.json'), syncFile]) {
+    const text = readFileSync(file, 'utf8')
+    expect(text).toContain('"api"')
+    expect(text).not.toContain('kept-46-quit')
+    expect(text).not.toContain('scrollback')
+    expect(text).not.toContain('Previous output')
+  }
+  expect(readdirSync(folder)).not.toContain('scrollback')
+})
+
+test('AC6: at launch, saves of cards not on the board and stray temporary files are removed', async () => {
+  await newCard('api')
+  await run('echo kept-46-prune')
+  await expect.poll(bufferLines).toContain('kept-46-prune')
+  await closeOpenCard('api')
+  const kept = fileOf(cardId('api'))
+  await expect.poll(keptFiles).toEqual([kept])
+  await app.close()
+
+  // A save of a card on no board, and temporary files a failed save left.
+  const planted = [fileOf('card-not-on-the-board'), `${kept}.tmp`, `${fileOf('gone')}.tmp`]
+  for (const name of planted) writeFileSync(join(scrollbackDir(), name), 'planted\r\n')
+  ;({ app, page } = await launchApp({ dataDir }))
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect.poll(() => keptFiles().sort()).toEqual([kept])
+
+  // The board's card keeps its save.
+  await openCard('api')
+  await expect.poll(async () => lastIndex(await bufferLines(), SEPARATOR)).toBeGreaterThan(0)
+  const lines = await bufferLines()
+  expect(lastIndex(lines, 'kept-46-prune')).toBeLessThan(lastIndex(lines, SEPARATOR))
 })

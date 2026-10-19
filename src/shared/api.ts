@@ -32,6 +32,7 @@ export const IPC = {
   scrollbackRead: 'scrollback:read',
   scrollbackSave: 'scrollback:save',
   scrollbackDelete: 'scrollback:delete',
+  scrollbackQuitSaved: 'scrollback:quitSaved',
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   settingsShells: 'settings:shells',
@@ -163,6 +164,11 @@ export interface ScrollbackApi {
   save(cardId: string, data: string): void
   /** Removes the card's save, if any (D7). */
   delete(cardId: string): void
+  /**
+   * Sent once every running card's quit save (D2) was sent: main stops the shells after it, or
+   * after a bound.
+   */
+  quitSaved(): void
 }
 
 /** App-wide settings, stored by main in `userData/drovr-settings.json` (#10 D6). */

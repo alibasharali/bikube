@@ -38,7 +38,8 @@ const recordingFs = (): ScrollbackFs => ({
   },
   readFileSync: (path, encoding) => fs.readFileSync(path, encoding),
   statSync: (path) => fs.statSync(path),
-  rmSync: (path, options) => fs.rmSync(path, options)
+  rmSync: (path, options) => fs.rmSync(path, options),
+  readdirSync: (path) => fs.readdirSync(path)
 })
 
 beforeEach(() => {
@@ -119,5 +120,20 @@ describe('ScrollbackStore (#46 D4)', () => {
     fs.chmodSync(dir, 0o755)
     store.save('card-1', 'x')
     expect(statSync(dir).mode & 0o777).toBe(0o700)
+  })
+
+  it('at launch removes every save of a card not kept, and stray temporary files (D7, AC6)', () => {
+    store.save('card-1', 'x')
+    store.save('card-2', 'y')
+    writeFileSync(join(dir, `${hash('card-1')}.tmp`), 'half')
+    writeFileSync(join(dir, `${hash('gone')}.tmp`), 'half')
+    store.prune(['card-1', 'card-3'])
+    expect(readdirSync(dir)).toEqual([hash('card-1')])
+    expect(store.read('card-1')?.data).toBe('x')
+  })
+
+  it('prunes nothing when the folder does not exist yet', () => {
+    store.prune([])
+    expect(fs.existsSync(dir)).toBe(false)
   })
 })

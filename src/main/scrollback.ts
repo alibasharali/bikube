@@ -7,19 +7,30 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
 import { ScrollbackStore } from '../core/scrollback-store'
+import type { WorkspaceState } from '../core/workspace-store'
 import { IPC } from '../shared/api'
+
+export interface MainScrollback {
+  store: ScrollbackStore
+  /**
+   * Resolves when the window says its quit saves were sent (#46 D2): call it before sending
+   * `app:quitting`. Saves arrive in order on the same channel, so they are written by then.
+   */
+  quitSaved(): Promise<void>
+}
 
 /**
  * Cards' kept output (#46 D4) in `<userData>/scrollback`: only the window's own top-level page
  * may read, save or delete, as with `state:*`.
  */
-export function registerScrollback(): ScrollbackStore {
+export function registerScrollback(): MainScrollback {
   const store = new ScrollbackStore({
     dir: join(app.getPath('userData'), 'scrollback'),
     fs: {
@@ -32,7 +43,8 @@ export function registerScrollback(): ScrollbackStore {
       renameSync,
       readFileSync,
       statSync,
-      rmSync
+      rmSync,
+      readdirSync
     }
   })
 
@@ -49,5 +61,20 @@ export function registerScrollback(): ScrollbackStore {
   ipcMain.on(IPC.scrollbackDelete, (event, cardId: unknown) => {
     if (fromMainFrame(event)) store.delete(cardId)
   })
-  return store
+  let quitSaved = (): void => {}
+  ipcMain.on(IPC.scrollbackQuitSaved, (event) => {
+    if (fromMainFrame(event)) quitSaved()
+  })
+  return {
+    store,
+    quitSaved: () =>
+      new Promise<void>((resolve) => {
+        quitSaved = resolve
+      })
+  }
+}
+
+/** The ids of every card on the given boards, whose saves the launch prune keeps (#46 D7). */
+export function cardIds(...boards: WorkspaceState[]): string[] {
+  return boards.flatMap((board) => board.workspaces.flatMap((w) => w.cards.map((c) => c.id)))
 }

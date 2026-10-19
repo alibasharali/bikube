@@ -213,3 +213,100 @@ describe("this machine's host name for the renderer (#45 D8)", () => {
     expect(parseHostName(['electron'])).toBe('')
   })
 })
+
+describe("ShellMarks' output positions (#60 D1)", () => {
+  /** Feeds `marks` (a payload, the row and column it arrived at) to a fresh mark state. */
+  function at(sequence: [string, number, number][]): ShellMarks<number> {
+    const marks = new ShellMarks<number>()
+    sequence.forEach(([data, row, x], i) => {
+      const mark = parseShellMark(133, data)
+      if (mark)
+        marks.feed(
+          mark,
+          i,
+          () => row,
+          () => x
+        )
+    })
+    return marks
+  }
+
+  it("AC1: keeps each ended command's C and D positions, with its line", () => {
+    const marks = at([
+      ['A', 0, 0],
+      ['B', 0, 2],
+      ['C', 1, 0],
+      ['D;0', 3, 0],
+      ['A', 3, 0],
+      ['B', 3, 2],
+      ['C', 3, 7],
+      ['D;1', 4, 5]
+    ])
+    expect(marks.outputs()).toEqual([
+      { command: marks.commands()[0], start: { line: 1, x: 0 }, end: { line: 3, x: 0 } },
+      { command: marks.commands()[1], start: { line: 3, x: 7 }, end: { line: 4, x: 5 } }
+    ])
+    expect(marks.commands().map((c) => c.line)).toEqual([0, 3])
+  })
+
+  it('AC1: lists no running command, and none fed without a column', () => {
+    const running = at([
+      ['B', 0, 2],
+      ['C', 1, 0]
+    ])
+    expect(running.outputs()).toEqual([])
+    const { marks } = fed([
+      [133, 'B'],
+      [133, 'C'],
+      [133, 'D']
+    ])
+    expect(marks.commands()).toHaveLength(1)
+    expect(marks.outputs()).toEqual([])
+  })
+
+  it('AC1: forgets a command whose C row left the scrollback, also while it runs', () => {
+    const marks = at([
+      ['B', 0, 2],
+      ['C', 1, 0],
+      ['D', 2, 0],
+      ['B', 2, 2],
+      ['C', 3, 0]
+    ])
+    marks.forget(1)
+    expect(marks.outputs()).toEqual([])
+    expect(marks.commands()).toHaveLength(1)
+    marks.forget(3)
+    marks.feed(
+      { kind: 'command-end', exitCode: 0 },
+      9,
+      () => 4,
+      () => 0
+    )
+    expect(marks.commands()).toHaveLength(2)
+    expect(marks.outputs()).toEqual([])
+  })
+
+  it('keeps no position on a row xterm gave no handle for (the alt screen)', () => {
+    const marks = new ShellMarks<number | undefined>()
+    marks.feed(
+      { kind: 'prompt-end' },
+      0,
+      () => 0,
+      () => 2
+    )
+    marks.feed(
+      { kind: 'output-start' },
+      1,
+      () => undefined,
+      () => 0
+    )
+    marks.feed(
+      { kind: 'command-end', exitCode: 0 },
+      2,
+      () => 1,
+      () => 0
+    )
+    expect(marks.commands()).toHaveLength(1)
+    expect(marks.outputs()).toEqual([])
+  })
+})

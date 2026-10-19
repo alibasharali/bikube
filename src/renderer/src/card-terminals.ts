@@ -273,7 +273,15 @@ export class XtermScreen implements CardScreen {
     for (const family of SHELL_MARK_OSCS) {
       this.term.parser.registerOscHandler(family, (data) => {
         const mark = parseShellMark(family, data)
-        if (mark && !this.restoring) this.marks.feed(mark, Date.now(), () => this.markRow())
+        // The cursor's column too, so a command's output keeps its C and D positions (#60 D1).
+        if (mark && !this.restoring) {
+          this.marks.feed(
+            mark,
+            Date.now(),
+            () => this.markRow(),
+            () => this.term.buffer.active.cursorX
+          )
+        }
         return false
       })
     }

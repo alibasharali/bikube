@@ -39,6 +39,19 @@ export interface ShellCommand<Line> {
   exitCode?: number
 }
 
+/** Where a mark arrived (#60 D1): the row's handle and the cursor's column when it was parsed. */
+export interface MarkPosition<Line> {
+  line: Line
+  x: number
+}
+
+/** An ended command's output (#60 D1): from where its `C` arrived to where its `D` did. */
+export interface CommandOutput<Line> {
+  command: ShellCommand<Line>
+  start: MarkPosition<Line>
+  end: MarkPosition<Line>
+}
+
 /** The mark in an OSC payload of `family`, or undefined for anything else (D1). */
 export function parseShellMark(family: ShellMarkFamily, data: string): ShellMark | undefined {
   if (family === 7) return parseOsc7(data)
@@ -98,15 +111,19 @@ export class ShellMarks<Line> {
   private latestEnd: Line | undefined
   private running: ShellCommand<Line> | undefined
   private readonly ended: ShellCommand<Line>[] = []
+  /** Where the running command's `C` arrived (#60 D1); none when fed without a column. */
+  private runningStart: MarkPosition<Line> | undefined
+  private readonly endedOutputs: CommandOutput<Line>[] = []
   private lastDirectory: ShellDirectory | undefined
   private readonly listeners = new Set<(command: ShellCommand<Line>) => void>()
 
   /**
    * Takes in a mark parsed at `time` (ms); `line` gives the row it arrived on, and is called only
    * when the mark needs it. A row it gives as undefined (xterm has no marker on the alt screen)
-   * is never kept: no prompt and no listed command, which could never be forgotten.
+   * is never kept: no prompt and no listed command, which could never be forgotten. `column`
+   * gives the cursor's column; with it, a command's `C` and `D` positions are kept (#60 D1).
    */
-  feed(mark: ShellMark, time: number, line: () => Line): void {
+  feed(mark: ShellMark, time: number, line: () => Line, column?: () => number): void {
     switch (mark.kind) {
       case 'prompt-start': {
         const row = line()
@@ -128,6 +145,7 @@ export class ShellMarks<Line> {
         if (this.running) return
         this.running = { line: this.latestEnd ?? this.latestStart ?? line(), start: time }
         this.latestStart = this.latestEnd = undefined
+        this.runningStart = column && position(line(), column())
         return
       case 'command-end': {
         // A `D` with no `C` since the last `D` ends nothing (D2).
@@ -136,7 +154,13 @@ export class ShellMarks<Line> {
         this.running = undefined
         command.end = time
         command.exitCode = mark.exitCode
-        if (command.line !== undefined) this.ended.push(command)
+        const start = this.runningStart
+        this.runningStart = undefined
+        if (command.line !== undefined) {
+          this.ended.push(command)
+          const end = start && column && position(line(), column())
+          if (end) this.endedOutputs.push({ command, start, end })
+        }
         for (const listener of this.listeners) listener(command)
         return
       }
@@ -148,6 +172,14 @@ export class ShellMarks<Line> {
   /** The ended commands still in the scrollback, oldest first. */
   commands(): readonly ShellCommand<Line>[] {
     return this.ended
+  }
+
+  /**
+   * The ended commands still in the scrollback with their `C` and `D` positions (#60 D1), oldest
+   * first: only those fed with a column whose rows had handles.
+   */
+  outputs(): readonly CommandOutput<Line>[] {
+    return this.endedOutputs
   }
 
   /** The prompts' rows, oldest first: of `A` marks, else of `B` marks if no `A` ever came (D2). */
@@ -176,9 +208,22 @@ export class ShellMarks<Line> {
     for (let i = this.ended.length - 1; i >= 0; i--) {
       if (this.ended[i]!.line === line) this.ended.splice(i, 1)
     }
+    // A command whose `C` row (or, safely, `D` row) is gone has no output (#60 D1).
+    for (let i = this.endedOutputs.length - 1; i >= 0; i--) {
+      const { command, start, end } = this.endedOutputs[i]!
+      if (command.line === line || start.line === line || end.line === line) {
+        this.endedOutputs.splice(i, 1)
+      }
+    }
+    if (this.runningStart?.line === line) this.runningStart = undefined
     if (this.latestStart === line) this.latestStart = undefined
     if (this.latestEnd === line) this.latestEnd = undefined
   }
+}
+
+/** A mark's position, none on a row without a handle (the alt screen). */
+function position<Line>(line: Line, x: number): MarkPosition<Line> | undefined {
+  return line === undefined ? undefined : { line, x }
 }
 
 function remove<T>(list: T[], item: T): void {

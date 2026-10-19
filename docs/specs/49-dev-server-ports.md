@@ -2,7 +2,7 @@
 item: 49
 type: feature
 title: Detect dev-server ports and open them
-status: draft
+status: approved
 branch: claude/49-dev-server-ports
 ---
 

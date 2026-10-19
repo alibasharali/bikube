@@ -183,6 +183,45 @@ async function nestedEnv(sh: Shell, nested: string): Promise<Record<string, stri
 }
 
 describeShell('bash', (bash) => {
+  /** bash's major and minor version: `\#` read through `${…@P}` needs 4.4. */
+  const version = execFileSync(bash, ['-c', 'echo "${BASH_VERSINFO[0]} ${BASH_VERSINFO[1]}"'], {
+    encoding: 'utf8'
+  })
+    .trim()
+    .split(' ')
+    .map(Number)
+  const promptExpansion = version[0]! > 4 || (version[0] === 4 && version[1]! >= 4)
+
+  /**
+   * A command line that is one whole subshell runs no simple command in the shell itself (no
+   * DEBUG trap): its C and D come at the next prompt. An empty Enter after it sends neither.
+   * With HISTCONTROL=ignoreboth in the login files, a line starting with a space too (bash 4.4+).
+   */
+  async function checkSubshell(sh: Shell): Promise<void> {
+    const ends = (part: string): string[] =>
+      marks(part).filter((m) => m === '133;C' || m.startsWith('133;D'))
+    let from = sh.output().length
+    sh.run('(exit 7)')
+    await sh.until('D;7', (o) => o.slice(from).includes(OSC('133;D;7')))
+    await sh.until('the next prompt', (o) => {
+      const part = o.slice(from)
+      return part.indexOf(OSC('133;A'), part.indexOf(OSC('133;D;7'))) > 0
+    })
+    expect(ends(sh.output().slice(from))).toEqual(['133;C', '133;D;7'])
+    from = sh.output().length
+    sh.run('')
+    await sh.until('the prompt after Enter', (o) => o.slice(from).includes(OSC('133;A')))
+    sh.run('echo after-"enter"')
+    await sh.until('the command after', (o) => visible(o.slice(from)).includes('\nafter-enter\n'))
+    await sh.until('its D', (o) => o.slice(from).includes(OSC('133;D;0')))
+    expect(ends(sh.output().slice(from))).toEqual(['133;C', '133;D;0'])
+    if (!promptExpansion) return
+    from = sh.output().length
+    sh.run(' (cd /tmp && false)')
+    await sh.until('D;1', (o) => o.slice(from).includes(OSC('133;D;1')))
+    expect(ends(sh.output().slice(from))).toEqual(['133;C', '133;D;1'])
+  }
+
   it('marks prompts and commands, keeps the login files, the prompt and $?', async () => {
     const home = folder()
     writeFileSync(
@@ -224,6 +263,19 @@ describeShell('bash', (bash) => {
     expect(sh.output().split(OSC('133;C')).length).toBe(7)
   })
 
+  it('marks a command line that is one whole subshell at the next prompt', async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.bash_profile'),
+      ['export TEST_LOGIN_VAR=from-login-files', "PS1='user[$?]> '", 'HISTCONTROL=ignoreboth'].join(
+        '\n'
+      ) + '\n'
+    )
+    const sh = start(bash, home)
+    await checkScripts(sh, (status) => `user[${status}]> `)
+    await checkSubshell(sh)
+  })
+
   it('percent-encodes OSC 7 by bytes and gives LC_ALL back as it was', async () => {
     for (const lcAll of [undefined, 'C.UTF-8']) {
       const home = folder()
@@ -262,6 +314,7 @@ describeShell('bash', (bash) => {
           'set -u',
           'export TEST_LOGIN_VAR=from-login-files',
           "PS1='user[$?]> '",
+          'HISTCONTROL=ignoreboth',
           ...lines,
           ...hooks
         ].join('\n') + '\n'
@@ -297,6 +350,7 @@ describeShell('bash', (bash) => {
       const sh = start(bash, profile([`. '${preexec}'`]))
       await checkScripts(sh, (status) => `user[${status}]> `)
       await checkHooks(sh)
+      await checkSubshell(sh)
     })
 
     it('sourced and installed at once by the login files', async () => {
@@ -311,6 +365,7 @@ describeShell('bash', (bash) => {
       )
       await checkScripts(sh, (status) => `user[${status}]> `)
       await checkHooks(sh)
+      await checkSubshell(sh)
     })
 
     it('sourced at the prompt after Drovr loaded, keeping a DEBUG trap of the user', async () => {
@@ -322,6 +377,7 @@ describeShell('bash', (bash) => {
       sh.run(`. '${preexec}'`)
       await sh.until('its install', (o) => visible(o).includes('user-precmd-0\n'))
       await checkHooks(sh)
+      await checkSubshell(sh)
       sh.run('echo traced')
       await sh.until('the user trap', (o) => visible(o).includes('\nuser-trap-ran\n'))
     })
@@ -364,6 +420,43 @@ describeShell('zsh', (zsh) => {
     await checkScripts(sh, (status) => `user[${status}]> `)
     expect(visible(sh.output())).toContain('hook-saw-1\n')
     expect((await nestedEnv(sh, zsh))['ZDOTDIR']).toBe(zdotdir)
+  })
+
+  it("marks the first prompt after the hooks the user's .zshrc adds (themes)", async () => {
+    const home = folder()
+    writeFileSync(
+      join(home, '.zshrc'),
+      [
+        'export TEST_LOGIN_VAR=from-login-files',
+        // A theme setting PS1 and printing a header line in precmd, as p10k, pure and oh-my-zsh do.
+        'theme() { local s=$?; PS1="T[$s]%# "; print "\\nheader"; }',
+        'precmd_functions+=(theme)'
+      ].join('\n') + '\n'
+    )
+    const sh = start(zsh, home)
+    await sh.until('the first prompt', (o) => o.includes(OSC('133;B')))
+    const first = sh.output()
+    const a = first.indexOf(OSC('133;A'))
+    // A after the header, on the prompt's row; B after the theme's prompt.
+    expect(a).toBeGreaterThan(first.indexOf('header'))
+    expect(first.indexOf('header')).toBeGreaterThanOrEqual(0)
+    expect(visible(first.slice(a, first.indexOf(OSC('133;B'))))).toMatch(/^T\[0\][%#] $/)
+    // The first command's marks, with the theme still seeing its status.
+    const from = first.length
+    sh.run('false')
+    await sh.until('D;1', (o) => o.slice(from).includes(OSC('133;D;1')))
+    await sh.until('the next prompt', (o) => o.slice(from).includes(OSC('133;B')))
+    const part = sh.output().slice(from)
+    expect(marks(part).filter((m) => m.startsWith('133;'))).toEqual([
+      '133;C',
+      '133;D;1',
+      '133;A',
+      '133;B'
+    ])
+    const d = part.indexOf(OSC('133;D;1'))
+    expect(part.indexOf('header', d)).toBeLessThan(part.indexOf(OSC('133;A')))
+    expect(part.indexOf('header', d)).toBeGreaterThan(d)
+    expect(visible(part)).toContain('T[1]')
   })
 
   it("works under the user's `setopt nounset` without an error", async () => {

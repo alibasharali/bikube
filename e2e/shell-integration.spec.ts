@@ -462,6 +462,8 @@ async function splitDirectory(): Promise<string> {
     .not.toBe('')
   await page.keyboard.press(SHORTCUTS.closePane)
   await expect(panes).toHaveCount(1)
+  // The main pane's terminal has the keyboard again before the next typed line, or it is lost.
+  await expect(panes.nth(0).locator('.xterm-helper-textarea')).toBeFocused()
   return found
 }
 

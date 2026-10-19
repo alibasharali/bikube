@@ -552,6 +552,11 @@ async function pickInPalette(query: string, title: string): Promise<void> {
 
 /** Expects `on`'s typed `echo after-…` line to be only what was typed: no stray keys before it. */
 async function expectCleanLine(on: Page): Promise<void> {
+  // A shell just started may not have drawn its prompt yet: keys typed before it would echo
+  // ahead of the prompt, on a line of their own.
+  await expect
+    .poll(async () => (await bufferLines(on)).some((l) => /^\S+[$#] ?$/.test(l)))
+    .toBe(true)
   await run(on, 'echo after-$((50+3))')
   await expect.poll(() => bufferLines(on)).toContain('after-53')
   const lines = await bufferLines(on)

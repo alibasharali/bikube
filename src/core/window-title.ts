@@ -8,3 +8,8 @@ export function windowTitle(
   if (workspace && card) return `${card.title} — ${workspace.name}`
   return workspace?.name ?? 'Drovr'
 }
+
+/** A card window's title (#53 D4): its card (or shell) as shown, then its workspace. */
+export function cardWindowTitle(workspace: { name: string }, card: { title: string }): string {
+  return `${card.title} · ${workspace.name}`
+}

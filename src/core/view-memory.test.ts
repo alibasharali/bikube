@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   enterWorkspace,
+  forgetCards,
   forgetView,
   NO_VIEWS,
   openedCard,
@@ -57,5 +58,13 @@ describe('view memory (#31 D19, AC17, AC18)', () => {
     expect(openedCard(after, 'alpha')).toBeNull()
     expect(openedCard(after, 'beta')).toBe('web')
     expect(forgetView(after, 'alpha')).toBe(after)
+  })
+
+  it('a card going to its own window is forgotten wherever it is open (#53 D6)', () => {
+    const views = rememberCard(rememberCard(NO_VIEWS, 'alpha', 'api'), 'beta', 'web')
+    const after = forgetCards(views, ['api', 'other'])
+    expect(openedCard(after, 'alpha')).toBeNull()
+    expect(openedCard(after, 'beta')).toBe('web')
+    expect(forgetCards(after, ['other'])).toBe(after)
   })
 })

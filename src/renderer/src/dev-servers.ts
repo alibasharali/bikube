@@ -1,18 +1,19 @@
 import { useSyncExternalStore } from 'react'
 import { DevServers, type DevServerUrl } from '../../core/dev-servers'
+import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
  * The app-wide dev server ports of cards and shells (#49): fed by `cardTerminals()` from each
- * local main pane's output, probed by main every 3 s while the window is focused and at once on
- * focus (D4).
+ * local main pane's output, probed by main every 3 s while a Drovr window is focused and at once
+ * when one gains the focus (D4; a card's own window counts, #53 D10).
  */
 let registry: DevServers | undefined
 
 export function devServers(): DevServers {
   registry ??= new DevServers({
     probe: (ports) => window.drovr.ports.probe(ports),
-    focused: () => document.hasFocus(),
-    onFocus: (listener) => window.addEventListener('focus', listener),
+    focused: anyWindowFocused,
+    onFocus: (listener) => void onAnyWindowFocus(listener),
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>)
   })

@@ -258,6 +258,15 @@ function lines(page: Page): Promise<string[]> {
 
 const screenText = async (page: Page): Promise<string> => (await lines(page)).join('\n')
 
+/**
+ * The screen with every run of whitespace, newlines included, as one space (#61): the shell may
+ * echo a typed line before turning tty echo off or redraw it itself (zsh, at 72 columns
+ * `. \r\e[K \r failed`, whose erase-in-line clears the row's wrapped flag), so a typed line can
+ * land on rows `lines` doesn't join.
+ */
+const flatText = async (page: Page): Promise<string> =>
+  (await screenText(page)).replace(/\s+/g, ' ')
+
 /** The cards' pending setups in the saved state file, by title. */
 function savedSetups(dataDir: string): Record<string, string | undefined> {
   const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')) as {
@@ -318,7 +327,7 @@ test('AC9: a setup that failed runs again after a restart, and the startup comma
   let page = first.page
   await createSetupWorkspace(page, repo, 'false')
   await newCard(page, 'broken', true)
-  await expect.poll(() => screenText(page)).toContain('setup . failed')
+  await expect.poll(() => flatText(page)).toContain('setup . failed')
   await backToBoard(page)
   await expect(setupPill(page, 'broken')).toHaveText('Setup failed')
   await openOnBoard(page, 'broken')
@@ -333,7 +342,7 @@ test('AC9: a setup that failed runs again after a restart, and the startup comma
   await quit(first.app)
   ;({ page } = await launch(dataDir))
   await openOnBoard(page, 'broken')
-  await expect.poll(() => screenText(page)).toContain('setup . failed')
+  await expect.poll(() => flatText(page)).toContain('setup . failed')
   await backToBoard(page)
   await expect(setupPill(page, 'broken')).toHaveText('Setup failed')
   await openOnBoard(page, 'broken')
@@ -369,7 +378,7 @@ test('AC10: no setup line for a card without Own worktree or the Default shell; 
   await saveDialog(page)
   await newCard(page, 'worktree', true)
   await expect.poll(() => lines(page)).toContain(AGENT)
-  expect(await screenText(page)).not.toContain('setup . ok')
+  expect(await flatText(page)).not.toContain('setup . ok')
   expect(savedSetups(dataDir)).toEqual({ plain: undefined, worktree: undefined })
 })
 

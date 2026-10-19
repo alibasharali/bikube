@@ -9,6 +9,7 @@ import { KILL_GRACE_MS } from '../core/session-manager'
 import { IPC } from '../shared/api'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerAttention } from './attention'
+import { allowCardWindows, appWindow, registerCardWindows } from './card-windows'
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerFiles } from './files'
@@ -78,6 +79,9 @@ function createWindow(settings: MainSettings): void {
     }
   })
 
+  // Its page opens its cards' own windows, and they close with it (#53 D3).
+  allowCardWindows(mainWindow, () => settings.backgroundColor())
+
   mainWindow.on('ready-to-show', () => {
     if (!hiddenForTests) mainWindow.show()
   })
@@ -142,6 +146,7 @@ function startApp(): void {
   registerPorts()
   registerDirectories()
   registerAttention()
+  registerCardWindows()
   registerWorktrees()
   registerGit(() => settings.shell())
   registerFiles(() => settings.editor())
@@ -202,10 +207,11 @@ function startApp(): void {
     process.kill(process.pid, 'SIGKILL')
   })
 
-  // Another launch on the same data directory: bring this one's window forward instead.
+  // Another launch on the same data directory: bring this one's window forward instead, the main
+  // window, never a card window (#53 D3).
   app.on('second-instance', () => {
     if (!app.isReady()) return
-    const [window] = BrowserWindow.getAllWindows()
+    const window = appWindow()
     if (!window) {
       createWindow(settings)
       return
@@ -227,7 +233,7 @@ function startApp(): void {
     createWindow(settings)
     updates.start()
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow(settings)
+      if (!appWindow()) createWindow(settings)
     })
   })
 

@@ -37,9 +37,11 @@ function MenuButton({
     const onDown = (e: MouseEvent): void => {
       if (!root.current?.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
+    // The document the menu is in: the main window's, or a card window's (#53 D5).
+    const doc = root.current?.ownerDocument ?? document
+    doc.addEventListener('mousedown', onDown)
     root.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
-    return () => document.removeEventListener('mousedown', onDown)
+    return () => doc.removeEventListener('mousedown', onDown)
   }, [open])
 
   const run = (action: () => void) => (): void => {
@@ -53,7 +55,10 @@ function MenuButton({
       setPosition({
         position: 'fixed',
         top: rect.bottom + 4,
-        right: Math.max(0, window.innerWidth - rect.right)
+        right: Math.max(
+          0,
+          (button.current.ownerDocument.defaultView ?? window).innerWidth - rect.right
+        )
       })
     }
     setOpen((o) => !o)
@@ -70,7 +75,7 @@ function MenuButton({
         root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []
       )
       if (items.length === 0) return
-      const at = items.indexOf(document.activeElement as HTMLElement)
+      const at = items.indexOf(root.current?.ownerDocument.activeElement as HTMLElement)
       const step = e.key === 'ArrowDown' ? 1 : -1
       items[(at + step + items.length) % items.length].focus()
     } else if (e.key === 'Tab') {

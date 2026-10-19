@@ -456,7 +456,8 @@ const CARD_VIEW_ACTIONS = [
   'Close card',
   'Toggle panel',
   'Find',
-  'Copy command output'
+  'Copy command output',
+  'Open in new window'
 ]
 
 test('AC7: with a running card open, the card view actions and its moves are listed, with their shortcuts', async () => {
@@ -470,7 +471,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
 
   await openPalette()
   const actions = await titles(section('actions'))
-  expect(actions.slice(0, 10)).toEqual([
+  expect(actions.slice(0, 11)).toEqual([
     'Back to board',
     'Split right',
     'Split down',
@@ -478,6 +479,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
     'Toggle panel',
     'Find',
     'Copy command output',
+    'Open in new window',
     'Move card to In Progress',
     'Move card to Review',
     'Move card to Done'

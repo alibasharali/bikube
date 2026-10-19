@@ -16,18 +16,19 @@ import {
   useCardRunState,
   type XtermScreen
 } from './card-terminals'
+import { dialogOpenIn, useViewWindow } from './view-window'
 
 /** A pane's screen: the card's own terminal for the main pane, else the extra pane's. */
 function paneScreen(cardId: string, paneId: string): XtermScreen | undefined {
   return paneId === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, paneId)
 }
 
-/** A dialog over the view owns the keyboard: nothing moves focus or acts on keys behind it. */
-const dialogOpen = (): boolean => document.querySelector('[aria-modal="true"]') !== null
-
-/** Gives the screen keyboard focus, unless a dialog is open over the view. */
-function focusScreen(screen: XtermScreen | undefined): void {
-  if (!dialogOpen()) screen?.focus()
+/**
+ * Gives the screen keyboard focus, unless a dialog is open over the view: it owns the keyboard of
+ * `view`, the window the view is in (#53 D5).
+ */
+function focusScreen(screen: XtermScreen | undefined, view: Window): void {
+  if (!dialogOpenIn(view)) screen?.focus()
 }
 
 /** The view's find bar (#35 D3): the pane it searches; `request` counts the Find presses. */
@@ -71,11 +72,12 @@ function Pane({
   focused: boolean
 } & FindProps &
   ZoomProps): React.JSX.Element {
+  const view = useViewWindow()
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => screen?.attach(hostRef.current!), [screen])
   useEffect(() => {
-    if (focused) focusScreen(screen)
-  }, [focused, screen])
+    if (focused) focusScreen(screen, view)
+  }, [focused, screen, view])
   return (
     <div
       className="pane"
@@ -99,7 +101,7 @@ function Pane({
           onClick={() => {
             // Ends the zoom; the keyboard goes back to the pane's terminal (#48 D5).
             cardPanes().toggleZoom(cardId)
-            focusScreen(screen)
+            focusScreen(screen, view)
           }}
         >
           Zoomed · {zoomedPanes} panes
@@ -123,7 +125,7 @@ function Pane({
           onClick={() => {
             cardPanes().close(cardId, paneId)
             // The button is gone: keyboard focus goes back to the focused pane's terminal.
-            focusScreen(paneScreen(cardId, cardPanes().layout(cardId).focused))
+            focusScreen(paneScreen(cardId, cardPanes().layout(cardId).focused), view)
           }}
         >
           <X {...SMALL_ICON} />
@@ -173,7 +175,18 @@ function PaneTree({
  * show on the board. Leaving only detaches the screens; the processes keep running (D8, D10).
  * When the shell exits, the view goes back to the board (#5 D6), including after Close.
  */
-function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.JSX.Element {
+function CardView({
+  card,
+  onBack,
+  onOpenInWindow
+}: {
+  card: Card
+  onBack: () => void
+  /** Opens the card in its own window (#53 D6); none in a card window, where it does nothing (D5). */
+  onOpenInWindow?: () => void
+}): React.JSX.Element {
+  // The main window, or the card's own window (#53 D5): its keys, dialogs and focus are that one's.
+  const view = useViewWindow()
   const runState = useCardRunState(card.id)
   const [closing, setClosing] = useState(false)
   // A card that stops or fails while its Close dialog is open has nothing left to close.
@@ -200,8 +213,8 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
     // Keyboard focus goes back to the searched pane's terminal, the focused pane (#35 D10).
     if (paneId === undefined) return
     cardPanes().focus(card.id, paneId)
-    focusScreen(paneScreen(card.id, paneId))
-  }, [find, card.id])
+    focusScreen(paneScreen(card.id, paneId), view)
+  }, [find, card.id, view])
 
   // The card's actions (#31 D5), run by its shortcuts and the command palette (#40 D6).
   useEffect(() => {
@@ -227,6 +240,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       else if (action === 'copyCommandOutput') paneScreen(card.id, focusedPane)?.copyCommandOutput()
       // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
       else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
+      else if (action === 'openInWindow') onOpenInWindow?.()
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); it ends a
       // zoom (#48 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
@@ -234,7 +248,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       } else if (action === 'closePane' && focusedPane !== MAIN_PANE) {
         // An extra pane closes at once (D4); the focus moves to the pane that gets it.
         cardPanes().close(card.id, focusedPane)
-        focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused))
+        focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
       } else if (running) {
         // Close card, or Close pane in the main pane: the Close confirmation (#7), only while
         // the card runs.
@@ -248,20 +262,21 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       // #57 D4).
       if (!isCardViewAction(action)) return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
-      if (dialogOpen()) return
+      if (dialogOpenIn(view)) return
       event.preventDefault()
       event.stopPropagation()
       // A held shortcut's auto-repeat is swallowed without acting again (D7).
       if (event.repeat) return
       run(action)
     }
-    window.addEventListener('keydown', onKeyDown, true)
-    const unregister = registerCardViewActions(run)
+    view.addEventListener('keydown', onKeyDown, true)
+    // The palette's card view actions act on the main window's open card only (#53 D5).
+    const unregister = view === window ? registerCardViewActions(run) : () => {}
     return () => {
-      window.removeEventListener('keydown', onKeyDown, true)
+      view.removeEventListener('keydown', onKeyDown, true)
       unregister()
     }
-  }, [onBack, card, splittable, running, focusedPane])
+  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])
 
   return (
     <div className="card-layout">
@@ -291,7 +306,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
           onHide={() => {
             settingsStore.update({ sidePanelOpen: false })
             // The hide button is gone: keyboard focus goes back to the focused pane's terminal.
-            focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused))
+            focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
           }}
         />
       )}

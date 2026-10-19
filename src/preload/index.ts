@@ -120,6 +120,9 @@ const api: DrovrApi = {
       return () => ipcRenderer.removeListener(IPC.appGlobalShow, handler)
     }
   },
+  cardWindow: {
+    focus: (cardId) => ipcRenderer.send(IPC.cardWindowFocus, cardId)
+  },
   globalShortcut: {
     state: () => ipcRenderer.invoke(IPC.globalShortcutState),
     suspend: (suspended) => ipcRenderer.send(IPC.globalShortcutSuspend, suspended)

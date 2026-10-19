@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   GitBranch,
   GitMerge,
   GitPullRequest,
@@ -41,6 +42,7 @@ import {
 import DeleteWorktreeCardDialog from './DeleteWorktreeCardDialog'
 import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
 import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
+import { openCardWindow, useInWindow } from './card-windows'
 import { workspaceStore } from './store'
 import { useCardUsage } from './usage'
 
@@ -261,12 +263,14 @@ interface CardItemProps {
  * command (#5 D11), moves it to the bottom of another column (#6 D8), closes it while it runs
  * (#7 D3, D4), retries or skips a setup that is running or failed (#39 D6), or deletes it, asking first while its process runs. Alt+arrows move it (#6 D7); its body drags it to another place
  * on the board, dimmed meanwhile (#6 D5). A running card's stop button opens the same Close
- * confirmation (#31 D10).
+ * confirmation (#31 D10). Its menu also opens it in its own window, or brings that window forward
+ * (#53 D6); while it is there its status row has the `In window` chip (D7).
  */
 function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
   const running = useCardRunState(card.id).kind === 'running'
   const usage = useCardUsage(card.id)
+  const inWindow = useInWindow(card.id)
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [editingStartup, setEditingStartup] = useState(false)
@@ -377,7 +381,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             onCommit={(title) => workspaceStore.renameCard(workspaceId, card.id, title)}
             onDone={() => setRenaming(false)}
           />
-          <CardLines status={status} usage={usage} />
+          <CardLines status={status} usage={usage} inWindow={inWindow} />
         </div>
       ) : (
         <button
@@ -407,7 +411,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>
-          <CardLines status={status} usage={usage} />
+          <CardLines status={status} usage={usage} inWindow={inWindow} />
         </button>
       )}
       {card.worktree && <PullRequestChip worktree={card.worktree} />}
@@ -480,6 +484,19 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             >
               <SquareTerminal {...MENU_ICON} />
               Startup command…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              data-testid="card-menu-open-window"
+              onClick={run(() => {
+                cancelPendingOpen()
+                openCardWindow(workspaceId, card.id)
+              })}
+            >
+              <AppWindow {...MENU_ICON} />
+              Open in new window
             </button>
             {card.worktree && (
               <PullRequestItem cardId={card.id} worktree={card.worktree} run={run} />

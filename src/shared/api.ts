@@ -53,6 +53,7 @@ export const IPC = {
   appReveal: 'app:reveal',
   appQuitting: 'app:quitting',
   appGlobalShow: 'app:globalShow',
+  cardWindowFocus: 'cardWindow:focus',
   globalShortcutState: 'globalShortcut:state',
   globalShortcutSuspend: 'globalShortcut:suspend',
   worktreeInfo: 'worktree:info',
@@ -365,6 +366,12 @@ export interface AppApi {
   onGlobalShow(listener: () => void): () => void
 }
 
+/** The card windows the page opens itself (#53 D2), as main keeps them by card id (D3). */
+export interface CardWindowApi {
+  /** Brings card (or shell) `cardId`'s window forward; nothing when it has none. */
+  focus(cardId: string): void
+}
+
 /** The global shortcut registered by main (#51 D8); its text is saved with the settings. */
 export interface GlobalShortcutApi {
   /** Whether the saved global shortcut is registered with the OS, or was refused. */
@@ -422,6 +429,7 @@ export interface DrovrApi {
   board: BoardApi
   sync: SyncApi
   app: AppApi
+  cardWindow: CardWindowApi
   globalShortcut: GlobalShortcutApi
   worktree: WorktreeApi
   git: GitApi

@@ -188,7 +188,10 @@ export class XtermScreen implements CardScreen {
   private readonly endPointerSelection = (): void => {
     if (this.pointerSelecting) setTimeout(() => (this.pointerSelecting = false), 0)
   }
-  private opened = false
+  /** Removes the pointer listeners from the window the screen is attached in (`attach`). */
+  private unlistenWindow: (() => void) | undefined
+  /** The window the screen was last shown in (#53 D2). */
+  private shownIn: Window | undefined
   private webgl: WebglAddon | undefined
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
@@ -249,11 +252,6 @@ export class XtermScreen implements CardScreen {
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.
     this.host.addEventListener('mousedown', () => (this.pointerSelecting = true), true)
-    // Released anywhere, even outside the window (blur) or cancelled: never left stuck. Capture
-    // phase, so no handler can stop it; the reset waits for xterm's own mouseup handler.
-    window.addEventListener('mouseup', this.endPointerSelection, true)
-    window.addEventListener('pointercancel', this.endPointerSelection, true)
-    window.addEventListener('blur', this.endPointerSelection)
     // Copy on select: a finished selection goes to the clipboard as it is made, unless Find made
     // it, also when the addon re-searches on new output (#35 D9).
     this.term.onSelectionChange(() => {
@@ -429,22 +427,97 @@ export class XtermScreen implements CardScreen {
     return this.serializer.serialize({ range, excludeModes: true, excludeAltBuffer: true })
   }
 
-  /** Shows the screen in `container`, fitted and kept fitted; returns the detach function. */
+  /**
+   * Shows the screen in `container`, fitted and kept fitted; returns the detach function. The
+   * container may be in a card's own window (#53 D2): xterm is opened again on its moved host,
+   * which makes it follow that window, before WebGL is loaded there.
+   */
   attach(container: HTMLElement): () => void {
+    const view = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis
     container.appendChild(this.host)
-    if (!this.opened) {
-      this.term.open(this.host)
-      this.opened = true
-    }
+    // Opens it the first time; after that only points xterm at the host's window.
+    this.term.open(this.host)
+    this.followDocument(container.ownerDocument)
+    if (this.shownIn && this.shownIn !== view) this.dropPendingFrames(this.shownIn)
+    this.shownIn = view
+    this.listenTo(view)
     this.fitNow()
     this.loadWebgl()
-    const observer = new ResizeObserver(() => this.fitNow())
+    const observer = new view.ResizeObserver(() => this.fitNow())
     observer.observe(container)
     this.term.refresh(0, this.term.rows - 1)
     return () => {
       observer.disconnect()
       this.dropWebgl()
-      this.host.remove()
+      this.unlistenWindow?.()
+      this.unlistenWindow = undefined
+      // Only from this container: it may already be shown elsewhere.
+      if (this.host.parentElement === container) this.host.remove()
+    }
+  }
+
+  /**
+   * xterm 6 binds a mouse-reporting drag's `mousemove` and `mouseup` on the document it was first
+   * opened in, and has no option to change it (a re-open only updates its window), so a drag in a
+   * card window would report neither its moves nor its release (#53 D2). Its private field is
+   * pointed at the host's document, back and forth; checked first, so another xterm version only
+   * loses this. A document node by its type, not `instanceof`: a card window's is another realm's.
+   */
+  private followDocument(doc: Document): void {
+    const core = (this.term as unknown as { _core?: { _document?: unknown } })._core
+    const current = core?._document as { nodeType?: unknown } | null | undefined
+    if (core && typeof current === 'object' && current !== null && current.nodeType === 9) {
+      if (current !== doc) core._document = doc
+    }
+  }
+
+  /**
+   * xterm 6 asks the window it is shown in for animation frames, and keeps each pending one's id
+   * until it runs: its render debouncer (which then skips every refresh), overview ruler and
+   * selection. A frame `previous` still owes never runs once that window closes, and the screen
+   * would never draw again, there or anywhere (#53 D2). Each pending frame is cancelled there and
+   * forgotten, so the next refresh asks this window. The debouncer keeps its rows and refresh
+   * callbacks: the full refresh after it covers every row and runs them. Private fields, each
+   * checked first, so another xterm version only loses this.
+   */
+  private dropPendingFrames(previous: Window): void {
+    const core = (this.term as unknown as { _core?: Record<string, unknown> })._core
+    const renderService = core?._renderService as Record<string, unknown> | undefined
+    const pending: [unknown, string][] = [
+      [renderService?._renderDebouncer, '_animationFrame'],
+      [core?._overviewRulerRenderer, '_animationFrame'],
+      [core?._selectionService, '_refreshAnimationFrame']
+    ]
+    for (const [owner, field] of pending) {
+      if (typeof owner !== 'object' || owner === null) continue
+      const fields = owner as Record<string, unknown>
+      const id = fields[field]
+      if (typeof id !== 'number') continue
+      try {
+        previous.cancelAnimationFrame(id)
+      } catch {
+        // A closed window has no frames left to cancel.
+      }
+      fields[field] = undefined
+    }
+  }
+
+  /**
+   * A mouse selection ends when the button is released anywhere in `view`, even outside it (blur)
+   * or cancelled: never left stuck. Capture phase, so no handler can stop it; the reset waits for
+   * xterm's own mouseup handler. In the window the screen is shown in (#53 D5).
+   */
+  private listenTo(view: Window): void {
+    this.unlistenWindow?.()
+    const end = this.endPointerSelection
+    view.addEventListener('mouseup', end, true)
+    view.addEventListener('pointercancel', end, true)
+    view.addEventListener('blur', end)
+    this.unlistenWindow = () => {
+      view.removeEventListener('mouseup', end, true)
+      view.removeEventListener('pointercancel', end, true)
+      view.removeEventListener('blur', end)
+      this.pointerSelecting = false
     }
   }
 
@@ -563,9 +636,8 @@ export class XtermScreen implements CardScreen {
 
   dispose(): void {
     this.disposed = true
-    window.removeEventListener('mouseup', this.endPointerSelection, true)
-    window.removeEventListener('pointercancel', this.endPointerSelection, true)
-    window.removeEventListener('blur', this.endPointerSelection)
+    this.unlistenWindow?.()
+    this.unlistenWindow = undefined
     liveScreens.delete(this)
     this.dropWebgl()
     this.host.remove()
@@ -594,7 +666,7 @@ export class XtermScreen implements CardScreen {
    */
   copyCommandOutput(): void {
     const buffer = this.term.buffer.active
-    if (!this.opened || buffer.type !== 'normal') return
+    if (!this.term.element || buffer.type !== 'normal') return
     const { cols, rows } = this.term
     const text = (y: number, from: number, to: number): string =>
       buffer.getLine(y)?.translateToString(true, from, to) ?? ''

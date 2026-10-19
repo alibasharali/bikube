@@ -20,7 +20,10 @@ interface ModalProps {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/** Accessible modal: role=dialog, labelled, Esc closes, Tab is trapped, focus is restored on close. */
+/**
+ * Accessible modal: role=dialog, labelled, Esc closes, Tab is trapped, focus is restored on close;
+ * all within the window it is shown in (#53 D5).
+ */
 function Modal({
   title,
   onClose,
@@ -41,8 +44,10 @@ function Modal({
   })
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
     const root = ref.current
+    // The document the dialog is in: the main window's, or a card window's (#53 D5).
+    const doc = root?.ownerDocument ?? document
+    const previous = doc.activeElement as HTMLElement | null
     const first = initialFocus ? root?.querySelector<HTMLElement>(initialFocus) : null
     ;(first ?? root?.querySelector<HTMLElement>(FOCUSABLE))?.focus()
 
@@ -60,7 +65,7 @@ function Modal({
       }
       const firstItem = items[0]
       const lastItem = items[items.length - 1]
-      const active = document.activeElement
+      const active = doc.activeElement
       if (!root.contains(active)) {
         e.preventDefault()
         firstItem.focus()
@@ -72,9 +77,9 @@ function Modal({
         firstItem.focus()
       }
     }
-    document.addEventListener('keydown', onKeyDown)
+    doc.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('keydown', onKeyDown)
+      doc.removeEventListener('keydown', onKeyDown)
       if (previous && previous.isConnected) previous.focus()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

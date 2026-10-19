@@ -5,19 +5,20 @@ import { draggedPanelWidth, PANEL_KEY_STEP, shownPanelWidth } from '../../core/s
 import FilesTab from './FilesTab'
 import { SMALL_ICON } from './icons'
 import { settingsStore, useSettings } from './settings'
+import { useViewWindow } from './view-window'
 
 /** The panel's tabs (#55 D1), in strip order; later tabs are added here. */
 const PANEL_TABS = [{ id: 'files', label: 'Files' }] as const
 type PanelTab = (typeof PANEL_TABS)[number]['id']
 
-/** The window's inner width, followed as it resizes. */
-function useWindowWidth(): number {
-  const [width, setWidth] = useState(() => window.innerWidth)
+/** `view`'s inner width, followed as it resizes. */
+function useWindowWidth(view: Window): number {
+  const [width, setWidth] = useState(() => view.innerWidth)
   useEffect(() => {
-    const onResize = (): void => setWidth(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
+    const onResize = (): void => setWidth(view.innerWidth)
+    view.addEventListener('resize', onResize)
+    return () => view.removeEventListener('resize', onResize)
+  }, [view])
   return width
 }
 
@@ -39,7 +40,9 @@ function SidePanel({
   onHide: () => void
 }): React.JSX.Element {
   const { sidePanelWidth } = useSettings()
-  const windowWidth = useWindowWidth()
+  // The window the panel is in: the main window, or a card's own (#53 D4, D5).
+  const view = useViewWindow()
+  const windowWidth = useWindowWidth(view)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
   const [tab, setTab] = useState<PanelTab>('files')
@@ -78,7 +81,7 @@ function SidePanel({
           const start = drag.current
           if (!start) return
           setDragWidth(
-            draggedPanelWidth(start.startWidth, start.startX - event.clientX, window.innerWidth)
+            draggedPanelWidth(start.startWidth, start.startX - event.clientX, view.innerWidth)
           )
         }}
         onPointerUp={(event) => {
@@ -88,7 +91,7 @@ function SidePanel({
           const next = draggedPanelWidth(
             start.startWidth,
             start.startX - event.clientX,
-            window.innerWidth
+            view.innerWidth
           )
           setDragWidth(null)
           save(next)
@@ -108,7 +111,7 @@ function SidePanel({
                 : 0
           if (step === 0 || event.altKey || event.ctrlKey || event.metaKey) return
           event.preventDefault()
-          save(draggedPanelWidth(width, step, window.innerWidth))
+          save(draggedPanelWidth(width, step, view.innerWidth))
         }}
       />
       <div className="side-panel-header">

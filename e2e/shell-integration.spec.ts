@@ -526,9 +526,27 @@ function paneSelection(index = 0): Promise<string> {
   }, index)
 }
 
-const readClipboard = (): Promise<string> => app!.evaluate(({ clipboard }) => clipboard.readText())
-const writeClipboard = (text: string): Promise<void> =>
-  app!.evaluate(({ clipboard }, text) => clipboard.writeText(text), text)
+/**
+ * Records each text the app writes to the clipboard from now on, still writing it: the system
+ * clipboard is shared by every test on xvfb's display, so the tests read what this app wrote.
+ * Main looks `clipboard.writeText` up at each write.
+ */
+const recordClipboardWrites = (): Promise<void> =>
+  app!.evaluate(({ clipboard }) => {
+    const writes: string[] = []
+    const write = clipboard.writeText.bind(clipboard)
+    Object.assign(globalThis, { __clipboardWrites: writes })
+    clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
+      writes.push(text)
+      write(text, type)
+    }
+  })
+
+/** The texts the app wrote to the clipboard since `recordClipboardWrites`. */
+const clipboardWrites = (): Promise<string[]> =>
+  app!.evaluate(() => [
+    ...(globalThis as unknown as { __clipboardWrites: string[] }).__clipboardWrites
+  ])
 
 /** Runs `echo after-copy` (quoted apart) and waits for its output: no key reached the shell. */
 async function shellGotNoKeys(): Promise<void> {
@@ -540,22 +558,21 @@ async function shellGotNoKeys(): Promise<void> {
 test("#60 AC2: Copy command output selects and copies the last command's output", async () => {
   await launchWithShell('/bin/sh')
   await openDefaultShell()
-  await writeClipboard('before')
+  await recordClipboardWrites()
   await run(markedOutput(String.raw`one\ntwo\n`))
   await run(markedOutput(String.raw`three\n`))
   await expect.poll(async () => (await rows()).includes('$ three')).toBe(true)
   const { top } = await viewport()
 
   await page.keyboard.press(COPY_OUTPUT)
-  await expect.poll(readClipboard).toBe('three')
+  await expect.poll(clipboardWrites).toEqual(['three'])
   expect(await paneSelection()).toBe('three')
   // The view does not scroll (D2).
   expect((await viewport()).top).toBe(top)
 
   // A selection like any other: Copy copies it again (D2).
-  await writeClipboard('stale')
   await page.keyboard.press(darwin ? 'Meta+C' : 'Control+Shift+C')
-  await expect.poll(readClipboard).toBe('three')
+  await expect.poll(clipboardWrites).toEqual(['three', 'three'])
   await shellGotNoKeys()
 })
 
@@ -575,8 +592,9 @@ test("#60 AC3: after Previous prompt, the output of the command at the viewport'
   await page.keyboard.press(PREVIOUS_PROMPT)
   await page.keyboard.press(PREVIOUS_PROMPT)
   await expect.poll(async () => (await viewport()).top).toBe(first)
+  await recordClipboardWrites()
   await page.keyboard.press(COPY_OUTPUT)
-  await expect.poll(readClipboard).toBe('one\ntwo')
+  await expect.poll(clipboardWrites).toEqual(['one\ntwo'])
   expect(await paneSelection()).toBe('one\ntwo')
   expect((await viewport()).top).toBe(first)
 })
@@ -586,11 +604,11 @@ test('#60 AC4: with nothing to copy the clipboard and selection stay as they wer
   await openDefaultShell()
   await run('echo no-"marks"')
   await expect.poll(async () => (await rows()).includes('no-marks')).toBe(true)
-  await writeClipboard('before')
+  await recordClipboardWrites()
 
   await page.keyboard.press(COPY_OUTPUT)
   await page.waitForTimeout(300)
-  expect(await readClipboard()).toBe('before')
+  expect(await clipboardWrites()).toEqual([])
   expect(await paneSelection()).toBe('')
 
   // A marked command with empty output (its C and D together), then one printing empty lines.
@@ -600,7 +618,7 @@ test('#60 AC4: with nothing to copy the clipboard and selection stay as they wer
   await expect.poll(async () => (await rows()).includes('empty-done')).toBe(true)
   await page.keyboard.press(COPY_OUTPUT)
   await page.waitForTimeout(300)
-  expect(await readClipboard()).toBe('before')
+  expect(await clipboardWrites()).toEqual([])
   expect(await paneSelection()).toBe('')
   await shellGotNoKeys()
 })
@@ -622,13 +640,14 @@ test("#60 AC5: in bash with Shell integration, a card's focused extra pane copie
 
   await run(String.raw`printf 'x\ny\n'`)
   await expect.poll(async () => (await paneRows(1)).includes('y')).toBe(true)
+  await recordClipboardWrites()
   await page.keyboard.press(COPY_OUTPUT)
-  await expect.poll(readClipboard).toBe('x\ny')
+  await expect.poll(clipboardWrites).toEqual(['x\ny'])
   expect(await paneSelection(1)).toBe('x\ny')
   expect(await paneSelection(0)).toBe('')
 })
 
-test("#60 AC7: with Find open, the selection is the command's output, not the match; Copy on select copies it", async () => {
+test("#60 AC7: with Find open, the selection is the command's output, not the match; with Copy on select it is copied once", async () => {
   await launchWithShell('/bin/sh')
   const dialog = page.getByTestId('settings-dialog')
   await page.getByTestId('settings-open').click()
@@ -640,7 +659,7 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   await run(markedOutput(String.raw`\141lpha\nbeta\n`))
   await run(markedOutput(String.raw`\141lpha\ngamma\n`))
   await expect.poll(async () => (await rows()).includes('gamma')).toBe(true)
-  await writeClipboard('before')
+  await recordClipboardWrites()
 
   await page.keyboard.press(darwin ? 'Meta+F' : 'Control+Shift+F')
   const input = page.getByTestId('find-input')
@@ -653,7 +672,7 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   expect(await paneSelection()).toBe('alpha')
 
   await page.keyboard.press(COPY_OUTPUT)
-  await expect.poll(readClipboard).toBe('alpha\ngamma')
+  await expect.poll(clipboardWrites).toEqual(['alpha\ngamma'])
   expect(await paneSelection()).toBe('alpha\ngamma')
   // Find's highlights stay, and its next step selects its match again.
   await expect(
@@ -664,7 +683,7 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   await input.press('Enter')
   await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
   expect(await paneSelection()).toBe('alpha')
-  // Find's selection is never copied (#35 D9).
+  // Written once with Copy on select on (D2), and Find's selections never (#35 D9).
   await page.waitForTimeout(300)
-  expect(await readClipboard()).toBe('alpha\ngamma')
+  expect(await clipboardWrites()).toEqual(['alpha\ngamma'])
 })

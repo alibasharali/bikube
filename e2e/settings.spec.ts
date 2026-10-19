@@ -894,7 +894,20 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
   const darwin = process.platform === 'darwin'
   const defaultText = darwin ? 'Shift+Cmd+A' : 'Ctrl+Shift+A'
-  const clipboard = (): Promise<string> => app!.evaluate(({ clipboard }) => clipboard.readText())
+  // What the app writes to the clipboard, recorded: xvfb's clipboard is every test's.
+  const clipboardWrites = (): Promise<string[]> =>
+    app!.evaluate(() => [
+      ...(globalThis as unknown as { __clipboardWrites: string[] }).__clipboardWrites
+    ])
+  await app.evaluate(({ clipboard }) => {
+    const writes: string[] = []
+    const write = clipboard.writeText.bind(clipboard)
+    Object.assign(globalThis, { __clipboardWrites: writes })
+    clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
+      writes.push(text)
+      write(text, type)
+    }
+  })
   await alphaWithApi(page)
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type(
@@ -921,9 +934,8 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
 
-  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
   await page.keyboard.press('Control+Alt+O')
-  await expect.poll(clipboard).toBe('copied')
+  await expect.poll(clipboardWrites).toEqual(['copied'])
 
   await page.keyboard.press(SHORTCUT)
   await dialog(page).getByTestId('settings-section-shortcuts').click()
@@ -932,7 +944,6 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   await expect.poll(saved).not.toContain('copyCommandOutput')
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
-  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
   await page.keyboard.press(darwin ? 'Meta+Shift+A' : 'Control+Shift+A')
-  await expect.poll(clipboard).toBe('copied')
+  await expect.poll(clipboardWrites).toEqual(['copied', 'copied'])
 })

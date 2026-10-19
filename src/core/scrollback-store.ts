@@ -6,10 +6,8 @@
  */
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { isCardId } from './ipc-guards'
 import { MAX_KEPT_CHARS, type KeptOutput } from './kept-output'
-
-/** The longest card id accepted, as `terminal:spawn` takes. */
-const MAX_CARD_ID_LENGTH = 100
 
 /** The synchronous fs calls the store needs (a subset of `node:fs`). */
 export interface ScrollbackFs {
@@ -32,9 +30,6 @@ export interface ScrollbackStoreOptions {
   log?: (message: string) => void
 }
 
-const validId = (cardId: unknown): cardId is string =>
-  typeof cardId === 'string' && cardId.length > 0 && cardId.length <= MAX_CARD_ID_LENGTH
-
 /** The file name of a card's save: the sha256 of its id, hex, so any id is a safe name. */
 export function scrollbackFileName(cardId: string): string {
   return createHash('sha256').update(cardId).digest('hex')
@@ -45,7 +40,7 @@ export class ScrollbackStore {
 
   /** The card's save, or null when it has none (or it can't be read, or is too long). */
   read(cardId: unknown): KeptOutput | null {
-    if (!validId(cardId)) return null
+    if (!isCardId(cardId)) return null
     const path = this.path(cardId)
     try {
       const data = this.options.fs.readFileSync(path, 'utf8')
@@ -61,7 +56,7 @@ export class ScrollbackStore {
    * isn't a string or is longer than `MAX_KEPT_CHARS` (D3), or a failed write.
    */
   save(cardId: unknown, data: unknown): boolean {
-    if (!validId(cardId) || typeof data !== 'string' || data.length > MAX_KEPT_CHARS) return false
+    if (!isCardId(cardId) || typeof data !== 'string' || data.length > MAX_KEPT_CHARS) return false
     const { fs, dir } = this.options
     const path = this.path(cardId)
     const tmp = `${path}.tmp`
@@ -87,7 +82,7 @@ export class ScrollbackStore {
 
   /** Removes the card's save; nothing happens when it has none (D7). */
   delete(cardId: unknown): void {
-    if (!validId(cardId)) return
+    if (!isCardId(cardId)) return
     try {
       this.options.fs.rmSync(this.path(cardId), { force: true })
     } catch (err) {

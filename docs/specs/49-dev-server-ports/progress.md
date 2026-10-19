@@ -6,12 +6,14 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
-| S2 | todo | | | |
+| S1 | done | `9d6278b..e6028ab` | CLEAN | `DevServers` (src/core/dev-servers.ts; app instance `devServers()` in src/renderer/src/dev-servers.ts): `paneOpened/output/paneEnded(cardId,paneId)`, `cardEnded`, `ports`, `subscribe`; `MAIN_PANE`. `CardSessions.watchOutput` feeds local main panes. IPC `ports:probe` → `window.drovr.ports.probe`. `<DevServerChips cardId>` (testids dev-servers, dev-server-chip, dev-server-more). |
+| S2 | running | | | |
 
 ## Rulings
 
 - 2026-10-19: grilling round 1 answered by full auto with the recommendations (see the spec).
+
+- 2026-10-19 S1: D3 "the first pane that printed a port keeps it" read as first in time (orchestrator).
 
 ## Verification
 

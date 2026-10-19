@@ -468,3 +468,45 @@ describe('workspace logos in the saved state (#59 D2, D5, AC4)', () => {
     expectRejected(fileWith((s) => (s.workspaces[0].logo = null)))
   })
 })
+
+describe('automatic move rules in the saved state (#42 D2, D7, AC10)', () => {
+  it('writes autoMove only on a workspace with a rule on, and reads it back', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    const [alpha] = s.getState().workspaces
+    ok(s.updateWorkspace(alpha.id, { autoMove: { waiting: alpha.columns[1].id } }))
+    const state = s.getState()
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces
+    expect(first.autoMove).toEqual({ waiting: alpha.columns[1].id })
+    expect('autoMove' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('reads a file without autoMove with every rule off', () => {
+    const read = parseSavedState(serializeSavedState(fullState()))
+    expect(read.ok && read.value.workspaces.every((w) => !('autoMove' in w))).toBe(true)
+  })
+
+  it('reads a rule naming an unknown column as off, ignores unknown keys, and loads the rest', () => {
+    const read = parseSavedState(
+      fileWith((s) => {
+        const w = s.workspaces[0]
+        w.autoMove = { working: 'gone', waiting: w.columns[0].id, later: 'x' }
+        s.workspaces[1].autoMove = { stopped: 'gone' }
+      })
+    )
+    expect(read.ok).toBe(true)
+    if (!read.ok) return
+    const [first, second] = read.value.workspaces
+    expect(first.autoMove).toEqual({ waiting: first.columns[0].id })
+    expect('autoMove' in second).toBe(false)
+  })
+
+  it('rejects an autoMove that is not an object, or a rule that is not a string', () => {
+    expectRejected(fileWith((s) => (s.workspaces[0].autoMove = 5)))
+    expectRejected(fileWith((s) => (s.workspaces[0].autoMove = null)))
+    expectRejected(fileWith((s) => (s.workspaces[0].autoMove = ['x'])))
+    expectRejected(fileWith((s) => (s.workspaces[0].autoMove = { waiting: 5 })))
+    expectRejected(fileWith((s) => (s.workspaces[0].autoMove = { stopped: null })))
+  })
+})

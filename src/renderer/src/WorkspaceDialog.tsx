@@ -12,6 +12,7 @@ import {
   type WorkspaceLocation
 } from '../../core/workspace-form'
 import { CLAUDE_STARTUP, checkCardStartup } from '../../core/startup-command'
+import { keepKnownRules, type AutoMove, type AutoMoveTrigger } from '../../core/auto-move'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
 import { WORKSPACE_LOGOS, type WorkspaceLogoId } from '../../core/workspace-logos'
 import {
@@ -32,6 +33,13 @@ interface WorkspaceDialogProps {
   workspaces: Workspace[]
   onClose: () => void
 }
+
+/** The automatic move rules' selects (#42 D6), in the fieldset's order. */
+const AUTO_MOVE_RULES: [AutoMoveTrigger, string][] = [
+  ['working', 'When working'],
+  ['waiting', 'When waiting for you'],
+  ['stopped', 'When stopped']
+]
 
 /** The Location choice (#12 D4), `This computer` first as the default. */
 const LOCATIONS: [WorkspaceLocation, string, LucideIcon][] = [
@@ -68,6 +76,11 @@ function WorkspaceDialog({
   const [setupError, setSetupError] = useState<string | undefined>(undefined)
   // The sidebar badge's icon (#59 D3); null is None, the name's initial.
   const [logo, setLogo] = useState<WorkspaceLogoId | null>(workspace?.logo ?? null)
+  // The automatic move rules (#42 D6): edited here, stored only on Save.
+  const [autoMove, setAutoMove] = useState<AutoMove>(workspace?.autoMove ?? {})
+  // The board's columns as they are now, so a rename or delete while the dialog is open shows.
+  const columns =
+    workspaces.find((w) => w.id === workspace?.id)?.columns ?? workspace?.columns ?? []
   const [busy, setBusy] = useState(false)
 
   const browse = async (): Promise<void> => {
@@ -103,7 +116,15 @@ function WorkspaceDialog({
         host: result.value.host ?? null,
         defaultStartup: command.value,
         ...(checkedSetup && { worktreeSetup: checkedSetup.value }),
-        logo
+        logo,
+        // A rule whose column went while the dialog was open is off (#42 D2).
+        ...(workspace && {
+          autoMove:
+            keepKnownRules(
+              autoMove,
+              columns.map((c) => c.id)
+            ) ?? {}
+        })
       }
       const stored = workspace
         ? workspaceStore.updateWorkspace(workspace.id, input)
@@ -347,6 +368,34 @@ function WorkspaceDialog({
               </p>
             )}
           </div>
+        )}
+        {workspace && (
+          <fieldset className="field radio-group auto-move">
+            <legend>Move cards automatically</legend>
+            {AUTO_MOVE_RULES.map(([trigger, label]) => (
+              <div key={trigger} className="auto-move-rule">
+                <label htmlFor={`${id}-auto-move-${trigger}`}>{label}</label>
+                <select
+                  id={`${id}-auto-move-${trigger}`}
+                  data-testid={`workspace-auto-move-${trigger}`}
+                  value={columns.some((c) => c.id === autoMove[trigger]) ? autoMove[trigger] : ''}
+                  onChange={(e) => {
+                    const next = { ...autoMove }
+                    if (e.target.value) next[trigger] = e.target.value
+                    else delete next[trigger]
+                    setAutoMove(next)
+                  }}
+                >
+                  <option value="">Don&apos;t move</option>
+                  {columns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </fieldset>
         )}
         <div className="modal-actions">
           <button type="button" className="btn" data-testid="workspace-cancel" onClick={onClose}>

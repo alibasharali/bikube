@@ -148,3 +148,13 @@ describe("keeping this machine's pending setups (#39 D8)", () => {
     ])
   })
 })
+
+describe('automatic move rules from the file (#42 D7, AC11)', () => {
+  it("takes the file's rules for a workspace, and none when the file has none", () => {
+    const local = [workspace('api', { autoMove: { stopped: 'api-backlog' } }), workspace('web')]
+    const incoming = [workspace('api'), workspace('web', { autoMove: { waiting: 'web-running' } })]
+    const applied = applySyncBoard(incoming, local, none)
+    expect(applied[0]).not.toHaveProperty('autoMove')
+    expect(applied[1]!.autoMove).toEqual({ waiting: 'web-running' })
+  })
+})

@@ -358,3 +358,37 @@ describe('workspace logos in the sync file (#59 D6, AC6)', () => {
     expect(read.ok && read.workspaces[1]!).not.toHaveProperty('logo')
   })
 })
+
+describe('automatic move rules in the sync file (#42 D7, AC11)', () => {
+  it('writes autoMove, absent with every rule off, and reads it back on the other machine', () => {
+    const rules = { waiting: 'w-running', stopped: 'w-backlog' }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [workspace('w', 'alpha', { autoMove: rules }), workspace('v', 'beta')]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.autoMove).toEqual(rules)
+    expect(board.workspaces[0]!.autoMove).not.toBe(rules)
+    expect(board.workspaces[1]!).not.toHaveProperty('autoMove')
+    const text = serializeSyncFile(board, new Date(0))
+    expect(JSON.parse(text).board.workspaces[1]).not.toHaveProperty('autoMove')
+    const read = parseSyncFile(text, '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.autoMove).toEqual(rules)
+    expect(read.ok && read.workspaces[1]!).not.toHaveProperty('autoMove')
+  })
+
+  it('reads a rule naming an unknown column as off, and rejects a bad autoMove', () => {
+    const fileWith = (autoMove: unknown): string =>
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date(0).toISOString(),
+        board: { workspaces: [{ ...workspace('w', 'alpha'), autoMove }] }
+      })
+    const read = parseSyncFile(fileWith({ working: 'gone', waiting: 'w-running' }), HOME)
+    expect(read.ok && read.workspaces[0]!.autoMove).toEqual({ waiting: 'w-running' })
+    const gone = parseSyncFile(fileWith({ stopped: 'gone' }), HOME)
+    expect(gone.ok && gone.workspaces[0]!).not.toHaveProperty('autoMove')
+    expect(parseSyncFile(fileWith(5), HOME).ok).toBe(false)
+    expect(parseSyncFile(fileWith({ waiting: 5 }), HOME).ok).toBe(false)
+  })
+})

@@ -4,6 +4,7 @@
  * `{ "version": 1, "savedAt": "<ISO 8601 UTC>", "board": { "workspaces": [...] } }`.
  */
 
+import { AUTO_MOVE_TRIGGERS, type AutoMove } from './auto-move'
 import { validateWorkspaceState } from './saved-state'
 import type { StartupCommand } from './startup-command'
 import type { Card, Workspace, WorkspaceState } from './workspace-store'
@@ -91,9 +92,20 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         autostart: sh.autostart
       })),
       // Like the shells, the setup's definition travels (#39 D1); a card's pending one doesn't (D8).
-      worktreeSetup: w.worktreeSetup
+      worktreeSetup: w.worktreeSetup,
+      // The rules are the workspace's settings and travel with it (#42 D7); the moves they make
+      // are ordinary moves.
+      ...(w.autoMove !== undefined && { autoMove: autoMoveCopy(w.autoMove) })
     }))
   }
+}
+
+/** The rules in a fixed key order, so the same rules always serialize to the same text (D4). */
+const autoMoveCopy = (rules: AutoMove): AutoMove => {
+  const copy: AutoMove = {}
+  for (const trigger of AUTO_MOVE_TRIGGERS)
+    if (rules[trigger] !== undefined) copy[trigger] = rules[trigger]
+  return copy
 }
 
 const startupCopy = (s: StartupCommand): StartupCommand =>

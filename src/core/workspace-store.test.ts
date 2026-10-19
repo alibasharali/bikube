@@ -1234,3 +1234,59 @@ describe('logo (#59 D1, D2, AC5)', () => {
     expect(s.getState().workspaces[0]).toBe(w)
   })
 })
+
+describe('automatic move rules (#42 D2, D9, AC12)', () => {
+  it('has no autoMove key for a new workspace, sets rules by column id, keeps them, and clears them', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    expect('autoMove' in w).toBe(false)
+    const [backlog, running, , done] = w.columns
+    const set = ok(s.updateWorkspace(w.id, { autoMove: { waiting: running.id, stopped: done.id } }))
+    expect(set.autoMove).toEqual({ waiting: running.id, stopped: done.id })
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).autoMove).toEqual(set.autoMove)
+    expect(ok(s.updateWorkspace(w.id, { autoMove: { working: backlog.id } })).autoMove).toEqual({
+      working: backlog.id
+    })
+    expect('autoMove' in ok(s.updateWorkspace(w.id, { autoMove: {} }))).toBe(false)
+  })
+
+  it('refuses a rule naming a column the workspace does not have, saving nothing', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const other = create(s, 'beta')
+    const refused = s.updateWorkspace(w.id, {
+      name: 'gamma',
+      autoMove: { waiting: other.columns[0].id }
+    })
+    expect(refused.ok).toBe(false)
+    expect(!refused.ok && refused.error).toEqual({ field: 'column', message: 'Column not found' })
+    expect(s.getState().workspaces[0]).toBe(w)
+  })
+
+  it('keeps a rule when its column is renamed', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const review = w.columns[2]
+    ok(s.updateWorkspace(w.id, { autoMove: { waiting: review.id } }))
+    ok(s.renameColumn(w.id, review.id, 'Needs me'))
+    expect(s.getState().workspaces[0].autoMove).toEqual({ waiting: review.id })
+  })
+
+  it('turns off every rule naming a deleted column, in the same change', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const [backlog, , review] = w.columns
+    ok(
+      s.updateWorkspace(w.id, {
+        autoMove: { working: review.id, waiting: review.id, stopped: backlog.id }
+      })
+    )
+    const listener = vi.fn()
+    s.subscribe(listener)
+    ok(s.deleteColumn(w.id, review.id))
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(s.getState().workspaces[0].autoMove).toEqual({ stopped: backlog.id })
+    ok(s.deleteColumn(w.id, backlog.id))
+    expect('autoMove' in s.getState().workspaces[0]).toBe(false)
+  })
+})

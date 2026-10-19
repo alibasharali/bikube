@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { Terminal as XTerm, type IBufferRange } from '@xterm/xterm'
+import { Terminal as XTerm, type IBufferRange, type IMarker, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -26,6 +26,12 @@ import {
   shiftEnterIsNewLine
 } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
+import {
+  parseShellMark,
+  SHELL_MARK_OSCS,
+  ShellMarks,
+  type ShellCommand
+} from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
 import { ghosttyStore } from './ghostty'
@@ -104,6 +110,21 @@ const FIND_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
   activeMatchColorOverviewRuler: AMBER
 }
 
+/** A failed command's red (#45 D6), in the overview ruler; the bar and badge use `--danger`. */
+const FAILED_RED = '#E5484D'
+
+/**
+ * The xterm theme for a palette: the overview ruler (#35 D8, #45 D6) draws no outline of its own,
+ * so the scrollbar's side looks as it did without it.
+ */
+const xtermTheme = (theme: TerminalAppearance['theme']): ITheme => ({
+  ...theme,
+  overviewRulerBorder: '#00000000'
+})
+
+/** A row of a terminal, as its marks keep it: undefined where xterm gives no marker (alt screen). */
+export type MarkLine = IMarker | undefined
+
 const samePosition = (a: IBufferRange, b: IBufferRange): boolean =>
   a.start.x === b.start.x && a.start.y === b.start.y && a.end.x === b.end.x && a.end.y === b.end.y
 
@@ -144,6 +165,11 @@ export class XtermScreen implements CardScreen {
   private cell = ''
   /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
   private sawProbe = false
+  /**
+   * The shell integration marks of this start (#45 D1, D2): its commands, prompts and last
+   * directory, gone with the screen. Rows are xterm markers, forgotten as they leave the scrollback.
+   */
+  readonly marks = new ShellMarks<MarkLine>()
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
@@ -157,8 +183,11 @@ export class XtermScreen implements CardScreen {
     this.term = new XTerm({
       fontFamily,
       fontSize,
-      theme: { ...theme },
+      theme: xtermTheme(theme),
       ...behaviour,
+      // Width of xterm's own scrollbar, so the fit is unchanged: find matches (#35 D8) and failed
+      // commands (#45 D6) show in it.
+      overviewRuler: { width: 14 },
       linkHandler: { activate: openLink },
       // The search addon's match highlights are decorations (#35 D8).
       allowProposedApi: true
@@ -205,6 +234,15 @@ export class XtermScreen implements CardScreen {
       if (params.flat().includes(1004)) this.sawProbe = false
       return false
     })
+    // Shell integration marks (#45 D1), watched the same way: never swallowed, never answered.
+    for (const family of SHELL_MARK_OSCS) {
+      this.term.parser.registerOscHandler(family, (data) => {
+        const mark = parseShellMark(family, data)
+        if (mark) this.marks.feed(mark, Date.now(), () => this.markRow())
+        return false
+      })
+    }
+    this.marks.onCommandEnded((command) => this.markFailed(command))
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18).
@@ -376,7 +414,7 @@ export class XtermScreen implements CardScreen {
     const options = this.term.options
     if (this.palette !== theme) {
       this.palette = theme
-      options.theme = { ...theme }
+      options.theme = xtermTheme(theme)
     }
     // Only what changed: setting an option, even to its value, makes xterm redraw.
     for (const key of Object.keys(behaviour) as (keyof typeof behaviour)[]) {
@@ -403,6 +441,43 @@ export class XtermScreen implements CardScreen {
     this.dropWebgl()
     this.host.remove()
     this.term.dispose()
+  }
+
+  /** The row the cursor is on, as a marker that follows scrolling (#45 D1). */
+  private markRow(): MarkLine {
+    const marker = this.term.registerMarker(0)
+    marker?.onDispose(() => this.marks.forget(marker))
+    return marker
+  }
+
+  /**
+   * A failed command's marks on its line (#45 D6): a red bar on its first cell and a `✗ <code>`
+   * badge on its last ones, both with the exit code as their tooltip, and a red mark in the
+   * overview ruler. xterm moves them with the line and drops them with it.
+   */
+  private markFailed({ line, exitCode }: ShellCommand<MarkLine>): void {
+    if (!exitCode || !line || line.isDisposed) return
+    const label = `✗ ${exitCode}`
+    const tooltip = `Exit code ${exitCode}`
+    // xterm calls these on every render of the line; it keeps the element and its own styles.
+    const show = (element: HTMLElement, testid: string, text = ''): void => {
+      element.dataset.line = String(line.line)
+      if (element.dataset.testid) return
+      element.dataset.testid = testid
+      element.dataset.exitCode = String(exitCode)
+      element.title = tooltip
+      element.classList.add(testid)
+      if (!text) return
+      const content = document.createElement('span')
+      content.textContent = text
+      element.replaceChildren(content)
+    }
+    this.term
+      .registerDecoration({ marker: line, overviewRulerOptions: { color: FAILED_RED } })
+      ?.onRender((element) => show(element, 'command-failed'))
+    this.term
+      .registerDecoration({ marker: line, anchor: 'right', width: label.length + 1 })
+      ?.onRender((element) => show(element, 'command-failed-badge', label))
   }
 
   private fitNow(): void {

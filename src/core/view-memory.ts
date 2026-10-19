@@ -27,6 +27,18 @@ export function forgetView(views: ViewMemory, workspaceId: string): ViewMemory {
 }
 
 /**
+ * The cards in `cardIds` went to their own windows (#53 D6): each workspace that had one of them
+ * open goes to its board and forgets it.
+ */
+export function forgetCards(views: ViewMemory, cardIds: readonly string[]): ViewMemory {
+  let next = views
+  for (const [workspaceId, cardId] of Object.entries(views)) {
+    if (cardIds.includes(cardId)) next = forgetView(next, workspaceId)
+  }
+  return next
+}
+
+/**
  * Selecting `targetId` while `activeId` is active (sidebar or Mod+digit): another workspace keeps
  * its view; the active one goes to its board and forgets its card.
  */

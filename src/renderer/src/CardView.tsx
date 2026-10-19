@@ -175,7 +175,16 @@ function PaneTree({
  * show on the board. Leaving only detaches the screens; the processes keep running (D8, D10).
  * When the shell exits, the view goes back to the board (#5 D6), including after Close.
  */
-function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.JSX.Element {
+function CardView({
+  card,
+  onBack,
+  onOpenInWindow
+}: {
+  card: Card
+  onBack: () => void
+  /** Opens the card in its own window (#53 D6); none in a card window, where it does nothing (D5). */
+  onOpenInWindow?: () => void
+}): React.JSX.Element {
   // The main window, or the card's own window (#53 D5): its keys, dialogs and focus are that one's.
   const view = useViewWindow()
   const runState = useCardRunState(card.id)
@@ -228,6 +237,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       }
       // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
       else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
+      else if (action === 'openInWindow') onOpenInWindow?.()
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); it ends a
       // zoom (#48 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
@@ -263,7 +273,7 @@ function CardView({ card, onBack }: { card: Card; onBack: () => void }): React.J
       view.removeEventListener('keydown', onKeyDown, true)
       unregister()
     }
-  }, [onBack, card, splittable, running, focusedPane, view])
+  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])
 
   return (
     <div className="card-layout">

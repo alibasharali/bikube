@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { keymapAction, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
-import { findShellCard } from '../../core/workspace-shells'
+import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
+import { defaultShellId } from '../../core/workspace-store'
 import { isCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import { currentKeymap, settingsStore } from './settings'
@@ -35,7 +36,9 @@ function CardWindow({
   const workspace = workspaces.find((w) => w.id === workspaceId)
   const card =
     workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))
-  const title = workspace && card ? cardWindowTitle(workspace, card) : null
+  // The Default shell is named as the palette names it (#53 AC9).
+  const shown = cardId === defaultShellId(workspaceId) ? { title: DEFAULT_SHELL_TITLE } : card
+  const title = workspace && shown ? cardWindowTitle(workspace, shown) : null
 
   useEffect(() => {
     if (title !== null) setTitle(view, title)

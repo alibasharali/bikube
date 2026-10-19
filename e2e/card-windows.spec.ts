@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
@@ -531,4 +531,178 @@ test("D5: Mod+digit is left alone while the card window's dialog owns its keyboa
   await window.keyboard.press(modDigit)
   await window.waitForTimeout(200)
   expect(await seen()).toEqual([true])
+})
+
+// S2: the shortcut, the palette and shells (#53 D6, D7).
+
+/** The Open in new window shortcut's default (D6) as a Playwright press. */
+const OPEN_WINDOW = darwin ? 'Meta+Shift+O' : 'Control+Shift+O'
+const PALETTE = darwin ? 'Meta+K' : 'Control+Shift+P'
+const palette = (): Locator => page.getByRole('dialog', { name: 'Command palette' })
+
+/** Opens the palette, types `query` and runs its first row, titled `title`, with Enter. */
+async function pickInPalette(query: string, title: string): Promise<void> {
+  await page.keyboard.press(PALETTE)
+  await expect(palette().getByTestId('palette-input')).toBeFocused()
+  await page.keyboard.type(query)
+  await expect(palette().getByTestId('palette-row-title').first()).toHaveText(title)
+  await page.keyboard.press('Enter')
+  await expect(palette()).toHaveCount(0)
+}
+
+/** Expects `on`'s typed `echo after-…` line to be only what was typed: no stray keys before it. */
+async function expectCleanLine(on: Page): Promise<void> {
+  await run(on, 'echo after-$((50+3))')
+  await expect.poll(() => bufferLines(on)).toContain('after-53')
+  const lines = await bufferLines(on)
+  expect(lines.find((l) => l.includes('echo after-'))).toMatch(
+    /^\S+[$#] echo after-\$\(\(50\+3\)\)$/
+  )
+}
+
+test('AC3: the shortcut opens the open card in its own window and the main window shows its board', async () => {
+  await newCard('Agent A')
+  await expect.poll(() => terminalFocused(page)).toBe(true)
+  const opened = app.waitForEvent('window')
+  await page.keyboard.press(OPEN_WINDOW)
+  const window = await opened
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('Agent A').getByTestId('card-in-window')).toHaveText('In window')
+  // The new window has the keyboard, and the shell got none of the shortcut's keys.
+  await expectCleanLine(window)
+
+  // In the card window the shortcut does nothing, and never reaches the shell (D5).
+  await window.keyboard.press(OPEN_WINDOW)
+  await window.waitForTimeout(300)
+  expect(app.windows()).toHaveLength(2)
+  await run(window, 'clear')
+  await expectCleanLine(window)
+
+  // The workspace forgot its view (#31 D19): with the window closed the main window stays on
+  // its board (D8).
+  await window.close()
+  await expect(card('Agent A').getByTestId('card-in-window')).toHaveCount(0)
+  await page.waitForTimeout(300)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test("AC3: the palette's Open in new window row opens the open card in its own window", async () => {
+  await newCard('Agent A')
+  const opened = app.waitForEvent('window')
+  await pickInPalette('Open in new window', 'Open in new window')
+  const window = await opened
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('Agent A').getByTestId('card-in-window')).toHaveText('In window')
+  await expect.poll(() => terminalFocused(window)).toBe(true)
+})
+
+test('AC4: a palette pick and Next waiting card focus its window, changing nothing here', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await expect.poll(() => window.title()).toBe(`Agent A · ${WORKSPACE}`)
+  const focusCalls = await spyOnFocus(`Agent A · ${WORKSPACE}`)
+
+  await pickInPalette('Agent A', 'Agent A')
+  await expect.poll(focusCalls).toBe(1)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  await run(window, 'board activity . waiting')
+  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  await expect(card('Agent A').getByTestId('card-activity')).toHaveText('Waiting for you', {
+    timeout: 15_000
+  })
+  await page.keyboard.press(darwin ? 'Meta+J' : 'Control+Shift+J')
+  await expect.poll(focusCalls).toBe(2)
+  await page.waitForTimeout(300)
+  expect(app.windows()).toHaveLength(2)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+})
+
+test("AC9: a shell's menu opens it in its own window; its strip button and shortcut focus it", async () => {
+  const shell = page.locator('[data-testid=shell][data-shell-name="Default"]')
+  const opened = app.waitForEvent('window')
+  await shell.getByTestId('shell-menu').click()
+  await page.getByTestId('shell-menu-open-window').click()
+  const window = await opened
+  await expect.poll(() => window.title()).toBe(`Default shell · ${WORKSPACE}`)
+  await expect(window.getByTestId('card-view')).toBeVisible()
+  await expect(shell.getByTestId('shell-in-window')).toHaveText('In window')
+  await expectCleanLine(window)
+  const focusCalls = await spyOnFocus(`Default shell · ${WORKSPACE}`)
+
+  await page.keyboard.press(darwin ? 'Meta+T' : 'Control+Shift+T')
+  await expect.poll(focusCalls).toBe(1)
+  await shell.getByTestId('shell-open').click()
+  await expect.poll(focusCalls).toBe(2)
+  await shell.getByTestId('shell-menu').click()
+  await page.getByTestId('shell-menu-open-window').click()
+  await expect.poll(focusCalls).toBe(3)
+  await page.waitForTimeout(300)
+  expect(app.windows()).toHaveLength(2)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+
+  await window.close()
+  await expect(shell.getByTestId('shell-in-window')).toHaveCount(0)
+})
+
+test('AC13: Settings lists Open in new window, recorded, refused, saved and reset; font size reaches the window', async () => {
+  const settings = page.getByTestId('settings-dialog')
+  const field = settings.getByTestId('settings-shortcut-openInWindow')
+  const error = settings.getByTestId('settings-shortcut-error-openInWindow')
+  const reset = settings.getByTestId('settings-shortcut-reset-openInWindow')
+  const file = join(dataDir, 'drovr-settings.json')
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+  const defaultText = darwin ? 'Shift+Cmd+O' : 'Ctrl+Shift+O'
+  const openSettings = async (): Promise<void> => {
+    await page.getByTestId('settings-open').click()
+    await settings.getByTestId('settings-section-shortcuts').click()
+  }
+
+  await openSettings()
+  await expect(settings.getByRole('group', { name: 'Shortcuts' })).toContainText(
+    'Open in new window'
+  )
+  await expect(field).toHaveText(defaultText)
+  await expect(reset).toBeDisabled()
+  await field.click()
+  await page.keyboard.press(PALETTE)
+  await expect(error).toHaveText('Already used by Command palette')
+  await page.keyboard.press('Control+Alt+O')
+  await expect(field).toHaveText('Ctrl+Alt+O')
+  await expect.poll(saved).toContain('"openInWindow":"Ctrl+Alt+O"')
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+
+  await newCard('Agent A')
+  const opened = app.waitForEvent('window')
+  await page.keyboard.press('Control+Alt+O')
+  const window = await opened
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
+
+  // The card window's terminal follows a font size set in the main window's Settings.
+  const fontSize = (): Promise<number | undefined> =>
+    window.evaluate(() => {
+      const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+        (HTMLElement & { __xterm?: { options: { fontSize?: number } } }) | null
+      return host?.__xterm?.options.fontSize
+    })
+  await expect.poll(fontSize).toBe(13)
+  await openSettings()
+  await reset.click()
+  await expect(field).toHaveText(defaultText)
+  await expect.poll(saved).not.toContain('openInWindow')
+  await settings.getByTestId('settings-section-appearance').click()
+  await settings.getByLabel('Font size').fill('18')
+  await expect.poll(fontSize).toBe(18)
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
 })

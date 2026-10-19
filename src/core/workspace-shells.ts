@@ -7,6 +7,9 @@ import { defaultShellId, type Card, type Workspace, type WorkspaceShell } from '
 
 export const DEFAULT_SHELL_NAME = 'Default'
 
+/** The Default shell's name where it stands alone: the palette's rows, its own window's title. */
+export const DEFAULT_SHELL_TITLE = 'Default shell'
+
 /** `shell` (or the Default shell for null) as a card in the workspace's folder. */
 export function shellCard(workspace: Workspace, shell: WorkspaceShell | null): Card {
   return {

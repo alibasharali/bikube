@@ -5,6 +5,7 @@ import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
 import {
   enterWorkspace,
+  forgetCards,
   forgetView,
   NO_VIEWS,
   openedCard,
@@ -18,7 +19,7 @@ import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
-import { focusCardWindow, subscribeCardWindows, windowedKey } from './card-windows'
+import { focusCardWindow, openCardWindow, subscribeCardWindows, windowedKey } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
@@ -73,10 +74,16 @@ function App(): React.JSX.Element {
       )
     }
   }
-  // A card is shown in one place at a time: one in its own window isn't open here (#53 D7).
+  // A card is shown in one place at a time (#53 D7): one going to its own window leaves the main
+  // window, which shows its board, and its workspace forgets it (D6, #31 D19), so the main window
+  // never comes back to it when that window closes (D8).
   const windowed = useSyncExternalStore(subscribeCardWindows, () => windowedKey())
-  const remembered = activeId ? openedCard(views, activeId) : null
-  const openedId = remembered && !windowed.split('\n').includes(remembered) ? remembered : null
+  const [seenWindowed, setSeenWindowed] = useState(windowed)
+  if (seenWindowed !== windowed) {
+    setSeenWindowed(windowed)
+    setViews((v) => forgetCards(v, windowed.split('\n')))
+  }
+  const openedId = activeId ? openedCard(views, activeId) : null
   // The open terminal: one of the board's cards, or one of the workspace's shells.
   const openCard = openedId
     ? (active?.cards.find((c) => c.id === openedId) ??
@@ -84,6 +91,11 @@ function App(): React.JSX.Element {
       null)
     : null
   const openIsShell = openCard !== null && !active?.cards.some((c) => c.id === openCard.id)
+  // The open card or shell goes to its own window, by its shortcut or the palette (#53 D6).
+  const openId = openCard?.id ?? null
+  const onOpenInWindow = useCallback(() => {
+    if (activeId && openId) openCardWindow(activeId, openId)
+  }, [activeId, openId])
   // Back, or the open card's shell stopping: the active workspace forgets its card (D19).
   const closeCard = useCallback(() => {
     if (activeId) setViews((v) => forgetView(v, activeId))
@@ -129,10 +141,13 @@ function App(): React.JSX.Element {
 
   // A card or shell picked in the palette opens at full size in its workspace, started first when
   // it isn't running, as a click on it does; one in another workspace makes that workspace active,
-  // as a clicked notification does (#40 D7). The card already open just stays.
+  // as a clicked notification does (#40 D7). The card already open just stays. One in its own
+  // window has that window brought forward, and nothing changes here (#53 D7); Next waiting card
+  // opens through this too.
   const onPaletteOpen = useCallback(
     (workspaceId: string, cardId: string) => {
       if (workspaceId === activeId && cardId === openedId) return
+      if (focusCardWindow(cardId)) return
       startCard(workspaceId, cardId)
       setViews((v) => rememberCard(v, workspaceId, cardId))
       if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
@@ -316,7 +331,12 @@ function App(): React.JSX.Element {
         />
         <main className="main">
           {active && openCard ? (
-            <CardView key={openCard.id} card={openCard} onBack={closeCard} />
+            <CardView
+              key={openCard.id}
+              card={openCard}
+              onBack={closeCard}
+              onOpenInWindow={onOpenInWindow}
+            />
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2).
             <div className="board-layout">

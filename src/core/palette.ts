@@ -8,7 +8,7 @@ import { SHORTCUT_LABELS, type Keymap } from './keymap'
 import type { Theme } from './settings'
 import { MAX_PANES } from './split-tree'
 import { nextWaitingCard } from './waiting'
-import { shellCards } from './workspace-shells'
+import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
 import {
   cardsInColumn,
   defaultShellId,
@@ -102,6 +102,7 @@ export type PaletteAction =
   | { id: 'openShell' }
   | { id: 'nextWaiting' }
   | { id: 'zoomPane' }
+  | { id: 'openInWindow' }
   | { id: 'newWorkspace' }
   | { id: 'settings' }
   | { id: 'theme'; theme: Theme }
@@ -154,7 +155,6 @@ export interface PaletteInput {
   waiting: readonly string[]
 }
 
-const DEFAULT_SHELL_TITLE = 'Default shell'
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
 const THEME_ORDER: Theme[] = ['system', 'dark', 'light']
 const WORKSPACE_SHORTCUTS = 9
@@ -226,6 +226,8 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   if (view.focusedPaneHasScreen) rows.push(keymapRow('find', keymap))
   // Whenever the view has panes to zoom, or is zoomed (#48 D7).
   if (view.paneCount > 1 || view.zoomed) rows.push(keymapRow('zoomPane', keymap))
+  // A card or shell open here goes to its own window (#53 D6).
+  rows.push(keymapRow('openInWindow', keymap))
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)

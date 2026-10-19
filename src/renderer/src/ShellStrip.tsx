@@ -1,9 +1,10 @@
-import { Pencil, Plus, RotateCw, Square, SquareTerminal, Trash2 } from 'lucide-react'
+import { AppWindow, Pencil, Plus, RotateCw, Square, SquareTerminal, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { closeCard, removeShell, restartCard } from './card-actions'
 import { useCardRunState } from './card-terminals'
+import { openCardWindow, useInWindow } from './card-windows'
 import ConfirmDialog from './ConfirmDialog'
 import DevServerChips from './DevServerChips'
 import { MENU_ICON, SMALL_ICON } from './icons'
@@ -60,7 +61,10 @@ function ShellStrip({
   )
 }
 
-/** One shell: a dot for running, its name and command; its menu restarts, closes, edits, deletes. */
+/**
+ * One shell: a dot for running, its name and command, and `In window` while it is in its own
+ * window (#53 D7); its menu restarts, closes, opens it in a new window, edits, deletes.
+ */
 function ShellChip({
   workspace,
   shell,
@@ -75,6 +79,7 @@ function ShellChip({
   onEdit: () => void
 }): React.JSX.Element {
   const running = useCardRunState(shell.id).kind === 'running'
+  const inWindow = useInWindow(shell.id)
   const [deleting, setDeleting] = useState(false)
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
   return (
@@ -91,6 +96,11 @@ function ShellChip({
         {isDefault ? <SquareTerminal {...SMALL_ICON} /> : null}
         <span className="shell-name">{shell.title}</span>
         {command && <span className="shell-command">{command}</span>}
+        {inWindow && (
+          <span className="card-in-window" data-testid="shell-in-window">
+            In window
+          </span>
+        )}
         <span className="visually-hidden">{running ? ', running' : ', stopped'}</span>
       </button>
       <MenuButton
@@ -124,6 +134,17 @@ function ShellChip({
                 Close
               </button>
             )}
+            {/* Started first when stopped; brought forward when it has a window already (#53 D6). */}
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              data-testid="shell-menu-open-window"
+              onClick={run(() => openCardWindow(workspace.id, shell.id))}
+            >
+              <AppWindow {...MENU_ICON} />
+              Open in new window
+            </button>
             {!isDefault && (
               <>
                 <button

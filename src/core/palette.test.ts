@@ -195,6 +195,7 @@ describe('paletteItems actions (#40 D6)', () => {
       'Close card',
       'Toggle panel',
       'Find',
+      'Open in new window',
       'Move card to In Progress',
       'Move card to Review',
       'Move card to Done',
@@ -220,10 +221,11 @@ describe('paletteItems actions (#40 D6)', () => {
 
   it('offers no splits or Close card for a stopped card', () => {
     const view = { ...cardView, running: false }
-    expect(labels(input(state, { view })).slice(0, 4)).toEqual([
+    expect(labels(input(state, { view })).slice(0, 5)).toEqual([
       'Back to board',
       'Toggle panel',
       'Find',
+      'Open in new window',
       'Move card to In Progress'
     ])
   })
@@ -242,13 +244,14 @@ describe('paletteItems actions (#40 D6)', () => {
 
   it('offers no moves for a shell', () => {
     const view: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
-    expect(labels(input(state, { view })).slice(0, 7)).toEqual([
+    expect(labels(input(state, { view })).slice(0, 8)).toEqual([
       'Back to board',
       'Split right',
       'Split down',
       'Close card',
       'Toggle panel',
       'Find',
+      'Open in new window',
       'New card'
     ])
   })
@@ -269,6 +272,21 @@ describe('paletteItems actions (#40 D6)', () => {
     ])
     expect(rows[7]).toMatchObject({ action: { id: 'zoomPane' }, shortcut: 'Ctrl+Shift+Enter' })
     expect(labels(input(state, { view: { ...cardView, zoomed: true } }))).toContain('Zoom pane')
+  })
+
+  it('offers Open in new window with its shortcut for an open card or shell, never on the board (#53 D6)', () => {
+    const rows = paletteItems(input(state, { view: cardView })).actions
+    const at = rows.findIndex((r) => r.label === 'Open in new window')
+    expect(rows[at]).toMatchObject({ action: { id: 'openInWindow' }, shortcut: 'Ctrl+Shift+O' })
+    // After the view's own actions, before the moves.
+    expect(rows[at - 1].label).toBe('Find')
+    expect(rows[at + 1].label).toBe('Move card to In Progress')
+    const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    expect(labels(input(state, { view: shell }))).toContain('Open in new window')
+    expect(labels(input(state, { view: { ...cardView, running: false } }))).toContain(
+      'Open in new window'
+    )
+    expect(labels(input(state))).not.toContain('Open in new window')
   })
 
   it('offers only the app rows without workspaces, every theme but the current one', () => {

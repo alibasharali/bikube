@@ -40,7 +40,8 @@ describe('defaultKeymap (#31 D6)', () => {
       nextWaiting: 'Cmd+J',
       previousPrompt: 'Cmd+ArrowUp',
       nextPrompt: 'Cmd+ArrowDown',
-      zoomPane: 'Shift+Cmd+Enter'
+      zoomPane: 'Shift+Cmd+Enter',
+      openInWindow: 'Shift+Cmd+O'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -57,7 +58,8 @@ describe('defaultKeymap (#31 D6)', () => {
         nextWaiting: 'Ctrl+Shift+J',
         previousPrompt: 'Ctrl+Shift+ArrowUp',
         nextPrompt: 'Ctrl+Shift+ArrowDown',
-        zoomPane: 'Ctrl+Shift+Enter'
+        zoomPane: 'Ctrl+Shift+Enter',
+        openInWindow: 'Ctrl+Shift+O'
       })
     }
   })
@@ -719,5 +721,35 @@ describe('resetRefusal (#31 D8)', () => {
   it('lets Reset apply a default nobody else holds', () => {
     const keymap = { ...defaultKeymap('darwin'), back: 'Cmd+Alt+B' }
     expect(resetRefusal('back', keymap, 'darwin')).toBeNull()
+  })
+})
+
+describe('Open in new window (#53 D6, AC13)', () => {
+  it('is a configurable action named Open in new window: Shift+Cmd+O on macOS, Ctrl+Shift+O elsewhere', () => {
+    expect(SHORTCUT_LABELS.openInWindow).toBe('Open in new window')
+    expect(defaultKeymap('darwin').openInWindow).toBe('Shift+Cmd+O')
+    expect(defaultKeymap('linux').openInWindow).toBe('Ctrl+Shift+O')
+    expect(defaultKeymap('win32').openInWindow).toBe('Ctrl+Shift+O')
+    expect(
+      keymapAction(press('O', { ctrlKey: true, shiftKey: true }), defaultKeymap('linux'))
+    ).toBe('openInWindow')
+    // Ctrl+O stays the shell's.
+    expect(keymapAction(press('o', { ctrlKey: true }), defaultKeymap('linux'))).toBeNull()
+  })
+
+  it('is read, refused when taken and reset like the others', () => {
+    expect(readShortcuts({ openInWindow: 'Ctrl+Alt+O' }, 'linux')).toEqual({
+      shortcuts: { openInWindow: 'Ctrl+Alt+O' },
+      dropped: []
+    })
+    expect(resolveKeymap(readShortcuts({}, 'linux').shortcuts, 'linux').openInWindow).toBe(
+      'Ctrl+Shift+O'
+    )
+    const keymap = defaultKeymap('linux')
+    expect(
+      recordPress(press('O', { ctrlKey: true, shiftKey: true }), 'find', keymap, 'linux')
+    ).toEqual({ kind: 'refused', message: 'Already used by Open in new window' })
+    const taken = resolveKeymap({ find: 'Ctrl+Shift+O', openInWindow: 'Ctrl+Alt+O' }, 'linux')
+    expect(resetRefusal('openInWindow', taken, 'linux')).toBe('Already used by Find')
   })
 })

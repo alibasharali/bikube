@@ -12,6 +12,7 @@ export type CardViewAction =
   | 'previousPrompt'
   | 'nextPrompt'
   | 'zoomPane'
+  | 'openInWindow'
 
 const CARD_VIEW_ACTIONS: readonly string[] = [
   'back',
@@ -22,7 +23,8 @@ const CARD_VIEW_ACTIONS: readonly string[] = [
   'find',
   'previousPrompt',
   'nextPrompt',
-  'zoomPane'
+  'zoomPane',
+  'openInWindow'
 ] satisfies CardViewAction[]
 
 export const isCardViewAction = (action: string | null): action is CardViewAction =>

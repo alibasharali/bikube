@@ -82,9 +82,13 @@ function CardWindow({
   return (
     <ViewWindowContext.Provider value={view}>
       <div className="app card-window" data-testid="card-window">
-        <main className="main">
-          <CardView key={card.id} card={card} onBack={onBack} />
-        </main>
+        {/* As in the main window: held to the window's height, so only the panes and the side
+            panel's tree scroll, never the window (#53 D4). */}
+        <div className="app-body">
+          <main className="main">
+            <CardView key={card.id} card={card} onBack={onBack} />
+          </main>
+        </div>
       </div>
     </ViewWindowContext.Provider>
   )

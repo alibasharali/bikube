@@ -923,6 +923,25 @@ test('D2: a card whose window closes while it prints keeps drawing where it show
   await expectRedrawing(window)
 })
 
+// A folder whose tree is taller than the window scrolled the whole window, pushing the
+// terminal's last rows (Claude Code's input) below its bottom edge.
+test('D4: a long Files tree scrolls in its panel; the window and its terminal stay fitted', async () => {
+  for (let i = 0; i < 80; i++)
+    writeFileSync(join(dir, `file-${String(i).padStart(2, '0')}.txt`), '')
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await expect(window.getByTestId('files-row')).toHaveCount(81)
+  const layout = (): Promise<string> =>
+    window.evaluate(() => {
+      const root = document.scrollingElement ?? document.documentElement
+      const screen = document.querySelector('[data-testid=card-view] .xterm-screen')
+      const bottom = screen?.getBoundingClientRect().bottom ?? Infinity
+      return [root.scrollHeight <= root.clientHeight, bottom <= innerHeight].join(',')
+    })
+  await expect.poll(layout).toBe('true,true')
+})
+
 test('D4: a file or link dropped on the card window opens nothing', async () => {
   await newCard('Agent A')
   await backToBoard(page)

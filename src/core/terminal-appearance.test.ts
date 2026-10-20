@@ -78,6 +78,7 @@ describe('terminalAppearance (#10 D3, D4)', () => {
         macOptionIsMeta: false,
         lineHeight: 1,
         letterSpacing: 0,
+        fontWeight: 400,
         drawBoldTextInBrightColors: true
       }
     })
@@ -92,6 +93,7 @@ describe('terminalAppearance (#10 D3, D4)', () => {
       optionAsMeta: true,
       lineHeight: 1.3,
       letterSpacing: 2,
+      fontWeight: 500,
       boldBright: false
     } as const
     expect(terminalAppearance(settings, true).behaviour).toEqual({
@@ -101,6 +103,7 @@ describe('terminalAppearance (#10 D3, D4)', () => {
       macOptionIsMeta: true,
       lineHeight: 1.3,
       letterSpacing: 2,
+      fontWeight: 500,
       drawBoldTextInBrightColors: false
     })
   })

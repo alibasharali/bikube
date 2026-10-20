@@ -231,7 +231,7 @@ export class XtermScreen implements CardScreen {
       // The search addon's match highlights are decorations (#35 D8).
       allowProposedApi: true
     })
-    this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
+    this.cell = cellKey(behaviour)
     followAppearance()
     liveScreens.add(this)
     this.host.className = 'terminal'
@@ -651,11 +651,11 @@ export class XtermScreen implements CardScreen {
     const cellChanged =
       options.fontFamily !== fontFamily ||
       options.fontSize !== fontSize ||
-      this.cell !== `${behaviour.lineHeight}/${behaviour.letterSpacing}`
+      this.cell !== cellKey(behaviour)
     if (!cellChanged) return
     options.fontFamily = fontFamily
     options.fontSize = fontSize
-    this.cell = `${behaviour.lineHeight}/${behaviour.letterSpacing}`
+    this.cell = cellKey(behaviour)
     this.fitNow()
   }
 
@@ -783,6 +783,10 @@ export class XtermScreen implements CardScreen {
     this.webgl = undefined
   }
 }
+
+/** What sizes a terminal's cell besides its font: a change refits it. */
+const cellKey = (b: TerminalAppearance['behaviour']): string =>
+  `${b.lineHeight}/${b.letterSpacing}/${b.fontWeight}`
 
 let router: SessionRouter | undefined
 let registry: CardSessions<XtermScreen> | undefined

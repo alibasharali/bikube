@@ -49,6 +49,8 @@ export interface Settings extends Preferences {
 export const CURSOR_STYLES = ['block', 'bar', 'underline'] as const
 export type CursorStyle = (typeof CURSOR_STYLES)[number]
 export const BELLS = ['none', 'flash', 'sound'] as const
+/** The terminal font's regular weight: Light, Regular, Medium, Semibold. */
+export const FONT_WEIGHTS = [300, 400, 500, 600] as const
 export type Bell = (typeof BELLS)[number]
 export const SCROLLBACK_CHOICES = [1000, 5000, 10000, 50000] as const
 export const MIN_LINE_HEIGHT = 1
@@ -78,6 +80,11 @@ export interface Preferences {
   lineHeight: number
   /** Extra pixels between characters, 0 to 4. */
   letterSpacing: number
+  /**
+   * The terminal text's weight (`FONT_WEIGHTS`): xterm draws on a canvas, thinner than macOS's own
+   * text, so Medium reads like a native terminal's Regular. Bold text stays bold.
+   */
+  fontWeight: number
   bell: Bell
   /** Bold text in the bright ANSI colours, as most terminals do. */
   boldBright: boolean
@@ -112,6 +119,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   copyOnSelect: false,
   lineHeight: 1,
   letterSpacing: 0,
+  fontWeight: 400,
   bell: 'none',
   boldBright: true,
   notifications: true,
@@ -147,6 +155,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     Math.abs(Math.round(v * 10) - v * 10) < 1e-9,
   letterSpacing: (v): v is number =>
     typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_LETTER_SPACING,
+  fontWeight: oneOf(FONT_WEIGHTS as readonly number[]),
   bell: oneOf(BELLS),
   boldBright: isBoolean,
   notifications: isBoolean,

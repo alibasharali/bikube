@@ -31,6 +31,7 @@ export interface TerminalBehaviour {
   macOptionIsMeta: boolean
   lineHeight: number
   letterSpacing: number
+  fontWeight: number
   drawBoldTextInBrightColors: boolean
 }
 
@@ -66,6 +67,7 @@ export function terminalAppearance(
       macOptionIsMeta: settings.optionAsMeta,
       lineHeight: settings.lineHeight,
       letterSpacing: settings.letterSpacing,
+      fontWeight: settings.fontWeight,
       drawBoldTextInBrightColors: settings.boldBright
     }
   }

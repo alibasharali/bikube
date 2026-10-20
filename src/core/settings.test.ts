@@ -439,23 +439,45 @@ describe('terminal and notification preferences in the settings file', () => {
   })
 
   it('reads written preferences back, and missing ones as their defaults', () => {
-    const parsed = parseSettingsFile(file({ ...base, scrollback: 50000, bell: 'flash' }), 'linux')
-    expect(parsed.settings).toMatchObject({ scrollback: 50000, bell: 'flash', cursorBlink: false })
+    const parsed = parseSettingsFile(
+      file({ ...base, scrollback: 50000, bell: 'flash', fontWeight: 500 }),
+      'linux'
+    )
+    expect(parsed.settings).toMatchObject({
+      scrollback: 50000,
+      bell: 'flash',
+      fontWeight: 500,
+      cursorBlink: false
+    })
     expect(parsed.replaced).toEqual([])
   })
 
   it('replaces invalid preferences with their defaults', () => {
     const parsed = parseSettingsFile(
-      file({ ...base, scrollback: 7, lineHeight: 1.25, letterSpacing: 9, cursorStyle: 'beam' }),
+      file({
+        ...base,
+        scrollback: 7,
+        lineHeight: 1.25,
+        letterSpacing: 9,
+        fontWeight: 450,
+        cursorStyle: 'beam'
+      }),
       'linux'
     )
     expect(parsed.settings).toMatchObject({
       scrollback: 10000,
       lineHeight: 1,
       letterSpacing: 0,
+      fontWeight: 400,
       cursorStyle: 'block'
     })
-    expect(parsed.replaced).toEqual(['cursorStyle', 'scrollback', 'lineHeight', 'letterSpacing'])
+    expect(parsed.replaced).toEqual([
+      'cursorStyle',
+      'scrollback',
+      'lineHeight',
+      'letterSpacing',
+      'fontWeight'
+    ])
   })
 
   it('accepts line heights in tenths from 1 to 2', () => {

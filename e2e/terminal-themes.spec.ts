@@ -227,6 +227,7 @@ function openOptions(page: Page): Promise<Record<string, unknown>> {
       scrollback: o.scrollback,
       lineHeight: o.lineHeight,
       letterSpacing: o.letterSpacing,
+      fontWeight: o.fontWeight,
       drawBoldTextInBrightColors: o.drawBoldTextInBrightColors
     }
   })
@@ -243,21 +244,35 @@ test('terminal settings reach the open terminal at once and are saved only when 
     scrollback: 10000,
     lineHeight: 1,
     letterSpacing: 0,
+    fontWeight: 400,
     drawBoldTextInBrightColors: true
   })
 
   await page.getByTestId('settings-open').click()
   await dialog(page).getByTestId('settings-line-height').selectOption('1.2')
+  await dialog(page).getByTestId('settings-font-weight').selectOption({ label: 'Medium' })
   await dialog(page).getByTestId('settings-section-terminal').click()
   await dialog(page).getByTestId('settings-cursor-bar').check()
   await dialog(page).getByTestId('settings-cursor-blink').check()
   await dialog(page).getByTestId('settings-scrollback').selectOption('50000')
   await expect
     .poll(() => openOptions(page))
-    .toMatchObject({ cursorStyle: 'bar', cursorBlink: true, scrollback: 50000, lineHeight: 1.2 })
+    .toMatchObject({
+      cursorStyle: 'bar',
+      cursorBlink: true,
+      scrollback: 50000,
+      lineHeight: 1.2,
+      fontWeight: 500
+    })
   await expect
     .poll(() => savedSettings(dataDir))
-    .toMatchObject({ cursorStyle: 'bar', cursorBlink: true, scrollback: 50000, lineHeight: 1.2 })
+    .toMatchObject({
+      cursorStyle: 'bar',
+      cursorBlink: true,
+      scrollback: 50000,
+      lineHeight: 1.2,
+      fontWeight: 500
+    })
   // Untouched preferences stay out of the file.
   expect(savedSettings(dataDir)).not.toHaveProperty('letterSpacing')
   expect(savedSettings(dataDir)).not.toHaveProperty('bell')

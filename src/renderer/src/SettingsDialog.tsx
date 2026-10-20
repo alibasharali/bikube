@@ -37,6 +37,7 @@ import {
   MAX_FONT_FAMILY_LENGTH,
   MAX_FONT_SIZE,
   MAX_LETTER_SPACING,
+  FONT_WEIGHTS,
   MIN_FONT_SIZE,
   SCROLLBACK_CHOICES,
   THEMES,
@@ -410,6 +411,13 @@ function AppearanceSection({
         </div>
       </div>
       <SelectRow
+        label="Font weight"
+        testId="settings-font-weight"
+        value={String(settings.fontWeight)}
+        options={FONT_WEIGHTS.map((w) => [String(w), FONT_WEIGHT_LABELS[w]])}
+        onChange={(v) => settingsStore.update({ fontWeight: Number(v) })}
+      />
+      <SelectRow
         label="Line height"
         testId="settings-line-height"
         value={String(settings.lineHeight)}
@@ -429,6 +437,12 @@ function AppearanceSection({
 
 const OTHER_SHELL = '__other__'
 
+const FONT_WEIGHT_LABELS: Record<number, string> = {
+  300: 'Light',
+  400: 'Regular (default)',
+  500: 'Medium',
+  600: 'Semibold'
+}
 const LINE_HEIGHTS = Array.from({ length: 11 }, (_, i) => Math.round((1 + i / 10) * 10) / 10)
 const LETTER_SPACINGS = Array.from({ length: MAX_LETTER_SPACING + 1 }, (_, i) => i)
 const CURSOR_LABELS: Record<CursorStyle, string> = {

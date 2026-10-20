@@ -1121,6 +1121,22 @@ describe('shells', () => {
       autostart: false,
       autoClose: true
     })
+    // Closing after the command types `<command>; exit`: endings and comments that break it.
+    for (const command of ['npm run dev;', 'npm run dev &', 'a |', 'a &&', 'npm run dev # note']) {
+      expect(
+        s.updateShell(w.id, dev.id, { name: 'Web', command, autostart: false, autoClose: true })
+      ).toMatchObject({ ok: false, error: { field: 'command' } })
+      // Without closing, they are typed as written.
+      ok(s.updateShell(w.id, dev.id, { name: 'Web', command, autostart: false }))
+    }
+    ok(
+      s.updateShell(w.id, dev.id, {
+        name: 'Web',
+        command: 'echo a#b',
+        autostart: false,
+        autoClose: true
+      })
+    )
     ok(s.deleteShell(w.id, plain.id))
     expect(s.getState().workspaces[0].shells.map((sh) => sh.id)).toEqual([dev.id])
   })

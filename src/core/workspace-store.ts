@@ -763,6 +763,16 @@ export function checkShell(input: ShellInput): Result<Omit<WorkspaceShell, 'id'>
     const checked = checkStartup({ kind: 'custom', command })
     if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'command' } }
   }
+  // Closing after it types `<command>; exit`: an ending `;`, `&` or `|` would make that a syntax
+  // error, and a `#` comment would comment the `exit` out (as #39's setup line refuses).
+  if (command && input.autoClose === true) {
+    if (/[;&|]$/.test(command)) {
+      return fail('command', "Command can't end with ; & or | when the shell closes after it")
+    }
+    if (/(^|\s)#/.test(command)) {
+      return fail('command', "Command can't have a # comment when the shell closes after it")
+    }
+  }
   return {
     ok: true,
     value: {

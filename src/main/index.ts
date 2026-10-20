@@ -13,6 +13,7 @@ import { allowCardWindows, appWindow, registerCardWindows } from './card-windows
 import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerFiles } from './files'
+import { registerAgents } from './agents'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
 import { registerGit } from './git'
 import { registerLinks } from './links'
@@ -150,6 +151,7 @@ function startApp(): void {
   registerWorktrees()
   registerGit(() => settings.shell())
   registerFiles(() => settings.editor())
+  registerAgents(() => settings.shell())
   const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.

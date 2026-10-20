@@ -19,6 +19,8 @@ function StartupDialog({
   onClose: () => void
 }): React.JSX.Element {
   const [draft, setDraft] = useState<StartupDraft>(() => startupDraft(card.startup))
+  const remote =
+    workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)?.host !== undefined
   const [error, setError] = useState<string | undefined>(undefined)
 
   const submit = (e: React.FormEvent): void => {
@@ -44,6 +46,7 @@ function StartupDialog({
           }}
           error={error}
           testIdPrefix="startup-dialog"
+          remote={remote}
         />
         <p className="modal-hint">Used the next time this card starts.</p>
         <div className="modal-actions">

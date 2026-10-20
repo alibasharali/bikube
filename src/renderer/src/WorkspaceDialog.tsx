@@ -324,6 +324,7 @@ function WorkspaceDialog({
           }}
           error={commandError}
           testIdPrefix="workspace"
+          remote={ssh}
         />
         {!ssh && (
           <div className="field">

@@ -85,6 +85,9 @@ const api: DrovrApi = {
     status: (folder) => ipcRenderer.invoke(IPC.filesStatus, folder),
     open: (folder, path) => ipcRenderer.invoke(IPC.filesOpen, folder, path)
   },
+  agents: {
+    installed: () => ipcRenderer.invoke(IPC.agentsInstalled)
+  },
   update: {
     state: () => ipcRenderer.invoke(IPC.updateState),
     onState: (listener) => {

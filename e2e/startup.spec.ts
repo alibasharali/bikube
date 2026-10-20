@@ -18,9 +18,9 @@ import {
 } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { fakeAgentsHome } from './fake-agents'
 import {
   claudeLogLines,
-  fakeClaudeHome,
   SETTINGS_ARGS,
   claudeFirstLine,
   claudeResumeLine,
@@ -48,7 +48,8 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-startup-'))
-  const fake = fakeClaudeHome(root)
+  // The fake `claude`, and the fake `codex` an agent switch picks (installed, so it can be chosen).
+  const fake = fakeAgentsHome(root)
   home = fake.home
   log = fake.log
   ;({ app, page } = await launchApp({ env: fake.env }))
@@ -604,6 +605,9 @@ test("AC9: changing a card's command applies at its next start, keeping its sess
   await openCard('sh')
   const shell = await settledScreen()
   expect(shell.join('\n')).not.toContain('claude')
+  expect(shell.join('\n')).toContain('fake-codex')
+  // The fake codex reads one line, then exits to the shell.
+  await page.keyboard.press('Enter')
   await run('exit')
   await stoppedToBoard('sh')
   await setStartup('sh', 'Claude Code', { current: 'Codex' })

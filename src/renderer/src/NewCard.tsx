@@ -190,7 +190,7 @@ function NewCardForm({
           // An open dropdown takes Enter to pick; once picked, Enter here creates the card.
           onKeyDown={onKeyDown}
         >
-          <StartupOptions />
+          <StartupOptions remote={workspace?.host !== undefined} />
         </select>
       </div>
       {titleError && (

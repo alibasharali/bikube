@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
+import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS } from './fake-claude'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { backToBoard, belowSeparator, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -420,4 +420,40 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
   await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --resume ${u}`)
   expect(claudeLogLines(claudeLog)).toEqual([`${SETTINGS_ARGS} --resume ${u}`])
   expect(logLines()).toEqual([])
+})
+
+test('an agent whose CLI the login shell lacks is disabled in the selects, except for SSH', async () => {
+  // Only the fake `claude` on the login PATH: Codex, Gemini CLI and OpenCode aren't installed.
+  const claudeOnly = fakeClaudeHome(join(root, 'claude-only'))
+  ;({ app, page } = await launchApp({ dataDir, env: claudeOnly.env }))
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  const options = (select: Locator): Promise<string[]> =>
+    select
+      .locator('option')
+      .evaluateAll((els) =>
+        els.map(
+          (el) => `${el.textContent}${(el as HTMLOptionElement).disabled ? ' [disabled]' : ''}`
+        )
+      )
+  const expected = [
+    'Claude Code',
+    'Codex (not installed) [disabled]',
+    'Gemini CLI (not installed) [disabled]',
+    'OpenCode (not installed) [disabled]',
+    'Custom…'
+  ]
+  await column('Backlog').getByTestId('new-card').click()
+  // The login shell answers within a few seconds.
+  await expect
+    .poll(() => options(page.getByTestId('new-card-startup')), { timeout: 15_000 })
+    .toEqual(expected)
+  await page.keyboard.press('Escape')
+
+  await page.getByTestId('workspace-add').click()
+  await expect.poll(() => options(page.getByTestId('workspace-startup'))).toEqual(expected)
+  // An SSH workspace's agents run on its host: none is shown as not installed.
+  await page.getByTestId('workspace-location-ssh').check()
+  await expect
+    .poll(() => options(page.getByTestId('workspace-startup')))
+    .toEqual(['Claude Code', 'Codex', 'Gemini CLI', 'OpenCode', 'Custom…'])
 })

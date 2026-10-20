@@ -1,4 +1,6 @@
 import { useId } from 'react'
+import { isAgentKind } from '../../core/agent-presets'
+import { useInstalledAgents } from './installed-agents'
 import {
   STARTUP_CHOICES,
   parseChoice,
@@ -6,15 +8,24 @@ import {
   type StartupDraft
 } from '../../core/startup-form'
 
-/** The startup commands, in the order every select shows them (#5 D9, #21 D5). */
-export function StartupOptions(): React.JSX.Element {
+/**
+ * The startup commands, in the order every select shows them (#5 D9, #21 D5). An agent whose CLI
+ * the login shell doesn't find is shown disabled, `(not installed)`; never on a `remote` (SSH)
+ * workspace, whose agents run on its host, nor while the check hasn't answered.
+ */
+export function StartupOptions({ remote = false }: { remote?: boolean }): React.JSX.Element {
+  const installed = useInstalledAgents()
   return (
     <>
-      {STARTUP_CHOICES.map(({ choice, label }) => (
-        <option key={choice} value={choice}>
-          {label}
-        </option>
-      ))}
+      {STARTUP_CHOICES.map(({ choice, label }) => {
+        const agent = choice === 'claude' || isAgentKind(choice)
+        const missing = !remote && installed !== null && agent && !installed.has(choice)
+        return (
+          <option key={choice} value={choice} disabled={missing}>
+            {missing ? `${label} (not installed)` : label}
+          </option>
+        )
+      })}
     </>
   )
 }
@@ -26,6 +37,8 @@ interface StartupFieldProps {
   error?: string
   /** Test id prefix: `<prefix>-startup`, `<prefix>-command`, `<prefix>-error-command`. */
   testIdPrefix: string
+  /** An SSH workspace's: its agents run on its host, so none is shown as not installed. */
+  remote?: boolean
 }
 
 /**
@@ -36,7 +49,8 @@ function StartupField({
   draft,
   onChange,
   error,
-  testIdPrefix
+  testIdPrefix,
+  remote = false
 }: StartupFieldProps): React.JSX.Element {
   const id = useId()
   const selectId = `${id}-startup`
@@ -55,7 +69,7 @@ function StartupField({
           aria-describedby={hint ? hintId : undefined}
           onChange={(e) => onChange({ ...draft, choice: parseChoice(e.target.value) })}
         >
-          <StartupOptions />
+          <StartupOptions remote={remote} />
         </select>
         {hint && (
           <p className="field-hint" id={hintId} data-testid={`${testIdPrefix}-startup-hint`}>

@@ -157,7 +157,10 @@ async function newCard(title: string): Promise<void> {
   await backToBoard(page)
 }
 
-/** Opens card `title`, runs `board activity . waiting` in it and goes back to the board. */
+/**
+ * Opens card `title`, runs `board activity . waiting` in it a second later and goes back to the
+ * board: Waiting for you clears once the card is seen, so it is set while the board shows.
+ */
 async function setWaiting(title: string): Promise<void> {
   await boardCard(page, title).getByTestId('card-open').click()
   await expectCardOpen(page, title)
@@ -168,7 +171,7 @@ async function setWaiting(title: string): Promise<void> {
       )
     )
     .toBe(true)
-  await page.keyboard.type('board activity . waiting')
+  await page.keyboard.type('sleep 1; board activity . waiting')
   await page.keyboard.press('Enter')
   await backToBoard(page)
   // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.

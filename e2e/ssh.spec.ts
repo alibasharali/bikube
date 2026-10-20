@@ -967,8 +967,9 @@ test('#31 AC11: board activity works in an SSH card and its extra pane, cleared 
 
   expect(await remoteRun('board activity . working')).toEqual(ok)
   await expectPill('Working')
+  // Waiting for you while the card is open: seen at once, so it clears.
   expect(await remoteRun('board activity . waiting')).toEqual(ok)
-  await expectPill('Waiting for you')
+  await expectPill(null)
   expect(await remoteRun('board activity . question')).toEqual(ok)
   await expectPill('Needs your answer')
   expect(await remoteRun('board activity . none')).toEqual(ok)

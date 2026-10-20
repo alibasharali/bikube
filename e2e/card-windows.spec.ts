@@ -677,6 +677,8 @@ test('AC4: a palette pick and Next waiting card focus its window, changing nothi
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 
+  // The main window focused: the card in its window isn't looked at, so it stays waiting.
+  await focusWindow(page, window)
   await run(window, 'board activity . waiting')
   // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
   await expect(card('Agent A').getByTestId('card-activity')).toHaveText('Waiting for you', {
@@ -818,11 +820,13 @@ test("AC12: a card waiting in its focused window notifies nothing; with the main
   await stubNotifications()
   const activity = card('Agent A').getByTestId('card-activity')
 
-  // Its own window focused: the user is looking at it.
+  // Its own window focused: the user is looking at it, so its Waiting for you is seen at once.
   await focusWindow(window, page)
-  await run(window, 'board activity . waiting')
+  await run(window, 'board activity . working')
   // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
-  await expect(activity).toHaveText('Waiting for you', { timeout: 15_000 })
+  await expect(activity).toHaveText('Working', { timeout: 15_000 })
+  await run(window, 'board activity . waiting')
+  await expect(activity).toHaveCount(0)
   await page.waitForTimeout(300)
   expect(await notifications()).toEqual([])
   await run(window, 'board activity . working')

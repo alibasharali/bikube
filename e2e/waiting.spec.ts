@@ -86,10 +86,14 @@ async function openCard(title: string): Promise<void> {
     .toBe(true)
 }
 
-/** Opens card `title`, types `board activity . <activity>` in it and waits for its pill. */
+/**
+ * Opens card `title`, types `board activity . <activity>` in it and waits for its pill. Waiting
+ * for you clears once the card is seen, so it is set a second later, back on the board.
+ */
 async function setActivity(title: string, activity: string, pillText: string): Promise<void> {
   await openCard(title)
-  await page.keyboard.type(`board activity . ${activity}`)
+  const delay = activity === 'waiting' ? 'sleep 1; ' : ''
+  await page.keyboard.type(`${delay}board activity . ${activity}`)
   await page.keyboard.press('Enter')
   await backToBoard(page)
   // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
@@ -117,7 +121,11 @@ test('AC1: each waiting card is marked in its workspace’s tree, live', async (
   await expect(mark('Beta', 'b1')).toHaveAttribute('title', 'Waiting for you')
   await expect(mark('Beta', 'b2')).toHaveAttribute('data-activity', 'question')
   await expect(mark('Beta', 'b2')).toHaveAttribute('title', 'Needs your answer')
-  await expect(row('Alpha').getByTestId('workspace-terminal-activity')).toHaveCount(0)
+  // Alpha's cards run with nothing to report: the green dot.
+  await expect(row('Alpha').getByTestId('workspace-terminal-activity')).toHaveCount(2)
+  for (const title of ['a1', 'a2']) {
+    await expect(mark('Alpha', title)).toHaveAttribute('data-activity', 'running')
+  }
   // Expanded, the workspace row itself counts nothing: the cards show it.
   await expect(row('Beta').getByTestId('workspace-item')).toHaveAccessibleName('Beta')
 
@@ -212,14 +220,21 @@ test('AC3: the shortcut opens the longest-waiting card in any workspace, then th
   await expectOpenIn('Beta', 'one')
   await page.keyboard.press(NEXT)
   await expectOpenIn('Beta', 'two')
+  // `one` was seen, so it waits no more; `two` needs an answer still and stays open.
   await page.keyboard.press(NEXT)
-  await expectOpenIn('Beta', 'one')
+  await settle()
+  await expectOpenIn('Beta', 'two')
 })
 
 test('AC4: a change between waiting and question keeps the place; working and back moves it last', async () => {
   await oneThenTwoInBeta()
   await selectWorkspace('Beta')
-  await setActivity('one', 'question', 'Needs your answer')
+  // From `two` (a question stays while open), so `one` changes without being opened and seen.
+  await openCard('two')
+  await page.keyboard.type('board activity one question')
+  await page.keyboard.press('Enter')
+  await backToBoard(page)
+  await expect(boardCard('one').getByTestId('card-activity')).toHaveText('Needs your answer')
   await page.keyboard.press(NEXT)
   await expectOpenIn('Beta', 'one')
 
@@ -381,4 +396,49 @@ test('AC9: the palette lists Next waiting card while a card waits, with its shor
   await nextRow.click()
   await expect(palette()).toHaveCount(0)
   await expectOpenIn('Beta', 'b1')
+})
+
+test('Waiting for you is a notification: opening the card clears it; Needs your answer stays', async () => {
+  await createWorkspace('Alpha')
+  await newCard('a1')
+  await newCard('a2')
+  await setActivity('a1', 'waiting', 'Waiting for you')
+  await setActivity('a2', 'question', 'Needs your answer')
+  await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'waiting')
+
+  // Opened (even with nothing typed), a1 is seen: running again everywhere.
+  await openCard('a1')
+  await backToBoard(page)
+  await expect(boardCard('a1').getByTestId('card-activity')).toHaveCount(0)
+  await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'running')
+  await expect(boardCard('a2').getByTestId('card-activity')).toHaveText('Needs your answer')
+
+  // Opened, a2's question stays until answered, and it alone is left to jump to.
+  await openCard('a2')
+  await backToBoard(page)
+  await expect(boardCard('a2').getByTestId('card-activity')).toHaveText('Needs your answer')
+  await page.keyboard.press(NEXT)
+  await expectOpenIn('Alpha', 'a2')
+})
+
+test('Waiting for you set while the window is away stays until the window is focused again', async () => {
+  await createWorkspace('Alpha')
+  await newCard('a1')
+  await openCard('a1')
+  // Playwright reads every page as focused: the window looks away here, as another app would.
+  await page.evaluate(() => (document.hasFocus = () => false))
+  await page.keyboard.type('board activity . waiting')
+  await page.keyboard.press('Enter')
+  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'waiting', {
+    timeout: 15_000
+  })
+  await settle()
+  await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'waiting')
+
+  await page.evaluate(() => {
+    document.hasFocus = () => true
+    dispatchEvent(new FocusEvent('focus'))
+  })
+  await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'running')
 })

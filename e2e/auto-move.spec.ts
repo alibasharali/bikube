@@ -270,7 +270,8 @@ test('#42 AC1: waiting or a question moves the card to the bottom of the Waiting
   await board('board activity . waiting')
   await back()
   await expect(titlesIn('Needs me')).toHaveText(['first', 'api'], { timeout: 2_000 })
-  await expect(card('api').getByTestId('card-activity')).toHaveText('Waiting for you')
+  // It waited while open, so it was seen at once: moved, its pill already gone.
+  await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
   await expect(titlesIn('Running')).toHaveCount(0)
 
   await newCard('Running', 'web')
@@ -341,21 +342,22 @@ test('#42 AC5: only a change moves the card; a manual move stays until the next 
   await createWorkspace()
   await showAllColumns()
   await setRules({ 'When waiting for you': 'Needs me' })
+  // Needs your answer, which stays while the card is open (Waiting for you clears once seen).
   await newCard('Running', 'api')
-  await board('board activity . waiting')
+  await board('board activity . question')
   await back()
   await expect(titlesIn('Needs me')).toHaveText(['api'])
 
   await drag('api', column('Backlog'))
   await expect(titlesIn('Backlog')).toHaveText(['api'])
   await openCard('api')
-  await board('board activity . waiting')
+  await board('board activity . question')
   await back()
   await expect(titlesIn('Backlog')).toHaveText(['api'])
 
   await openCard('api')
   await board('board activity . working')
-  await board('board activity . waiting')
+  await board('board activity . question')
   await back()
   await expect(titlesIn('Needs me')).toHaveText(['api'])
 

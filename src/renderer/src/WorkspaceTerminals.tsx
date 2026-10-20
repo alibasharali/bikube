@@ -1,4 +1,4 @@
-import { AppWindow, BellDot, MessageCircleQuestion } from 'lucide-react'
+import { AppWindow, BellDot, LoaderCircle, MessageCircleQuestion } from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
@@ -81,7 +81,7 @@ function TerminalRow({
             <AppWindow {...SMALL_ICON} />
           </span>
         )}
-        {row.activity && <ActivityMark activity={row.activity} />}
+        <StatusMark activity={row.activity} />
       </button>
     </li>
   )
@@ -95,20 +95,27 @@ function toolName(row: OpenTerminal): string {
   return row.tool === 'custom' ? 'Custom command' : 'Shell'
 }
 
-/** Working as a dot; Waiting for you and Needs your answer as an amber icon, named by tooltip. */
-function ActivityMark({
-  activity
-}: {
-  activity: NonNullable<OpenTerminal['activity']>
-}): React.JSX.Element {
-  const label = ACTIVITY_LABELS[activity]
+/**
+ * The terminal's status: a green dot while it runs with nothing to report, a spinner while its
+ * agent works, an amber bell while it waits for the user (until seen) and an amber question mark
+ * while it needs an answer; named by tooltip.
+ */
+function StatusMark({ activity }: { activity: OpenTerminal['activity'] }): React.JSX.Element {
+  const status = activity ?? 'running'
+  const label = activity ? ACTIVITY_LABELS[activity] : 'Running'
   const Icon =
-    activity === 'waiting' ? BellDot : activity === 'question' ? MessageCircleQuestion : null
+    status === 'waiting'
+      ? BellDot
+      : status === 'question'
+        ? MessageCircleQuestion
+        : status === 'working'
+          ? LoaderCircle
+          : null
   return (
     <span
-      className={`workspace-terminal-activity workspace-terminal-${activity}`}
+      className={`workspace-terminal-activity workspace-terminal-${status}`}
       data-testid="workspace-terminal-activity"
-      data-activity={activity}
+      data-activity={status}
       title={label}
       aria-label={label}
     >

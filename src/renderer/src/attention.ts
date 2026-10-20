@@ -10,7 +10,7 @@ import { cardPanes, cardTerminals, onScreenCreated } from './card-terminals'
 import { focusCardWindow } from './card-windows'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
-import { anyWindowFocused, focusedCardWindow } from './window-focus'
+import { anyWindowFocused, focusedCardWindow, onAnyWindowFocus } from './window-focus'
 
 /**
  * Telling the user when an agent needs them: a notification (with a tone, when on) as a card's
@@ -19,6 +19,9 @@ import { anyWindowFocused, focusedCardWindow } from './window-focus'
  * cards waiting. Clicking a notification opens its card, or brings its own window forward.
  * A long command that ends out of sight gets one too (#45 D7), changing nothing else here.
  * The waiting cards and shells, oldest first (#41 D2), are a queue the sidebar follows.
+ * Waiting for you is a notification: once the user looks at the card (opens it, or is looking at
+ * it as it starts waiting), it is seen and clears, as `board activity . none` would. Needs your
+ * answer stays until the agent hears back.
  */
 
 /** The cards and shells whose agent waits for the user now, oldest first (#41 D1, D2). */
@@ -32,6 +35,7 @@ let started = false
 /** The app tells which card is open, so its own notifications are skipped while it's in view. */
 export function setLookingAt(cardId: string | null): void {
   lookingAt = cardId
+  acknowledgeLookedAt()
 }
 
 /** The app opens a card when its notification is clicked. Returns an unsubscribe function. */
@@ -83,6 +87,19 @@ function cardOf(cardId: string): { workspaceId: string; workspace: string; title
  */
 function lookedAt(): string | null {
   return focusedCardWindow() ?? (document.hasFocus() ? lookingAt : null)
+}
+
+/**
+ * The card the user is looking at has been seen: its Waiting for you clears. After the current
+ * activity event has reached every listener (the queue, automatic moves), so each sees it in order.
+ */
+function acknowledgeLookedAt(): void {
+  queueMicrotask(() => {
+    const id = lookedAt()
+    if (id && cardTerminals().status(id)?.activity === 'waiting') {
+      cardTerminals().setActivity(id, null)
+    }
+  })
 }
 
 function notify(cardId: string, activity: Activity): void {
@@ -171,7 +188,10 @@ export function startAttention(): void {
   cardTerminals().onActivity((cardId, activity) => {
     setWaiting(withActivity(waiting, cardId, activity))
     if (activity && isWaiting(activity)) notify(cardId, activity)
+    if (activity === 'waiting') acknowledgeLookedAt()
   })
+  // Coming back to a window with a waiting card in view: it is seen now.
+  onAnyWindowFocus(acknowledgeLookedAt)
   onScreenCreated((screen, cardId, paneId) =>
     screen.marks.onCommandEnded((command) => notifyLongCommand(cardId, paneId, command))
   )

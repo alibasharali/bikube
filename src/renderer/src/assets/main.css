@@ -491,12 +491,35 @@ button {
   display: inline-flex;
 }
 
-.workspace-terminal-working {
-  width: 8px;
-  height: 8px;
-  margin: 0 3px;
+/* Running with nothing to report: the Shells strip's green dot. */
+.workspace-terminal-running::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin: 0 3.5px;
   border-radius: 50%;
-  background: var(--pill-working-text);
+  background: #3fb950;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
+}
+
+.workspace-terminal-working {
+  color: var(--pill-working-text);
+}
+
+.workspace-terminal-working svg {
+  animation: workspace-terminal-spin 1s linear infinite;
+}
+
+@keyframes workspace-terminal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-terminal-working svg {
+    animation: none;
+  }
 }
 
 .workspace-terminal-waiting,

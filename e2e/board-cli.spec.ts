@@ -565,8 +565,9 @@ test('#31 AC11: board activity shows a pill until none, from the main and an ext
 
   expect(await board(alpha, 'board activity . working')).toEqual(ok)
   await expectPill('Working')
+  // Waiting for you while the card is open: seen at once, so it clears.
   expect(await board(alpha, 'board activity . waiting')).toEqual(ok)
-  await expectPill('Waiting for you')
+  await expectPill(null)
   expect(await board(alpha, 'board activity . question')).toEqual(ok)
   await expectPill('Needs your answer')
   expect(await board(alpha, 'board activity . none')).toEqual(ok)

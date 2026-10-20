@@ -115,27 +115,36 @@ test('a workspace’s click shows its board, even when a card was open there', a
   await expect(terminal('Agent B')).not.toHaveAttribute('aria-current', 'true')
 })
 
-test('marks working, waiting and question on the card; hidden with the collapsed sidebar', async () => {
+test('shows each terminal’s status: running, working, question; waiting while open is seen at once', async () => {
   await createWorkspace('Alpha')
   await newCard('Agent A')
+  const mark = terminal('Agent A').getByTestId('workspace-terminal-activity')
+  await expect(mark).toHaveAttribute('data-activity', 'running')
+  await expect(mark).toHaveAttribute('title', 'Running')
   await terminal('Agent A').click()
   await expectCardOpen(page, 'Agent A')
-  const mark = terminal('Agent A').getByTestId('workspace-terminal-activity')
   await page.getByTestId('card-view').getByTestId('terminal').click()
-  for (const [activity, label] of [
-    ['working', 'Working'],
-    ['waiting', 'Waiting for you'],
-    ['question', 'Needs your answer']
-  ]) {
+  const set = async (activity: string): Promise<void> => {
     await page.keyboard.type(`"$DROVR_BIN/board" activity . ${activity}`)
     await page.keyboard.press('Enter')
+  }
+  for (const [activity, label] of [
+    ['working', 'Working'],
+    ['question', 'Needs your answer']
+  ]) {
+    await set(activity)
     // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
     await expect(mark).toHaveAttribute('data-activity', activity, { timeout: 15_000 })
     await expect(mark).toHaveAttribute('title', label)
   }
-  await page.keyboard.type('"$DROVR_BIN/board" activity . none')
-  await page.keyboard.press('Enter')
-  await expect(mark).toHaveCount(0)
+  await expect(mark.locator('svg')).toHaveCount(1)
+  // Waiting for you while the card is open: the user sees it, so it is running again.
+  await set('waiting')
+  await expect(mark).toHaveAttribute('data-activity', 'running')
+  await set('working')
+  await expect(mark).toHaveAttribute('data-activity', 'working')
+  await set('none')
+  await expect(mark).toHaveAttribute('data-activity', 'running')
 
   await page.getByTestId('sidebar-toggle').click()
   await expect(page.getByTestId('workspace-terminals')).toHaveCount(0)

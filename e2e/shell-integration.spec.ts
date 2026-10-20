@@ -646,10 +646,10 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   const input = page.getByTestId('find-input')
   await expect(input).toBeFocused()
   await input.fill('alpha')
-  await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
+  await expect(page.getByTestId('find-result')).toHaveText('1 of 2')
   // The first command's match active: the output copied next holds the other one.
   await input.press('Enter')
-  await expect(page.getByTestId('find-result')).toHaveText('1 of 2')
+  await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
   expect(await paneSelection()).toBe('alpha')
 
   await page.keyboard.press(COPY_OUTPUT)
@@ -662,7 +662,7 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   await expect(page.getByTestId('find-bar')).toBeVisible()
   // Upwards from the first match, not from the selected output: wrapping to the newest.
   await input.press('Enter')
-  await expect(page.getByTestId('find-result')).toHaveText('2 of 2')
+  await expect(page.getByTestId('find-result')).toHaveText('1 of 2')
   expect(await paneSelection()).toBe('alpha')
   // Written once with Copy on select on (D2), and Find's selections never (#35 D9).
   await page.waitForTimeout(300)

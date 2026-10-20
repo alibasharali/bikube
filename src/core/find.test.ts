@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { FIND_HIGHLIGHT_LIMIT, findResultText, isValidRegex } from './find'
 
 describe('findResultText (#35 D7)', () => {
-  it('reads the active match counted from the top, of the matches in the buffer', () => {
-    expect(findResultText({ count: 3, index: 2 })).toBe('3 of 3')
-    expect(findResultText({ count: 3, index: 0 })).toBe('1 of 3')
+  it('reads the active match counted from the bottom, of the matches in the buffer', () => {
+    // The newest match (the last from the top) is where the search starts: 1 of 3.
+    expect(findResultText({ count: 3, index: 2 })).toBe('1 of 3')
+    expect(findResultText({ count: 3, index: 0 })).toBe('3 of 3')
+    expect(findResultText({ count: 3, index: 1 })).toBe('2 of 3')
     expect(findResultText({ count: 1, index: 0 })).toBe('1 of 1')
   })
 
@@ -17,7 +19,7 @@ describe('findResultText (#35 D7)', () => {
     expect(findResultText({ count: 1001, index: -1 })).toBe('More than 1,000')
     expect(findResultText({ count: 1001, index: 4 })).toBe('More than 1,000')
     // Exactly the limit is still counted.
-    expect(findResultText({ count: 1000, index: 999 })).toBe('1000 of 1000')
+    expect(findResultText({ count: 1000, index: 999 })).toBe('1 of 1000')
   })
 
   it('reads the count alone when no match is active', () => {

@@ -17,7 +17,8 @@ export interface FindResults {
 }
 
 /**
- * The bar's result text (#35 D7): `<n> of <m>` with `n` counted from the top, `No results`,
+ * The bar's result text (#35 D7): `<n> of <m>` with `n` counted from the bottom, so the newest
+ * match the search starts on reads `1 of <m>` and Enter counts up as it goes back; `No results`,
  * `Invalid regex`, or `More than 1,000` past the limit, where `n` isn't known; the count alone
  * when no match is active.
  */
@@ -27,7 +28,7 @@ export function findResultText({ count, index, invalid }: FindResults): string {
   if (count > FIND_HIGHLIGHT_LIMIT) return 'More than 1,000'
   // No active match known (none selected): the count alone.
   if (index < 0) return count === 1 ? '1 result' : `${count} results`
-  return `${index + 1} of ${count}`
+  return `${count - index} of ${count}`
 }
 
 /** Whether `query` is a JavaScript regular expression, as the addon builds it (#35 D7). */

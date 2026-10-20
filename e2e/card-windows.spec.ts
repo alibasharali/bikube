@@ -294,6 +294,34 @@ test('AC6: Back, the shell exiting and deleting the card close its window', asyn
   await expect(card('Agent A')).toHaveCount(0)
 })
 
+// A card opened again after its window lost WebGL, and its failed load left a dead canvas the
+// window's size over the terminal: re-opening xterm made the image addon's renderer hook recurse.
+// The same canvases as before, by size; only bites where WebGL loads (a real GPU, not xvfb's).
+test('D2: back from its window, the card has the renderer it had before, the terminal’s size', async () => {
+  const canvases = (): Promise<string> =>
+    page.evaluate(() => {
+      const screen = document.querySelector('[data-testid=card-view] .xterm-screen')
+      if (!(screen instanceof HTMLElement)) return 'no screen'
+      const found = [...screen.querySelectorAll('canvas:not(.xterm-image-layer)')]
+      return found
+        .map((c) => ((c as HTMLElement).clientWidth === screen.clientWidth ? 'fitted' : 'other'))
+        .join(',')
+    })
+  await newCard('Agent A')
+  await expect.poll(canvases).not.toBe('no screen')
+  const before = await canvases()
+  expect(before).not.toContain('other')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  await expect.poll(() => terminalFocused(window)).toBe(true)
+  const gone = closed(window)
+  await window.keyboard.press(SHORTCUTS.back).catch(() => undefined)
+  await gone
+  await card('Agent A').click()
+  await expectCardOpen(page, 'Agent A')
+  await expect.poll(canvases).toBe(before)
+})
+
 test("AC6: deleting the card's workspace closes its window", async () => {
   await newCard('Agent A')
   await backToBoard(page)

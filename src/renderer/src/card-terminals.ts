@@ -429,14 +429,14 @@ export class XtermScreen implements CardScreen {
 
   /**
    * Shows the screen in `container`, fitted and kept fitted; returns the detach function. The
-   * container may be in a card's own window (#53 D2): xterm is opened again on its moved host,
-   * which makes it follow that window, before WebGL is loaded there.
+   * container may be in a card's own window (#53 D2): xterm follows that window, before WebGL is
+   * loaded there.
    */
   attach(container: HTMLElement): () => void {
     const view = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis
     container.appendChild(this.host)
-    // Opens it the first time; after that only points xterm at the host's window.
-    this.term.open(this.host)
+    if (this.term.element) this.followWindow(view)
+    else this.term.open(this.host)
     this.followDocument(container.ownerDocument)
     if (this.shownIn && this.shownIn !== view) this.dropPendingFrames(this.shownIn)
     this.shownIn = view
@@ -453,6 +453,23 @@ export class XtermScreen implements CardScreen {
       this.unlistenWindow = undefined
       // Only from this container: it may already be shown elsewhere.
       if (this.host.parentElement === container) this.host.remove()
+    }
+  }
+
+  /**
+   * What xterm 6's `open` does on an opened terminal: point it at the window it is now shown in.
+   * Not `open` itself: `@xterm/addon-image` 0.9 wraps `setRenderer` again on every `open`, and the
+   * second wrapper calls itself, so loading WebGL afterwards overflowed the stack and left its
+   * canvas over the terminal. Private field, checked first, so another xterm version only loses
+   * the window change.
+   */
+  private followWindow(view: Window): void {
+    const core = (
+      this.term as unknown as { _core?: { _coreBrowserService?: { window?: unknown } } }
+    )._core
+    const browser = core?._coreBrowserService
+    if (browser && typeof browser.window === 'object' && browser.window !== view) {
+      browser.window = view
     }
   }
 
@@ -737,12 +754,18 @@ export class XtermScreen implements CardScreen {
   // WebGL where a real GPU backs it; xterm's DOM renderer stays in place otherwise.
   private loadWebgl(): void {
     if (this.webgl || !hardwareWebgl()) return
+    const webgl = new WebglAddon()
     try {
-      const webgl = new WebglAddon()
       webgl.onContextLoss(() => this.dropWebgl())
       this.term.loadAddon(webgl)
       this.webgl = webgl
     } catch {
+      // A half-loaded renderer would leave its canvas over the terminal.
+      try {
+        webgl.dispose()
+      } catch {
+        // Nothing more to remove.
+      }
       this.webgl = undefined
     }
   }

@@ -2953,6 +2953,11 @@ button.dev-server-chip:focus-visible {
   accent-color: var(--accent);
 }
 
+.new-card-check:has(input:disabled) {
+  color: var(--text-muted);
+  cursor: default;
+}
+
 .new-card-branch {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -3278,13 +3283,15 @@ button.dev-server-chip:focus-visible {
   color: var(--text-muted);
 }
 
+/* The shell dialog's checkboxes, each on its own line. */
 .shell-autostart {
-  margin-top: var(--space-1);
+  display: flex;
+  margin-top: var(--space-2);
 }
 
 /* Under its checkbox, lined up with the label's text. */
 .shell-auto-close-hint {
-  margin: 2px 0 0 24px;
+  margin: 2px 0 0 calc(13px + var(--space-2));
 }
 
 /* Find bar (#35 D3, D4): the top-right corner of the pane it searches, left of an extra pane's

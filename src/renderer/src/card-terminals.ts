@@ -453,13 +453,19 @@ export class XtermScreen implements CardScreen {
     this.listenTo(view)
     this.fitNow()
     this.loadWebgl()
-    const observer = new view.ResizeObserver(() => this.fitNow())
+    // Moved to another container (a card window and back), the view's scroll position resets
+    // as the moved host is laid out, which may take a while in a new window: for a second, each
+    // fit puts it back where it was (at the bottom following output, unless the user had
+    // scrolled up), as do the next frame and a short timer.
+    const restoreUntil = performance.now() + 1000
+    const observer = new view.ResizeObserver(() => {
+      this.fitNow()
+      if (performance.now() < restoreUntil) this.restoreScroll()
+    })
     observer.observe(container)
-    // Moved to another container (a card window and back), the view's scroll position resets:
-    // put it back where it was, at the bottom following output unless the user had scrolled up.
-    // Once more after the next frame, when the browser has laid the moved host out.
     this.restoreScroll()
     view.requestAnimationFrame(() => this.restoreScroll())
+    view.setTimeout(() => this.restoreScroll(), 250)
     this.term.refresh(0, this.term.rows - 1)
     return () => {
       const buffer = this.term.buffer.active

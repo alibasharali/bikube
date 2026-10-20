@@ -320,10 +320,6 @@ export interface GitApi {
   merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
-/**
- * The side panel's Files tab (#55 D16), read by main inside the shown folder (an absolute,
- * existing folder): anything that resolves outside it is refused with `ok: false`.
- */
 export interface AgentsApi {
   /**
    * The agents whose CLI the user's login shell finds (`claude`, `codex`, `gemini`, `opencode`),
@@ -332,6 +328,10 @@ export interface AgentsApi {
   installed(): Promise<AgentChoice[] | null>
 }
 
+/**
+ * The side panel's Files tab (#55 D16), read by main inside the shown folder (an absolute,
+ * existing folder): anything that resolves outside it is refused with `ok: false`.
+ */
 export interface FilesApi {
   /**
    * The entries of the folder `path` (relative, `/`-separated, `''` for the shown folder itself)

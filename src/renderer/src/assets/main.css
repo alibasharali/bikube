@@ -2085,17 +2085,11 @@ button.dev-server-chip:focus-visible {
   min-width: 0;
 }
 
-/* The startup command's logo in a small tile in its kind's colour. */
+/* The startup command's logo before the title, in its kind's colour, as in the sidebar tree. */
 .card-tag {
   flex: none;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 18px;
-  box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
   color: var(--text-muted);
 }
 
@@ -2138,20 +2132,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .card-tag[data-kind] {
-  border-color: color-mix(in srgb, var(--kind) 45%, transparent);
-  background: color-mix(in srgb, var(--kind) 14%, transparent);
   color: var(--kind);
-}
-
-/* A stripe in the kind's colour down the card's left edge, following its rounded corners. */
-.card[data-kind]:not([data-kind='shell'])::after {
-  content: '';
-  position: absolute;
-  inset: -1px auto -1px -1px;
-  width: 3px;
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  background: var(--kind);
-  pointer-events: none;
 }
 
 .modal-hint {

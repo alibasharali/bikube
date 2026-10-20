@@ -76,21 +76,21 @@ function TitleBar({
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />
-                <span className="titlebar-current" data-testid="titlebar-card">
-                  {card.title}
-                </span>
                 {isShell ? (
                   <span
                     className="card-tag card-tag-shell"
                     data-testid="titlebar-shell-tag"
                     title="Shell"
                   >
-                    <ToolIcon tool="shell" size={12} />
+                    <ToolIcon tool="shell" />
                     <span className="visually-hidden">Shell</span>
                   </span>
                 ) : (
                   <StartupTag startup={card.startup} />
                 )}
+                <span className="titlebar-current" data-testid="titlebar-card">
+                  {card.title}
+                </span>
                 {dir && branch && (
                   <BranchChip key={dir} dir={dir} branch={branch} worktree={worktree !== null} />
                 )}

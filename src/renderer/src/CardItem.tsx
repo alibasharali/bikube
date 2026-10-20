@@ -49,8 +49,8 @@ import { useCardUsage } from './usage'
 
 /**
  * The card's startup command on the board (#5 D12, #21 D5): the agent's logo for Claude Code and
- * the presets, a prompt for Custom, with its name (`Claude`, a preset's tag, `Custom`) for screen
- * readers and its select label (or the command) as tooltip; nothing for Shell. It follows the
+ * the presets, a prompt for Custom, before the title, with its name (`Claude`, a preset's tag,
+ * `Custom`) for screen readers and its select label (or the command) as tooltip; nothing for Shell. It follows the
  * setting, not what is running, and takes its kind's colour (`--kind`).
  */
 export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
@@ -63,7 +63,7 @@ export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.
         : [AGENT_PRESETS[startup.kind].tag, AGENT_PRESETS[startup.kind].label]
   return (
     <span className="card-tag" data-testid="card-tag" data-kind={startup.kind} title={title}>
-      <ToolIcon tool={startup.kind} size={12} />
+      <ToolIcon tool={startup.kind} />
       <span className="visually-hidden">{tag}</span>
     </span>
   )
@@ -401,6 +401,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
         >
           <span className="card-head">
             <span className="card-title-row">
+              <StartupTag startup={card.startup} />
               <span
                 ref={titleRef}
                 className="card-title"
@@ -410,7 +411,6 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               >
                 {card.title}
               </span>
-              <StartupTag startup={card.startup} />
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>

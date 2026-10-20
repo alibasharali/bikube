@@ -53,7 +53,7 @@ exit 0
 `
 
 export interface FakeClaudeHome {
-  /** The HOME directory; its .bash_profile puts the fake `claude` first on PATH. */
+  /** The HOME directory; its .bash_profile and .profile put the fake `claude` first on PATH. */
   home: string
   /** The fake claude's log file. */
   log: string
@@ -69,6 +69,8 @@ export function fakeClaudeHome(root: string): FakeClaudeHome {
   writeFileSync(join(home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(home, 'bin', 'claude'), 0o755)
   writeFileSync(join(home, '.bash_profile'), 'export PATH="$HOME/bin:$PATH"\n')
+  // And for `/bin/sh -l`, which Drovr's checks use for a shell it doesn't know (a test's wrapper).
+  writeFileSync(join(home, '.profile'), 'export PATH="$HOME/bin:$PATH"\n')
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
   return { home, log, env: { ...env, SHELL: '/bin/bash', HOME: home, DROVR_CLAUDE_LOG: log } }

@@ -24,7 +24,11 @@ export function appWindow(): BrowserWindow | undefined {
  * closes them all when the main window closes, its page navigates (a reload) or its renderer is
  * gone: the page that draws them must not be outlived.
  */
-export function allowCardWindows(mainWindow: BrowserWindow, backgroundColor: () => string): void {
+export function allowCardWindows(
+  mainWindow: BrowserWindow,
+  backgroundColor: () => string,
+  hidden = false
+): void {
   const contents = mainWindow.webContents
   const cardIdOf = (details: { url: string; frameName: string }): string | null =>
     cardWindowOpen({ url: details.url, frameName: details.frameName, fromMainWindow: true })
@@ -35,9 +39,17 @@ export function allowCardWindows(mainWindow: BrowserWindow, backgroundColor: () 
   contents.setWindowOpenHandler((details) => {
     const cardId = cardIdOf(details)
     if (cardId === null || cardWindows.has(cardId)) return { action: 'deny' }
+    const options = cardWindowOptions(process.platform, backgroundColor())
     return {
       action: 'allow',
-      overrideBrowserWindowOptions: cardWindowOptions(process.platform, backgroundColor())
+      // Smoke tests keep card windows hidden too, drawing as if shown (see `hiddenForTests`).
+      overrideBrowserWindowOptions: hidden
+        ? {
+            ...options,
+            show: false,
+            webPreferences: { ...options.webPreferences, backgroundThrottling: false }
+          }
+        : options
     }
   })
   contents.on('did-create-window', (window, details) => {
@@ -63,14 +75,14 @@ export function allowCardWindows(mainWindow: BrowserWindow, backgroundColor: () 
 }
 
 /** `cardWindow:focus` (#53 D3): brings a card's window forward; an unknown id does nothing. */
-export function registerCardWindows(): void {
+export function registerCardWindows(hidden = false): void {
   ipcMain.on(IPC.cardWindowFocus, (event, cardId: unknown) => {
     if (event.senderFrame === null || event.senderFrame !== event.sender.mainFrame) return
     if (!isCardId(cardId)) return
     const window = cardWindows.get(cardId)
     if (!window || window.isDestroyed()) return
     if (window.isMinimized()) window.restore()
-    window.show()
+    if (!hidden) window.show()
     window.focus()
   })
 }

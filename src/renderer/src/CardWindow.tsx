@@ -93,8 +93,6 @@ function CardWindow({
   return (
     <ViewWindowContext.Provider value={view}>
       <div className="app card-window" data-testid="card-window">
-        {/* As in the main window: held to the window's height, so only the panes and the side
-            panel's tree scroll, never the window (#53 D4). */}
         {/* Back to the main window by mouse; Open in new window's shortcut does the same here. */}
         <div className="card-window-bar">
           <button
@@ -108,11 +106,9 @@ function CardWindow({
             <ShortcutKeys shortcut={keymap.openInWindow} platform={window.drovr.platform} />
           </button>
         </div>
-        <div className="app-body">
-          <main className="main">
-            <CardView key={card.id} card={card} onBack={onBack} onOpenInWindow={onReturn} />
-          </main>
-        </div>
+        <main className="main">
+          <CardView key={card.id} card={card} onBack={onBack} onOpenInWindow={onReturn} />
+        </main>
       </div>
     </ViewWindowContext.Provider>
   )

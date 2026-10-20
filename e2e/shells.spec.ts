@@ -205,9 +205,13 @@ test('the title bar shows the workspace folder, and the board has no header of i
   await expect(page.getByRole('heading', { name: 'Review' })).toBeVisible()
   // The Shell choice is gone from new cards.
   await page.getByTestId('column').first().getByTestId('new-card').click()
-  const options = await page.getByTestId('new-card-startup').locator('option').allTextContents()
-  expect(options).not.toContain('Shell')
-  expect(options[0]).toBe('Claude Code')
+  // Read by value: an agent the login shell lacks reads `(not installed)`.
+  const options = await page
+    .getByTestId('new-card-startup')
+    .locator('option')
+    .evaluateAll((els) => els.map((el) => (el as HTMLOptionElement).value))
+  expect(options).not.toContain('shell')
+  expect(options[0]).toBe('claude')
 })
 
 test('#48 AC7: the Default shell split into 2 panes zooms its focused pane and restores it', async () => {

@@ -193,6 +193,8 @@ export class XtermScreen implements CardScreen {
   private unlistenWindow: (() => void) | undefined
   /** The window the screen was last shown in (#53 D2). */
   private shownIn: Window | undefined
+  /** How many rows above the bottom the view was when last detached: kept across a move. */
+  private rowsFromBottom = 0
   private webgl: WebglAddon | undefined
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
@@ -453,8 +455,15 @@ export class XtermScreen implements CardScreen {
     this.loadWebgl()
     const observer = new view.ResizeObserver(() => this.fitNow())
     observer.observe(container)
+    // Moved to another container (a card window and back), the view's scroll position resets:
+    // put it back where it was, at the bottom following output unless the user had scrolled up.
+    // Once more after the next frame, when the browser has laid the moved host out.
+    this.restoreScroll()
+    view.requestAnimationFrame(() => this.restoreScroll())
     this.term.refresh(0, this.term.rows - 1)
     return () => {
+      const buffer = this.term.buffer.active
+      this.rowsFromBottom = Math.max(0, buffer.baseY - buffer.viewportY)
       observer.disconnect()
       this.dropWebgl()
       this.unlistenWindow?.()
@@ -462,6 +471,12 @@ export class XtermScreen implements CardScreen {
       // Only from this container: it may already be shown elsewhere.
       if (this.host.parentElement === container) this.host.remove()
     }
+  }
+
+  private restoreScroll(): void {
+    if (this.disposed) return
+    const target = Math.max(0, this.term.buffer.active.baseY - this.rowsFromBottom)
+    if (this.term.buffer.active.viewportY !== target) this.term.scrollToLine(target)
   }
 
   /**

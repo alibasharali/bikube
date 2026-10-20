@@ -81,7 +81,7 @@ function createWindow(settings: MainSettings): void {
   })
 
   // Its page opens its cards' own windows, and they close with it (#53 D3).
-  allowCardWindows(mainWindow, () => settings.backgroundColor())
+  allowCardWindows(mainWindow, () => settings.backgroundColor(), hiddenForTests)
 
   mainWindow.on('ready-to-show', () => {
     if (!hiddenForTests) mainWindow.show()
@@ -147,7 +147,7 @@ function startApp(): void {
   registerPorts()
   registerDirectories()
   registerAttention()
-  registerCardWindows()
+  registerCardWindows(hiddenForTests)
   registerWorktrees()
   registerGit(() => settings.shell())
   registerFiles(() => settings.editor())

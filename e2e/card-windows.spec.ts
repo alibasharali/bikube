@@ -668,13 +668,6 @@ test('AC3: the shortcut opens the open card in its own window and the main windo
   // The new window has the keyboard, and the shell got none of the shortcut's keys.
   await expectCleanLine(window)
 
-  // In the card window the shortcut does nothing, and never reaches the shell (D5).
-  await window.keyboard.press(OPEN_WINDOW)
-  await window.waitForTimeout(300)
-  expect(app.windows()).toHaveLength(2)
-  await run(window, 'clear')
-  await expectCleanLine(window)
-
   // The workspace forgot its view (#31 D19): with the window closed the main window stays on
   // its board (D8).
   await window.close()
@@ -682,6 +675,7 @@ test('AC3: the shortcut opens the open card in its own window and the main windo
   await page.waitForTimeout(300)
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
+  // In the card window the same shortcut moves the card back: see "moves the card back".
 })
 
 test("AC3: the palette's Open in new window row opens the open card in its own window", async () => {

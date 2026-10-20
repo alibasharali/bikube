@@ -534,6 +534,12 @@ button {
   color: var(--pill-question-text);
 }
 
+/* A card window's view is held to the window's height, so only its panes and the side panel's
+   tree scroll, never the window (#53 D4). */
+.card-window > .main {
+  min-height: 0;
+}
+
 /* A card window's bar: the button that moves the card back to the main window. */
 .card-window-bar {
   flex: none;

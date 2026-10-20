@@ -21,6 +21,8 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [react()]
+    plugins: [react()],
+    // Off Vite's busy default 5173, so `npm run dev` sits beside other projects' dev servers.
+    server: { port: 46969 }
   }
 })

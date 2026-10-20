@@ -139,6 +139,43 @@ test('a named shell types its command each time it starts; restart, close, edit 
   await expect(page.getByTestId('shell')).toHaveCount(1)
 })
 
+test('Close when the command stops: the shell exits once its command ends; Ctrl+C keeps the prompt', async () => {
+  // Off and disabled without a command.
+  await page.getByTestId('shell-add').click()
+  await expect(page.getByTestId('shell-auto-close')).toBeDisabled()
+  await expect(page.getByTestId('shell-dialog')).toContainText('Needs a startup command.')
+  await page.getByTestId('shell-name').fill('Once')
+  await page.getByTestId('shell-command').fill('echo once-$((40+2)); sleep 1')
+  await expect(page.getByTestId('shell-auto-close')).toBeEnabled()
+  await page.getByTestId('shell-auto-close').check()
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
+  // The strip shows the command as typed, without the `; exit`.
+  await expect(shell('Once')).toContainText('echo once-$((40+2)); sleep 1')
+
+  // Its command ends on its own: the shell exits, the view goes back to the board.
+  await shell('Once').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Once')
+  await expect.poll(lines).toContain('once-42')
+  await expect(page.getByTestId('board')).toBeVisible({ timeout: 10_000 })
+  await expect.poll(() => running('Once')).toBe('false')
+
+  // Ctrl+C stops the list, so the shell stays at its prompt.
+  await shellMenu('Once', 'edit')
+  await expect(page.getByTestId('shell-auto-close')).toBeChecked()
+  await page.getByTestId('shell-command').fill('sleep 30')
+  await page.getByTestId('shell-submit').click()
+  await shell('Once').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Once')
+  await expect.poll(lines).toContainEqual(expect.stringContaining('sleep 30; exit'))
+  await page.waitForTimeout(500)
+  await page.keyboard.press('Control+C')
+  await page.keyboard.type('echo still-$((50+3))')
+  await page.keyboard.press('Enter')
+  await expect.poll(lines).toContain('still-53')
+  await expectCardOpen(page, 'Once')
+})
+
 test('a shell must have a name and a one-line command; the Default one has no edit or delete', async () => {
   await page.getByTestId('shell-add').click()
   await page.getByTestId('shell-submit').click()

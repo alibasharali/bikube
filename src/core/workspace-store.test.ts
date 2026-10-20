@@ -1105,12 +1105,21 @@ describe('shells', () => {
       s.createShell(w.id, { name: 'Two lines', command: 'a\nb', autostart: false })
     ).toMatchObject({ ok: false, error: { field: 'command' } })
 
-    ok(s.updateShell(w.id, dev.id, { name: 'Web', command: 'npm start', autostart: false }))
+    expect(dev.autoClose).toBe(false)
+    ok(
+      s.updateShell(w.id, dev.id, {
+        name: 'Web',
+        command: 'npm start',
+        autostart: false,
+        autoClose: true
+      })
+    )
     expect(s.getState().workspaces[0].shells[0]).toEqual({
       id: dev.id,
       name: 'Web',
       command: 'npm start',
-      autostart: false
+      autostart: false,
+      autoClose: true
     })
     ok(s.deleteShell(w.id, plain.id))
     expect(s.getState().workspaces[0].shells.map((sh) => sh.id)).toEqual([dev.id])

@@ -24,6 +24,11 @@ export interface StartupState {
   /** The presets this card has started (#21 D3); missing means none. */
   startedAgents?: readonly AgentKind[]
   /**
+   * A workspace shell with Auto close: its Custom command is typed as `<command>; exit`, so the
+   * shell exits once the command ends on its own (a Ctrl+C stops the list, keeping the prompt).
+   */
+  exitAfterStartup?: boolean
+  /**
    * The card's pending setup (#39 D2): typed instead of the start line until it succeeds; absent
    * (or empty) means none.
    */
@@ -85,7 +90,7 @@ export function startLine(card: StartupState): string | null {
         : `${claude} --session-id ${id} || ${claude} --resume ${id}`
     }
     case 'custom':
-      return card.startup.command
+      return card.exitAfterStartup ? `${card.startup.command}; exit` : card.startup.command
     default: {
       const kind = card.startup.kind
       const { plain, resume } = AGENT_PRESETS[kind]

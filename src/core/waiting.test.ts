@@ -30,7 +30,13 @@ function workspace(id: string, cards: string[], shells: string[] = []): Workspac
     cards: cards.map(card),
     nextCardNumber: 1,
     defaultStartup: { kind: 'shell' },
-    shells: shells.map((s) => ({ id: s, name: s, command: '', autostart: false })),
+    shells: shells.map((s) => ({
+      id: s,
+      name: s,
+      command: '',
+      autostart: false,
+      autoClose: false
+    })),
     worktreeSetup: ''
   }
 }

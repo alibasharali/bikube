@@ -51,7 +51,15 @@ describe('openTerminals', () => {
     const a = workspace(
       'a',
       [card('a2', 'Second', 'progress'), card('a1', 'First'), card('a3', 'Stopped one')],
-      [{ id: 'dev', name: 'Dev server', command: 'npm run dev', autostart: false }]
+      [
+        {
+          id: 'dev',
+          name: 'Dev server',
+          command: 'npm run dev',
+          autostart: false,
+          autoClose: false
+        }
+      ]
     )
     const b = workspace('b', [card('b1', 'Other')])
     const rows = openTerminals(
@@ -94,7 +102,15 @@ describe('openTerminals', () => {
         card('c2', 'Codex', 'backlog', { kind: 'codex' }),
         card('c3', 'Script', 'backlog', { kind: 'custom', command: 'make watch' })
       ],
-      [{ id: 'dev', name: 'Dev server', command: 'npm run dev', autostart: false }]
+      [
+        {
+          id: 'dev',
+          name: 'Dev server',
+          command: 'npm run dev',
+          autostart: false,
+          autoClose: false
+        }
+      ]
     )
     const rows = openTerminals([a], running('c1', 'c2', 'c3', 'dev'), noActivity)
     expect(rows.map((r) => [r.title, r.tool])).toEqual([

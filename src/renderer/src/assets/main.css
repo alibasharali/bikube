@@ -3282,6 +3282,11 @@ button.dev-server-chip:focus-visible {
   margin-top: var(--space-1);
 }
 
+/* Under its checkbox, lined up with the label's text. */
+.shell-auto-close-hint {
+  margin: 2px 0 0 24px;
+}
+
 /* Find bar (#35 D3, D4): the top-right corner of the pane it searches, left of an extra pane's
    close button (24px wide, at --space-1 from the edge). */
 .find-bar {

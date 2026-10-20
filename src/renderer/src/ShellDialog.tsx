@@ -5,7 +5,8 @@ import { workspaceStore } from './store'
 
 /**
  * New shell, or editing one: its name, an optional command typed each time it starts (e.g.
- * `npm run dev`), and whether it starts when the workspace is first opened. No worktree: shells
+ * `npm run dev`), whether it starts when the workspace is first opened, and whether it closes
+ * once that command ends on its own (typed as `<command>; exit`, so a Ctrl+C keeps the prompt). No worktree: shells
  * run in the workspace's folder.
  */
 function ShellDialog({
@@ -22,11 +23,13 @@ function ShellDialog({
   const [name, setName] = useState(shell?.name ?? '')
   const [command, setCommand] = useState(shell?.command ?? '')
   const [autostart, setAutostart] = useState(shell?.autostart ?? false)
+  const [autoClose, setAutoClose] = useState(shell?.autoClose ?? false)
+  const hasCommand = command.trim() !== ''
   const [errors, setErrors] = useState<{ name?: string; command?: string }>({})
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
-    const input = { name, command, autostart }
+    const input = { name, command, autostart, autoClose: hasCommand && autoClose }
     const result = shell
       ? workspaceStore.updateShell(workspaceId, shell.id, input)
       : workspaceStore.createShell(workspaceId, input)
@@ -111,6 +114,22 @@ function ShellDialog({
           />
           Start when the workspace opens
         </label>
+        <label className="new-card-check shell-autostart">
+          <input
+            type="checkbox"
+            data-testid="shell-auto-close"
+            checked={hasCommand && autoClose}
+            disabled={!hasCommand}
+            aria-describedby={`${id}-auto-close-hint`}
+            onChange={(e) => setAutoClose(e.target.checked)}
+          />
+          Close when the command stops
+        </label>
+        <p className="field-hint shell-auto-close-hint" id={`${id}-auto-close-hint`}>
+          {hasCommand
+            ? 'The shell exits once the command ends; Ctrl+C keeps the prompt.'
+            : 'Needs a startup command.'}
+        </p>
         <div className="modal-actions">
           <button type="button" className="btn" data-testid="shell-cancel" onClick={onDone}>
             Cancel

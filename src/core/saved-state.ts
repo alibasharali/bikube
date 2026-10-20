@@ -144,7 +144,8 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
     const checked = checkShell({
       name: s.name,
       command: typeof s.command === 'string' ? s.command : '',
-      autostart: s.autostart === true
+      autostart: s.autostart === true,
+      autoClose: s.autoClose === true
     })
     if (!checked.ok || checked.value.name !== s.name) return 'bad shell'
     if (shells.some((other) => other.id === s.id)) return 'duplicate shell'

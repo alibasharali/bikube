@@ -321,6 +321,24 @@ describe('worktree setup in the sync file (#39 D1, AC12)', () => {
   })
 })
 
+describe('shells in the sync file', () => {
+  it('writes a shell’s Close when the command stops and reads it back on the other machine', () => {
+    const shell = {
+      id: 's1',
+      name: 'Dev',
+      command: 'npm run dev',
+      autostart: true,
+      autoClose: true
+    }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [workspace('w', 'alpha', { shells: [shell] })]
+    }
+    const read = parseSyncFile(serializeSyncFile(toSyncBoard(state, HOME), new Date(0)), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.shells).toEqual([shell])
+  })
+})
+
 describe("a card's pending setup is not synced (#39 D8, AC12)", () => {
   it('writes no setup on any card, and reads a card the file gives one as having none', () => {
     const state: WorkspaceState = {

@@ -50,6 +50,17 @@ describe('startLine (D2, D5)', () => {
       })
     ).toBe('echo drovr-custom')
   })
+
+  it('follows a workspace shell’s command with `; exit` when it closes once the command ends', () => {
+    expect(
+      startLine({
+        startup: { kind: 'custom', command: 'npm run dev' },
+        agentSessionId: '',
+        claudeStarted: false,
+        exitAfterStartup: true
+      })
+    ).toBe('npm run dev; exit')
+  })
 })
 
 describe('checkStartup (D2, AC7)', () => {

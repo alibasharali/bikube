@@ -55,6 +55,8 @@ export interface Card {
    * Absent when none. Saved, never synced (D8).
    */
   setup?: string
+  /** Only a workspace shell's card-shaped record (never stored): see `StartupState`. */
+  exitAfterStartup?: boolean
 }
 
 /** Where a card's own git worktree is, and how to remove it. */
@@ -121,12 +123,19 @@ export interface WorkspaceShell {
   command: string
   /** Started when its workspace is first opened in a run of the app. */
   autostart: boolean
+  /**
+   * The shell exits once its command ends on its own (`<command>; exit`); a Ctrl+C keeps the
+   * prompt. Only with a command.
+   */
+  autoClose: boolean
 }
 
 export interface ShellInput {
   name: string
   command: string
   autostart: boolean
+  /** Missing (an older file) is off. */
+  autoClose?: boolean
 }
 
 export const MAX_SHELL_NAME_LENGTH = 100
@@ -743,7 +752,7 @@ const unknownColumn = (): { ok: false; error: FieldError } => fail('column', 'Co
 const unknownCard = (): { ok: false; error: FieldError } => fail('card', 'Card not found')
 
 /** A shell's fields, trimmed and checked: a name of 1 to 100 characters, a one-line command or ''. */
-export function checkShell(input: ShellInput): Result<ShellInput> {
+export function checkShell(input: ShellInput): Result<Omit<WorkspaceShell, 'id'>> {
   const name = input.name.trim()
   if (!name) return { ok: false, error: { field: 'name', message: 'Name is required' } }
   if (name.length > MAX_SHELL_NAME_LENGTH) {
@@ -754,7 +763,15 @@ export function checkShell(input: ShellInput): Result<ShellInput> {
     const checked = checkStartup({ kind: 'custom', command })
     if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'command' } }
   }
-  return { ok: true, value: { name, command, autostart: input.autostart === true } }
+  return {
+    ok: true,
+    value: {
+      name,
+      command,
+      autostart: input.autostart === true,
+      autoClose: input.autoClose === true
+    }
+  }
 }
 
 /**

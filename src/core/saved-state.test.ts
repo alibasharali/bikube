@@ -412,9 +412,16 @@ describe('shells, and a workspace defaulting to Shell', () => {
   })
 
   it('reads saved shells, and rejects a bad one', () => {
-    const shells = [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }]
+    const shells = [
+      { id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true, autoClose: true }
+    ]
     const parsed = parseSavedState(file({ shells }))
     expect(parsed.ok && parsed.value.workspaces[0]!.shells).toEqual(shells)
+    // A file from before Auto close: off.
+    const older = parseSavedState(
+      file({ shells: [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }] })
+    )
+    expect(older.ok && older.value.workspaces[0]!.shells[0]!.autoClose).toBe(false)
     expect(parseSavedState(file({ shells: [{ id: 's1', name: '' }] })).ok).toBe(false)
     expect(parseSavedState(file({ shells: 'nope' })).ok).toBe(false)
   })

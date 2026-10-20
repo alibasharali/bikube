@@ -19,6 +19,7 @@ export function shellCard(workspace: Workspace, shell: WorkspaceShell | null): C
     directory: workspace.directory,
     ...(workspace.host !== undefined && { host: workspace.host }),
     startup: shell?.command ? { kind: 'custom', command: shell.command } : { kind: 'shell' },
+    ...(shell?.command && shell.autoClose && { exitAfterStartup: true }),
     agentSessionId: '',
     claudeStarted: false,
     startedAgents: []

@@ -10,7 +10,9 @@ const workspace: Workspace = {
   cards: [],
   nextCardNumber: 1,
   defaultStartup: { kind: 'claude' },
-  shells: [{ id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true }],
+  shells: [
+    { id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true, autoClose: false }
+  ],
   worktreeSetup: ''
 }
 
@@ -21,6 +23,19 @@ describe('workspace shells as cards', () => {
       ['s1', 'Dev server', { kind: 'custom', command: 'npm run dev' }]
     ])
     expect(shellCards(workspace)[0]).toMatchObject({ directory: '/tmp/alpha' })
+  })
+
+  it('marks a shell with Auto close and a command to exit after it, never one without', () => {
+    const closing = (command: string, autoClose: boolean): boolean | undefined =>
+      shellCards({
+        ...workspace,
+        shells: [{ id: 's1', name: 'Dev', command, autostart: false, autoClose }]
+      })[1]!.exitAfterStartup
+    expect(closing('npm run dev', true)).toBe(true)
+    expect(closing('npm run dev', false)).toBeUndefined()
+    expect(closing('', true)).toBeUndefined()
+    // The Default shell never is.
+    expect(shellCards(workspace)[0]!.exitAfterStartup).toBeUndefined()
   })
 
   it('runs over SSH in an SSH workspace', () => {

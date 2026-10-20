@@ -1,6 +1,14 @@
-import { AppWindow, BellDot, MessageCircleQuestion, SquareTerminal, StickyNote } from 'lucide-react'
+import {
+  AppWindow,
+  BellDot,
+  MessageCircleQuestion,
+  SquareChevronRight,
+  SquareTerminal
+} from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
+import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
+import AgentLogo from './AgentLogo'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 
@@ -13,8 +21,9 @@ interface WorkspaceTerminalsProps {
 
 /**
  * A workspace's running cards and shells, nested under its sidebar row, each opened as a palette
- * pick opens it (switching workspace, or focusing its own window). A card waiting for the user
- * or asking a question shows it here, on the card itself.
+ * pick opens it (switching workspace, or focusing its own window). Each shows what it runs: its
+ * agent's logo, and its stretch of the tree's line, in the board tag's colour (`data-kind`). A
+ * card waiting for the user or asking a question shows it here, on the card itself.
  */
 function WorkspaceTerminals({
   terminals,
@@ -46,23 +55,25 @@ function TerminalRow({
   onOpen: WorkspaceTerminalsProps['onOpen']
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
-  const Kind = row.kind === 'shell' ? SquareTerminal : StickyNote
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
   const classes = ['workspace-terminal']
   if (current) classes.push('active')
   if (needsYou) classes.push('needs-you')
   return (
-    <li>
+    // Its tool's `--kind` colour, as the board's tag reads it, inherited by the row.
+    <li data-kind={row.tool}>
       <button
         type="button"
         className={classes.join(' ')}
         data-testid="workspace-terminal"
         data-kind={row.kind}
         aria-current={current ? 'true' : undefined}
-        title={row.kind === 'shell' ? `${row.title} (shell)` : row.title}
+        title={`${row.title} (${toolName(row)})`}
         onClick={() => onOpen(row.workspaceId, row.cardId)}
       >
-        <Kind className="workspace-terminal-kind" {...SMALL_ICON} />
+        <span className="workspace-terminal-kind" data-testid="workspace-terminal-kind">
+          <ToolIcon tool={row.tool} />
+        </span>
         <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
           {row.title}
         </span>
@@ -80,6 +91,21 @@ function TerminalRow({
       </button>
     </li>
   )
+}
+
+/** What a row runs, for its tooltip: a shell, a plain card's shell, an agent or a command. */
+function toolName(row: OpenTerminal): string {
+  if (row.kind === 'shell') return 'shell'
+  if (row.tool === 'claude') return 'Claude Code'
+  if (isAgentKind(row.tool)) return AGENT_PRESETS[row.tool].label
+  return row.tool === 'custom' ? 'Custom command' : 'Shell'
+}
+
+/** The agent's logo; a terminal for a shell, a prompt for a Custom command. */
+function ToolIcon({ tool }: { tool: OpenTerminal['tool'] }): React.JSX.Element | null {
+  if (tool === 'shell') return <SquareTerminal {...SMALL_ICON} />
+  if (tool === 'custom') return <SquareChevronRight {...SMALL_ICON} />
+  return <AgentLogo tool={tool} />
 }
 
 /** Working as a dot; Waiting for you and Needs your answer as an amber icon, named by tooltip. */

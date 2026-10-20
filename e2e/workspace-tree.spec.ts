@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen } from './card-view'
+import { fakeAgentsHome } from './fake-agents'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -140,4 +141,48 @@ test('marks working, waiting and question on the card; hidden with the collapsed
   await expect(page.getByTestId('workspace-terminals')).toHaveCount(0)
   await page.getByTestId('sidebar-toggle').click()
   await expect(terminal('Agent A')).toHaveCount(1)
+})
+
+test('shows what each terminal runs: its agent’s logo and colour, a shell neutral', async () => {
+  // The fake `claude`, `codex`, `gemini` and `opencode` on the login PATH.
+  const root = mkdtempSync(join(tmpdir(), 'drovr-workspace-tree-agents-'))
+  dirs.push(root)
+  const fake = fakeAgentsHome(root)
+  await app.close()
+  ;({ app, page } = await launchApp({ env: fake.env }))
+  await createWorkspace('Alpha')
+  const agents = [
+    ['Claude card', 'Claude Code', 'claude'],
+    ['Codex card', 'Codex', 'codex'],
+    ['Gemini card', 'Gemini CLI', 'gemini'],
+    ['OpenCode card', 'OpenCode', 'opencode']
+  ] as const
+  for (const [title, label] of agents) {
+    await page.getByTestId('column').first().getByTestId('new-card').click()
+    await page.getByTestId('new-card-input').fill(title)
+    await page.getByTestId('new-card-startup').selectOption({ label })
+    await page.getByTestId('new-card-input').press('Enter')
+    await expectCardOpen(page, title)
+    await backToBoard(page)
+  }
+  await page.getByTestId('shell').first().getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Default')
+  await backToBoard(page)
+
+  for (const [title, label, kind] of agents) {
+    await expect(terminal(title).locator('..')).toHaveAttribute('data-kind', kind)
+    await expect(terminal(title)).toHaveAttribute('title', `${title} (${label})`)
+    await expect(terminal(title).locator('.agent-logo')).toHaveCount(1)
+  }
+  // Each agent's colour, not the shell's: the board tag's `--kind`.
+  const colour = (title: string): Promise<string> =>
+    terminal(title)
+      .getByTestId('workspace-terminal-kind')
+      .evaluate((el) => getComputedStyle(el).color)
+  const colours = await Promise.all(agents.map(([title]) => colour(title)))
+  expect(new Set(colours).size).toBe(agents.length)
+  expect(colours).not.toContain(await colour('Default shell'))
+  await expect(terminal('Default shell').locator('..')).toHaveAttribute('data-kind', 'shell')
+  await expect(terminal('Default shell').locator('.agent-logo')).toHaveCount(0)
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT })
 })

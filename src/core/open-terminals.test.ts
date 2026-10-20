@@ -8,13 +8,18 @@ const COLUMNS = [
   { id: 'progress', name: 'In Progress' }
 ]
 
-function card(id: string, title: string, columnId = 'backlog'): Card {
+function card(
+  id: string,
+  title: string,
+  columnId = 'backlog',
+  startup: Card['startup'] = { kind: 'shell' }
+): Card {
   return {
     id,
     columnId,
     title,
     directory: '/tmp',
-    startup: { kind: 'shell' },
+    startup,
     agentSessionId: '',
     claudeStarted: false,
     startedAgents: []
@@ -69,8 +74,34 @@ describe('openTerminals', () => {
       id === 'a2' ? 'question' : undefined
     )
     expect(rows).toEqual([
-      { kind: 'card', workspaceId: 'a', cardId: 'a1', title: 'One' },
-      { kind: 'card', workspaceId: 'a', cardId: 'a2', title: 'Two', activity: 'question' }
+      { kind: 'card', workspaceId: 'a', cardId: 'a1', title: 'One', tool: 'shell' },
+      {
+        kind: 'card',
+        workspaceId: 'a',
+        cardId: 'a2',
+        title: 'Two',
+        tool: 'shell',
+        activity: 'question'
+      }
+    ])
+  })
+
+  it('gives each card its startup command’s kind as its tool, and every shell `shell`', () => {
+    const a = workspace(
+      'a',
+      [
+        card('c1', 'Claude', 'backlog', { kind: 'claude' }),
+        card('c2', 'Codex', 'backlog', { kind: 'codex' }),
+        card('c3', 'Script', 'backlog', { kind: 'custom', command: 'make watch' })
+      ],
+      [{ id: 'dev', name: 'Dev server', command: 'npm run dev', autostart: false }]
+    )
+    const rows = openTerminals([a], running('c1', 'c2', 'c3', 'dev'), noActivity)
+    expect(rows.map((r) => [r.title, r.tool])).toEqual([
+      ['Claude', 'claude'],
+      ['Codex', 'codex'],
+      ['Script', 'custom'],
+      ['Dev server', 'shell']
     ])
   })
 

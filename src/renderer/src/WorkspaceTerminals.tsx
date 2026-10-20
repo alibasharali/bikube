@@ -1,14 +1,8 @@
-import {
-  AppWindow,
-  BellDot,
-  MessageCircleQuestion,
-  SquareChevronRight,
-  SquareTerminal
-} from 'lucide-react'
+import { AppWindow, BellDot, MessageCircleQuestion } from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
-import AgentLogo from './AgentLogo'
+import { ToolIcon } from './AgentLogo'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 
@@ -99,13 +93,6 @@ function toolName(row: OpenTerminal): string {
   if (row.tool === 'claude') return 'Claude Code'
   if (isAgentKind(row.tool)) return AGENT_PRESETS[row.tool].label
   return row.tool === 'custom' ? 'Custom command' : 'Shell'
-}
-
-/** The agent's logo; a terminal for a shell, a prompt for a Custom command. */
-function ToolIcon({ tool }: { tool: OpenTerminal['tool'] }): React.JSX.Element | null {
-  if (tool === 'shell') return <SquareTerminal {...SMALL_ICON} />
-  if (tool === 'custom') return <SquareChevronRight {...SMALL_ICON} />
-  return <AgentLogo tool={tool} />
 }
 
 /** Working as a dot; Waiting for you and Needs your answer as an amber icon, named by tooltip. */

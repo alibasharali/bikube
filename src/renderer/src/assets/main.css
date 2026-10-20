@@ -2085,15 +2085,18 @@ button.dev-server-chip:focus-visible {
   min-width: 0;
 }
 
+/* The startup command's logo in a small tile in its kind's colour. */
 .card-tag {
   flex: none;
-  padding: 0 var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 18px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  line-height: 1.4;
 }
 
 /*

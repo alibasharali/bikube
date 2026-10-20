@@ -1,4 +1,4 @@
-import { Bot } from 'lucide-react'
+import { Bot, SquareChevronRight, SquareTerminal } from 'lucide-react'
 import type { StartupCommand } from '../../core/startup-command'
 
 /**
@@ -37,6 +37,22 @@ function AgentLogo({
       <path d={path} />
     </svg>
   )
+}
+
+/**
+ * What a terminal runs, as an icon: the agent's logo, a terminal for a shell, a prompt for a
+ * Custom command.
+ */
+export function ToolIcon({
+  tool,
+  size = 14
+}: {
+  tool: StartupCommand['kind']
+  size?: number
+}): React.JSX.Element | null {
+  if (tool === 'shell') return <SquareTerminal size={size} aria-hidden="true" />
+  if (tool === 'custom') return <SquareChevronRight size={size} aria-hidden="true" />
+  return <AgentLogo tool={tool} size={size} />
 }
 
 export default AgentLogo

@@ -1,3 +1,4 @@
+import { ToolIcon } from './AgentLogo'
 import {
   AppWindow,
   GitBranch,
@@ -47,9 +48,10 @@ import { workspaceStore } from './store'
 import { useCardUsage } from './usage'
 
 /**
- * The card's startup command on the board (#5 D12, #21 D5): `Claude` for Claude Code, a preset's
- * tag with its select label as tooltip, `Custom` with the command as its tooltip, nothing for
- * Shell. It follows the setting, not what is running, and takes its kind's colour (`--kind`).
+ * The card's startup command on the board (#5 D12, #21 D5): the agent's logo for Claude Code and
+ * the presets, a prompt for Custom, with its name (`Claude`, a preset's tag, `Custom`) for screen
+ * readers and its select label (or the command) as tooltip; nothing for Shell. It follows the
+ * setting, not what is running, and takes its kind's colour (`--kind`).
  */
 export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
   if (startup.kind === 'shell') return null
@@ -61,7 +63,8 @@ export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.
         : [AGENT_PRESETS[startup.kind].tag, AGENT_PRESETS[startup.kind].label]
   return (
     <span className="card-tag" data-testid="card-tag" data-kind={startup.kind} title={title}>
-      {tag}
+      <ToolIcon tool={startup.kind} size={12} />
+      <span className="visually-hidden">{tag}</span>
     </span>
   )
 }

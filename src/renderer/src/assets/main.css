@@ -534,6 +534,48 @@ button {
   color: var(--pill-question-text);
 }
 
+/* A card window's bar: the button that moves the card back to the main window. */
+.card-window-bar {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.card-window-return {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.card-window-return:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Smaller key caps in the slim bar; dim until the button is hovered. */
+.card-window-return .keys kbd {
+  min-width: 14px;
+  padding: 0 3px;
+  border-bottom-width: 1px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding: var(--space-2);

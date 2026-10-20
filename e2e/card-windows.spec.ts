@@ -322,6 +322,37 @@ test('D2: back from its window, the card has the renderer it had before, the ter
   await expect.poll(canvases).toBe(before)
 })
 
+// Open in new window's shortcut pressed in the card's own window, or its Move to main window
+// button, moves the card back: the window closes and the main window opens it, still running.
+for (const by of ['shortcut', 'button'] as const) {
+  test(`the ${by} in a card window moves the card back to the main window, opened and running`, async () => {
+    await newCard('Agent A')
+    await run(page, 'echo before-$((40+2))')
+    await expect.poll(() => bufferLines(page)).toContain('before-42')
+    await backToBoard(page)
+    const window = await openInWindow('Agent A')
+    await expect.poll(() => terminalFocused(window)).toBe(true)
+    await expect(window.getByTestId('card-window-return')).toContainText('Move to main window')
+
+    const gone = closed(window)
+    if (by === 'shortcut') {
+      // The window closes on the keydown, before the press's keyup.
+      await window.keyboard
+        .press(darwin ? 'Meta+Shift+O' : 'Control+Shift+O')
+        .catch(() => undefined)
+    } else await window.getByTestId('card-window-return').click()
+    await gone
+    await expectCardOpen(page, 'Agent A')
+    await expect(page.getByTestId('card-view').getByTestId('card-window-return')).toHaveCount(0)
+    expect(await bufferLines(page)).toContain('before-42')
+    await run(page, 'echo after-$((50+3))')
+    await expect.poll(() => bufferLines(page)).toContain('after-53')
+    await backToBoard(page)
+    await expect(card('Agent A').getByTestId('card-in-window')).toHaveCount(0)
+    await expect(card('Agent A').getByTestId('card-status-label')).toHaveText('Running')
+  })
+}
+
 test("AC6: deleting the card's workspace closes its window", async () => {
   await newCard('Agent A')
   await backToBoard(page)

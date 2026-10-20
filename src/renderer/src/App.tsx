@@ -19,7 +19,13 @@ import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
-import { focusCardWindow, openCardWindow, subscribeCardWindows, windowedKey } from './card-windows'
+import {
+  focusCardWindow,
+  onReturnRequest,
+  openCardWindow,
+  subscribeCardWindows,
+  windowedKey
+} from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
@@ -131,6 +137,15 @@ function App(): React.JSX.Element {
 
   // Notifications skip the card in view, and a clicked one opens its card in its workspace.
   useEffect(() => setLookingAt(openedId), [openedId])
+  // A card moved back from its own window opens here, in its workspace.
+  useEffect(
+    () =>
+      onReturnRequest((workspaceId, cardId) => {
+        setViews((v) => rememberCard(v, workspaceId, cardId))
+        if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
+      }),
+    [activeId, setViews]
+  )
   useEffect(
     () =>
       onOpenRequest((workspaceId, cardId) => {

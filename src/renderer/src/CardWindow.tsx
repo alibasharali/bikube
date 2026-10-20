@@ -1,11 +1,14 @@
+import { PanelLeftOpen } from 'lucide-react'
 import { useEffect } from 'react'
-import { keymapAction, workspaceShortcut } from '../../core/keymap'
+import { keymapAction, resolveKeymap, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
 import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
 import { defaultShellId } from '../../core/workspace-store'
 import { isCardViewAction } from './card-view-actions'
 import CardView from './CardView'
-import { currentKeymap, settingsStore } from './settings'
+import { SMALL_ICON } from './icons'
+import ShortcutKeys from './ShortcutKeys'
+import { currentKeymap, settingsStore, useSettings } from './settings'
 import { useWorkspaceState } from './store'
 import { dialogOpenIn, ViewWindowContext } from './view-window'
 
@@ -17,7 +20,9 @@ function setTitle(view: Window, title: string): void {
 /**
  * What a card's own window shows (#53 D4): only its card view, as at full size in the main window,
  * titled `<title> · <workspace>` as either is renamed. `onBack` closes the window: Back, or the
- * card's shell stopping (D8). The card view's actions and Toggle panel work there; the app's own
+ * card's shell stopping (D8). Open in new window's shortcut, or the bar's Move to main window
+ * button, moves the card back to the main window, opened there. The card view's actions and
+ * Toggle panel work there; the app's own
  * shortcuts (Settings, the palette, Next waiting card, the Default shell, Mod+1…9) do nothing and,
  * as everywhere, never reach the shell (D5).
  */
@@ -25,14 +30,20 @@ function CardWindow({
   view,
   workspaceId,
   cardId,
-  onBack
+  onBack,
+  onReturn
 }: {
   view: Window
   workspaceId: string
   cardId: string
   onBack: () => void
+  /** Moves the card back to the main window, opened there. */
+  onReturn: () => void
 }): React.JSX.Element | null {
   const { workspaces } = useWorkspaceState()
+  // Its shortcut on the button, as Settings has it now.
+  const { shortcuts } = useSettings()
+  const keymap = resolveKeymap(shortcuts, window.drovr.platform)
   const workspace = workspaces.find((w) => w.id === workspaceId)
   const card =
     workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))
@@ -84,9 +95,22 @@ function CardWindow({
       <div className="app card-window" data-testid="card-window">
         {/* As in the main window: held to the window's height, so only the panes and the side
             panel's tree scroll, never the window (#53 D4). */}
+        {/* Back to the main window by mouse; Open in new window's shortcut does the same here. */}
+        <div className="card-window-bar">
+          <button
+            type="button"
+            className="card-window-return"
+            data-testid="card-window-return"
+            onClick={onReturn}
+          >
+            <PanelLeftOpen {...SMALL_ICON} />
+            <span>Move to main window</span>
+            <ShortcutKeys shortcut={keymap.openInWindow} platform={window.drovr.platform} />
+          </button>
+        </div>
         <div className="app-body">
           <main className="main">
-            <CardView key={card.id} card={card} onBack={onBack} />
+            <CardView key={card.id} card={card} onBack={onBack} onOpenInWindow={onReturn} />
           </main>
         </div>
       </div>

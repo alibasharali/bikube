@@ -77,6 +77,31 @@ export function closeCardWindow(cardId: string): void {
   })
 }
 
+let returnRequest: ((workspaceId: string, cardId: string) => void) | null = null
+
+/** The app opens a card moved back from its own window. Returns an unsubscribe function. */
+export function onReturnRequest(
+  handler: (workspaceId: string, cardId: string) => void
+): () => void {
+  returnRequest = handler
+  return () => {
+    if (returnRequest === handler) returnRequest = null
+  }
+}
+
+/**
+ * Moves card (or shell) `cardId` from its own window back to the main window: the window closes,
+ * the main window comes forward and opens the card at full size in its workspace. It keeps
+ * running, its panes and output as they were.
+ */
+export function returnCardWindow(cardId: string): void {
+  const open = windows.get(cardId)
+  if (!open) return
+  closeCardWindow(cardId)
+  window.drovr.app.focus()
+  returnRequest?.(open.workspaceId, cardId)
+}
+
 /**
  * Opens card (or shell) `cardId` of workspace `workspaceId` in its own window (D2, D6), or brings
  * it forward when it has one. A card that isn't running starts first, as opening it does (#5 D7).
@@ -117,7 +142,8 @@ export function openCardWindow(workspaceId: string, cardId: string): void {
             view,
             workspaceId,
             cardId,
-            onBack: () => closeCardWindow(cardId)
+            onBack: () => closeCardWindow(cardId),
+            onReturn: () => returnCardWindow(cardId)
           })
         )
       )

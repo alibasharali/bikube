@@ -1,10 +1,11 @@
-import { AppWindow, BellDot, LoaderCircle, MessageCircleQuestion } from 'lucide-react'
+import { AppWindow } from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
 import { ToolIcon } from './AgentLogo'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
+import StatusIcon from './StatusIcon'
 
 interface WorkspaceTerminalsProps {
   terminals: readonly OpenTerminal[]
@@ -95,31 +96,19 @@ function toolName(row: OpenTerminal): string {
   return row.tool === 'custom' ? 'Custom command' : 'Shell'
 }
 
-/**
- * The terminal's status: a green dot while it runs with nothing to report, a spinner while its
- * agent works, an amber bell while it waits for the user (until seen) and an amber question mark
- * while it needs an answer; named by tooltip.
- */
+/** The terminal's status icon (`StatusIcon`), named by tooltip. */
 function StatusMark({ activity }: { activity: OpenTerminal['activity'] }): React.JSX.Element {
   const status = activity ?? 'running'
   const label = activity ? ACTIVITY_LABELS[activity] : 'Running'
-  const Icon =
-    status === 'waiting'
-      ? BellDot
-      : status === 'question'
-        ? MessageCircleQuestion
-        : status === 'working'
-          ? LoaderCircle
-          : null
   return (
     <span
-      className={`workspace-terminal-activity workspace-terminal-${status}`}
+      className="workspace-terminal-activity"
       data-testid="workspace-terminal-activity"
       data-activity={status}
       title={label}
       aria-label={label}
     >
-      {Icon && <Icon {...SMALL_ICON} />}
+      <StatusIcon status={status} />
     </span>
   )
 }

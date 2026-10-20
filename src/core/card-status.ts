@@ -134,3 +134,12 @@ export function knownRunState(state: CardRunState | undefined): CardRunState {
 export function knownStatus(status: CardStatus | undefined): CardStatus {
   return status ?? NOT_STARTED_STATUS
 }
+
+/**
+ * Whether a running card's status row has nothing to show in words: its status is the icon before
+ * its title (the board card's `CardStatusIcon`), so the row is for screen readers only and takes no room. A setup's
+ * pill (#39 D5) or the `In window` chip (#53 D7) keeps it.
+ */
+export function compactStatus(status: CardStatus, inWindow: boolean): boolean {
+  return status.label === 'Running' && !status.setup && !inWindow
+}

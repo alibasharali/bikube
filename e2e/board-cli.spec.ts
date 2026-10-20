@@ -489,18 +489,23 @@ test('#31 AC10: the card shows its label, agent status and last output line on s
   await expect(label).toHaveText('Running')
   await expect(agent).toHaveText('running tests')
   await expect(line).toHaveText('hello')
-  const [l, a, o] = [await box(label), await box(agent), await box(line)]
-  expect(a.y).toBeGreaterThanOrEqual(l.y + l.height - 1)
+  // Running is the green dot before the title (its words for screen readers only); the agent
+  // status takes the status row, beside the stop button (D10), and the last line comes below.
+  const icon = card('api').getByTestId('card-status-icon')
+  await expect(icon).toHaveAttribute('data-status', 'running')
+  const title = await box(card('api').getByTestId('card-title'))
+  const [i, a, o] = [await box(icon), await box(agent), await box(line)]
+  expect(i.x + i.width).toBeLessThanOrEqual(title.x + 1)
+  expect(a.y).toBeGreaterThanOrEqual(title.y + title.height - 1)
   expect(o.y).toBeGreaterThanOrEqual(a.y + a.height - 1)
   const font = (el: Element): string => getComputedStyle(el).fontFamily
   expect(await line.evaluate(font)).toMatch(/monospace/)
   expect(await agent.evaluate(font)).not.toMatch(/monospace/)
-  // The stop button (D10) sits at the right of the status row.
   const stop = await box(card('api').getByTestId('card-stop'))
-  expect(stop.x).toBeGreaterThan(l.x + l.width)
+  expect(stop.x).toBeGreaterThanOrEqual(a.x + a.width - 1)
   const middle = stop.y + stop.height / 2
-  expect(middle).toBeGreaterThan(l.y)
-  expect(middle).toBeLessThan(l.y + l.height)
+  expect(middle).toBeGreaterThan(a.y)
+  expect(middle).toBeLessThan(a.y + a.height)
 
   // A long status shows on at most 2 lines, its full text in the tooltip.
   await openCard('api')

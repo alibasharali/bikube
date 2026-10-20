@@ -333,9 +333,12 @@ test("#31 AC13: each hook command sets the card's pill, exits 0, also with Drovr
   })
   const hook = (i: number, prefix = ''): string =>
     `${prefix}sh ${join(root, `hook-${i}.sh`)} < ${join(root, `input-${i}.json`)}`
+  // The card is open as the hooks run, so its Waiting for you is seen at once and clears.
   const pill = async (text: string): Promise<void> =>
     checkOnBoard(page, 'agent', (agent) =>
-      expect(agent.getByTestId('card-activity')).toHaveText(text)
+      text === 'Waiting for you'
+        ? expect(agent.getByTestId('card-activity')).toHaveCount(0)
+        : expect(agent.getByTestId('card-activity')).toHaveText(text)
     )
 
   for (const [i, [, , text]] of steps.entries()) {

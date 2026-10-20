@@ -491,8 +491,15 @@ button {
   display: inline-flex;
 }
 
-/* Running with nothing to report: the Shells strip's green dot. */
-.workspace-terminal-running::before {
+/* A running terminal's status (`StatusIcon`), in the sidebar tree and on the board card. Running
+   with nothing to report is the Shells strip's green dot. */
+.status-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-icon-running::before {
   content: '';
   width: 7px;
   height: 7px;
@@ -502,28 +509,28 @@ button {
   box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
 }
 
-.workspace-terminal-working {
+.status-icon-working {
   color: var(--pill-working-text);
 }
 
-.workspace-terminal-working svg {
-  animation: workspace-terminal-spin 1s linear infinite;
+.status-icon-working svg {
+  animation: status-icon-spin 1s linear infinite;
 }
 
-@keyframes workspace-terminal-spin {
+@keyframes status-icon-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-terminal-working svg {
+  .status-icon-working svg {
     animation: none;
   }
 }
 
-.workspace-terminal-waiting,
-.workspace-terminal-question {
+.status-icon-waiting,
+.status-icon-question {
   color: var(--pill-question-text);
 }
 
@@ -1395,6 +1402,27 @@ button {
 
 .card-body > .card-status-line {
   grid-row: 6;
+}
+
+/* A running card with nothing to say in its status row (its status is the icon before its title):
+   the agent status, else the last output line, moves up beside the stop button. */
+.card[data-compact] .card-body > .card-agent-status {
+  grid-row: 4;
+  grid-column: 1;
+}
+
+.card[data-compact] .card-body > .card-status-line {
+  grid-row: 5;
+}
+
+.card[data-compact] .card-body:not(:has(> .card-agent-status)) > .card-status-line {
+  grid-row: 4;
+  grid-column: 1;
+}
+
+.card-status-icon {
+  flex: none;
+  display: inline-flex;
 }
 
 /* The card's Claude Code usage (#50 D8): dim, last of its lines, running or not. */

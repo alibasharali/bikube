@@ -14,7 +14,9 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS } from '../../core/agent-presets'
+import { compactStatus, type CardStatus } from '../../core/card-status'
 import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import type { StartupCommand } from '../../core/startup-command'
@@ -31,6 +33,7 @@ import MergeCardDialog, { type MergeChoice } from './MergeCardDialog'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import StartupDialog from './StartupDialog'
+import StatusIcon from './StatusIcon'
 import {
   moveCardByKey,
   moveCardToColumn,
@@ -77,6 +80,25 @@ export function StartupTag({
     >
       <ToolIcon tool={startup.kind} size={watermark ? 96 : 14} />
       <span className="visually-hidden">{tag}</span>
+    </span>
+  )
+}
+
+/**
+ * A running card's status before its title, as in the sidebar tree: a green dot, or its agent's
+ * spinner, bell or question mark (a setup's pill shows in words below instead); named by tooltip.
+ * Decorative for screen readers, which read the status row's words.
+ */
+function CardStatusIcon({ status }: { status: CardStatus }): React.JSX.Element {
+  const shown = !status.setup && status.activity ? status.activity : 'running'
+  return (
+    <span
+      className="card-status-icon"
+      data-testid="card-status-icon"
+      data-status={shown}
+      title={shown === 'running' ? status.label : ACTIVITY_LABELS[shown]}
+    >
+      <StatusIcon status={shown} />
     </span>
   )
 }
@@ -380,6 +402,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
   return (
     <li
       className={dragging ? 'card card-dragging' : 'card'}
+      data-compact={compactStatus(status, inWindow) || undefined}
       data-testid="card"
       data-card-id={card.id}
       data-kind={card.startup.kind}
@@ -414,6 +437,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
         >
           <span className="card-head">
             <span className="card-title-row">
+              {status.label === 'Running' && <CardStatusIcon status={status} />}
               <span
                 ref={titleRef}
                 className="card-title"

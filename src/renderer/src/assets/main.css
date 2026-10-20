@@ -2135,6 +2135,39 @@ button.dev-server-chip:focus-visible {
   color: var(--kind);
 }
 
+/* On a board card, the logo is a large faint watermark behind its content: anchored at the
+   bottom right, tilted, cropped by the card's corner and fading out towards the text. */
+.card {
+  isolation: isolate;
+}
+
+.card-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.card-watermark svg {
+  position: absolute;
+  right: -18px;
+  bottom: -26px;
+  opacity: 0.14;
+  transform: rotate(-12deg);
+  mask-image: radial-gradient(circle at 60% 60%, #000 40%, transparent 82%);
+  transition:
+    opacity var(--transition),
+    transform 240ms ease;
+}
+
+.card:hover .card-watermark svg {
+  opacity: 0.2;
+  transform: rotate(-8deg) scale(1.04);
+}
+
 /* A subtle border in the kind's colour around an agent's or Custom command's card. */
 .card[data-kind]:not([data-kind='shell']) {
   border-color: color-mix(in srgb, var(--kind) 50%, transparent);

@@ -48,12 +48,19 @@ import { workspaceStore } from './store'
 import { useCardUsage } from './usage'
 
 /**
- * The card's startup command on the board (#5 D12, #21 D5): the agent's logo for Claude Code and
- * the presets, a prompt for Custom, before the title, with its name (`Claude`, a preset's tag,
- * `Custom`) for screen readers and its select label (or the command) as tooltip; nothing for Shell. It follows the
- * setting, not what is running, and takes its kind's colour (`--kind`).
+ * The card's startup command (#5 D12, #21 D5): the agent's logo for Claude Code and the presets, a
+ * prompt for Custom, with its name (`Claude`, a preset's tag, `Custom`) for screen readers and its
+ * select label (or the command) as tooltip; nothing for Shell. In the title bar it sits before the
+ * name; on a board card (`watermark`) it is a large faint logo behind the card's content. It
+ * follows the setting, not what is running, and takes its kind's colour (`--kind`).
  */
-export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.Element | null {
+export function StartupTag({
+  startup,
+  watermark = false
+}: {
+  startup: StartupCommand
+  watermark?: boolean
+}): React.JSX.Element | null {
   if (startup.kind === 'shell') return null
   const [tag, title] =
     startup.kind === 'custom'
@@ -62,8 +69,13 @@ export function StartupTag({ startup }: { startup: StartupCommand }): React.JSX.
         ? ['Claude', 'Claude Code']
         : [AGENT_PRESETS[startup.kind].tag, AGENT_PRESETS[startup.kind].label]
   return (
-    <span className="card-tag" data-testid="card-tag" data-kind={startup.kind} title={title}>
-      <ToolIcon tool={startup.kind} />
+    <span
+      className={watermark ? 'card-tag card-watermark' : 'card-tag'}
+      data-testid="card-tag"
+      data-kind={startup.kind}
+      title={title}
+    >
+      <ToolIcon tool={startup.kind} size={watermark ? 96 : 14} />
       <span className="visually-hidden">{tag}</span>
     </span>
   )
@@ -373,6 +385,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
       data-kind={card.startup.kind}
       data-drop={drop}
     >
+      <StartupTag startup={card.startup} watermark />
       {renaming ? (
         <div className="card-body card-renaming">
           <InlineInput
@@ -401,7 +414,6 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
         >
           <span className="card-head">
             <span className="card-title-row">
-              <StartupTag startup={card.startup} />
               <span
                 ref={titleRef}
                 className="card-title"

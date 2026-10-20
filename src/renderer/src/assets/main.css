@@ -2135,6 +2135,15 @@ button.dev-server-chip:focus-visible {
   color: var(--kind);
 }
 
+/* A subtle border in the kind's colour around an agent's or Custom command's card. */
+.card[data-kind]:not([data-kind='shell']) {
+  border-color: color-mix(in srgb, var(--kind) 50%, transparent);
+}
+
+.card[data-kind]:not([data-kind='shell']):hover {
+  border-color: color-mix(in srgb, var(--kind) 80%, transparent);
+}
+
 .modal-hint {
   margin: 0;
   color: var(--text-muted);

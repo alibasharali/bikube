@@ -281,6 +281,10 @@ button {
   flex-direction: column;
   gap: var(--space-1);
   overflow-y: auto;
+  /* The upper half at most: the Open terminals section below takes the rest. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 50%;
 }
 
 .workspace-item {
@@ -410,6 +414,105 @@ button {
 .workspace-ssh {
   flex: none;
   color: var(--text-muted);
+}
+
+/* The sidebar's lower half: every running card and shell, scrolling on its own. */
+.open-terminals {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.open-terminals-count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.open-terminals-empty {
+  margin: 0;
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.open-terminals-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+}
+
+.open-terminal {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition);
+}
+
+.open-terminal:hover {
+  background: var(--surface-hover);
+}
+
+.open-terminal.active {
+  background: var(--accent-soft);
+}
+
+.open-terminal-title,
+.open-terminal-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-terminal.active .open-terminal-title {
+  font-weight: 600;
+}
+
+.open-terminal-meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.open-terminal-window {
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* The activity as a dot in its pill's colour; its name is the tooltip. */
+.open-terminal .open-terminal-activity {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .sidebar-footer {

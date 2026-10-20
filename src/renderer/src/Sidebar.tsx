@@ -17,10 +17,11 @@ import {
   workspaceMoveKey,
   type WorkspaceHover
 } from '../../core/workspace-drops'
-import { waitingCounts } from '../../core/waiting'
+import { waitingCounts, waitingTooltip } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
+import OpenTerminals from './OpenTerminals'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
 import { ICON, SMALL_ICON } from './icons'
@@ -30,8 +31,7 @@ import {
   endWorkspaceDrag,
   startWorkspaceDrag
 } from './workspace-drag'
-import { workspaceInitial } from './workspace-initial'
-import { LOGO_ICON, LOGO_ICONS } from './workspace-logo'
+import WorkspaceBadge from './WorkspaceBadge'
 
 interface SidebarProps {
   workspaces: Workspace[]
@@ -46,11 +46,16 @@ interface SidebarProps {
   onSettings: () => void
   /** The sync status line (#13 D13), or null when sync is off. */
   syncStatus: string | null
+  /** The card or shell open at full size in the active workspace, or null. */
+  openId: string | null
+  /** Opens a running card or shell from the Open terminals section. */
+  onOpenTerminal: (workspaceId: string, cardId: string) => void
 }
 
 /**
- * The workspace list. A row's click or Enter selects it; dragging it, or Alt+Up/Down while it
- * has focus, moves it to another place, with a line showing where it would land (#32 D4, D5).
+ * The workspace list, and under it the running cards and shells (`OpenTerminals`). A workspace
+ * row's click or Enter selects it; dragging it, or Alt+Up/Down while it has focus, moves it to
+ * another place, with a line showing where it would land (#32 D4, D5).
  */
 function Sidebar({
   workspaces,
@@ -62,7 +67,9 @@ function Sidebar({
   onEdit,
   onDelete,
   onSettings,
-  syncStatus
+  syncStatus,
+  openId,
+  onOpenTerminal
 }: SidebarProps): React.JSX.Element {
   // Where a workspace dragged over the list would land (#32 D4), or null.
   const [dropAt, setDropAt] = useState<{ workspaceId: string; index: number } | null>(null)
@@ -293,6 +300,14 @@ function Sidebar({
           )
         })}
       </ul>
+      {!collapsed && (
+        <OpenTerminals
+          workspaces={workspaces}
+          activeId={activeId}
+          openId={openId}
+          onOpen={onOpenTerminal}
+        />
+      )}
       <div className="sidebar-footer">
         <UpdateButton collapsed={collapsed} />
         {!collapsed && syncStatus !== null && (
@@ -326,42 +341,6 @@ function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Eleme
         <span className="workspace-branch" data-testid="workspace-branch">
           <GitBranch {...SMALL_ICON} />
           <span>{branch}</span>
-        </span>
-      )}
-    </span>
-  )
-}
-
-/** The tooltip of a workspace's waiting count (#41 D6). */
-const waitingTooltip = (count: number): string => `${count} waiting for you`
-
-/**
- * The row's badge: its logo's icon (#59 D4), else the name's initial; in the collapsed sidebar,
- * with a dot counting its waiting cards and shells on the corner when any wait (#41 D6).
- */
-function WorkspaceBadge({
-  workspace,
-  waiting
-}: {
-  workspace: Workspace
-  waiting: number
-}): React.JSX.Element {
-  const Icon = workspace.logo && LOGO_ICONS[workspace.logo]
-  return (
-    <span
-      className="workspace-badge"
-      data-testid="workspace-badge"
-      data-logo={Icon ? workspace.logo : undefined}
-      aria-hidden="true"
-    >
-      {Icon ? <Icon {...LOGO_ICON} /> : workspaceInitial(workspace.name)}
-      {waiting > 0 && (
-        <span
-          className="workspace-waiting-dot"
-          data-testid="workspace-waiting-dot"
-          title={waitingTooltip(waiting)}
-        >
-          {waiting}
         </span>
       )}
     </span>

@@ -328,6 +328,8 @@ function App(): React.JSX.Element {
           onDelete={(id) => setDialog({ kind: 'delete', id })}
           onSettings={() => setSettingsOpen(true)}
           syncStatus={syncStatus}
+          openId={openId}
+          onOpenTerminal={onPaletteOpen}
         />
         <main className="main">
           {active && openCard ? (

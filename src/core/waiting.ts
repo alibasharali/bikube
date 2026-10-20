@@ -90,3 +90,6 @@ export function nextWaitingCard(
   const workspaceId = cardId === null ? undefined : owner.get(cardId)
   return cardId === null || workspaceId === undefined ? null : { workspaceId, cardId }
 }
+
+/** The tooltip of a workspace's waiting count (#41 D6). */
+export const waitingTooltip = (count: number): string => `${count} waiting for you`

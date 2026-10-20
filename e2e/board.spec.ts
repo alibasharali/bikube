@@ -351,7 +351,8 @@ test('#32 AC5: a running card is unaffected when its workspace is dragged; cards
   await expect(sidebarNames()).toHaveText(['beta', 'alpha', 'gamma'])
   await expectAlphaActive()
 
-  await workspaceRow('beta').getByTestId('workspace-item').click()
+  // Mod+1, now beta's: it comes back to its card (a click would show its board, #31 D19).
+  await page.keyboard.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+1`)
   await expectCardOpen(page, 'api')
   await expect.poll(bufferText).toContain('drovr-marker\n')
   await backToBoard(page)

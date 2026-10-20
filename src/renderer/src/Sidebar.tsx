@@ -21,7 +21,7 @@ import { waitingCounts, waitingTooltip } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
-import OpenTerminals from './OpenTerminals'
+import { useOpenTerminals } from './open-terminals'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
 import { ICON, SMALL_ICON } from './icons'
@@ -32,6 +32,7 @@ import {
   startWorkspaceDrag
 } from './workspace-drag'
 import WorkspaceBadge from './WorkspaceBadge'
+import WorkspaceTerminals from './WorkspaceTerminals'
 
 interface SidebarProps {
   workspaces: Workspace[]
@@ -48,13 +49,13 @@ interface SidebarProps {
   syncStatus: string | null
   /** The card or shell open at full size in the active workspace, or null. */
   openId: string | null
-  /** Opens a running card or shell from the Open terminals section. */
+  /** Opens a running card or shell from its workspace's tree. */
   onOpenTerminal: (workspaceId: string, cardId: string) => void
 }
 
 /**
- * The workspace list, and under it the running cards and shells (`OpenTerminals`). A workspace
- * row's click or Enter selects it; dragging it, or Alt+Up/Down while it has focus, moves it to
+ * The workspace list as a tree: under each workspace its running cards and shells
+ * (`WorkspaceTerminals`). A workspace row's click or Enter shows its board; dragging it, or Alt+Up/Down while it has focus, moves it to
  * another place, with a line showing where it would land (#32 D4, D5).
  */
 function Sidebar({
@@ -81,6 +82,7 @@ function Sidebar({
   const ids = workspaces.map((w) => w.id)
   const queue = useWaitingQueue()
   const waiting = useMemo(() => waitingCounts(queue, workspaces), [queue, workspaces])
+  const terminals = useOpenTerminals(workspaces)
 
   useLayoutEffect(() => {
     const id = focusAfterMove.current
@@ -228,86 +230,75 @@ function Sidebar({
               data-workspace-id={w.id}
               data-drop={w.id === lineBefore ? 'before' : w.id === lineAfter ? 'after' : undefined}
             >
-              <button
-                type="button"
-                className={active ? 'workspace-item active' : 'workspace-item'}
-                data-testid="workspace-item"
-                aria-current={active ? 'true' : undefined}
-                aria-label={
-                  collapsed
-                    ? count > 0
-                      ? `${w.name}, ${waitingTooltip(count)}`
-                      : w.name
-                    : undefined
-                }
-                title={
-                  collapsed
-                    ? w.name
-                    : w.host === undefined
-                      ? w.directory
-                      : `${w.host}:${w.directory}`
-                }
-                draggable
-                onDragStart={(e) => onDragStart(e, w.id)}
-                onDragEnd={onDragEnd}
-                onClick={() => onSelect(w.id)}
-                onKeyDown={(e) => onKeyDown(e, w.id)}
-              >
-                <WorkspaceBadge workspace={w} waiting={collapsed ? count : 0} />
-                {!collapsed && <WorkspaceName workspace={w} />}
-                {!collapsed && w.host !== undefined && (
-                  <Server className="workspace-ssh" {...SMALL_ICON} />
-                )}
-                {!collapsed && count > 0 && (
-                  <>
-                    <span
-                      className="workspace-waiting"
-                      data-testid="workspace-waiting"
-                      title={waitingTooltip(count)}
-                      aria-hidden="true"
+              <div className="workspace-head">
+                <button
+                  type="button"
+                  className={active ? 'workspace-item active' : 'workspace-item'}
+                  data-testid="workspace-item"
+                  aria-current={active ? 'true' : undefined}
+                  aria-label={
+                    collapsed
+                      ? count > 0
+                        ? `${w.name}, ${waitingTooltip(count)}`
+                        : w.name
+                      : undefined
+                  }
+                  title={
+                    collapsed
+                      ? w.name
+                      : w.host === undefined
+                        ? w.directory
+                        : `${w.host}:${w.directory}`
+                  }
+                  draggable
+                  onDragStart={(e) => onDragStart(e, w.id)}
+                  onDragEnd={onDragEnd}
+                  onClick={() => onSelect(w.id)}
+                  onKeyDown={(e) => onKeyDown(e, w.id)}
+                >
+                  {/* Collapsed, the tree is hidden: the badge's dot counts what waits. */}
+                  <WorkspaceBadge workspace={w} waiting={collapsed ? count : 0} />
+                  {!collapsed && <WorkspaceName workspace={w} />}
+                  {!collapsed && w.host !== undefined && (
+                    <Server className="workspace-ssh" {...SMALL_ICON} />
+                  )}
+                </button>
+                {!collapsed && (
+                  <span className="workspace-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      data-testid="workspace-edit"
+                      aria-label={`Edit ${w.name}`}
+                      title="Edit workspace"
+                      onClick={() => onEdit(w.id)}
                     >
-                      {count}
-                    </span>
-                    <span className="visually-hidden">, {waitingTooltip(count)}</span>
-                  </>
+                      <Pencil {...SMALL_ICON} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      data-testid="workspace-delete"
+                      aria-label={`Delete ${w.name}`}
+                      title="Delete workspace"
+                      onClick={() => onDelete(w.id)}
+                    >
+                      <Trash2 {...SMALL_ICON} />
+                    </button>
+                  </span>
                 )}
-              </button>
+              </div>
               {!collapsed && (
-                <span className="workspace-actions">
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    data-testid="workspace-edit"
-                    aria-label={`Edit ${w.name}`}
-                    title="Edit workspace"
-                    onClick={() => onEdit(w.id)}
-                  >
-                    <Pencil {...SMALL_ICON} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    data-testid="workspace-delete"
-                    aria-label={`Delete ${w.name}`}
-                    title="Delete workspace"
-                    onClick={() => onDelete(w.id)}
-                  >
-                    <Trash2 {...SMALL_ICON} />
-                  </button>
-                </span>
+                <WorkspaceTerminals
+                  terminals={terminals.get(w.id) ?? []}
+                  currentId={active ? openId : null}
+                  onOpen={onOpenTerminal}
+                />
               )}
             </li>
           )
         })}
       </ul>
-      {!collapsed && (
-        <OpenTerminals
-          workspaces={workspaces}
-          activeId={activeId}
-          openId={openId}
-          onOpen={onOpenTerminal}
-        />
-      )}
       <div className="sidebar-footer">
         <UpdateButton collapsed={collapsed} />
         {!collapsed && syncStatus !== null && (

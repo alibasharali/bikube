@@ -119,6 +119,15 @@ function App(): React.JSX.Element {
     },
     [activeId, setViews]
   )
+  // A workspace clicked in the sidebar always shows its board: its running cards and shells are
+  // listed under it to open directly.
+  const onShowBoard = useCallback(
+    (id: string) => {
+      setViews((v) => forgetView(v, id))
+      workspaceStore.selectWorkspace(id)
+    },
+    [setViews]
+  )
 
   // Notifications skip the card in view, and a clicked one opens its card in its workspace.
   useEffect(() => setLookingAt(openedId), [openedId])
@@ -322,7 +331,7 @@ function App(): React.JSX.Element {
           activeId={activeId}
           collapsed={collapsed}
           onToggle={() => setCollapsed((c) => !c)}
-          onSelect={onSelectWorkspace}
+          onSelect={onShowBoard}
           onAdd={onCreateWorkspace}
           onEdit={(id) => setDialog({ kind: 'edit', id })}
           onDelete={(id) => setDialog({ kind: 'delete', id })}

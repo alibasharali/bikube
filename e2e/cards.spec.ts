@@ -45,6 +45,9 @@ async function createWorkspace(dir: string, name: string): Promise<void> {
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
 }
 
+// Mod+digit's modifier (#31 D18).
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
+
 async function selectWorkspace(name: string): Promise<void> {
   await page.getByTestId('workspace-item').filter({ hasText: name }).click()
   await expect(page.getByTestId('board-title')).toHaveText(name)
@@ -260,8 +263,9 @@ test('AC5/#31 D19: selecting another workspace leaves the full-size view; back r
   await page.getByTestId('workspace-item').filter({ hasText: 'beta' }).click()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
   await expect(page.getByTestId('board-title')).toHaveText('beta')
-  // alpha was left with `api` open: it shows again (#31 D19), still running.
-  await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+  // alpha was left with `api` open: Mod+digit shows it again (#31 D19), still running. A click
+  // on a workspace always shows its board (its cards are in the sidebar's tree).
+  await page.keyboard.press(`${MOD}+1`)
   await expectCardOpen(page, 'api')
   await expectStatusOnBoard(page, 'api', 'Running')
 })
@@ -714,7 +718,6 @@ test("#5 AC11: a Stopped card isn't counted as running and is deleted without as
 
 // Workspace switching (#31 D18, D19). Linux runs drive Ctrl+digit; Cmd+digit on macOS is
 // checked by hand.
-const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
 
 /** The open card's panes: whether each is marked focused and has keyboard focus. */
 function paneFocus(): Promise<{ marked: boolean; active: boolean }[]> {
@@ -765,15 +768,14 @@ test('#31 AC17: each workspace comes back to its view, panes and focus; the acti
     { marked: true, active: true }
   ])
 
-  // Away and back by click, then by Ctrl+digit: the same view each time.
+  // Away by click and back by Ctrl+digit, then both ways by Ctrl+digit: the same view each time.
+  // (A click on a workspace always shows its board: its cards are in the sidebar's tree.)
   for (const by of ['click', 'key'] as const) {
     if (by === 'click') await selectWorkspace('beta')
     else await page.keyboard.press(`${MOD}+2`)
     await expect(page.getByTestId('board-title')).toHaveText('beta')
     await expect(page.getByTestId('card-view')).toHaveCount(0)
-    if (by === 'click')
-      await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
-    else await page.keyboard.press(`${MOD}+1`)
+    await page.keyboard.press(`${MOD}+1`)
     await expectCardOpen(page, 'api')
     await expect.poll(paneFocus).toEqual([
       { marked: false, active: false },

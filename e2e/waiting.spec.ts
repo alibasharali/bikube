@@ -51,7 +51,13 @@ async function selectWorkspace(name: 'Alpha' | 'Beta'): Promise<void> {
 const row = (name: 'Alpha' | 'Beta'): Locator =>
   page.locator('[data-workspace-id]').nth(name === 'Alpha' ? 0 : 1)
 
-const pill = (name: 'Alpha' | 'Beta'): Locator => row(name).getByTestId('workspace-waiting')
+/** Card `title` in workspace `name`'s sidebar tree, and its activity mark. */
+const terminalRow = (name: 'Alpha' | 'Beta', title: string): Locator =>
+  row(name)
+    .getByTestId('workspace-terminal')
+    .filter({ has: page.getByTestId('workspace-terminal-title').getByText(title, { exact: true }) })
+const mark = (name: 'Alpha' | 'Beta', title: string): Locator =>
+  terminalRow(name, title).getByTestId('workspace-terminal-activity')
 
 function boardCard(title: string): Locator {
   return page
@@ -105,42 +111,30 @@ async function twoWaitingInBeta(): Promise<void> {
   await selectWorkspace('Alpha')
 }
 
-test('AC1: a workspace row counts its waiting cards, live', async () => {
+test('AC1: each waiting card is marked in its workspace’s tree, live', async () => {
   await twoWaitingInBeta()
-  await expect(pill('Beta')).toHaveText('2')
-  await expect(pill('Beta')).toHaveAttribute('title', '2 waiting for you')
-  await expect(pill('Alpha')).toHaveCount(0)
-  // A screen reader hears the count in words as part of the row's name.
-  await expect(row('Beta').getByTestId('workspace-item')).toHaveAccessibleName(
-    /^Beta\s*, 2 waiting for you$/
-  )
-  await expect(row('Alpha').getByTestId('workspace-item')).toHaveAccessibleName('Alpha')
-
-  // The pill stays visible while the row's edit and delete buttons show.
-  await row('Beta').hover()
-  await expect(row('Beta').getByTestId('workspace-edit')).toBeVisible()
-  await expect(pill('Beta')).toBeVisible()
-  const pillBox = (await pill('Beta').boundingBox())!
-  const editBox = (await row('Beta').getByTestId('workspace-edit').boundingBox())!
-  expect(pillBox.x + pillBox.width).toBeLessThanOrEqual(editBox.x)
+  await expect(mark('Beta', 'b1')).toHaveAttribute('data-activity', 'waiting')
+  await expect(mark('Beta', 'b1')).toHaveAttribute('title', 'Waiting for you')
+  await expect(mark('Beta', 'b2')).toHaveAttribute('data-activity', 'question')
+  await expect(mark('Beta', 'b2')).toHaveAttribute('title', 'Needs your answer')
+  await expect(row('Alpha').getByTestId('workspace-terminal-activity')).toHaveCount(0)
+  // Expanded, the workspace row itself counts nothing: the cards show it.
+  await expect(row('Beta').getByTestId('workspace-item')).toHaveAccessibleName('Beta')
 
   await selectWorkspace('Beta')
   await setActivity('b2', 'working', 'Working')
-  await expect(pill('Beta')).toHaveText('1')
-  await expect(pill('Beta')).toHaveAttribute('title', '1 waiting for you')
+  await expect(mark('Beta', 'b2')).toHaveAttribute('data-activity', 'working')
 
   await openCard('b1')
   await closeCard(page)
   await page.getByTestId('confirm-close').click()
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
   await expect(page.getByTestId('board')).toBeVisible()
-  await expect(pill('Beta')).toHaveCount(0)
-  await expect(pill('Alpha')).toHaveCount(0)
+  await expect(terminalRow('Beta', 'b1')).toHaveCount(0)
 })
 
 test('AC2: the collapsed sidebar shows the count as a dot on the badge', async () => {
   await twoWaitingInBeta()
-  await expect(pill('Beta')).toHaveText('2')
 
   await page.getByTestId('sidebar-toggle').click()
   await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
@@ -152,12 +146,11 @@ test('AC2: the collapsed sidebar shows the count as a dot on the badge', async (
     'Beta, 2 waiting for you'
   )
   await expect(row('Alpha').getByTestId('workspace-waiting-dot')).toHaveCount(0)
-  await expect(page.getByTestId('workspace-waiting')).toHaveCount(0)
 
   await page.getByTestId('sidebar-toggle').click()
   await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'false')
   await expect(row('Beta').getByTestId('workspace-waiting-dot')).toHaveCount(0)
-  await expect(pill('Beta')).toHaveText('2')
+  await expect(mark('Beta', 'b1')).toHaveAttribute('data-activity', 'waiting')
 })
 
 /** The active workspace's sidebar row reads `name`. */

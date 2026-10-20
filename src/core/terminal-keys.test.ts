@@ -3,6 +3,7 @@ import type { KeyLike } from './clipboard'
 import {
   CLAUDE_CODE_PROBE_OSC,
   isShiftEnter,
+  macLineEditKey,
   SHIFT_ENTER,
   shiftEnterIsNewLine
 } from './terminal-keys'
@@ -64,5 +65,30 @@ describe('shiftEnterIsNewLine', () => {
 
   it("names Claude Code's probe OSC 7501", () => {
     expect(CLAUDE_CODE_PROBE_OSC).toBe(7501)
+  })
+})
+
+describe('macLineEditKey', () => {
+  const press = (k: string, mods: Partial<KeyLike>): KeyLike =>
+    key({ key: k, shiftKey: false, ...mods })
+
+  it('sends the line editing keys macOS terminals send for Cmd and Option', () => {
+    expect(macLineEditKey(press('Backspace', { metaKey: true }), 'darwin')).toBe('\x15')
+    expect(macLineEditKey(press('ArrowLeft', { metaKey: true }), 'darwin')).toBe('\x01')
+    expect(macLineEditKey(press('ArrowRight', { metaKey: true }), 'darwin')).toBe('\x05')
+    expect(macLineEditKey(press('Backspace', { altKey: true }), 'darwin')).toBe('\x1b\x7f')
+    expect(macLineEditKey(press('ArrowLeft', { altKey: true }), 'darwin')).toBe('\x1bb')
+    expect(macLineEditKey(press('ArrowRight', { altKey: true }), 'darwin')).toBe('\x1bf')
+  })
+
+  it('leaves other keys and combinations to xterm, and every key off macOS', () => {
+    expect(macLineEditKey(press('Backspace', {}), 'darwin')).toBeNull()
+    expect(macLineEditKey(press('ArrowUp', { metaKey: true }), 'darwin')).toBeNull()
+    expect(
+      macLineEditKey(press('Backspace', { metaKey: true, shiftKey: true }), 'darwin')
+    ).toBeNull()
+    expect(macLineEditKey(press('ArrowLeft', { metaKey: true, altKey: true }), 'darwin')).toBeNull()
+    expect(macLineEditKey(press('Backspace', { ctrlKey: true }), 'darwin')).toBeNull()
+    expect(macLineEditKey(press('Backspace', { metaKey: true }), 'linux')).toBeNull()
   })
 })

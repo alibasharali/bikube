@@ -313,3 +313,41 @@ test('an OSC 8 link opens its target on Mod+click', async () => {
     })
     .toContain('https://example.com/docs')
 })
+
+// macOS line editing as other macOS terminals do it: Cmd+Backspace clears the line before the
+// cursor, Cmd+Left/Right go to its start and end, Option+Left/Right move a word and
+// Option+Backspace deletes one. Read through what the shell runs: no output for a cleared line.
+test('Cmd+Backspace, Cmd+Left/Right and Option+Left/Right/Backspace edit the line on macOS', async () => {
+  test.skip(process.platform !== 'darwin', 'macOS keys')
+  // The test's zsh has no rc file and picks vi keys when $EDITOR names vi; these are emacs keys.
+  await page.keyboard.type('bindkey -e 2>/dev/null; true')
+  await page.keyboard.press('Enter')
+  const ran = (marker: string): Promise<boolean> =>
+    bufferText().then((text) => text.split('\n').some((line) => line.trim() === marker))
+
+  await page.keyboard.type('echo cleared-$((40+2))')
+  await page.keyboard.press('Meta+Backspace')
+  await page.keyboard.type('echo kept-$((50+3))')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => ran('kept-53')).toBe(true)
+  expect(await ran('cleared-42')).toBe(false)
+
+  // `two` typed at the start, then `three` at the end: `two one three`.
+  await page.keyboard.type('one')
+  await page.keyboard.press('Meta+ArrowLeft')
+  await page.keyboard.type('echo two ')
+  await page.keyboard.press('Meta+ArrowRight')
+  await page.keyboard.type(' three')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => ran('two one three')).toBe(true)
+
+  // A word back puts `B` before `C`; a word forward and Option+Backspace drop `C`.
+  await page.keyboard.type('echo A C')
+  await page.keyboard.press('Alt+ArrowLeft')
+  await page.keyboard.type('B ')
+  await page.keyboard.press('Alt+ArrowRight')
+  await page.keyboard.press('Alt+Backspace')
+  await page.keyboard.type('D')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => ran('A B D')).toBe(true)
+})

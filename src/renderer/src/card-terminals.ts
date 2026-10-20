@@ -33,7 +33,8 @@ import {
   CLAUDE_CODE_PROBE_OSC,
   isShiftEnter,
   SHIFT_ENTER,
-  shiftEnterIsNewLine
+  shiftEnterIsNewLine,
+  macLineEditKey
 } from '../../core/terminal-keys'
 import { opensLink } from '../../core/terminal-links'
 import { promptJumpTarget, type PromptJump } from '../../core/prompt-jumps'
@@ -307,6 +308,13 @@ export class XtermScreen implements CardScreen {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin)
           this.term.input(SHIFT_ENTER)
+        return false
+      }
+      // macOS line editing (Cmd+Backspace and the like), as other macOS terminals send it.
+      const edit = macLineEditKey(event, window.drovr.platform)
+      if (edit !== null) {
+        event.preventDefault()
+        if (event.type === 'keydown' && !this.term.options.disableStdin) this.term.input(edit)
         return false
       }
       const action = clipboardShortcut(event, window.drovr.platform)

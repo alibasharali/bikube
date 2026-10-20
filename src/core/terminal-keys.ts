@@ -34,3 +34,25 @@ export function shiftEnterIsNewLine(
 ): boolean {
   return (claudeCodePane || sawProbe) && focusReporting
 }
+
+/**
+ * The line editing keys macOS terminals (Terminal, iTerm2, Ghostty) send, which xterm.js doesn't:
+ * Cmd+Backspace deletes to the line's start (Ctrl+U), Cmd+Left and Cmd+Right go to its start and
+ * end (Ctrl+A, Ctrl+E), Option+Left and Option+Right move a word (ESC b, ESC f) and
+ * Option+Backspace deletes one (ESC DEL), as readline, zsh's line editor and fish read them. Null
+ * for any other key, and off macOS.
+ */
+export function macLineEditKey(event: KeyLike, platform: string): string | null {
+  if (platform !== 'darwin' || event.ctrlKey || event.shiftKey) return null
+  if (event.metaKey && !event.altKey) {
+    if (event.key === 'Backspace') return '\x15'
+    if (event.key === 'ArrowLeft') return '\x01'
+    if (event.key === 'ArrowRight') return '\x05'
+  }
+  if (event.altKey && !event.metaKey) {
+    if (event.key === 'Backspace') return '\x1b\x7f'
+    if (event.key === 'ArrowLeft') return '\x1bb'
+    if (event.key === 'ArrowRight') return '\x1bf'
+  }
+  return null
+}

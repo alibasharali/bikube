@@ -218,3 +218,41 @@ test("the sidebar and title bar show the workspace's branch, and follow a switch
   })
   await expect(page.getByTestId('titlebar').getByTestId('card-branch')).toHaveText('feature/other')
 })
+
+test('a stopped plain card moves into its own worktree and runs there from its next start', async () => {
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Add search')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'Add search')
+  await backToBoard(page)
+
+  // Not offered while it runs.
+  await card('Add search').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-move-worktree')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await card('Add search').getByTestId('card-stop').click()
+  await page.getByTestId('confirm-close').click()
+  await expect(card('Add search').getByTestId('card-status-label')).toHaveText('Stopped')
+
+  await card('Add search').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-move-worktree').click()
+  const dialog = page.getByTestId('move-worktree-dialog')
+  await expect(dialog.getByTestId('move-worktree-branch')).toHaveValue('drovr/add-search')
+  await expect(dialog.getByTestId('move-worktree-hint')).toContainText('A new branch from main')
+  await dialog.getByTestId('move-worktree-submit').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(card('Add search').getByTestId('card-branch')).toHaveText('drovr/add-search')
+  expect(existsSync(worktreePath('add-search'))).toBe(true)
+
+  // Once it has one, the item is gone; its next start runs in the worktree.
+  await card('Add search').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-move-worktree')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await card('Add search').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Add search')
+  await run('echo "at=$(git branch --show-current) conf=$(cat local.conf)"')
+  await expect
+    .poll(async () => (await lines()).includes('at=drovr/add-search conf=port=4000'))
+    .toBe(true)
+  expect(git('branch', '--show-current')).toBe('main')
+})

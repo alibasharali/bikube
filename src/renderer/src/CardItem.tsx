@@ -32,6 +32,7 @@ import InlineInput from './InlineInput'
 import MergeCardDialog, { type MergeChoice } from './MergeCardDialog'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
+import MoveToWorktreeDialog from './MoveToWorktreeDialog'
 import StartupDialog from './StartupDialog'
 import StatusIcon from './StatusIcon'
 import {
@@ -376,6 +377,10 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
     setRenaming(true)
   }
 
+  // A stopped local card in a git repository, not in its own worktree yet, can move into one.
+  const inRepo = useBranch(card.host === undefined && !card.worktree ? card.directory : null)
+  const canMoveToWorktree = !running && inRepo !== null && inRepo !== undefined
+  const [movingToWorktree, setMovingToWorktree] = useState(false)
   const [deletingWorktree, setDeletingWorktree] = useState(false)
   const [merging, setMerging] = useState<MergeChoice | null>(null)
   const merge = ({ cardBranch, branch }: MergeChoice): void => {
@@ -537,6 +542,21 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
               <AppWindow {...MENU_ICON} />
               Open in new window
             </button>
+            {canMoveToWorktree && (
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                data-testid="card-menu-move-worktree"
+                onClick={run(() => {
+                  cancelPendingOpen()
+                  setMovingToWorktree(true)
+                })}
+              >
+                <TreePine {...MENU_ICON} />
+                Move to own worktree…
+              </button>
+            )}
             {card.worktree && (
               <PullRequestItem cardId={card.id} worktree={card.worktree} run={run} />
             )}
@@ -623,6 +643,13 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             setConfirm(null)
             removeCard(workspaceId, card.id)
           }}
+        />
+      )}
+      {movingToWorktree && (
+        <MoveToWorktreeDialog
+          workspaceId={workspaceId}
+          card={card}
+          onDone={() => setMovingToWorktree(false)}
         />
       )}
       {merging && card.worktree && (

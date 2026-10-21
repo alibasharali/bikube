@@ -259,6 +259,12 @@ export interface WorkspaceStore {
   /** The card's pending setup succeeded or was skipped (#39 D4, D6): it has none from now on. */
   clearCardSetup(workspaceId: string, cardId: string): Result<Card>
   /**
+   * Moves a local card without a worktree into its own new one: it runs there from its next
+   * start, after the workspace's Worktree setup when it has one (#39 D2). Agents keep their
+   * conversations per folder, so the card gets a new agent session and starts its agent afresh.
+   */
+  moveCardToWorktree(workspaceId: string, cardId: string, worktree: NewCardWorktree): Result<Card>
+  /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
    */
@@ -661,6 +667,25 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       const cleared: Card = { ...card }
       delete cleared.setup
       return { ok: true, value: cleared }
+    })
+  }
+
+  moveCardToWorktree(workspaceId: string, cardId: string, worktree: NewCardWorktree): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    return this.updateCard(workspaceId, cardId, (card) => {
+      if (card.host !== undefined) return fail('card', 'An SSH card can’t have its own worktree')
+      if (card.worktree) return fail('card', 'The card already has its own worktree')
+      const moved: Card = {
+        ...card,
+        directory: worktree.directory,
+        worktree: { ...worktree.worktree },
+        agentSessionId: this.generateSessionId(),
+        claudeStarted: false,
+        startedAgents: []
+      }
+      if (ws.worktreeSetup) moved.setup = ws.worktreeSetup
+      return { ok: true, value: moved }
     })
   }
 

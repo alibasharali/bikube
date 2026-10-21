@@ -1315,3 +1315,49 @@ describe('automatic move rules (#42 D2, D9, AC12)', () => {
     expect('autoMove' in s.getState().workspaces[0]).toBe(false)
   })
 })
+
+describe('moveCardToWorktree', () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix',
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+  }
+
+  it('moves a plain local card into the worktree, with the setup and a fresh agent session', () => {
+    let sessions = 0
+    const s = new InMemoryWorkspaceStore({ generateSessionId: () => `session-${++sessions}` })
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'fix'))
+    ok(s.markClaudeStarted(w.id, c.id))
+    ok(s.markAgentStarted(w.id, c.id, 'codex'))
+    const moved = ok(s.moveCardToWorktree(w.id, c.id, worktree))
+    expect(moved).toEqual({
+      ...c,
+      directory: worktree.directory,
+      worktree: worktree.worktree,
+      setup: 'npm ci',
+      agentSessionId: 'session-2',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(s.getState().workspaces[0].cards[0]).toEqual(moved)
+  })
+
+  it('adds no setup when the workspace has none', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'fix'))
+    expect(ok(s.moveCardToWorktree(w.id, c.id, worktree))).not.toHaveProperty('setup')
+  })
+
+  it('refuses a card that has a worktree already and an SSH card, changing nothing', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'wt', undefined, worktree))
+    const r = ok(s.createWorkspace({ name: 'r', directory: '~/a', host: 'devbox' }))
+    const remote = ok(s.createCard(r.id, r.columns[0].id, 'x'))
+    const before = s.getState()
+    expect(s.moveCardToWorktree(w.id, c.id, worktree)).toMatchObject({ ok: false })
+    expect(s.moveCardToWorktree(r.id, remote.id, worktree)).toMatchObject({ ok: false })
+    expect(s.getState()).toBe(before)
+  })
+})

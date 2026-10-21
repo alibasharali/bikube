@@ -525,7 +525,7 @@ button {
 }
 
 /* A running terminal's status (`StatusIcon`), in the sidebar tree and on the board card. Running
-   with nothing to report is the Shells strip's green dot. */
+   with nothing to report is the green running dot. */
 .status-icon {
   flex: none;
   display: inline-flex;

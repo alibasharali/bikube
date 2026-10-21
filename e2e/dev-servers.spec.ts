@@ -18,8 +18,8 @@ import { showShells } from './shells-tab'
 
 // Dev server chips (#49): a local card's pane (main or extra, S2) printing a localhost URL shows
 // a `localhost:<port>` chip on its board card while something listens there, and a named shell's
-// beside it in the shell strip (S2). The servers are Node
-// HTTP servers in this test process on free ports; `shell.openExternal` is stubbed. The URLs are
+// under its row in the side panel's Shells tab (S2). The servers are Node HTTP servers in this
+// test process on free ports; `shell.openExternal` is stubbed. The URLs are
 // printed with `printf` and the port as an argument, so the typed command line itself holds none.
 
 let app: ElectronApplication | undefined

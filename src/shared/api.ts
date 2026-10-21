@@ -26,6 +26,7 @@ export const IPC = {
   exit: 'terminal:exit',
   clipboardRead: 'clipboard:read',
   clipboardWrite: 'clipboard:write',
+  clipboardHasImage: 'clipboard:hasImage',
   linkOpen: 'link:open',
   portsProbe: 'ports:probe',
   fsIsDirectory: 'fs:isDirectory',
@@ -134,6 +135,8 @@ export interface TerminalApi {
 export interface ClipboardApi {
   read(): Promise<string>
   write(text: string): Promise<void>
+  /** Whether it holds an image: Cmd+V then sends Claude Code its image paste key. */
+  hasImage(): Promise<boolean>
 }
 
 /** A terminal link, opened in the default browser by main (http and https only). */

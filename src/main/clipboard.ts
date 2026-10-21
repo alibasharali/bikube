@@ -13,6 +13,10 @@ export function registerClipboard(): void {
     // Never hand back more than a paste may carry.
     return isClipboardText(text) ? text : ''
   })
+  ipcMain.handle(IPC.clipboardHasImage, (event) => {
+    if (!fromMainFrame(event)) throw new Error('clipboard:hasImage rejected: untrusted sender')
+    return !clipboard.readImage().isEmpty()
+  })
   ipcMain.handle(IPC.clipboardWrite, (event, text: unknown) => {
     if (!fromMainFrame(event)) throw new Error('clipboard:write rejected: untrusted sender')
     if (!isClipboardText(text)) throw new Error('clipboard:write rejected: invalid text')

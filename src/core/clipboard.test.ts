@@ -51,7 +51,7 @@ describe('copySelection', () => {
     const text = '  two  spaces\tand a tab\nsecond line  '
     const copied = await copySelection(
       { hasSelection: () => true, getSelection: () => text },
-      { read: vi.fn(), write }
+      { read: vi.fn(), write, hasImage: vi.fn() }
     )
     expect(copied).toBe(true)
     expect(write).toHaveBeenCalledWith(text)
@@ -61,7 +61,7 @@ describe('copySelection', () => {
     const write = vi.fn(() => Promise.resolve())
     const copied = await copySelection(
       { hasSelection: () => false, getSelection: () => '' },
-      { read: vi.fn(), write }
+      { read: vi.fn(), write, hasImage: vi.fn() }
     )
     expect(copied).toBe(false)
     expect(write).not.toHaveBeenCalled()
@@ -72,17 +72,47 @@ describe('pasteFromClipboard', () => {
   it('hands clipboard text with a newline to term.paste, which brackets it when enabled', async () => {
     const bridge: ClipboardBridge = {
       read: () => Promise.resolve('echo a\necho b'),
-      write: vi.fn()
+      write: vi.fn(),
+      hasImage: () => Promise.resolve(true)
     }
     const paste = vi.fn()
     const target: PasteTarget = { paste }
-    await pasteFromClipboard(target, bridge)
+    const input = vi.fn()
+    await pasteFromClipboard(target, bridge, { accepts: () => true, input })
     expect(paste).toHaveBeenCalledWith('echo a\necho b')
+    // Text wins over an image copied with it.
+    expect(input).not.toHaveBeenCalled()
+  })
+
+  it('sends Ctrl+V for an image alone to a pane that takes it, and nothing elsewhere', async () => {
+    const bridge: ClipboardBridge = {
+      read: () => Promise.resolve(''),
+      write: vi.fn(),
+      hasImage: () => Promise.resolve(true)
+    }
+    const paste = vi.fn()
+    const input = vi.fn()
+    await pasteFromClipboard({ paste }, bridge, { accepts: () => true, input })
+    expect(input).toHaveBeenCalledWith('\x16')
+    expect(paste).not.toHaveBeenCalled()
+    input.mockClear()
+    await pasteFromClipboard({ paste }, bridge, { accepts: () => false, input })
+    await pasteFromClipboard({ paste }, bridge)
+    await pasteFromClipboard(
+      { paste },
+      { ...bridge, hasImage: () => Promise.resolve(false) },
+      { accepts: () => true, input }
+    )
+    expect(input).not.toHaveBeenCalled()
+    expect(paste).not.toHaveBeenCalled()
   })
 
   it('pastes nothing for an empty clipboard', async () => {
     const paste = vi.fn()
-    await pasteFromClipboard({ paste }, { read: () => Promise.resolve(''), write: vi.fn() })
+    await pasteFromClipboard(
+      { paste },
+      { read: () => Promise.resolve(''), write: vi.fn(), hasImage: () => Promise.resolve(false) }
+    )
     expect(paste).not.toHaveBeenCalled()
   })
 })

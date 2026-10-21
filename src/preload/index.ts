@@ -15,7 +15,8 @@ const api: DrovrApi = {
   hostName: parseHostName(process.argv),
   clipboard: {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
-    write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text)
+    write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text),
+    hasImage: () => ipcRenderer.invoke(IPC.clipboardHasImage)
   },
   link: {
     open: (url) => ipcRenderer.send(IPC.linkOpen, url)

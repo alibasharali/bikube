@@ -304,10 +304,7 @@ export class XtermScreen implements CardScreen {
       if (keymapAction(event, currentKeymap())) return false
       if (workspaceShortcut(event, window.drovr.platform) !== null) return false
       if (terminalShortcut(event, window.drovr.platform) !== null) return false
-      if (
-        isShiftEnter(event) &&
-        shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode, this.sawProbe)
-      ) {
+      if (isShiftEnter(event) && this.claudeCodeRunning()) {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin)
           this.term.input(SHIFT_ENTER)
@@ -325,9 +322,22 @@ export class XtermScreen implements CardScreen {
       // Stop the native paste event too, or xterm would paste twice.
       event.preventDefault()
       if (action === 'copy') void copySelection(this.term, clipboard)
-      else void pasteFromClipboard(this.term, clipboard)
+      else
+        void pasteFromClipboard(this.term, clipboard, {
+          // Claude Code reads an image from the clipboard on Ctrl+V, while it runs here.
+          accepts: () => this.claudeCodeRunning() && !this.term.options.disableStdin,
+          input: (data) => this.term.input(data)
+        })
       return false
     })
+  }
+
+  /**
+   * Whether Claude Code runs in this pane now: a Claude Code card's main pane or one that saw its
+   * probe, with focus reporting on (#58), as Shift+Enter reads it.
+   */
+  private claudeCodeRunning(): boolean {
+    return shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode, this.sawProbe)
   }
 
   get cols(): number {

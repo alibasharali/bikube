@@ -13,6 +13,8 @@ export interface KeyLike {
 export interface ClipboardBridge {
   read(): Promise<string>
   write(text: string): Promise<void>
+  /** Whether the clipboard holds an image (a screenshot, a copied picture). */
+  hasImage(): Promise<boolean>
 }
 
 export interface CopySource {
@@ -51,10 +53,32 @@ export async function copySelection(
   return true
 }
 
+/**
+ * Ctrl+V, the key Claude Code pastes an image on: it reads the image from the system clipboard
+ * itself (on macOS too, where Cmd+V is the terminal's own text paste).
+ */
+export const IMAGE_PASTE_KEY = '\x16'
+
+/** A pane that may take an image paste: whether it does now, and how keys reach it. */
+export interface ImagePasteTarget {
+  accepts(): boolean
+  input(data: string): void
+}
+
+/**
+ * Pastes the clipboard's text; with no text but an image, sends `IMAGE_PASTE_KEY` to a pane
+ * that accepts it (Claude Code running there), so Cmd+V pastes a screenshot as it does in other
+ * macOS terminals. Anywhere else an image alone pastes nothing.
+ */
 export async function pasteFromClipboard(
   target: PasteTarget,
-  clipboard: ClipboardBridge
+  clipboard: ClipboardBridge,
+  image?: ImagePasteTarget
 ): Promise<void> {
   const text = await clipboard.read()
-  if (text) target.paste(text)
+  if (text) {
+    target.paste(text)
+    return
+  }
+  if (image?.accepts() && (await clipboard.hasImage())) image.input(IMAGE_PASTE_KEY)
 }

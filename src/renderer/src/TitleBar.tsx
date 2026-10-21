@@ -12,6 +12,7 @@ import { cardTerminals, useRunningCount } from './card-terminals'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
 import { settingsStore, useSettings } from './settings'
+import StatusIcon from './StatusIcon'
 import { useWorkspaceUsage } from './usage'
 
 /**
@@ -141,7 +142,7 @@ function RunningShellsChip({ workspace }: { workspace: Workspace }): React.JSX.E
       title={`Running: ${names.join(', ')}. Show them in the panel`}
       onClick={() => settingsStore.update({ sidePanelOpen: true, sidePanelTab: 'shells' })}
     >
-      <span className="shell-dot" aria-hidden="true" />
+      <StatusIcon status="running" />
       {running === 1 ? '1 shell' : `${running} shells`}
     </button>
   )

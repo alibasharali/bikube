@@ -218,10 +218,6 @@ button {
   color: var(--text);
 }
 
-.titlebar-shells .shell-dot {
-  background: #3fb950;
-}
-
 .titlebar-shells + .titlebar-panel {
   margin-left: var(--space-1);
 }

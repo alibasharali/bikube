@@ -6,6 +6,7 @@ import { backToBoard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Shell integration (#45): the marks a shell sends around its prompts and commands (OSC 133,
 // OSC 633, OSC 7), and what Drovr shows from them: a failed command's mark on its line (D6),
@@ -59,6 +60,7 @@ function readSettings(): unknown {
 
 /** Opens the workspace's Default shell and focuses its terminal. */
 async function openDefaultShell(): Promise<void> {
+  await showShells(page)
   await page
     .locator('[data-testid="shell"][data-shell-name="Default"]')
     .getByTestId('shell-open')
@@ -191,6 +193,7 @@ test('AC5: bash with Shell integration marks a failed command; with it off a new
   await toggle.uncheck()
   await page.getByTestId('settings-dialog').getByRole('button', { name: 'Done' }).click()
   await expect.poll(() => readSettings()).toMatchObject({ settings: { shellIntegration: false } })
+  await showShells(page)
   await page
     .locator('[data-testid="shell"][data-shell-name="Default"]')
     .getByTestId('shell-menu')

@@ -3273,48 +3273,67 @@ button.dev-server-chip:focus-visible {
   font-family: var(--font-mono);
 }
 
-/* The workspace's shells, above the board. */
-.shells {
+/* The side panel's Shells tab: New shell, then one row per shell. */
+.shells-tab {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-2);
+  padding: var(--space-2);
 }
 
-.shells-label {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.shell-chip-wrap {
-  position: relative;
+.shells-add {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
+  gap: 4px;
 }
 
-.shell-chip-wrap:hover {
-  border-color: var(--border-strong);
+.shell-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.shell-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 320px;
-  padding: 4px 4px 4px var(--space-3);
+/* A shell: what it is and runs on the left, its buttons on the right, then Run here and its dev
+   servers under both, lined up with its name. */
+.shell-row {
+  --shell-indent: 13px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition);
+}
+
+.shell-row:hover {
+  background: var(--surface-hover);
+}
+
+.shell-row-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
   border: 0;
-  border-radius: 999px 0 0 999px;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: var(--text-sm);
+  text-align: left;
   cursor: pointer;
+}
+
+.shell-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .shell-dot {
@@ -3325,16 +3344,27 @@ button.dev-server-chip:focus-visible {
   background: var(--border-strong);
 }
 
-.shell-chip[data-running='true'] .shell-dot {
+.shell-row[data-running='true'] .shell-dot {
   background: #3fb950;
   box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
 }
 
 .shell-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.shell-command {
+.shell-marker {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.shell-command,
+.shell-where {
+  padding-left: var(--shell-indent);
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -3343,23 +3373,94 @@ button.dev-server-chip:focus-visible {
   white-space: nowrap;
 }
 
-.shell-menu-wrap .icon-btn {
+.shell-where {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+}
+
+.shell-where svg {
+  flex: none;
+}
+
+.shell-where > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.shell-row-actions .icon-btn {
   width: 24px;
   height: 24px;
-  margin-right: 2px;
-  border-radius: 999px;
 }
 
-/* A shell's dev server chips (#49 D7), at the end of its pill, after its menu. */
-.shell-chip-wrap .dev-servers {
-  flex-wrap: nowrap;
-  margin: 0;
-  padding: 0 var(--space-2) 0 0;
+/* Beside a worktree card: where the shell runs now, and Run here to move it into that worktree. */
+.shell-run-here-line {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-left: var(--shell-indent);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
-.shells-add {
-  border: 1px dashed var(--border);
-  border-radius: 999px;
+.shell-run-here-line svg {
+  flex: none;
+}
+
+.shell-run-here-from {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-run-here {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell-run-here:hover {
+  background: var(--accent-soft);
+}
+
+/* A shell's dev server chips (#49 D7), under its row. */
+.shell-row .dev-servers {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  margin-top: 4px;
+  padding: 0 0 0 var(--shell-indent);
+}
+
+/* How many shells run, on the Shells tab. */
+.side-panel-tab-count {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
 }
 
 .card-tag-shell {

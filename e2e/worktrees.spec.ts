@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Cards with their own git worktree. Each test launches with its own data directory, so its
 // worktrees live in that directory's `worktrees` folder.
@@ -255,4 +256,56 @@ test('a stopped plain card moves into its own worktree and runs there from its n
     .poll(async () => (await lines()).includes('at=drovr/add-search conf=port=4000'))
     .toBe(true)
   expect(git('branch', '--show-current')).toBe('main')
+})
+
+test("a shell runs in a worktree card's worktree from Run here, back in the workspace folder from Run in", async () => {
+  await showShells(page)
+  await page.getByTestId('shell-add').click()
+  const dialog = page.getByTestId('shell-dialog')
+  await dialog.getByTestId('shell-name').fill('Where')
+  await dialog.getByTestId('shell-command').fill('echo "at=$(git branch --show-current)"')
+  await dialog.getByTestId('shell-submit').click()
+  await expect(dialog).toHaveCount(0)
+  const where = page.locator('[data-testid="shell"][data-shell-name="Where"]')
+  // Nothing to run in while the workspace has no worktree card.
+  await where.getByTestId('shell-menu').click()
+  await expect(page.getByTestId('shell-menu-run-in')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // Beside a worktree card, Run here starts the shell in its worktree without opening it.
+  const branch = await worktreeCard('Add search')
+  await expect(where.getByTestId('shell-run-here')).toBeVisible()
+  await where.getByTestId('shell-run-here').click()
+  await expect(where).toHaveAttribute('data-running', 'true')
+  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await expect(where.getByTestId('shell-run-here')).toHaveCount(0)
+  await expectCardOpen(page, 'Add search')
+  await where.getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Where')
+  await expect.poll(lines).toContain(`at=${branch}`)
+  expect(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')).toContain('"runIn"')
+
+  // On the board, Run in moves it back: it restarts in the workspace folder.
+  await backToBoard(page)
+  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await where.getByTestId('shell-menu').click()
+  const runIn = page.getByTestId('shell-menu-run-in')
+  await expect(runIn).toHaveText(['Workspace folder', `Add search · ${branch}`])
+  await expect(runIn.nth(1)).toHaveAttribute('aria-checked', 'true')
+  await runIn.first().click()
+  await expect(where.getByTestId('shell-where')).toHaveCount(0)
+  await where.getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Where')
+  await expect.poll(lines).toContain('at=main')
+  await backToBoard(page)
+
+  // Moved there again, a deleted worktree card leaves it in the workspace folder.
+  await where.getByTestId('shell-menu').click()
+  await page.getByTestId('shell-menu-run-in').nth(1).click()
+  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await card('Add search').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-delete').click()
+  await page.getByTestId('delete-keep-worktree').click()
+  await expect(card('Add search')).toHaveCount(0)
+  await expect(where.getByTestId('shell-where')).toHaveCount(0)
 })

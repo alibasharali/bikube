@@ -6,6 +6,7 @@ import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // A card in its own window (#53): opened from its ⋯ menu, drawn by the main window's page into
 // an `about:blank` window main allows (D2, D3), coming back to its board when that window closes.
@@ -718,6 +719,7 @@ test('AC4: a palette pick and Next waiting card focus its window, changing nothi
 })
 
 test("AC9: a shell's menu opens it in its own window; its strip button and shortcut focus it", async () => {
+  await showShells(page)
   const shell = page.locator('[data-testid=shell][data-shell-name="Default"]')
   const opened = app.waitForEvent('window')
   await shell.getByTestId('shell-menu').click()

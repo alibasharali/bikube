@@ -10,13 +10,25 @@ export const DEFAULT_SHELL_NAME = 'Default'
 /** The Default shell's name where it stands alone: the palette's rows, its own window's title. */
 export const DEFAULT_SHELL_TITLE = 'Default shell'
 
-/** `shell` (or the Default shell for null) as a card in the workspace's folder. */
+/**
+ * The worktree card `shell` runs in: its `runIn` card while that card is on the board with its own
+ * worktree (local workspaces only), else undefined for the workspace's folder.
+ */
+export function shellWorktreeCard(
+  workspace: Workspace,
+  shell: WorkspaceShell | null
+): Card | undefined {
+  if (!shell?.runIn || workspace.host !== undefined) return undefined
+  return workspace.cards.find((c) => c.id === shell.runIn && c.worktree !== undefined)
+}
+
+/** `shell` (or the Default shell for null) as a card in the folder it runs in. */
 export function shellCard(workspace: Workspace, shell: WorkspaceShell | null): Card {
   return {
     id: shell?.id ?? defaultShellId(workspace.id),
     columnId: '',
     title: shell?.name ?? DEFAULT_SHELL_NAME,
-    directory: workspace.directory,
+    directory: shellWorktreeCard(workspace, shell)?.directory ?? workspace.directory,
     ...(workspace.host !== undefined && { host: workspace.host }),
     startup: shell?.command ? { kind: 'custom', command: shell.command } : { kind: 'shell' },
     ...(shell?.command && shell.autoClose && { exitAfterStartup: true }),

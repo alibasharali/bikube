@@ -133,6 +133,12 @@ export interface WorkspaceShell {
    * of the sidebar until it is opened; a click on the running chip opens it.
    */
   background: boolean
+  /**
+   * The worktree card it runs in, by id: it starts in that card's directory while the card is on
+   * the board with its own worktree, else in the workspace's folder. This machine's: saved, never
+   * synced (a worktree is a folder on this machine). Absent for the workspace's folder.
+   */
+  runIn?: string
 }
 
 export interface ShellInput {
@@ -253,6 +259,11 @@ export interface WorkspaceStore {
   /** Adds a shell at the end of the workspace's shells; name required, command one line or ''. */
   createShell(workspaceId: string, input: ShellInput): Result<WorkspaceShell>
   updateShell(workspaceId: string, shellId: string, input: ShellInput): Result<WorkspaceShell>
+  /**
+   * Where the shell runs from its next start: a worktree card of the workspace, or null for the
+   * workspace's folder. Saved on this machine only.
+   */
+  setShellRunIn(workspaceId: string, shellId: string, cardId: string | null): Result<WorkspaceShell>
   deleteShell(workspaceId: string, shellId: string): Result<void>
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
@@ -626,7 +637,32 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     }
     const checked = checkShell(input)
     if (!checked.ok) return checked
-    const shell: WorkspaceShell = { id: shellId, ...checked.value }
+    const runIn = ws.shells.find((s) => s.id === shellId)?.runIn
+    const shell: WorkspaceShell = {
+      id: shellId,
+      ...checked.value,
+      ...(runIn !== undefined && { runIn })
+    }
+    this.replace({ ...ws, shells: ws.shells.map((s) => (s.id === shellId ? shell : s)) })
+    return { ok: true, value: shell }
+  }
+
+  setShellRunIn(
+    workspaceId: string,
+    shellId: string,
+    cardId: string | null
+  ): Result<WorkspaceShell> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    const current = ws.shells.find((s) => s.id === shellId)
+    if (!current) return { ok: false, error: { field: 'shell', message: 'Shell not found' } }
+    if (cardId !== null && !ws.cards.some((c) => c.id === cardId && c.worktree)) {
+      return fail('card', 'Not a card with its own worktree')
+    }
+    if ((current.runIn ?? null) === cardId) return { ok: true, value: current }
+    const shell: WorkspaceShell = { ...current }
+    if (cardId === null) delete shell.runIn
+    else shell.runIn = cardId
     this.replace({ ...ws, shells: ws.shells.map((s) => (s.id === shellId ? shell : s)) })
     return { ok: true, value: shell }
   }

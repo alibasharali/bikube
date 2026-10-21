@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Find in a card's terminal (#35): the find bar on the focused pane, its result text, stepping,
 // toggles, highlights, the clipboard, the remembered query, the live count, closing with the
@@ -617,6 +618,7 @@ test('#35 AC12: the bar closes with the extra pane it searches', async () => {
 
 test('#35 AC13: Find works in the Default shell', async () => {
   await backToBoard(page)
+  await showShells(page)
   await page
     .locator('[data-testid="shell"][data-shell-name="Default"]')
     .getByTestId('shell-open')

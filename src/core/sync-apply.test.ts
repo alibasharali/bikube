@@ -158,3 +158,30 @@ describe('automatic move rules from the file (#42 D7, AC11)', () => {
     expect(applied[1]!.autoMove).toEqual({ waiting: 'web-running' })
   })
 })
+
+describe("keeping where this machine's shells run", () => {
+  it('keeps the local runIn of each shell the file has, which never carries one', () => {
+    const shell = {
+      id: 's1',
+      name: 'Dev',
+      command: '',
+      autostart: false,
+      autoClose: false,
+      background: false
+    }
+    const local = [workspace('a', { shells: [{ ...shell, runIn: 'k1' }] })]
+    const incoming = [
+      workspace('a', {
+        shells: [
+          { ...shell, name: 'Dev server' },
+          { ...shell, id: 's2' }
+        ]
+      })
+    ]
+    const [applied] = applySyncBoard(incoming, local, none)
+    expect(applied!.shells).toEqual([
+      { ...shell, name: 'Dev server', runIn: 'k1' },
+      { ...shell, id: 's2' }
+    ])
+  })
+})

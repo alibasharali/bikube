@@ -6,6 +6,7 @@ import { backToBoard, expectCardOpen } from './card-view'
 import { fakeAgentsHome } from './fake-agents'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // The sidebar as a tree: under each workspace its running cards and shells, each opening as a
 // palette pick does, with what waits for the user marked on the card; a workspace's click always
@@ -79,6 +80,7 @@ test('nests each workspace’s running cards and shells under it, and opens one 
   await newCard('Agent A')
   await createWorkspace('Beta')
   await newCard('Agent B')
+  await showShells(page)
   await page.getByTestId('shell').first().getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')
   await backToBoard(page)
@@ -174,6 +176,7 @@ test('shows what each terminal runs: its agent’s logo and colour, a shell neut
     await expectCardOpen(page, title)
     await backToBoard(page)
   }
+  await showShells(page)
   await page.getByTestId('shell').first().getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')
   await backToBoard(page)

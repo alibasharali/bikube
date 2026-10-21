@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { backToBoard, belowSeparator, boardCard, closeCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Worktree setup (#39): the workspace's command typed in each new worktree card before its
 // startup command. S1: the workspace field, its one-line check, restart and sync. S2: the
@@ -364,6 +365,7 @@ test('AC10: no setup line for a card without Own worktree or the Default shell; 
   expect(await screenText(page)).not.toContain('SETUP-RAN')
   await backToBoard(page)
 
+  await showShells(page)
   await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')
   await page.getByTestId('card-view').getByTestId('terminal').click()

@@ -1372,3 +1372,31 @@ describe('moveCardToWorktree', () => {
     expect(s.getState()).toBe(before)
   })
 })
+
+describe('setShellRunIn', () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix',
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+  }
+
+  it("sets a shell's worktree card and clears it; an edit keeps it", () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const k = ok(s.createCard(w.id, w.columns[0].id, 'fix', undefined, worktree))
+    const sh = ok(s.createShell(w.id, { name: 'Dev', command: 'npm run dev', autostart: false }))
+    expect(ok(s.setShellRunIn(w.id, sh.id, k.id)).runIn).toBe(k.id)
+    expect(
+      ok(s.updateShell(w.id, sh.id, { name: 'Web', command: '', autostart: false })).runIn
+    ).toBe(k.id)
+    expect(ok(s.setShellRunIn(w.id, sh.id, null))).not.toHaveProperty('runIn')
+  })
+
+  it('refuses a card without its own worktree and an unknown shell', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const plain = ok(s.createCard(w.id, w.columns[0].id, 'plain'))
+    const sh = ok(s.createShell(w.id, { name: 'Dev', command: '', autostart: false }))
+    expect(s.setShellRunIn(w.id, sh.id, plain.id)).toMatchObject({ ok: false })
+    expect(s.setShellRunIn(w.id, 'nope', null)).toMatchObject({ ok: false })
+  })
+})

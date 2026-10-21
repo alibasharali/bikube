@@ -393,8 +393,10 @@ function App(): React.JSX.Element {
             <CardView
               key={openCard.id}
               card={openCard}
+              workspaceId={active.id}
               onBack={closeCard}
               onOpenInWindow={onOpenInWindow}
+              onOpenShell={onOpenCard}
             />
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2).
@@ -404,6 +406,8 @@ function App(): React.JSX.Element {
                 <SidePanel
                   folder={active.directory}
                   ssh={active.host !== undefined}
+                  workspaceId={active.id}
+                  onOpenShell={onOpenCard}
                   onHide={() => settingsStore.update({ sidePanelOpen: false })}
                 />
               )}

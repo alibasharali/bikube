@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { backToBoard, checkOnBoard, closeCard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Kept output (#46): a card's main pane output saved when its shell stops, shown above a dim
 // separator when it starts again; never for an extra pane or a shell; removed with the card.
@@ -334,6 +335,7 @@ test("AC9: an extra pane and the Default shell keep nothing; only the card's mai
   await backToBoard(page)
 
   // The Default shell, restarted: no separator.
+  await showShells(page)
   const defaultShell = page.locator('[data-testid="shell"][data-shell-name="Default"]')
   await defaultShell.getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')

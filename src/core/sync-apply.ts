@@ -9,7 +9,8 @@ import type { Card, Workspace } from './workspace-store'
 /**
  * The board this machine takes from `incoming` (D7): the file's workspaces, columns, cards and
  * order, with this machine's `claudeStarted`, `startedAgents` (#21 D7) and pending setup (#39 D8) for local cards it
- * already has, else false and empty (D6), and every card running here (`isRunning`) kept (D8): a
+ * already has, else false and empty (D6), where each shell runs (`runIn`, never in the file), and
+ * every card running here (`isRunning`) kept (D8): a
  * running card the file lacks goes to the bottom of its column, or of its workspace's first column
  * when that column is gone; a workspace the file lacks that has a running card stays as this
  * machine has it, after the file's workspaces. A running card the file has takes the file's values.
@@ -36,7 +37,15 @@ export function applySyncBoard(
   const kept = (w: Workspace): Card[] =>
     w.cards.filter((c) => isRunning(c.id) && !incomingCards.has(c.id))
 
+  // Where a shell runs is this machine's: the file never has it.
+  const localRunIn = new Map<string, string>()
+  for (const w of local) for (const s of w.shells) if (s.runIn) localRunIn.set(s.id, s.runIn)
+
   const applied = incoming.map((w) => {
+    const shells = w.shells.map((s) => {
+      const runIn = localRunIn.get(s.id)
+      return runIn === undefined ? s : { ...s, runIn }
+    })
     const cards = w.cards.map((c) =>
       c.host === undefined
         ? { ...c, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
@@ -50,7 +59,7 @@ export function applySyncBoard(
         cards.push(columnId === c.columnId ? c : { ...c, columnId })
       }
     }
-    return { ...w, cards }
+    return { ...w, cards, shells }
   })
   // A workspace the file deleted stays whole while a card of it runs here; a card the file has
   // elsewhere is left out, so ids stay unique (#8 D3).

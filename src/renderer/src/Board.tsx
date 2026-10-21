@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import type { Workspace } from '../../core/workspace-store'
 import AddColumn from './AddColumn'
-import ShellStrip from './ShellStrip'
 import BoardColumn from './BoardColumn'
 import { newCardRequestFor, takeNewCardRequest, usePendingNewCardRequest } from './new-card-request'
 
@@ -25,7 +24,6 @@ function Board({
     <section className="board" data-testid="board" aria-label={`Board for ${workspace.name}`}>
       {/* The name and folder are in the title bar; the heading stays for screen readers. */}
       <h1 className="visually-hidden">{workspace.name}</h1>
-      <ShellStrip workspace={workspace} onOpen={onOpenCard} />
       <ol className="board-columns">
         {workspace.columns.map((c, i) => (
           <BoardColumn

@@ -15,6 +15,7 @@ import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // The side panel beside an open card (#55 S1) and beside the board (#57): shown by default,
 // toggled by its title bar button, its hide button and the Toggle panel shortcut, resized from its
@@ -149,8 +150,7 @@ test('#55 AC1: the panel shows by default at the right of the panes, 280 px, Fil
   // Full height of the content area, beside the panes.
   expect(Math.abs(panelBox.height - termBox.height)).toBeLessThanOrEqual(1)
   const tabs = panel().getByRole('tab')
-  await expect(tabs).toHaveCount(1)
-  await expect(tabs.first()).toHaveText('Files')
+  await expect(tabs).toHaveText(['Files', 'Shells'])
   await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
   await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
   // Nothing is saved while the panel is as by default.
@@ -554,8 +554,10 @@ test("#55 AC10: a worktree card shows its worktree, the workspace's Default shel
     .toEqual(['own-tree', '  dist', '  src', '  .gitignore', '  README.md'])
 
   await backToBoard(page)
+  await showShells(page)
   await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')
+  await page.getByTestId('side-panel-tab-files').click()
   await expect(row('')).toHaveText('repo')
   await expect(row('')).toHaveAttribute('title', repo)
   await expect.poll(shownRows).toEqual(['repo', '  dist', '  src', '  .gitignore', '  README.md'])

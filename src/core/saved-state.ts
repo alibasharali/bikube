@@ -150,7 +150,7 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
     })
     if (!checked.ok || checked.value.name !== s.name) return 'bad shell'
     if (shells.some((other) => other.id === s.id)) return 'duplicate shell'
-    shells.push({ id: s.id, ...checked.value })
+    shells.push({ id: s.id, ...checked.value, ...(isId(s.runIn) && { runIn: s.runIn }) })
   }
   return shells
 }

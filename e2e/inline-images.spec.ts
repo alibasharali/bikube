@@ -6,6 +6,7 @@ import { deflateSync } from 'node:zlib'
 import { backToBoard, closeCard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Inline images (#52): sixel and iTerm2 images printed in any terminal (a card's main pane, an
 // extra pane, the Default shell) are held at the cell where they were printed, also while the
@@ -231,6 +232,7 @@ test('AC5: an extra pane and the Default shell hold the images they print', asyn
   expect(imageRows(await screen(0))).toEqual([])
   await backToBoard(page)
 
+  await showShells(page)
   const defaultShell = page.locator('[data-testid="shell"][data-shell-name="Default"]')
   await defaultShell.getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')

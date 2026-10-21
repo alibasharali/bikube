@@ -14,6 +14,7 @@ import {
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Dev server chips (#49): a local card's pane (main or extra, S2) printing a localhost URL shows
 // a `localhost:<port>` chip on its board card while something listens there, and a named shell's
@@ -332,6 +333,7 @@ test("AC6: a named shell's printed, listening port shows beside it in the shell 
   await launch()
   const opened = await recordOpenedLinks()
   await createWorkspace()
+  await showShells(page)
   await page.getByTestId('shell-add').click()
   await page.getByTestId('shell-name').fill('Dev server')
   await page.getByTestId('shell-command').fill(`printf 'http://localhost:%s/\\n' ${port}`)
@@ -345,8 +347,8 @@ test("AC6: a named shell's printed, listening port shows beside it in the shell 
 
   const chip = shell.getByTestId('dev-server-chip')
   await expect(chip).toHaveText([`localhost:${port}`], { timeout: CHIP_MS })
-  // Right after the shell's own chip (D7); the Default shell has none.
-  await expect(shell.locator('.shell-chip + .shell-menu-wrap + .dev-servers')).toHaveCount(1)
+  // Under the shell's own row in the Shells tab (D7); the Default shell has none.
+  await expect(shell.locator(':scope > .dev-servers')).toHaveCount(1)
   await expect(
     page.locator('[data-testid="shell"][data-shell-name="Default"]').getByTestId('dev-servers')
   ).toHaveCount(0)

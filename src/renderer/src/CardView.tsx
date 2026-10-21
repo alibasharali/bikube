@@ -178,11 +178,17 @@ function PaneTree({
  */
 function CardView({
   card,
+  workspaceId,
   onBack,
-  onOpenInWindow
+  onOpenInWindow,
+  onOpenShell
 }: {
   card: Card
+  /** The workspace the card or shell is in. */
+  workspaceId: string
   onBack: () => void
+  /** Opens a shell from the side panel's Shells tab. */
+  onOpenShell: (shellId: string) => void
   /** Opens the card in its own window (#53 D6); none in a card window, where it does nothing (D5). */
   onOpenInWindow?: () => void
 }): React.JSX.Element {
@@ -306,6 +312,9 @@ function CardView({
         <SidePanel
           folder={card.directory}
           ssh={card.host !== undefined}
+          workspaceId={workspaceId}
+          openCard={card}
+          onOpenShell={onOpenShell}
           onHide={() => {
             settingsStore.update({ sidePanelOpen: false })
             // The hide button is gone: keyboard focus goes back to the focused pane's terminal.

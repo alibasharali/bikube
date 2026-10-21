@@ -1,15 +1,22 @@
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
-import { MIN_SIDE_PANEL_WIDTH } from '../../core/settings'
+import { MIN_SIDE_PANEL_WIDTH, type SidePanelTab } from '../../core/settings'
 import { draggedPanelWidth, PANEL_KEY_STEP, shownPanelWidth } from '../../core/side-panel'
+import { shellCards } from '../../core/workspace-shells'
+import type { Card, Workspace } from '../../core/workspace-store'
+import { useRunningCount } from './card-terminals'
 import FilesTab from './FilesTab'
 import { SMALL_ICON } from './icons'
 import { settingsStore, useSettings } from './settings'
+import ShellsTab from './ShellsTab'
+import { useWorkspaceState } from './store'
 import { useViewWindow } from './view-window'
 
-/** The panel's tabs (#55 D1), in strip order; later tabs are added here. */
-const PANEL_TABS = [{ id: 'files', label: 'Files' }] as const
-type PanelTab = (typeof PANEL_TABS)[number]['id']
+/** The panel's tabs (#55 D1), in strip order. */
+const PANEL_TABS: readonly { id: SidePanelTab; label: string }[] = [
+  { id: 'files', label: 'Files' },
+  { id: 'shells', label: 'Shells' }
+]
 
 /** `view`'s inner width, followed as it resizes. */
 function useWindowWidth(view: Window): number {
@@ -31,21 +38,30 @@ function useWindowWidth(view: Window): number {
 function SidePanel({
   folder,
   ssh,
+  workspaceId,
+  openCard,
+  onOpenShell,
   onHide
 }: {
   /** The folder the Files tab shows (D5). */
   folder: string
   /** The card runs over SSH: the Files tab lists nothing (D6). */
   ssh: boolean
+  /** The workspace whose shells the Shells tab lists. */
+  workspaceId: string
+  /** The card or shell open beside the panel: a worktree card offers its shells Run here. */
+  openCard?: Card
+  /** Opens a shell from the Shells tab. */
+  onOpenShell: (shellId: string) => void
   onHide: () => void
 }): React.JSX.Element {
-  const { sidePanelWidth } = useSettings()
+  const { sidePanelWidth, sidePanelTab: tab } = useSettings()
+  const workspace = useWorkspaceState().workspaces.find((w) => w.id === workspaceId)
   // The window the panel is in: the main window, or a card's own (#53 D4, D5).
   const view = useViewWindow()
   const windowWidth = useWindowWidth(view)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
-  const [tab, setTab] = useState<PanelTab>('files')
   const id = useId()
   const width = dragWidth ?? shownPanelWidth(sidePanelWidth, windowWidth)
 
@@ -127,9 +143,10 @@ function SidePanel({
               aria-selected={tab === t.id}
               aria-controls={`${id}-panel-${t.id}`}
               tabIndex={tab === t.id ? 0 : -1}
-              onClick={() => setTab(t.id)}
+              onClick={() => settingsStore.update({ sidePanelTab: t.id })}
             >
               {t.label}
+              {t.id === 'shells' && workspace && <RunningShells workspace={workspace} />}
             </button>
           ))}
         </div>
@@ -157,8 +174,30 @@ function SidePanel({
             onOpenFile={(path) => window.drovr.files.open(folder, path)}
           />
         )}
+        {tab === 'shells' && workspace && (
+          <ShellsTab
+            workspace={workspace}
+            worktreeCard={openCard?.worktree ? openCard : undefined}
+            onOpen={onOpenShell}
+          />
+        )}
       </div>
     </aside>
+  )
+}
+
+/** How many of the workspace's shells run, on the Shells tab; nothing when none does. */
+function RunningShells({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const running = useRunningCount(shellCards(workspace))
+  if (running === 0) return null
+  return (
+    <span
+      className="side-panel-tab-count"
+      data-testid="shells-running"
+      aria-label={`${running} running`}
+    >
+      {running}
+    </span>
   )
 }
 

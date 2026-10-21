@@ -6,6 +6,7 @@ import { expectCardOpen, splitRight } from './card-view'
 import { fakeClaudeHome } from './fake-claude'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // Shift+Enter (the terminal polish pass, #58). It sends ESC CR, which Claude Code takes as a new
 // line, while focus reporting is on in a Claude Code card's main pane or in any pane that saw
@@ -159,6 +160,7 @@ test('Shift+Enter is Enter in a card that does not start Claude Code', async () 
 
 test("Shift+Enter is ESC CR in a workspace's shell while Claude Code runs there, Enter once it exits", async () => {
   await addWorkspace(true)
+  await showShells(page)
   await page
     .locator('[data-testid="shell"][data-shell-name="Default"]')
     .getByTestId('shell-open')

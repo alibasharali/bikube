@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { backToBoard, expectCardOpen, splitRight, zoomPane } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // A workspace's shells: the Default shell and named shells with a startup command, above the board.
 
@@ -39,6 +40,7 @@ async function createWorkspace(): Promise<void> {
   await page.getByTestId('workspace-name').fill('alpha')
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await showShells(page)
 }
 
 const shell = (name: string): Locator =>

@@ -6,6 +6,7 @@ import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
 import { defaultShellId } from '../../core/workspace-store'
 import { isCardViewAction } from './card-view-actions'
 import CardView from './CardView'
+import { openCardWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 import ShortcutKeys from './ShortcutKeys'
 import { currentKeymap, settingsStore, useSettings } from './settings'
@@ -110,7 +111,15 @@ function CardWindow({
           </button>
         </div>
         <main className="main">
-          <CardView key={card.id} card={card} onBack={onBack} onOpenInWindow={onReturn} />
+          <CardView
+            key={card.id}
+            card={card}
+            workspaceId={workspaceId}
+            onBack={onBack}
+            onOpenInWindow={onReturn}
+            // A card window shows only its card: a shell opens in a window of its own.
+            onOpenShell={(shellId) => openCardWindow(workspaceId, shellId)}
+          />
         </main>
       </div>
     </ViewWindowContext.Provider>

@@ -149,8 +149,6 @@ function ShellRow({
   // Worktree cards a named shell can run in (local workspaces only).
   const worktreeCards =
     named && workspace.host === undefined ? workspace.cards.filter((c) => c.worktree) : []
-  const runHere =
-    named !== null && worktreeCard?.worktree !== undefined && where?.id !== worktreeCard.id
   // A named shell of a local workspace can move to a worktree: its button gets a dropdown.
   const movable = named !== null && workspace.host === undefined
   const start = (): void =>
@@ -248,29 +246,50 @@ function ShellRow({
               testId="shell-run-menu"
               fixed
             >
-              {(run) => (
-                <>
-                  {where && (
+              {(run) => {
+                const mark = (checked: boolean): React.JSX.Element =>
+                  checked ? (
+                    <Check {...MENU_ICON} />
+                  ) : (
+                    <span className="branch-menu-spacer" aria-hidden="true" />
+                  )
+                // Set to a worktree card that isn't the one open: listed too, checked.
+                const elsewhere = where && where.id !== worktreeCard?.id ? where : undefined
+                return (
+                  <>
                     <button
                       type="button"
-                      role="menuitem"
+                      role="menuitemradio"
+                      aria-checked={!where}
                       className="menu-item"
                       data-testid="shell-run-workspace"
                       onClick={run(() => runShellIn(workspace, shell.id, null, running, false))}
                     >
-                      <Folder {...MENU_ICON} />
+                      {mark(!where)}
                       Run in workspace folder
                     </button>
-                  )}
-                  {(!where || runHere) && (
+                    {elsewhere?.worktree && (
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked="true"
+                        className="menu-item"
+                        data-testid="shell-run-elsewhere"
+                        onClick={run(() => {})}
+                      >
+                        {mark(true)}
+                        {`Run in ${elsewhere.worktree.branch}`}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      role="menuitem"
+                      role="menuitemradio"
+                      aria-checked={where !== undefined && where.id === worktreeCard?.id}
                       className="menu-item"
                       data-testid="shell-run-here"
-                      disabled={!runHere}
+                      disabled={!worktreeCard?.worktree}
                       title={
-                        runHere && worktreeCard?.worktree
+                        worktreeCard?.worktree
                           ? `Run ${shell.title} in ${worktreeCard.worktree.branch}`
                           : 'Open a card with its own worktree to run it there'
                       }
@@ -280,12 +299,12 @@ function ShellRow({
                           : undefined
                       )}
                     >
-                      <TreePine {...MENU_ICON} />
+                      {mark(where !== undefined && where.id === worktreeCard?.id)}
                       Run in this worktree
                     </button>
-                  )}
-                </>
-              )}
+                  </>
+                )
+              }}
             </MenuButton>
           )}
         </span>
@@ -395,17 +414,20 @@ function ShellRow({
           )}
         </MenuButton>
       </span>
-      <span
-        className="shell-where"
-        data-testid="shell-where"
-        data-worktree={where?.worktree ? 'true' : undefined}
-        title={where?.directory ?? workspace.directory}
-      >
-        {where?.worktree ? <TreePine {...SMALL_ICON} /> : <Folder {...SMALL_ICON} />}
-        <span className="shell-where-text" data-testid="shell-where-text">
-          {where?.worktree ? where.worktree.branch : `/${folderName(workspace.directory)}`}
+      {/* Where it runs, while it runs. */}
+      {running && (
+        <span
+          className="shell-where"
+          data-testid="shell-where"
+          data-worktree={where?.worktree ? 'true' : undefined}
+          title={where?.directory ?? workspace.directory}
+        >
+          {where?.worktree ? <TreePine {...SMALL_ICON} /> : <Folder {...SMALL_ICON} />}
+          <span className="shell-where-text" data-testid="shell-where-text">
+            {where?.worktree ? where.worktree.branch : `/${folderName(workspace.directory)}`}
+          </span>
         </span>
-      </span>
+      )}
       {running && <DevServerChips cardId={shell.id} />}
       {deleting && (
         <ConfirmDialog

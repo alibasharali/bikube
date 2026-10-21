@@ -267,34 +267,38 @@ test("a shell runs in a worktree card's worktree from Run in this worktree, back
   await dialog.getByTestId('shell-submit').click()
   await expect(dialog).toHaveCount(0)
   const where = page.locator('[data-testid="shell"][data-shell-name="Where"]')
-  // Nothing to run in while the workspace has no worktree card: the dropdown's item is disabled.
+  // No worktree card: the dropdown lists both, the folder checked and this worktree disabled.
   await where.getByTestId('shell-menu').click()
   await expect(page.getByTestId('shell-menu-run-in')).toHaveCount(0)
   await page.keyboard.press('Escape')
-  await where.getByTestId('shell-run-menu').click()
-  await expect(page.getByTestId('shell-run-here')).toBeDisabled()
+  const runMenu = where.getByTestId('shell-run-menu')
+  const folder = page.getByTestId('shell-run-workspace')
+  const here = page.getByTestId('shell-run-here')
+  await runMenu.click()
+  await expect(folder).toHaveAttribute('aria-checked', 'true')
+  await expect(here).toBeDisabled()
   await page.keyboard.press('Escape')
+  // Stopped, no line says where it runs.
+  await expect(where.getByTestId('shell-where')).toHaveCount(0)
 
-  // Beside a worktree card, the dropdown's Run in this worktree makes the button run it there.
+  // Beside a worktree card, Run in this worktree makes the button run it there.
   const branch = await worktreeCard('Add search')
-  // Where it runs, always shown: the workspace's folder by name.
-  const runsIn = where.getByTestId('shell-where-text')
-  await expect(runsIn).toHaveText('/repo')
   const start = where.getByTestId('shell-start')
   await expect(start).not.toHaveAttribute('data-worktree')
-  await where.getByTestId('shell-run-menu').click()
-  await page.getByTestId('shell-run-here').click()
-  await expect(runsIn).toHaveText(branch)
+  await runMenu.click()
+  await here.click()
   await expect(start).toHaveAttribute('data-worktree', 'true')
   await expect(where).toHaveAttribute('data-running', 'false')
-  // The dropdown now offers the way back.
-  await where.getByTestId('shell-run-menu').click()
-  await expect(page.getByTestId('shell-run-workspace')).toHaveText('Run in workspace folder')
-  await expect(page.getByTestId('shell-run-here')).toHaveCount(0)
+  await runMenu.click()
+  await expect(folder).toHaveAttribute('aria-checked', 'false')
+  await expect(here).toHaveAttribute('aria-checked', 'true')
   await page.keyboard.press('Escape')
   await start.click()
   await expect(where).toHaveAttribute('data-running', 'true')
   await expectCardOpen(page, 'Add search')
+  // Running, the line says where.
+  const runsIn = where.getByTestId('shell-where-text')
+  await expect(runsIn).toHaveText(branch)
   await where.getByTestId('shell-open').click()
   await expectCardOpen(page, 'Where')
   await expect.poll(lines).toContain(`at=${branch}`)

@@ -1,6 +1,7 @@
 import {
   AppWindow,
   Check,
+  ChevronDown,
   Folder,
   LoaderCircle,
   Pencil,
@@ -150,6 +151,8 @@ function ShellRow({
     named && workspace.host === undefined ? workspace.cards.filter((c) => c.worktree) : []
   const runHere =
     named !== null && worktreeCard?.worktree !== undefined && where?.id !== worktreeCard.id
+  // A named shell of a local workspace can move to a worktree: its button gets a dropdown.
+  const movable = named !== null && workspace.host === undefined
   const start = (): void =>
     startsHidden ? startInBackground(workspace.id, shell.id) : startCard(workspace.id, shell.id)
 
@@ -205,29 +208,87 @@ function ShellRow({
         </span>
       </button>
       <span className="shell-row-actions">
-        {running ? (
-          <button
-            type="button"
-            className="icon-btn"
-            data-testid="shell-stop"
-            aria-label={`Stop ${shell.title}`}
-            title="Stop"
-            onClick={() => closeCard(shell.id)}
-          >
-            <Square {...SMALL_ICON} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="icon-btn"
-            data-testid="shell-start"
-            aria-label={`Start ${shell.title}`}
-            title="Start without opening"
-            onClick={start}
-          >
-            <Play {...SMALL_ICON} />
-          </button>
-        )}
+        <span className={movable ? 'split-btn' : 'split-btn split-btn-single'}>
+          {running ? (
+            <button
+              type="button"
+              className="split-btn-main"
+              data-testid="shell-stop"
+              aria-label={`Stop ${shell.title}`}
+              title="Stop"
+              onClick={() => closeCard(shell.id)}
+            >
+              <Square {...SMALL_ICON} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="split-btn-main"
+              data-testid="shell-start"
+              data-worktree={where?.worktree ? 'true' : undefined}
+              aria-label={`Start ${shell.title}`}
+              title={
+                where?.worktree
+                  ? `Start in ${where.worktree.branch}, without opening`
+                  : 'Start without opening'
+              }
+              onClick={start}
+            >
+              <Play {...SMALL_ICON} />
+              {where?.worktree && <TreePine {...SMALL_ICON} />}
+            </button>
+          )}
+          {movable && (
+            <MenuButton
+              className="split-btn-menu"
+              buttonClassName="split-btn-toggle"
+              icon={<ChevronDown size={12} aria-hidden="true" />}
+              label={`Where ${shell.title} runs`}
+              menuLabel={`Where ${shell.title} runs`}
+              testId="shell-run-menu"
+              fixed
+            >
+              {(run) => (
+                <>
+                  {where && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item"
+                      data-testid="shell-run-workspace"
+                      onClick={run(() => runShellIn(workspace, shell.id, null, running, false))}
+                    >
+                      <Folder {...MENU_ICON} />
+                      Run in workspace folder
+                    </button>
+                  )}
+                  {(!where || runHere) && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item"
+                      data-testid="shell-run-here"
+                      disabled={!runHere}
+                      title={
+                        runHere && worktreeCard?.worktree
+                          ? `Run ${shell.title} in ${worktreeCard.worktree.branch}`
+                          : 'Open a card with its own worktree to run it there'
+                      }
+                      onClick={run(() =>
+                        worktreeCard
+                          ? runShellIn(workspace, shell.id, worktreeCard.id, running, false)
+                          : undefined
+                      )}
+                    >
+                      <TreePine {...MENU_ICON} />
+                      Run in this worktree
+                    </button>
+                  )}
+                </>
+              )}
+            </MenuButton>
+          )}
+        </span>
         <MenuButton
           className="shell-menu-wrap"
           label={`Shell menu for ${shell.title}`}
@@ -344,19 +405,6 @@ function ShellRow({
         <span className="shell-where-text" data-testid="shell-where-text">
           {where?.worktree ? where.worktree.branch : `/${folderName(workspace.directory)}`}
         </span>
-        {runHere && worktreeCard?.worktree && (
-          <button
-            type="button"
-            className="icon-btn shell-run-here"
-            data-testid="shell-run-here"
-            aria-label={`Run ${shell.title} in this worktree`}
-            title={`Run ${shell.title} in this worktree (${worktreeCard.worktree.branch})`}
-            onClick={() => runShellIn(workspace, shell.id, worktreeCard.id, running, true)}
-          >
-            <Play {...SMALL_ICON} />
-            <TreePine {...SMALL_ICON} />
-          </button>
-        )}
       </span>
       {running && <DevServerChips cardId={shell.id} />}
       {deleting && (

@@ -3493,19 +3493,58 @@ button.dev-server-chip:focus-visible {
   height: 24px;
 }
 
-/* Run in this worktree, beside where the shell runs: ▶ and the worktree icon. */
-.shell-run-here {
-  flex: none;
-  width: auto;
-  height: 20px;
-  margin-left: auto;
-  padding: 0 4px;
+/* A shell's Start or Stop, joined to the dropdown that picks where it runs (a worktree or the
+   workspace folder). A shell that can't move has the main half alone. */
+.split-btn {
+  display: inline-flex;
+  align-items: stretch;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.split-btn-main,
+.split-btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 1px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.split-btn-main {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.split-btn-single .split-btn-main {
+  border-radius: var(--radius-sm);
+}
+
+.split-btn-main[data-worktree='true'] {
   color: var(--accent);
 }
 
-.shell-run-here:hover {
-  background: var(--accent-soft);
+.split-btn-menu {
+  display: flex;
+}
+
+.split-btn-toggle {
+  min-width: 18px;
+  padding: 0 3px;
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.split-btn-main:hover,
+.split-btn-toggle:hover,
+.split-btn-toggle[aria-expanded='true'] {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 /* A shell's dev server chips (#49 D7), under its row. */

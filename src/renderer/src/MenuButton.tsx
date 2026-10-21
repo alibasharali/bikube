@@ -16,6 +16,9 @@ interface MenuButtonProps {
   fixed?: boolean
   /** The menu items; `run(action)` closes the menu and then runs the action. */
   children: (run: (action: () => void) => () => void) => React.ReactNode
+  /** The button's content and class: ⋯ in an icon button by default. */
+  icon?: React.ReactNode
+  buttonClassName?: string
 }
 
 /** A ⋯ button with a menu. Esc closes and returns focus; click outside or Tab closes. */
@@ -25,7 +28,9 @@ function MenuButton({
   testId,
   className,
   fixed,
-  children
+  children,
+  icon,
+  buttonClassName = 'icon-btn'
 }: MenuButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<React.CSSProperties | undefined>(undefined)
@@ -92,14 +97,14 @@ function MenuButton({
       <button
         ref={button}
         type="button"
-        className="icon-btn"
+        className={buttonClassName}
         data-testid={testId}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
         onClick={toggle}
       >
-        <Ellipsis {...ICON} />
+        {icon ?? <Ellipsis {...ICON} />}
       </button>
       {open && (
         <div

@@ -196,6 +196,36 @@ button {
   -webkit-app-region: no-drag;
 }
 
+/* Running shells while the panel is hidden, just before its button, which then follows it. */
+.titlebar-shells {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-shells:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.titlebar-shells .shell-dot {
+  background: #3fb950;
+}
+
+.titlebar-shells + .titlebar-panel {
+  margin-left: var(--space-1);
+}
+
 .titlebar-panel[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--text);

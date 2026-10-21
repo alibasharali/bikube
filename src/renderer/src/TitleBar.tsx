@@ -2,11 +2,13 @@ import { ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
-import type { Card, Workspace } from '../../core/workspace-store'
+import { DEFAULT_SHELL_TITLE, shellCards } from '../../core/workspace-shells'
+import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { BranchChip } from './BranchMenu'
 import { ToolIcon } from './AgentLogo'
 import { StartupTag } from './CardItem'
 import { useBranch } from './branches'
+import { cardTerminals, useRunningCount } from './card-terminals'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
 import { settingsStore, useSettings } from './settings'
@@ -100,6 +102,7 @@ function TitleBar({
         ) : (
           <span className="titlebar-current">Drovr</span>
         )}
+        {workspace && !sidePanelOpen && <RunningShellsChip workspace={workspace} />}
         {/* On the board as in a card (#57 D4). */}
         {workspace && (
           <button
@@ -116,6 +119,31 @@ function TitleBar({
         )}
       </div>
     </header>
+  )
+}
+
+/**
+ * While the side panel is hidden, how many of the workspace's shells run, with a dot; a click
+ * shows the panel on its Shells tab. Nothing when none runs.
+ */
+function RunningShellsChip({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const shells = shellCards(workspace)
+  const running = useRunningCount(shells)
+  if (running === 0) return null
+  const names = shells
+    .filter((s) => cardTerminals().runState(s.id)?.kind === 'running')
+    .map((s) => (s.id === defaultShellId(workspace.id) ? DEFAULT_SHELL_TITLE : s.title))
+  return (
+    <button
+      type="button"
+      className="titlebar-shells"
+      data-testid="titlebar-shells"
+      title={`Running: ${names.join(', ')}. Show them in the panel`}
+      onClick={() => settingsStore.update({ sidePanelOpen: true, sidePanelTab: 'shells' })}
+    >
+      <span className="shell-dot" aria-hidden="true" />
+      {running === 1 ? '1 shell' : `${running} shells`}
+    </button>
   )
 }
 

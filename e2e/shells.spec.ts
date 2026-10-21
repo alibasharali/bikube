@@ -280,3 +280,26 @@ test('a background shell starts on a click without opening, hidden from the side
   await shell('Watcher').getByTestId('shell-open').click()
   await expectCardOpen(page, 'Watcher')
 })
+
+test('with the panel hidden, the title bar counts running shells and opens the Shells tab', async () => {
+  const chip = page.getByTestId('titlebar-shells')
+  await shell('Default').getByTestId('shell-start').click()
+  await expect.poll(() => running('Default')).toBe('true')
+  // Shown only while the panel is hidden.
+  await expect(chip).toHaveCount(0)
+  await page.getByTestId('side-panel-tab-files').click()
+  await page.getByTestId('titlebar-panel').click()
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await expect(chip).toHaveText('1 shell')
+  await expect(chip).toHaveAttribute('title', 'Running: Default shell. Show them in the panel')
+  await chip.click()
+  await expect(page.getByTestId('side-panel')).toBeVisible()
+  await expect(page.getByTestId('side-panel-tab-shells')).toHaveAttribute('aria-selected', 'true')
+  await expect(chip).toHaveCount(0)
+
+  // Nothing running, nothing shown.
+  await shell('Default').getByTestId('shell-stop').click()
+  await expect.poll(() => running('Default')).toBe('false')
+  await page.getByTestId('titlebar-panel').click()
+  await expect(chip).toHaveCount(0)
+})

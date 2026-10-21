@@ -325,6 +325,7 @@ function WorkspaceDialog({
           error={commandError}
           testIdPrefix="workspace"
           remote={ssh}
+          label="Default for new cards"
         />
         {!ssh && (
           <div className="field">

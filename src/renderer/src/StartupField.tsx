@@ -39,6 +39,8 @@ interface StartupFieldProps {
   testIdPrefix: string
   /** An SSH workspace's: its agents run on its host, so none is shown as not installed. */
   remote?: boolean
+  /** The select's label; `Startup command` by default. */
+  label?: string
 }
 
 /**
@@ -50,7 +52,8 @@ function StartupField({
   onChange,
   error,
   testIdPrefix,
-  remote = false
+  remote = false,
+  label = 'Startup command'
 }: StartupFieldProps): React.JSX.Element {
   const id = useId()
   const selectId = `${id}-startup`
@@ -61,7 +64,7 @@ function StartupField({
   return (
     <>
       <div className="field">
-        <label htmlFor={selectId}>Startup command</label>
+        <label htmlFor={selectId}>{label}</label>
         <select
           id={selectId}
           data-testid={`${testIdPrefix}-startup`}

@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen, splitRight, zoomPane } from './card-view'
+import { SHORTCUTS, backToBoard, expectCardOpen, splitRight, zoomPane } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
@@ -208,6 +208,20 @@ test('a trigger runs its command in the background and shows done or failed; a c
   // Closed, it is idle again, not failed.
   await shellMenu('Build', 'close')
   await expect(status).toHaveAttribute('data-status', 'idle')
+})
+
+test('Close pane in a shell asks to close it on the first press', async () => {
+  await newShell('Dev', 'echo dev-$((40+2))')
+  await shell('Dev').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Dev')
+  await expect.poll(lines).toContain('dev-42')
+  // One press: the modifier's keydown re-renders the view before the key's (a shell's card is
+  // built anew each render), which must not drop the shortcut.
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(page.getByTestId('confirm-close')).toBeVisible()
+  await page.getByTestId('confirm-close').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect.poll(() => running('Dev')).toBe('false')
 })
 
 test('a shell must have a name and a one-line command; the Default one has no edit or delete', async () => {

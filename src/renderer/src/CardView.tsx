@@ -225,9 +225,13 @@ function CardView({
     focusScreen(paneScreen(card.id, paneId), view)
   }, [find, card.id, view])
 
-  // The card's actions (#31 D5), run by its shortcuts and the command palette (#40 D6).
+  // The card's actions (#31 D5), run by its shortcuts and the command palette (#40 D6). The
+  // listener stays put while the view does and calls the latest `run`: a shell's `card` is a new
+  // object on every render, and a listener re-added mid-dispatch (a re-render from the Cmd keydown
+  // before it) would miss the key that follows.
+  const runAction = useRef<(action: CardViewAction) => void>(() => {})
   useEffect(() => {
-    const run = (action: CardViewAction): void => {
+    runAction.current = (action: CardViewAction): void => {
       if (action === 'back') onBack()
       // Find opens the bar on the focused pane, moves it there from another pane (keeping the
       // query and toggles; the old pane's highlights go with its bar) or, when it is there
@@ -264,6 +268,9 @@ function CardView({
         setClosing(true)
       }
     }
+  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])
+  useEffect(() => {
+    const run = (action: CardViewAction): void => runAction.current(action)
     // Capture phase: works wherever focus is, including the terminal, which swallows the key.
     const onKeyDown = (event: KeyboardEvent): void => {
       const action = keymapAction(event, currentKeymap())
@@ -285,7 +292,7 @@ function CardView({
       view.removeEventListener('keydown', onKeyDown, true)
       unregister()
     }
-  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])
+  }, [view])
 
   return (
     <div className="card-layout">

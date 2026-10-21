@@ -18,7 +18,7 @@ const activityOf = (cardId: string): Activity | undefined =>
 /**
  * The running cards and shells by workspace id, following starts, exits and activity changes but
  * not each output chunk: the snapshot is a string that changes only when one of those does. A
- * background shell shows once it has been opened.
+ * trigger shows once it has been opened.
  */
 export function useOpenTerminals(
   workspaces: readonly Workspace[]

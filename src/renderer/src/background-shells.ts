@@ -2,8 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { startCard } from './card-actions'
 
 /**
- * Background shells (`WorkspaceShell.background`) that were opened since they last started in
- * the background: from then on they are ordinary shells, listed in the sidebar. Runtime only.
+ * Triggers (`WorkspaceShell.type`) that were opened since they last started in the background:
+ * from then on they are listed in the sidebar like any shell. Runtime only.
  */
 const opened = new Set<string>()
 const listeners = new Set<() => void>()
@@ -25,7 +25,7 @@ export function wasOpened(shellId: string): boolean {
   return opened.has(shellId)
 }
 
-/** Starts a background shell without opening it: out of the sidebar until it is opened. */
+/** Starts a trigger without opening it: out of the sidebar until it is opened. */
 export function startInBackground(workspaceId: string, shellId: string): void {
   if (opened.delete(shellId)) changed()
   startCard(workspaceId, shellId)

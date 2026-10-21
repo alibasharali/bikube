@@ -1105,13 +1105,13 @@ describe('shells', () => {
       s.createShell(w.id, { name: 'Two lines', command: 'a\nb', autostart: false })
     ).toMatchObject({ ok: false, error: { field: 'command' } })
 
-    expect(dev.autoClose).toBe(false)
+    expect(dev.type).toBe('shell')
     ok(
       s.updateShell(w.id, dev.id, {
         name: 'Web',
         command: 'npm start',
         autostart: false,
-        autoClose: true
+        type: 'trigger'
       })
     )
     expect(s.getState().workspaces[0].shells[0]).toEqual({
@@ -1119,25 +1119,18 @@ describe('shells', () => {
       name: 'Web',
       command: 'npm start',
       autostart: false,
-      autoClose: true,
-      background: false
+      type: 'trigger'
     })
+    // A trigger needs a command.
     expect(
-      ok(
-        s.updateShell(w.id, dev.id, {
-          name: 'Web',
-          command: '',
-          autostart: false,
-          background: true
-        })
-      ).background
-    ).toBe(true)
-    // Closing after the command types `<command>; exit`: endings and comments that break it.
+      s.updateShell(w.id, dev.id, { name: 'Web', command: ' ', autostart: false, type: 'trigger' })
+    ).toEqual({ ok: false, error: { field: 'command', message: 'A trigger needs a command' } })
+    // A trigger types `<command>; exit`: endings and comments that break it.
     for (const command of ['npm run dev;', 'npm run dev &', 'a |', 'a &&', 'npm run dev # note']) {
       expect(
-        s.updateShell(w.id, dev.id, { name: 'Web', command, autostart: false, autoClose: true })
+        s.updateShell(w.id, dev.id, { name: 'Web', command, autostart: false, type: 'trigger' })
       ).toMatchObject({ ok: false, error: { field: 'command' } })
-      // Without closing, they are typed as written.
+      // A shell types them as written.
       ok(s.updateShell(w.id, dev.id, { name: 'Web', command, autostart: false }))
     }
     ok(
@@ -1145,7 +1138,7 @@ describe('shells', () => {
         name: 'Web',
         command: 'echo a#b',
         autostart: false,
-        autoClose: true
+        type: 'trigger'
       })
     )
     ok(s.deleteShell(w.id, plain.id))

@@ -57,8 +57,7 @@ describe('openTerminals', () => {
           name: 'Dev server',
           command: 'npm run dev',
           autostart: false,
-          autoClose: false,
-          background: false
+          type: 'shell'
         }
       ]
     )
@@ -109,8 +108,7 @@ describe('openTerminals', () => {
           name: 'Dev server',
           command: 'npm run dev',
           autostart: false,
-          autoClose: false,
-          background: false
+          type: 'shell'
         }
       ]
     )
@@ -123,14 +121,13 @@ describe('openTerminals', () => {
     ])
   })
 
-  it('leaves a running background shell out until it has been opened', () => {
-    const shell = (id: string, background: boolean): Workspace['shells'][number] => ({
+  it('leaves a running trigger out until it has been opened', () => {
+    const shell = (id: string, trigger: boolean): Workspace['shells'][number] => ({
       id,
       name: id,
-      command: '',
+      command: 'npm run dev',
       autostart: false,
-      autoClose: false,
-      background
+      type: trigger ? 'trigger' : 'shell'
     })
     const a = workspace('a', [], [shell('bg', true), shell('plain', false)])
     const ids = (opened: (id: string) => boolean): string[] =>

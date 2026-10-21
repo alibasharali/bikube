@@ -2,7 +2,7 @@ import {
   AppWindow,
   Check,
   Folder,
-  Moon,
+  LoaderCircle,
   Pencil,
   Play,
   Plus,
@@ -11,9 +11,12 @@ import {
   Square,
   SquareTerminal,
   Trash2,
-  TreePine
+  TreePine,
+  X,
+  Zap
 } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { triggerStatus, triggerStatusLabel, type TriggerStatus } from '../../core/trigger-status'
 import { shellCards, shellWorktreeCard } from '../../core/workspace-shells'
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { startInBackground } from './background-shells'
@@ -22,16 +25,18 @@ import { useCardRunState } from './card-terminals'
 import { openCardWindow, useInWindow } from './card-windows'
 import ConfirmDialog from './ConfirmDialog'
 import DevServerChips from './DevServerChips'
+import { useDevServers } from './dev-servers'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import ShellDialog from './ShellDialog'
+import StatusIcon from './StatusIcon'
 import { workspaceStore } from './store'
 
 /**
  * The side panel's Shells tab: the workspace's shells, terminals that aren't tasks (a dev server,
  * a test watcher, a plain prompt), one row each with what it runs, where, and its dev servers.
  * The Default shell is always first; New shell adds a named one. A click on a row opens the shell,
- * starting it when stopped (a background shell's first click only starts it). Beside a worktree
+ * starting it when stopped (a trigger's click runs it in the background unless it runs). Beside a worktree
  * card, each named shell offers Run here: from then on it runs in that card's worktree.
  */
 function ShellsTab({
@@ -85,7 +90,7 @@ function ShellsTab({
 
 /**
  * Moves a named shell to `cardId`'s worktree (null: the workspace's folder): a running shell
- * starts again there; `start` starts a stopped one too (a background shell in the background).
+ * starts again there; `start` starts a stopped one too (a trigger in the background).
  */
 function runShellIn(
   workspace: Workspace,
@@ -97,16 +102,17 @@ function runShellIn(
   if (!workspaceStore.setShellRunIn(workspace.id, shellId, cardId).ok) return
   if (running) restartCard(workspace.id, shellId)
   else if (start) {
-    const background = workspace.shells.find((s) => s.id === shellId)?.background
-    if (background) startInBackground(workspace.id, shellId)
+    const trigger = workspace.shells.find((s) => s.id === shellId)?.type === 'trigger'
+    if (trigger) startInBackground(workspace.id, shellId)
     else startCard(workspace.id, shellId)
   }
 }
 
 /**
- * One shell: its status dot, name and markers (background, autostart, `In window`), its command,
- * the worktree it runs in, its buttons (Start or Stop, Run here) and menu, and its dev servers.
- * A right-click opens the menu.
+ * One shell: its status (a dot for a shell; a trigger's idle, running, serving, done or failed),
+ * its type's icon, name and markers (autostart, `In window`), its command, the worktree it runs
+ * in, its buttons (Start or Stop, Run here) and menu, and its dev servers. A right-click opens
+ * the menu. A trigger's click runs it in the background unless it runs, then opens it.
  */
 function ShellRow({
   workspace,
@@ -121,14 +127,16 @@ function ShellRow({
   onOpen: () => void
   onEdit: () => void
 }): React.JSX.Element {
-  const running = useCardRunState(shell.id).kind === 'running'
+  const runState = useCardRunState(shell.id)
+  const running = runState.kind === 'running'
+  const listening = useDevServers(shell.id)
   const inWindow = useInWindow(shell.id)
   const [deleting, setDeleting] = useState(false)
   const row = useRef<HTMLLIElement>(null)
   const isDefault = shell.id === defaultShellId(workspace.id)
   const named = workspace.shells.find((s) => s.id === shell.id) ?? null
-  const background = named?.background === true
-  const startsHidden = background && !running
+  const trigger = named?.type === 'trigger'
+  const startsHidden = trigger && !running
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
   const where = shellWorktreeCard(workspace, named)
   // Worktree cards a named shell can run in (local workspaces only).
@@ -156,23 +164,24 @@ function ShellRow({
         className="shell-row-open"
         data-testid="shell-open"
         data-running={running}
-        data-background={background || undefined}
+        data-type={named?.type ?? 'shell'}
         title={
           startsHidden
-            ? `Start ${shell.title} in the background; click again to open it`
+            ? `Run ${shell.title} in the background; click it while it runs to open it`
             : `Open ${shell.title}`
         }
         onClick={startsHidden ? start : onOpen}
       >
         <span className="shell-row-head">
-          <span className="shell-dot" aria-hidden="true" />
-          {isDefault && <SquareTerminal {...SMALL_ICON} />}
-          <span className="shell-name">{isDefault ? 'Default shell' : shell.title}</span>
-          {background && (
-            <span className="shell-marker" title="Starts in the background">
-              <Moon {...SMALL_ICON} aria-label="Starts in the background" />
-            </span>
+          {trigger ? (
+            <TriggerStatusIcon status={triggerStatus(runState, listening)} />
+          ) : (
+            <span className="shell-dot" aria-hidden="true" />
           )}
+          <span className="shell-type-icon" title={trigger ? 'Trigger' : 'Shell'}>
+            {trigger ? <Zap {...SMALL_ICON} /> : <SquareTerminal {...SMALL_ICON} />}
+          </span>
+          <span className="shell-name">{isDefault ? 'Default shell' : shell.title}</span>
           {named?.autostart && (
             <span className="shell-marker" title="Starts when the workspace opens">
               <Power {...SMALL_ICON} aria-label="Starts when the workspace opens" />
@@ -356,6 +365,36 @@ function ShellRow({
         />
       )}
     </li>
+  )
+}
+
+/**
+ * A trigger's status: a hollow dot before its first run (or after a Close), a spinner while its
+ * command runs, the running dot once a dev server it printed listens, a check when it ended with
+ * 0 and a cross otherwise, named by its tooltip (the exit code and last line).
+ */
+function TriggerStatusIcon({ status }: { status: TriggerStatus }): React.JSX.Element {
+  const label = triggerStatusLabel(status)
+  return (
+    <span
+      className="trigger-status"
+      data-testid="trigger-status"
+      data-status={status.kind}
+      title={label}
+      aria-label={label}
+    >
+      {status.kind === 'running' ? (
+        <LoaderCircle {...SMALL_ICON} />
+      ) : status.kind === 'serving' ? (
+        <StatusIcon status="running" />
+      ) : status.kind === 'done' ? (
+        <Check {...SMALL_ICON} />
+      ) : status.kind === 'failed' ? (
+        <X {...SMALL_ICON} />
+      ) : (
+        <span className="shell-dot" aria-hidden="true" />
+      )}
+    </span>
   )
 }
 

@@ -20,7 +20,7 @@ export interface OpenTerminal {
 
 /**
  * The running cards and shells, by workspace in sidebar order, each workspace's cards in column
- * order, then its shells (the Default shell first). A background shell is left out until it has
+ * order, then its shells (the Default shell first). A trigger is left out until it has
  * been opened (`opened`).
  */
 export function openTerminals(
@@ -47,7 +47,9 @@ export function openTerminals(
     ),
     ...shellCards(w)
       .filter((s) => isRunning(s.id))
-      .filter((s) => !w.shells.find((named) => named.id === s.id)?.background || opened(s.id))
+      .filter(
+        (s) => w.shells.find((named) => named.id === s.id)?.type !== 'trigger' || opened(s.id)
+      )
       .map((s) =>
         row(
           'shell',

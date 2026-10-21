@@ -115,16 +115,14 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
         name: 'Dev server',
         command: 'npm run dev',
         autostart: false,
-        autoClose: false,
-        background: false
+        type: 'shell'
       },
       {
         id: 's2',
         name: 'Tests',
         command: '',
         autostart: false,
-        autoClose: false,
-        background: false
+        type: 'shell'
       }
     ]
   })

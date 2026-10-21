@@ -24,7 +24,7 @@ export interface StartupState {
   /** The presets this card has started (#21 D3); missing means none. */
   startedAgents?: readonly AgentKind[]
   /**
-   * A workspace shell with Auto close: its Custom command is typed as `<command>; exit`, so the
+   * A trigger (a workspace shell of type `trigger`): its Custom command is typed as `<command>; exit`, so the
    * shell exits once the command ends on its own (a Ctrl+C stops the list, keeping the prompt).
    */
   exitAfterStartup?: boolean

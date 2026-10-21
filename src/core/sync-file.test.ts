@@ -322,14 +322,13 @@ describe('worktree setup in the sync file (#39 D1, AC12)', () => {
 })
 
 describe('shells in the sync file', () => {
-  it('writes a shell’s Close when the command stops and reads it back on the other machine', () => {
+  it('writes a shell’s type and reads it back on the other machine', () => {
     const shell = {
       id: 's1',
       name: 'Dev',
       command: 'npm run dev',
       autostart: true,
-      autoClose: true,
-      background: false
+      type: 'trigger' as const
     }
     const state: WorkspaceState = {
       activeId: 'w',

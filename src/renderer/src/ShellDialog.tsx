@@ -1,14 +1,30 @@
+import { SquareTerminal, Zap } from 'lucide-react'
 import { useId, useState } from 'react'
-import type { WorkspaceShell } from '../../core/workspace-store'
+import type { ShellType, WorkspaceShell } from '../../core/workspace-store'
+import { SMALL_ICON } from './icons'
 import Modal from './Modal'
 import { workspaceStore } from './store'
 
+/** Each type's choice and what it does, under the choice. */
+const TYPES: { type: ShellType; label: string; icon: typeof Zap; hint: string }[] = [
+  {
+    type: 'shell',
+    label: 'Shell',
+    icon: SquareTerminal,
+    hint: 'A click opens its terminal; the command, if any, is typed each time it starts.'
+  },
+  {
+    type: 'trigger',
+    label: 'Trigger',
+    icon: Zap,
+    hint: 'A click runs the command in the background, and it exits when the command ends, done or failed. Click it while it runs to open it.'
+  }
+]
+
 /**
- * New shell, or editing one: its name, an optional command typed each time it starts (e.g.
- * `npm run dev`), whether it starts when the workspace is first opened, whether a click starts it
- * in the background instead of opening it, and whether it closes
- * once that command ends on its own (typed as `<command>; exit`, so a Ctrl+C keeps the prompt). No worktree: shells
- * run in the workspace's folder.
+ * New shell, or editing one: its type (a shell opens; a trigger runs its command in the
+ * background and exits when it ends), its name, its command (optional for a shell, e.g.
+ * `npm run dev`), and whether it starts when the workspace is first opened.
  */
 function ShellDialog({
   workspaceId,
@@ -24,14 +40,12 @@ function ShellDialog({
   const [name, setName] = useState(shell?.name ?? '')
   const [command, setCommand] = useState(shell?.command ?? '')
   const [autostart, setAutostart] = useState(shell?.autostart ?? false)
-  const [autoClose, setAutoClose] = useState(shell?.autoClose ?? false)
-  const [background, setBackground] = useState(shell?.background ?? false)
-  const hasCommand = command.trim() !== ''
+  const [type, setType] = useState<ShellType>(shell?.type ?? 'shell')
   const [errors, setErrors] = useState<{ name?: string; command?: string }>({})
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
-    const input = { name, command, autostart, autoClose: hasCommand && autoClose, background }
+    const input = { name, command, autostart, type }
     const result = shell
       ? workspaceStore.updateShell(workspaceId, shell.id, input)
       : workspaceStore.createShell(workspaceId, input)
@@ -49,6 +63,31 @@ function ShellDialog({
   return (
     <Modal title={shell ? 'Edit shell' : 'New shell'} onClose={onDone} testId="shell-dialog">
       <form onSubmit={submit} noValidate>
+        <fieldset className="field shell-type">
+          <legend>Type</legend>
+          <div className="segmented">
+            {TYPES.map(({ type: t, label, icon: Icon }) => (
+              <label key={t} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-type`}
+                  value={t}
+                  data-testid={`shell-type-${t}`}
+                  checked={type === t}
+                  onChange={() => {
+                    setType(t)
+                    setErrors({ ...errors, command: undefined })
+                  }}
+                />
+                <Icon {...SMALL_ICON} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="field-hint" data-testid="shell-type-hint">
+            {TYPES.find((t) => t.type === type)?.hint}
+          </p>
+        </fieldset>
         <div className="field">
           <label htmlFor={`${id}-name`}>Name</label>
           <input
@@ -76,13 +115,13 @@ function ShellDialog({
           )}
         </div>
         <div className="field">
-          <label htmlFor={`${id}-command`}>Startup command</label>
+          <label htmlFor={`${id}-command`}>Command</label>
           <input
             id={`${id}-command`}
             className="new-card-command"
             data-testid="shell-command"
             value={command}
-            placeholder="npm run dev (optional)"
+            placeholder={type === 'trigger' ? 'npm run dev' : 'npm run dev (optional)'}
             spellCheck={false}
             autoComplete="off"
             aria-invalid={errors.command ? true : undefined}
@@ -102,9 +141,7 @@ function ShellDialog({
               {errors.command}
             </p>
           ) : (
-            <p className="field-hint">
-              Typed each time the shell starts. Leave empty for a plain shell.
-            </p>
+            type === 'shell' && <p className="field-hint">Leave empty for a plain shell.</p>
           )}
         </div>
         <label className="new-card-check shell-autostart">
@@ -116,36 +153,6 @@ function ShellDialog({
           />
           Start when the workspace opens
         </label>
-        <label className="new-card-check shell-autostart">
-          <input
-            type="checkbox"
-            data-testid="shell-background"
-            checked={background}
-            aria-describedby={`${id}-background-hint`}
-            onChange={(e) => setBackground(e.target.checked)}
-          />
-          Start in the background
-        </label>
-        <p className="field-hint shell-auto-close-hint" id={`${id}-background-hint`}>
-          A click starts it without opening it, and it stays out of the sidebar; click it again to
-          open it.
-        </p>
-        <label className="new-card-check shell-autostart">
-          <input
-            type="checkbox"
-            data-testid="shell-auto-close"
-            checked={hasCommand && autoClose}
-            disabled={!hasCommand}
-            aria-describedby={`${id}-auto-close-hint`}
-            onChange={(e) => setAutoClose(e.target.checked)}
-          />
-          Close when the command stops
-        </label>
-        <p className="field-hint shell-auto-close-hint" id={`${id}-auto-close-hint`}>
-          {hasCommand
-            ? 'The shell exits once the command ends; Ctrl+C keeps the prompt.'
-            : 'Needs a startup command.'}
-        </p>
         <div className="modal-actions">
           <button type="button" className="btn" data-testid="shell-cancel" onClick={onDone}>
             Cancel

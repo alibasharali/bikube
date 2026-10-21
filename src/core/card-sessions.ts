@@ -9,6 +9,7 @@ import type { Activity } from './activity'
 import { SessionRouter } from './session-router'
 import {
   cardStatus,
+  isShellExitLine,
   lastOutputLine,
   type CardRunState,
   type CardStatus,
@@ -125,6 +126,8 @@ interface Entry<S> {
   closed: boolean
   /** The current start's SSH host; undefined for a local card (#12 D5). */
   host: string | undefined
+  /** The current start exits after its command: its own exit gives a `CommandExit`. */
+  exitsAfterCommand: boolean
   /** Fed each output chunk while an SSH card's start line waits for the ready marker (#12 D6). */
   watch: ((data: string) => void) | null
 }
@@ -185,6 +188,7 @@ export class CardSessions<S extends CardScreen> {
       closing: false,
       closed: false,
       host: card.host,
+      exitsAfterCommand: card.exitAfterStartup === true,
       watch: null
     }
     if (existing) {
@@ -230,6 +234,7 @@ export class CardSessions<S extends CardScreen> {
     entry.closing = false
     entry.closed = false
     entry.host = card.host
+    entry.exitsAfterCommand = card.exitAfterStartup === true
     entry.watch = null
     this.outputWatcher?.ended(card.id)
     this.setState(entry, state)
@@ -499,12 +504,20 @@ export class CardSessions<S extends CardScreen> {
     const screen = entry.screen
     const sshFailed = entry.host !== undefined && exitCode === 255 && !entry.closed
     const keeper = this.keeper?.keeps(cardId) ? this.keeper : undefined
-    if (!screen || (!sshFailed && !keeper)) return this.stopped(cardId, entry, { kind: 'stopped' })
+    // A trigger's own exit (not a Close) is its command's result.
+    const reportsExit = entry.exitsAfterCommand && !entry.closed && !sshFailed
+    if (!screen || (!sshFailed && !keeper && !reportsExit)) {
+      return this.stopped(cardId, entry, { kind: 'stopped' })
+    }
     screen.write('', () => {
       if (entry.disposed || entry.screen !== screen) return
       if (keeper) this.save(cardId, screen, keeper)
-      if (!sshFailed) return this.stopped(cardId, entry, { kind: 'stopped' })
       const { lines, cursorRow } = screen.screen()
+      if (reportsExit) {
+        const exit = { code: exitCode, line: lastOutputLine(lines, cursorRow, isShellExitLine) }
+        return this.stopped(cardId, entry, { kind: 'stopped', exit })
+      }
+      if (!sshFailed) return this.stopped(cardId, entry, { kind: 'stopped' })
       this.stopped(cardId, entry, { kind: 'stopped', sshFailed: lastOutputLine(lines, cursorRow) })
     })
   }

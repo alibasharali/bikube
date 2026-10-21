@@ -206,7 +206,7 @@ function App(): React.JSX.Element {
     autostarted.current.add(active.id)
     for (const shell of active.shells) {
       if (shell.autostart && cardTerminals().runState(shell.id)?.kind !== 'running') {
-        if (shell.background) startInBackground(active.id, shell.id)
+        if (shell.type === 'trigger') startInBackground(active.id, shell.id)
         else startCard(active.id, shell.id)
       }
     }

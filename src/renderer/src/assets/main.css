@@ -1275,6 +1275,25 @@ button {
   font-size: var(--text-xs);
 }
 
+/* A field of radio choices (a shell's type): a fieldset that reads like the other fields. */
+fieldset.field {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+fieldset.field > legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+fieldset.field .segmented .radio {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
 .field-row {
   display: flex;
   gap: var(--space-2);
@@ -3331,7 +3350,7 @@ button.dev-server-chip:focus-visible {
 /* A shell: what it is and runs on the left, its buttons on the right, then Run here and its dev
    servers under both, lined up with its name. */
 .shell-row {
-  --shell-indent: 13px;
+  --shell-indent: 20px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -3385,6 +3404,52 @@ button.dev-server-chip:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* What a shell is: a terminal or a trigger. */
+.shell-type-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+/* A trigger's status, where a shell has its dot: 14 px wide so names line up. */
+.trigger-status {
+  flex: none;
+  width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trigger-status .shell-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+
+.trigger-status .status-icon-running::before {
+  margin: 0;
+}
+
+.trigger-status[data-status='running'] {
+  color: var(--pill-working-text);
+}
+
+.trigger-status[data-status='running'] svg {
+  animation: status-icon-spin 1s linear infinite;
+}
+
+.trigger-status[data-status='done'] {
+  color: #3fb950;
+}
+
+.trigger-status[data-status='failed'] {
+  color: var(--danger);
+}
+
+/* A shell's dot in the same 14 px column as a trigger's status. */
+.shell-row-head > .shell-dot {
+  margin: 0 3.5px;
 }
 
 .shell-marker {

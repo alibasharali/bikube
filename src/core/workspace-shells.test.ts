@@ -16,8 +16,7 @@ const workspace: Workspace = {
       name: 'Dev server',
       command: 'npm run dev',
       autostart: true,
-      autoClose: false,
-      background: false
+      type: 'shell'
     }
   ],
   worktreeSetup: ''
@@ -32,11 +31,13 @@ describe('workspace shells as cards', () => {
     expect(shellCards(workspace)[0]).toMatchObject({ directory: '/tmp/alpha' })
   })
 
-  it('marks a shell with Auto close and a command to exit after it, never one without', () => {
-    const closing = (command: string, autoClose: boolean): boolean | undefined =>
+  it('marks a trigger with a command to exit after it, never a shell or one without', () => {
+    const closing = (command: string, trigger: boolean): boolean | undefined =>
       shellCards({
         ...workspace,
-        shells: [{ id: 's1', name: 'Dev', command, autostart: false, autoClose, background: false }]
+        shells: [
+          { id: 's1', name: 'Dev', command, autostart: false, type: trigger ? 'trigger' : 'shell' }
+        ]
       })[1]!.exitAfterStartup
     expect(closing('npm run dev', true)).toBe(true)
     expect(closing('npm run dev', false)).toBeUndefined()

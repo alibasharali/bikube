@@ -31,7 +31,8 @@ export function shellCard(workspace: Workspace, shell: WorkspaceShell | null): C
     directory: shellWorktreeCard(workspace, shell)?.directory ?? workspace.directory,
     ...(workspace.host !== undefined && { host: workspace.host }),
     startup: shell?.command ? { kind: 'custom', command: shell.command } : { kind: 'shell' },
-    ...(shell?.command && shell.autoClose && { exitAfterStartup: true }),
+    // A trigger exits when its command ends, with the command's exit code.
+    ...(shell?.type === 'trigger' && shell.command && { exitAfterStartup: true }),
     agentSessionId: '',
     claudeStarted: false,
     startedAgents: []

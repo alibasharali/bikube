@@ -32,13 +32,20 @@ export function withoutPromptGlyphs(text: string): string {
  * prompt glyphs removed and whitespace trimmed; empty when there is none. `cursorRow` indexes
  * `lines`.
  */
-export function lastOutputLine(lines: readonly string[], cursorRow: number): string {
+export function lastOutputLine(
+  lines: readonly string[],
+  cursorRow: number,
+  skip: (text: string) => boolean = () => false
+): string {
   for (let row = Math.min(cursorRow, lines.length - 1); row >= 0; row--) {
     const text = withoutPromptGlyphs(stripEscapes(lines[row])).trim()
-    if (text) return text
+    if (text && !skip(text)) return text
   }
   return ''
 }
+
+/** What an interactive shell prints as it exits (bash's `exit`, a login shell's `logout`). */
+export const isShellExitLine = (text: string): boolean => text === 'exit' || text === 'logout'
 
 /**
  * A card's process state. `stopped`: its shell exited, however it ended (#5 D6, which replaces
@@ -47,7 +54,18 @@ export function lastOutputLine(lines: readonly string[], cursorRow: number): str
  * none); such a card is Stopped in every other way.
  */
 export type CardRunState =
-  { kind: 'running' } | { kind: 'stopped'; sshFailed?: string } | { kind: 'failed'; reason: string }
+  | { kind: 'running' }
+  | { kind: 'stopped'; sshFailed?: string; exit?: CommandExit }
+  | { kind: 'failed'; reason: string }
+
+/**
+ * How a start that exits after its command (a trigger, `exitAfterStartup`) ended by itself: the
+ * shell's exit code, which is the command's, and the last line it printed. Absent when Closed.
+ */
+export interface CommandExit {
+  code: number
+  line: string
+}
 
 /** `Running`, `Stopped`, `SSH failed: <line>` or `Couldn't start: <reason>`. */
 export function statusLabel(state: CardRunState): string {

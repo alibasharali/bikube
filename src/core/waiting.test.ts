@@ -35,8 +35,7 @@ function workspace(id: string, cards: string[], shells: string[] = []): Workspac
       name: s,
       command: '',
       autostart: false,
-      autoClose: false,
-      background: false
+      type: 'shell'
     })),
     worktreeSetup: ''
   }

@@ -124,15 +124,12 @@ export interface WorkspaceShell {
   /** Started when its workspace is first opened in a run of the app. */
   autostart: boolean
   /**
-   * The shell exits once its command ends on its own (`<command>; exit`); a Ctrl+C keeps the
-   * prompt. Only with a command.
+   * `shell`: a click opens it, typing its command (if any) each start. `trigger`: a click runs its
+   * command in the background (`<command>; exit`, out of the sidebar until opened) and it exits
+   * when the command ends, with a done or failed result; a click while it runs opens it. A
+   * trigger always has a command.
    */
-  autoClose: boolean
-  /**
-   * Starts in the background: a click on its chip starts it without opening it, and it stays out
-   * of the sidebar until it is opened; a click on the running chip opens it.
-   */
-  background: boolean
+  type: ShellType
   /**
    * The worktree card it runs in, by id: it starts in that card's directory while the card is on
    * the board with its own worktree, else in the workspace's folder. This machine's: saved, never
@@ -141,14 +138,17 @@ export interface WorkspaceShell {
   runIn?: string
 }
 
+export type ShellType = 'shell' | 'trigger'
+
+export const isShellType = (value: unknown): value is ShellType =>
+  value === 'shell' || value === 'trigger'
+
 export interface ShellInput {
   name: string
   command: string
   autostart: boolean
-  /** Missing (an older file) is off. */
-  autoClose?: boolean
-  /** Missing (an older file) is off. */
-  background?: boolean
+  /** Missing is `shell`. */
+  type?: ShellType
 }
 
 export const MAX_SHELL_NAME_LENGTH = 100
@@ -831,26 +831,17 @@ export function checkShell(input: ShellInput): Result<Omit<WorkspaceShell, 'id'>
     const checked = checkStartup({ kind: 'custom', command })
     if (!checked.ok) return { ok: false, error: { ...checked.error, field: 'command' } }
   }
-  // Closing after it types `<command>; exit`: an ending `;`, `&` or `|` would make that a syntax
-  // error, and a `#` comment would comment the `exit` out (as #39's setup line refuses).
-  if (command && input.autoClose === true) {
-    if (/[;&|]$/.test(command)) {
-      return fail('command', "Command can't end with ; & or | when the shell closes after it")
-    }
-    if (/(^|\s)#/.test(command)) {
-      return fail('command', "Command can't have a # comment when the shell closes after it")
-    }
+  const type: ShellType = input.type === 'trigger' ? 'trigger' : 'shell'
+  // A trigger types `<command>; exit`: an ending `;`, `&` or `|` would make that a syntax error,
+  // and a `#` comment would comment the `exit` out (as #39's setup line refuses).
+  if (type === 'trigger') {
+    if (!command) return fail('command', 'A trigger needs a command')
+    if (/[;&|]$/.test(command))
+      return fail('command', "A trigger's command can't end with ; & or |")
+    if (/(^|\s)#/.test(command))
+      return fail('command', "A trigger's command can't have a # comment")
   }
-  return {
-    ok: true,
-    value: {
-      name,
-      command,
-      autostart: input.autostart === true,
-      autoClose: input.autoClose === true,
-      background: input.background === true
-    }
-  }
+  return { ok: true, value: { name, command, autostart: input.autostart === true, type } }
 }
 
 /**

@@ -166,8 +166,7 @@ describe("keeping where this machine's shells run", () => {
       name: 'Dev',
       command: '',
       autostart: false,
-      autoClose: false,
-      background: false
+      type: 'shell' as const
     }
     const local = [workspace('a', { shells: [{ ...shell, runIn: 'k1' }] })]
     const incoming = [

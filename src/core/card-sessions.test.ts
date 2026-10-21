@@ -844,6 +844,38 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     expect(api.writes).toEqual([])
   })
 
+  it("keeps a trigger's exit code and last line when it exits by itself, none after a Close", async () => {
+    const trigger = (id: string): StartingCard => ({
+      ...card(id),
+      startup: { kind: 'custom', command: 'npm run build' },
+      exitAfterStartup: true
+    })
+    sessions.start(trigger('c1'))
+    api.spawns[api.spawns.length - 1].resolve({ ok: true, id: 's1' })
+    await vi.advanceTimersByTimeAsync(0)
+    api.emitData('s1', 'error TS2304: Cannot find name\r\nexit\r\n')
+    api.emitExit({ id: 's1', exitCode: 2 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c1')).toEqual({
+      kind: 'stopped',
+      exit: { code: 2, line: 'error TS2304: Cannot find name' }
+    })
+
+    sessions.start(trigger('c2'))
+    api.spawns[api.spawns.length - 1].resolve({ ok: true, id: 's2' })
+    await vi.advanceTimersByTimeAsync(0)
+    sessions.close('c2')
+    api.emitExit({ id: 's2', exitCode: 129 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c2')).toEqual({ kind: 'stopped' })
+
+    // A plain card's exit is no result.
+    await started('c3', { ok: true, id: 's3' })
+    api.emitExit({ id: 's3', exitCode: 1 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sessions.runState('c3')).toEqual({ kind: 'stopped' })
+  })
+
   it('reads SSH failed with the last output line after an exit with 255 (D7)', async () => {
     await startedSsh('c1')
     api.emitData('s1', 'ssh: Could not resolve hostname x: Name or service not known\r\n')

@@ -38,8 +38,8 @@ import { workspaceStore } from './store'
  * a test watcher, a plain prompt), one row each with what it runs, where, and its dev servers.
  * The Default shell is always first; New shell adds a named one. A click on a row opens the shell,
  * starting it when stopped (a trigger's click runs it in the background unless it runs). Beside a worktree
- * card, each named shell offers Run in this worktree (▶ and the worktree icon, beside where it
- * runs): from then on it runs in that card's worktree.
+ * card, each named shell's Start dropdown offers Run in this worktree: from then on it runs in
+ * that card's worktree.
  */
 function ShellsTab({
   workspace,
@@ -47,7 +47,7 @@ function ShellsTab({
   onOpen
 }: {
   workspace: Workspace
-  /** The worktree card open beside the panel, whose worktree Run here moves a shell into. */
+  /** The worktree card open beside the panel, whose worktree Run in this worktree moves a shell into. */
   worktreeCard?: Card
   onOpen: (shellId: string) => void
 }): React.JSX.Element {
@@ -121,8 +121,9 @@ function runShellIn(
 
 /**
  * One shell: its status (a dot for a shell; a trigger's idle, running, serving, done or failed),
- * its type's icon, name and markers (autostart, `In window`), its command, the worktree it runs
- * in, its buttons (Start or Stop, Run here) and menu, and its dev servers. A right-click opens
+ * its type's icon, name and markers (autostart, `In window`), its command, its Start or Stop
+ * (with the dropdown picking where it runs) and menu, where it runs while it runs, and its dev
+ * servers. A right-click opens
  * the menu. A trigger's click runs it in the background unless it runs, then opens it.
  */
 function ShellRow({

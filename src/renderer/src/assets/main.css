@@ -3337,8 +3337,8 @@ button.dev-server-chip:focus-visible {
   list-style: none;
 }
 
-/* A shell: what it is and runs on the left, its buttons on the right, then Run here and its dev
-   servers under both, lined up with its name. */
+/* A shell: what it is and runs on the left, its buttons on the right, then where it runs and its
+   dev servers under both, lined up with its name. */
 .shell-row {
   --shell-indent: 20px;
   display: grid;

@@ -49,7 +49,7 @@ function SidePanel({
   ssh: boolean
   /** The workspace whose shells the Shells tab lists. */
   workspaceId: string
-  /** The card or shell open beside the panel: a worktree card offers its shells Run here. */
+  /** The card or shell open beside the panel: a worktree card offers its shells Run in this worktree. */
   openCard?: Card
   /** Opens a shell from the Shells tab. */
   onOpenShell: (shellId: string) => void

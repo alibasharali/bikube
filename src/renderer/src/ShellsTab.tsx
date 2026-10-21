@@ -278,7 +278,7 @@ function ShellRow({
                         type="button"
                         role="menuitemradio"
                         aria-checked={current}
-                        className="menu-item"
+                        className="menu-item menu-item-checkable"
                         data-testid="shell-menu-run-in"
                         onClick={run(() =>
                           runShellIn(workspace, shell.id, c?.id ?? null, running, false)

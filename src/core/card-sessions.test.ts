@@ -858,7 +858,11 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(sessions.runState('c1')).toEqual({
       kind: 'stopped',
-      exit: { code: 2, line: 'error TS2304: Cannot find name' }
+      exit: {
+        code: 2,
+        line: 'error TS2304: Cannot find name',
+        tail: ['error TS2304: Cannot find name']
+      }
     })
 
     sessions.start(trigger('c2'))

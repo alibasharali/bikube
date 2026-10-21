@@ -2,6 +2,7 @@ import {
   AppWindow,
   Check,
   ChevronDown,
+  ChevronRight,
   Folder,
   LoaderCircle,
   Pencil,
@@ -17,7 +18,12 @@ import {
   Zap
 } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { triggerStatus, triggerStatusLabel, type TriggerStatus } from '../../core/trigger-status'
+import {
+  failureHeading,
+  triggerStatus,
+  triggerStatusLabel,
+  type TriggerStatus
+} from '../../core/trigger-status'
 import { shellCards, shellWorktreeCard } from '../../core/workspace-shells'
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { startInBackground } from './background-shells'
@@ -150,6 +156,7 @@ function ShellRow({
   const trigger = named?.type === 'trigger'
   const startsHidden = trigger && !running
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
+  const status = trigger ? triggerStatus(runState, listening) : null
   const where = shellWorktreeCard(workspace, named)
   // Worktree cards a named shell can run in (local workspaces only).
   const worktreeCards =
@@ -186,7 +193,7 @@ function ShellRow({
       >
         <span className="shell-row-head">
           {trigger ? (
-            <TriggerStatusIcon status={triggerStatus(runState, listening)} />
+            <TriggerStatusIcon status={status ?? { kind: 'idle' }} />
           ) : (
             <span className="shell-dot" aria-hidden="true" />
           )}
@@ -434,6 +441,7 @@ function ShellRow({
         </span>
       )}
       {running && <DevServerChips cardId={shell.id} />}
+      {status?.kind === 'failed' && <TriggerFailure status={status} />}
       {deleting && (
         <ConfirmDialog
           title="Delete shell"
@@ -447,6 +455,42 @@ function ShellRow({
         />
       )}
     </li>
+  )
+}
+
+/**
+ * What a failed trigger printed, under its row: its last line, a click showing the screen's last
+ * lines (the shell, and so its screen, is gone once the command ends).
+ */
+function TriggerFailure({
+  status
+}: {
+  status: Extract<TriggerStatus, { kind: 'failed' }>
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const heading = failureHeading(status)
+  const lines = status.tail.length > 0 ? status.tail : [status.line]
+  return (
+    <div className="trigger-failure" data-testid="trigger-failure" data-open={open}>
+      <button
+        type="button"
+        className="trigger-failure-toggle"
+        data-testid="trigger-failure-toggle"
+        aria-expanded={open}
+        title={open ? 'Hide output' : 'Show output'}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? <ChevronDown {...SMALL_ICON} /> : <ChevronRight {...SMALL_ICON} />}
+        <span className="trigger-failure-line" data-testid="trigger-failure-line">
+          {open || !status.line ? heading : status.line}
+        </span>
+      </button>
+      {open && (
+        <pre className="trigger-failure-output" data-testid="trigger-failure-output">
+          {lines.join('\n')}
+        </pre>
+      )}
+    </div>
   )
 }
 

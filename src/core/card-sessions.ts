@@ -11,6 +11,7 @@ import {
   cardStatus,
   isShellExitLine,
   lastOutputLine,
+  outputTail,
   type CardRunState,
   type CardStatus,
   type SetupState
@@ -514,7 +515,11 @@ export class CardSessions<S extends CardScreen> {
       if (keeper) this.save(cardId, screen, keeper)
       const { lines, cursorRow } = screen.screen()
       if (reportsExit) {
-        const exit = { code: exitCode, line: lastOutputLine(lines, cursorRow, isShellExitLine) }
+        const exit = {
+          code: exitCode,
+          line: lastOutputLine(lines, cursorRow, isShellExitLine),
+          tail: outputTail(lines, cursorRow, isShellExitLine)
+        }
         return this.stopped(cardId, entry, { kind: 'stopped', exit })
       }
       if (!sshFailed) return this.stopped(cardId, entry, { kind: 'stopped' })

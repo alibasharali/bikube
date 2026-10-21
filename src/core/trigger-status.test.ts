@@ -16,19 +16,21 @@ describe('triggerStatus', () => {
   })
 
   it('is done for exit 0, failed for any other code or a failed start', () => {
-    expect(triggerStatus({ kind: 'stopped', exit: { code: 0, line: 'built' } }, [])).toEqual({
+    expect(
+      triggerStatus({ kind: 'stopped', exit: { code: 0, line: 'built', tail: ['built'] } }, [])
+    ).toEqual({
       kind: 'done',
       line: 'built'
     })
-    expect(triggerStatus({ kind: 'stopped', exit: { code: 2, line: 'error TS' } }, [])).toEqual({
-      kind: 'failed',
-      code: 2,
-      line: 'error TS'
-    })
+    const tail = ['$ tsc', 'src/a.ts(1,1)', 'error TS']
+    expect(
+      triggerStatus({ kind: 'stopped', exit: { code: 2, line: 'error TS', tail } }, [])
+    ).toEqual({ kind: 'failed', code: 2, line: 'error TS', tail })
     expect(triggerStatus({ kind: 'failed', reason: 'working directory not found' }, [])).toEqual({
       kind: 'failed',
       code: null,
-      line: 'working directory not found'
+      line: 'working directory not found',
+      tail: ['working directory not found']
     })
   })
 })
@@ -41,10 +43,10 @@ describe('triggerStatusLabel', () => {
       'Running, listening on localhost:5173'
     )
     expect(triggerStatusLabel({ kind: 'done', line: '' })).toBe('Done')
-    expect(triggerStatusLabel({ kind: 'failed', code: 2, line: 'error TS2304' })).toBe(
+    expect(triggerStatusLabel({ kind: 'failed', code: 2, line: 'error TS2304', tail: [] })).toBe(
       'Failed (exit 2): error TS2304'
     )
-    expect(triggerStatusLabel({ kind: 'failed', code: null, line: 'no folder' })).toBe(
+    expect(triggerStatusLabel({ kind: 'failed', code: null, line: 'no folder', tail: [] })).toBe(
       "Couldn't start: no folder"
     )
   })

@@ -3427,6 +3427,56 @@ button.dev-server-chip:focus-visible {
   color: var(--danger);
 }
 
+/* What a failed trigger printed, under its row (`TriggerFailure`). */
+.trigger-failure {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-left: var(--shell-indent);
+}
+
+.trigger-failure-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trigger-failure-toggle svg {
+  flex: none;
+}
+
+.trigger-failure-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trigger-failure-output {
+  max-height: 240px;
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-left: 2px solid var(--danger);
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  white-space: pre;
+  user-select: text;
+}
+
 /* A shell's dot in the same 14 px column as a trigger's status. */
 .shell-row-head > .shell-dot {
   margin: 0 3.5px;

@@ -175,11 +175,22 @@ test('a trigger runs its command in the background and shows done or failed; a c
   // A failing command: failed, with its exit code and last line; a click runs it again.
   await shellMenu('Build', 'edit')
   await expect(dialog.getByTestId('shell-type-trigger')).toBeChecked()
-  await dialog.getByTestId('shell-command').fill('echo broke-$((1+1)); false')
+  await dialog.getByTestId('shell-command').fill('echo step-$((0+1)); echo broke-$((1+1)); false')
   await dialog.getByTestId('shell-submit').click()
+  await expect(shell('Build').getByTestId('trigger-failure')).toHaveCount(0)
   await shell('Build').getByTestId('shell-open').click()
   await expect(status).toHaveAttribute('data-status', 'failed', { timeout: 10_000 })
   await expect(status).toHaveAttribute('title', 'Failed (exit 1): broke-2')
+  // Its last line shows under the row; a click shows what it printed before it.
+  const failure = shell('Build').getByTestId('trigger-failure')
+  await expect(failure.getByTestId('trigger-failure-line')).toHaveText('broke-2')
+  await expect(failure.getByTestId('trigger-failure-output')).toHaveCount(0)
+  await failure.getByTestId('trigger-failure-toggle').click()
+  await expect(failure.getByTestId('trigger-failure-line')).toHaveText('Failed (exit 1)')
+  const output = failure.getByTestId('trigger-failure-output')
+  await expect(output).toContainText('step-1')
+  await expect(output).toContainText('broke-2')
+  expect((await output.textContent())?.trimEnd().endsWith('broke-2')).toBe(true)
 
   // While it runs, a click opens it, and from then on it is in the sidebar.
   await shellMenu('Build', 'edit')
@@ -187,6 +198,7 @@ test('a trigger runs its command in the background and shows done or failed; a c
   await dialog.getByTestId('shell-submit').click()
   await shell('Build').getByTestId('shell-open').click()
   await expect(status).toHaveAttribute('data-status', 'running')
+  await expect(failure).toHaveCount(0)
   await shell('Build').getByTestId('shell-open').click()
   await expectCardOpen(page, 'Build')
   await expect.poll(lines).toContain('waiting-43')

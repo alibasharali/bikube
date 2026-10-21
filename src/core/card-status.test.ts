@@ -4,9 +4,36 @@ import {
   cardStatus,
   knownRunState,
   knownStatus,
+  isShellExitLine,
   lastOutputLine,
+  outputTail,
   statusLabel
 } from './card-status'
+
+describe('outputTail', () => {
+  it('keeps the last lines at or above the cursor, indentation kept, the exit line and edges dropped', () => {
+    const lines = [
+      '',
+      '$ make',
+      '\x1b[31mmake: *** [all] Error 1\x1b[0m',
+      '  at a.c:3   ',
+      '',
+      'exit',
+      '',
+      'below'
+    ]
+    expect(outputTail(lines, 6, isShellExitLine)).toEqual([
+      '$ make',
+      'make: *** [all] Error 1',
+      '  at a.c:3'
+    ])
+  })
+
+  it('keeps at most the given number of lines, the newest', () => {
+    expect(outputTail(['a', 'b', 'c', 'd'], 3, undefined, 2)).toEqual(['c', 'd'])
+    expect(outputTail(['', ' '], 1)).toEqual([])
+  })
+})
 
 describe('lastOutputLine (D9)', () => {
   it('returns the last non-blank line at or above the cursor, trimmed', () => {

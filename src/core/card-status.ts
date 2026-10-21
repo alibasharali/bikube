@@ -44,6 +44,30 @@ export function lastOutputLine(
   return ''
 }
 
+/** Most lines a trigger's exit keeps (`outputTail`). */
+export const TAIL_LINES = 20
+
+/**
+ * The screen's last lines at or above the cursor row, at most `max`, without escapes or prompt
+ * glyphs and right-trimmed (spacing kept, so indentation stays), with blank and `skip`ped lines at
+ * the end and blank lines at the start dropped.
+ */
+export function outputTail(
+  lines: readonly string[],
+  cursorRow: number,
+  skip: (text: string) => boolean = () => false,
+  max = TAIL_LINES
+): string[] {
+  const tail: string[] = []
+  for (let row = Math.min(cursorRow, lines.length - 1); row >= 0 && tail.length < max; row--) {
+    const text = stripEscapes(lines[row]).replace(PRIVATE_USE, '').trimEnd()
+    if (tail.length === 0 && (!text.trim() || skip(text.trim()))) continue
+    tail.unshift(text)
+  }
+  while (tail.length > 0 && !tail[0].trim()) tail.shift()
+  return tail
+}
+
 /** What an interactive shell prints as it exits (bash's `exit`, a login shell's `logout`). */
 export const isShellExitLine = (text: string): boolean => text === 'exit' || text === 'logout'
 
@@ -60,11 +84,13 @@ export type CardRunState =
 
 /**
  * How a start that exits after its command (a trigger, `exitAfterStartup`) ended by itself: the
- * shell's exit code, which is the command's, and the last line it printed. Absent when Closed.
+ * shell's exit code, which is the command's, the last line it printed and the screen's last lines
+ * (`outputTail`), so a failure can be read after its screen is gone. Absent when Closed.
  */
 export interface CommandExit {
   code: number
   line: string
+  tail: string[]
 }
 
 /** `Running`, `Stopped`, `SSH failed: <line>` or `Couldn't start: <reason>`. */

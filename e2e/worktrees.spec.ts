@@ -283,7 +283,10 @@ test("a shell runs in a worktree card's worktree from Run here, back in the work
   await where.getByTestId('shell-open').click()
   await expectCardOpen(page, 'Where')
   await expect.poll(lines).toContain(`at=${branch}`)
-  expect(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')).toContain('"runIn"')
+  // Saved shortly after the change.
+  await expect
+    .poll(() => readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+    .toContain('"runIn"')
 
   // On the board, Run in moves it back: it restarts in the workspace folder.
   await backToBoard(page)

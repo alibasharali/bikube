@@ -1,6 +1,6 @@
 import { PanelLeftOpen } from 'lucide-react'
 import { useEffect } from 'react'
-import { keymapAction, resolveKeymap, workspaceShortcut } from '../../core/keymap'
+import { keymapAction, resolveKeymap, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
 import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
 import { defaultShellId } from '../../core/workspace-store'
@@ -61,8 +61,11 @@ function CardWindow({
       // The card view's own actions are its listener's.
       if (isCardViewAction(action)) return
       if (action === null) {
-        // Mod+1…9, as in the main window, is left alone while a dialog owns this window's keyboard.
-        if (workspaceShortcut(event, window.drovr.platform) === null || dialogOpenIn(view)) return
+        // Mod+1…9 and the terminal digits, as in the main window, are left alone while a dialog owns this window's keyboard.
+        const digits =
+          workspaceShortcut(event, window.drovr.platform) !== null ||
+          terminalShortcut(event, window.drovr.platform) !== null
+        if (!digits || dialogOpenIn(view)) return
         event.preventDefault()
         event.stopPropagation()
         return

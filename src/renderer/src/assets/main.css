@@ -478,6 +478,23 @@ button {
   opacity: 0.7;
 }
 
+/* The number a held modifier picks with a digit (Mod+1…9 workspaces, Ctrl+1…9 or Alt+1…9
+   terminals), in place of the badge's or the row's logo. */
+.held-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.workspace-terminal-kind.held-number {
+  width: 14px;
+  justify-content: center;
+  opacity: 1;
+  color: var(--text);
+}
+
 .workspace-terminal-title {
   flex: 1;
   min-width: 0;

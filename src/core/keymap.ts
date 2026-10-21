@@ -221,6 +221,39 @@ export function workspaceShortcut(event: KeyEventLike, platform: string): number
   return digit ? Number(digit[1]) : null
 }
 
+/**
+ * The terminal number of a press selecting the active workspace's Nth running card or shell, in
+ * its sidebar tree's order: Ctrl+1…9 on macOS, Alt+1…9 elsewhere (Ctrl+digit is workspaces
+ * there), from the physical digit key with no other modifier; else null. Matches every event type.
+ */
+export function terminalShortcut(event: KeyEventLike, platform: string): number | null {
+  const mac = platform === 'darwin'
+  if (event.ctrlKey !== mac || event.altKey === mac || event.metaKey || event.shiftKey) return null
+  const digit = /^Digit([1-9])$/.exec(event.code ?? '')
+  return digit ? Number(digit[1]) : null
+}
+
+/**
+ * Which numbers a press's modifiers would pick with a digit, for showing them while held:
+ * `workspace` for Mod alone, `terminal` for the terminal modifier alone, else null.
+ */
+export function heldNumbers(
+  event: KeyEventLike,
+  platform: string
+): 'workspace' | 'terminal' | null {
+  const mac = platform === 'darwin'
+  const { ctrlKey: ctrl, altKey: alt, metaKey: meta, shiftKey: shift } = event
+  if (shift) return null
+  if (mac) {
+    if (meta && !ctrl && !alt) return 'workspace'
+    if (ctrl && !meta && !alt) return 'terminal'
+    return null
+  }
+  if (ctrl && !alt && !meta) return 'workspace'
+  if (alt && !ctrl && !meta) return 'terminal'
+  return null
+}
+
 /** Each action's name in Settings and in refusals (D5). */
 export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.freeze({
   back: 'Back to board',
@@ -285,7 +318,7 @@ function menuAccelerators(platform: string): [string, string][] {
 
 /**
  * The fixed shortcuts a configurable one can't take (D8), as D7 text, with what they do: card
- * moves, copy and paste, workspace switching (D18), on macOS Quit, Hide and Minimize, and the app
+ * moves, copy and paste, workspace (D18) and terminal switching, on macOS Quit, Hide and Minimize, and the app
  * menu's accelerators.
  */
 export function fixedShortcuts(platform: string): ReadonlyMap<string, string> {
@@ -297,7 +330,10 @@ export function fixedShortcuts(platform: string): ReadonlyMap<string, string> {
   }
   fixed.set(mac ? 'Cmd+C' : 'Ctrl+Shift+C', 'Copy')
   fixed.set(mac ? 'Cmd+V' : 'Ctrl+Shift+V', 'Paste')
-  for (let digit = 1; digit <= 9; digit++) fixed.set(`${mod}+${digit}`, 'Switch workspace')
+  for (let digit = 1; digit <= 9; digit++) {
+    fixed.set(`${mod}+${digit}`, 'Switch workspace')
+    fixed.set(`${mac ? 'Ctrl' : 'Alt'}+${digit}`, 'Switch terminal')
+  }
   if (mac) {
     fixed.set('Cmd+Q', 'Quit')
     fixed.set('Cmd+H', 'Hide')

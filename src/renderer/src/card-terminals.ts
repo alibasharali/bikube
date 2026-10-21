@@ -14,7 +14,7 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { runningCount } from '../../core/card-deletes'
-import { keymapAction, workspaceShortcut } from '../../core/keymap'
+import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
 import { keptRange } from '../../core/kept-output'
@@ -300,9 +300,10 @@ export class XtermScreen implements CardScreen {
     this.marks.onCommandEnded((command) => this.markFailed(command))
     this.term.attachCustomKeyEventHandler((event) => {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
-      // sees any part of them (D7), nor of Mod+1…9 (D18).
+      // sees any part of them (D7), nor of Mod+1…9 (D18) or the terminal digits.
       if (keymapAction(event, currentKeymap())) return false
       if (workspaceShortcut(event, window.drovr.platform) !== null) return false
+      if (terminalShortcut(event, window.drovr.platform) !== null) return false
       if (
         isShiftEnter(event) &&
         shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode, this.sawProbe)

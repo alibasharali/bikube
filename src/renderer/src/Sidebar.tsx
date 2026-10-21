@@ -21,6 +21,7 @@ import { waitingCounts, waitingTooltip } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
+import type { HeldNumbers } from './held-numbers'
 import { useOpenTerminals } from './open-terminals'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
@@ -51,6 +52,8 @@ interface SidebarProps {
   openId: string | null
   /** Opens a running card or shell from its workspace's tree. */
   onOpenTerminal: (workspaceId: string, cardId: string) => void
+  /** The numbers a held modifier would pick with a digit, shown on the rows. */
+  heldNumbers: HeldNumbers
 }
 
 /**
@@ -70,7 +73,8 @@ function Sidebar({
   onSettings,
   syncStatus,
   openId,
-  onOpenTerminal
+  onOpenTerminal,
+  heldNumbers
 }: SidebarProps): React.JSX.Element {
   // Where a workspace dragged over the list would land (#32 D4), or null.
   const [dropAt, setDropAt] = useState<{ workspaceId: string; index: number } | null>(null)
@@ -220,7 +224,7 @@ function Sidebar({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        {workspaces.map((w) => {
+        {workspaces.map((w, index) => {
           const active = w.id === activeId
           const count = waiting.get(w.id) ?? 0
           return (
@@ -257,7 +261,11 @@ function Sidebar({
                   onKeyDown={(e) => onKeyDown(e, w.id)}
                 >
                   {/* Collapsed, the tree is hidden: the badge's dot counts what waits. */}
-                  <WorkspaceBadge workspace={w} waiting={collapsed ? count : 0} />
+                  <WorkspaceBadge
+                    workspace={w}
+                    waiting={collapsed ? count : 0}
+                    number={heldNumbers === 'workspace' && index < 9 ? index + 1 : null}
+                  />
                   {!collapsed && <WorkspaceName workspace={w} />}
                   {!collapsed && w.host !== undefined && (
                     <Server className="workspace-ssh" {...SMALL_ICON} />
@@ -293,6 +301,7 @@ function Sidebar({
                   terminals={terminals.get(w.id) ?? []}
                   currentId={active ? openId : null}
                   onOpen={onOpenTerminal}
+                  showNumbers={active && heldNumbers === 'terminal'}
                 />
               )}
             </li>

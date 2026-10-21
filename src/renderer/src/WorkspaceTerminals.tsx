@@ -12,6 +12,8 @@ interface WorkspaceTerminalsProps {
   /** The card or shell open at full size in the active workspace, or null. */
   currentId: string | null
   onOpen: (workspaceId: string, cardId: string) => void
+  /** Whether each row shows its Ctrl+digit number (Alt+digit off macOS) in place of its logo. */
+  showNumbers: boolean
 }
 
 /**
@@ -23,17 +25,19 @@ interface WorkspaceTerminalsProps {
 function WorkspaceTerminals({
   terminals,
   currentId,
-  onOpen
+  onOpen,
+  showNumbers
 }: WorkspaceTerminalsProps): React.JSX.Element | null {
   if (terminals.length === 0) return null
   return (
     <ul className="workspace-terminals" data-testid="workspace-terminals">
-      {terminals.map((row) => (
+      {terminals.map((row, index) => (
         <TerminalRow
           key={row.cardId}
           row={row}
           current={row.cardId === currentId}
           onOpen={onOpen}
+          number={showNumbers && index < 9 ? index + 1 : null}
         />
       ))}
     </ul>
@@ -43,11 +47,13 @@ function WorkspaceTerminals({
 function TerminalRow({
   row,
   current,
-  onOpen
+  onOpen,
+  number
 }: {
   row: OpenTerminal
   current: boolean
   onOpen: WorkspaceTerminalsProps['onOpen']
+  number: number | null
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
@@ -66,9 +72,15 @@ function TerminalRow({
         title={`${row.title} (${toolName(row)})`}
         onClick={() => onOpen(row.workspaceId, row.cardId)}
       >
-        <span className="workspace-terminal-kind" data-testid="workspace-terminal-kind">
-          <ToolIcon tool={row.tool} />
-        </span>
+        {number !== null ? (
+          <span className="workspace-terminal-kind held-number" data-testid="terminal-number">
+            {number}
+          </span>
+        ) : (
+          <span className="workspace-terminal-kind" data-testid="workspace-terminal-kind">
+            <ToolIcon tool={row.tool} />
+          </span>
+        )}
         <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
           {row.title}
         </span>

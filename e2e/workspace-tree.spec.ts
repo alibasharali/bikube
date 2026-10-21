@@ -195,3 +195,54 @@ test('shows what each terminal runs: its agent’s logo and colour, a shell neut
   await expect(terminal('Default shell').locator('.agent-logo')).toHaveCount(0)
   if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT })
 })
+
+// Workspace switching's modifier (Mod+1…9) and the terminal digits' (Ctrl+1…9 on macOS, Alt+1…9
+// elsewhere).
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control'
+const TERMINAL_MOD = process.platform === 'darwin' ? 'Control' : 'Alt'
+
+test('the terminal digits open the active workspace’s running cards; held modifiers show the numbers', async () => {
+  await createWorkspace('Alpha')
+  await newCard('Agent A1')
+  await newCard('Agent A2')
+  await createWorkspace('Beta')
+  await newCard('Agent B1')
+  await workspaceRow('Alpha').getByTestId('workspace-item').click()
+  await expect(activeWorkspace()).toContainText('Alpha')
+  await expect.poll(tree).toEqual(['Alpha: Agent A1, Agent A2', 'Beta: Agent B1'])
+
+  // From the board, then from a focused terminal; a number with no terminal does nothing.
+  await page.keyboard.press(`${TERMINAL_MOD}+2`)
+  await expectCardOpen(page, 'Agent A2')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.press(`${TERMINAL_MOD}+1`)
+  await expectCardOpen(page, 'Agent A1')
+  await expect(terminal('Agent A1')).toHaveAttribute('aria-current', 'true')
+  await page.keyboard.press(`${TERMINAL_MOD}+3`)
+  await expectCardOpen(page, 'Agent A1')
+
+  // Held alone, Mod numbers the workspaces and the terminal modifier the active one's terminals.
+  await expect(page.getByTestId('workspace-number')).toHaveCount(0)
+  await page.keyboard.down(MOD)
+  await expect(page.getByTestId('workspace-number')).toHaveText(['1', '2'])
+  await expect(page.getByTestId('terminal-number')).toHaveCount(0)
+  await page.keyboard.up(MOD)
+  await expect(page.getByTestId('workspace-number')).toHaveCount(0)
+  await page.keyboard.down(TERMINAL_MOD)
+  await expect(page.getByTestId('terminal-number')).toHaveText(['1', '2'])
+  await expect(workspaceRow('Beta').getByTestId('terminal-number')).toHaveCount(0)
+  await expect(page.getByTestId('workspace-number')).toHaveCount(0)
+  // Still shown while a digit picks with it.
+  await page.keyboard.press('Digit2')
+  await expectCardOpen(page, 'Agent A2')
+  await expect(page.getByTestId('terminal-number')).toHaveText(['1', '2'])
+  await page.keyboard.up(TERMINAL_MOD)
+  await expect(page.getByTestId('terminal-number')).toHaveCount(0)
+
+  // A combo pressed at once shows nothing.
+  await page.keyboard.press(`${MOD}+2`)
+  await expect(activeWorkspace()).toContainText('Beta')
+  // Past the hold that shows them.
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('workspace-number')).toHaveCount(0)
+})

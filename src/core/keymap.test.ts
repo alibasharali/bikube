@@ -10,6 +10,8 @@ import {
   shortcutOverrides,
   validateShortcuts,
   workspaceShortcut,
+  terminalShortcut,
+  heldNumbers,
   SHORTCUT_LABELS,
   type KeyEventLike
 } from './keymap'
@@ -731,6 +733,55 @@ describe('workspaceShortcut (#31 D18, AC16)', () => {
 
   it('matches every event type, so the whole key is swallowed', () => {
     expect(workspaceShortcut(digit(3, { ctrlKey: true, type: 'keyup' }), 'linux')).toBe(3)
+  })
+})
+
+describe('terminalShortcut', () => {
+  const digit = (n: number, over: Partial<KeyEventLike> = {}): KeyEventLike =>
+    press(String(n), { code: `Digit${n}`, ...over })
+
+  it('reads Ctrl+1…9 on macOS and Alt+1…9 elsewhere as the terminal number', () => {
+    for (let n = 1; n <= 9; n++) {
+      expect(terminalShortcut(digit(n, { ctrlKey: true }), 'darwin')).toBe(n)
+      expect(terminalShortcut(digit(n, { altKey: true }), 'linux')).toBe(n)
+    }
+    expect(terminalShortcut(digit(1, { ctrlKey: true }), 'linux')).toBeNull()
+    expect(terminalShortcut(digit(1, { metaKey: true }), 'darwin')).toBeNull()
+    expect(terminalShortcut(digit(1, { altKey: true }), 'darwin')).toBeNull()
+  })
+
+  it('matches the physical digit key with no other modifier', () => {
+    expect(terminalShortcut(press('é', { code: 'Digit2', ctrlKey: true }), 'darwin')).toBe(2)
+    expect(terminalShortcut(digit(0, { ctrlKey: true }), 'darwin')).toBeNull()
+    expect(terminalShortcut(digit(2, { ctrlKey: true, shiftKey: true }), 'darwin')).toBeNull()
+    expect(terminalShortcut(digit(2, { ctrlKey: true, metaKey: true }), 'darwin')).toBeNull()
+    expect(terminalShortcut(digit(2, { altKey: true, ctrlKey: true }), 'linux')).toBeNull()
+    expect(terminalShortcut(digit(3, { ctrlKey: true, type: 'keyup' }), 'darwin')).toBe(3)
+  })
+
+  it('is fixed, so Settings refuses it', () => {
+    expect(fixedShortcuts('darwin').get('Ctrl+4')).toBe('Switch terminal')
+    expect(fixedShortcuts('linux').get('Alt+4')).toBe('Switch terminal')
+  })
+})
+
+describe('heldNumbers', () => {
+  const held = (over: Partial<KeyEventLike>, platform: string): string | null =>
+    heldNumbers(press('Meta', over), platform)
+
+  it('names the numbers the held modifier picks', () => {
+    expect(held({ metaKey: true }, 'darwin')).toBe('workspace')
+    expect(held({ ctrlKey: true }, 'darwin')).toBe('terminal')
+    expect(held({ ctrlKey: true }, 'linux')).toBe('workspace')
+    expect(held({ altKey: true }, 'linux')).toBe('terminal')
+  })
+
+  it('is null for no modifier, a mix or Shift', () => {
+    expect(held({}, 'darwin')).toBeNull()
+    expect(held({ altKey: true }, 'darwin')).toBeNull()
+    expect(held({ metaKey: true, ctrlKey: true }, 'darwin')).toBeNull()
+    expect(held({ metaKey: true, shiftKey: true }, 'darwin')).toBeNull()
+    expect(held({ ctrlKey: true, altKey: true }, 'linux')).toBeNull()
   })
 })
 

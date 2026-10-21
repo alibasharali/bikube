@@ -3490,6 +3490,7 @@ button.dev-server-chip:focus-visible {
 .shell-run-here-line {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -3502,10 +3503,10 @@ button.dev-server-chip:focus-visible {
   flex: none;
 }
 
+/* Its full text when it fits beside the button, else the button goes under it. */
 .shell-run-here-from {
-  min-width: 0;
+  max-width: calc(100% - 18px);
   overflow: hidden;
-  font-family: var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

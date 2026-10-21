@@ -258,7 +258,7 @@ test('a stopped plain card moves into its own worktree and runs there from its n
   expect(git('branch', '--show-current')).toBe('main')
 })
 
-test("a shell runs in a worktree card's worktree from Run here, back in the workspace folder from Run in", async () => {
+test("a shell runs in a worktree card's worktree from Run in this worktree, back in the workspace folder from Run in", async () => {
   await showShells(page)
   await page.getByTestId('shell-add').click()
   const dialog = page.getByTestId('shell-dialog')
@@ -272,9 +272,10 @@ test("a shell runs in a worktree card's worktree from Run here, back in the work
   await expect(page.getByTestId('shell-menu-run-in')).toHaveCount(0)
   await page.keyboard.press('Escape')
 
-  // Beside a worktree card, Run here starts the shell in its worktree without opening it.
+  // Beside a worktree card, Run in this worktree starts the shell there without opening it.
   const branch = await worktreeCard('Add search')
-  await expect(where.getByTestId('shell-run-here')).toBeVisible()
+  await expect(where.getByTestId('shell-runs-in')).toHaveText('Runs in workspace folder')
+  await expect(where.getByTestId('shell-run-here')).toHaveText('Run in this worktree')
   await where.getByTestId('shell-run-here').click()
   await expect(where).toHaveAttribute('data-running', 'true')
   await expect(where.getByTestId('shell-where')).toHaveText(branch)

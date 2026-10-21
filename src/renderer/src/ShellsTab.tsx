@@ -37,7 +37,8 @@ import { workspaceStore } from './store'
  * a test watcher, a plain prompt), one row each with what it runs, where, and its dev servers.
  * The Default shell is always first; New shell adds a named one. A click on a row opens the shell,
  * starting it when stopped (a trigger's click runs it in the background unless it runs). Beside a worktree
- * card, each named shell offers Run here: from then on it runs in that card's worktree.
+ * card, each named shell says where it runs and offers Run in this worktree: from then on it runs
+ * in that card's worktree.
  */
 function ShellsTab({
   workspace,
@@ -337,8 +338,8 @@ function ShellRow({
       {runHere && worktreeCard?.worktree && (
         <span className="shell-run-here-line">
           {where?.worktree ? <TreePine {...SMALL_ICON} /> : <Folder {...SMALL_ICON} />}
-          <span className="shell-run-here-from">
-            {where?.worktree ? where.worktree.branch : 'workspace folder'}
+          <span className="shell-run-here-from" data-testid="shell-runs-in">
+            {where?.worktree ? `Runs in ${where.worktree.branch}` : 'Runs in workspace folder'}
           </span>
           <button
             type="button"
@@ -347,7 +348,7 @@ function ShellRow({
             title={`Run ${shell.title} in ${worktreeCard.title}'s worktree (${worktreeCard.worktree.branch})`}
             onClick={() => runShellIn(workspace, shell.id, worktreeCard.id, running, true)}
           >
-            Run here
+            Run in this worktree
           </button>
         </span>
       )}

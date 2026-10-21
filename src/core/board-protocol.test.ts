@@ -23,6 +23,33 @@ describe('serializeRequest / parseRequestLine', () => {
     expect(parseRequestLine(s)).toEqual({ ok: true, request: status })
   })
 
+  it('round-trips a list, a create and a rename; a list takes only text or json', () => {
+    for (const command of [
+      { command: 'list', format: 'json' },
+      { command: 'create', column: 'Backlog', title: 'Fix login' },
+      { command: 'rename', card: '.', title: 'New' }
+    ] as const) {
+      const sent = serializeRequest('c1', command)
+      expect(parseRequestLine(sent)).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'c1', ...command }
+      })
+    }
+    expect(parseRequestLine(line({ v: 1, cardId: 'c1', command: 'list', format: 'xml' }))).toEqual({
+      ok: false,
+      error: INVALID_REQUEST
+    })
+    expect(
+      parseRequestLine(line({ v: 1, cardId: 'c1', command: 'create', column: 'B', title: 1 }))
+    ).toEqual({ ok: false, error: INVALID_REQUEST })
+  })
+
+  it('carries a reply output both ways', () => {
+    const reply = serializeReply({ ok: true, output: 'c-new\n' })
+    expect(parseReplyLine(reply.trimEnd())).toEqual({ ok: true, output: 'c-new\n' })
+    expect(parseReplyLine(line({ ok: true, output: 3 }))).toBeNull()
+  })
+
   it('round-trips a session, and rejects one that is not a UUID', () => {
     const s = serializeRequest('c1', {
       command: 'session',

@@ -396,3 +396,157 @@ describe('answerBoardCommand', () => {
     })
   })
 })
+
+describe('answerBoardCommand: list, create and rename', () => {
+  const runtime = (id: string): { running: boolean; activity?: 'working'; status?: string } =>
+    id === 'c-api'
+      ? { running: true, activity: 'working', status: 'running tests' }
+      : { running: running(id) }
+
+  it("lists the calling card's workspace as JSON, columns in order with their cards", () => {
+    const store = setup()
+    const reply = answerBoardCommand(
+      store,
+      'c-web',
+      { command: 'list', format: 'json' },
+      running,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      runtime
+    )
+    if (!reply.ok || reply.output === undefined) throw new Error('no output')
+    const listing = JSON.parse(reply.output)
+    expect(listing.workspace).toEqual({ id: 'alpha', name: 'alpha', directory: '/tmp/drovr-alpha' })
+    expect(listing.columns.map((c: { name: string }) => c.name)).toEqual([
+      'Backlog',
+      'Running',
+      'Needs me',
+      'Done'
+    ])
+    expect(listing.columns[0].cards).toEqual([
+      { id: 'c-api', title: 'api', state: 'running', activity: 'working', status: 'running tests' },
+      { id: 'c-web', title: 'web', state: 'running', self: true },
+      { id: 'c-old', title: 'old', state: 'stopped' }
+    ])
+    expect(listing.columns[1].cards).toEqual([])
+  })
+
+  it('lists as lines for a person', () => {
+    const reply = answerBoardCommand(
+      setup(),
+      'c-web',
+      { command: 'list', format: 'text' },
+      running,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      runtime
+    )
+    expect(reply).toEqual({
+      ok: true,
+      output: [
+        'alpha (/tmp/drovr-alpha)',
+        '',
+        'Backlog (3)',
+        '  api  [c-api]  running, working',
+        '    status: running tests',
+        '  web  [c-web]  running, this card',
+        '  old  [c-old]  stopped',
+        '',
+        'Running (0)',
+        '',
+        'Needs me (0)',
+        '',
+        'Done (1)',
+        '  shipped  [c-done]  running',
+        ''
+      ].join('\n')
+    })
+  })
+
+  it('creates a card at the bottom of the column, not started, and answers with its id', () => {
+    const store = setup()
+    const reply = answerBoardCommand(
+      store,
+      'c-api',
+      { command: 'create', column: 'needs me', title: '  Fix login\n bug (NOT-12) ' },
+      running,
+      () => {}
+    )
+    const created = store.getState().workspaces[0].cards.at(-1)
+    expect(created).toMatchObject({
+      columnId: 'needs',
+      title: 'Fix login bug (NOT-12)',
+      startup: { kind: 'claude' }
+    })
+    expect(reply).toEqual({ ok: true, output: `${created?.id}\n` })
+  })
+
+  it('refuses a create with no title or an unknown column, changing nothing', () => {
+    const store = setup()
+    const before = store.getState()
+    expect(
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'create', column: 'Done', title: ' ' },
+        running,
+        () => {}
+      )
+    ).toEqual({ ok: false, error: 'board: a title is required' })
+    expect(
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'create', column: 'Later', title: 'x' },
+        running,
+        () => {}
+      )
+    ).toEqual({
+      ok: false,
+      error: 'board: no column "Later"; columns are: Backlog, Running, Needs me, Done'
+    })
+    expect(store.getState()).toBe(before)
+  })
+
+  it('renames a card by title or id; an empty title is refused', () => {
+    const store = setup()
+    expect(
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'rename', card: 'web', title: 'web app' },
+        running,
+        () => {}
+      )
+    ).toEqual({ ok: true })
+    expect(store.getState().workspaces[0].cards[1].title).toBe('web app')
+    expect(
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'rename', card: '.', title: '' },
+        running,
+        () => {}
+      )
+    ).toEqual({ ok: false, error: 'board: a title is required' })
+    expect(
+      answerBoardCommand(
+        store,
+        'c-api',
+        { command: 'rename', card: 'other', title: 'x' },
+        running,
+        () => {}
+      )
+    ).toEqual({ ok: false, error: 'board: no card "other" in this workspace' })
+  })
+
+  it('needs a calling card on the board', () => {
+    expect(
+      answerBoardCommand(setup(), 'c-gone', { command: 'list', format: 'text' }, running, () => {})
+    ).toEqual({ ok: false, error: NOT_IN_A_CARD })
+  })
+})

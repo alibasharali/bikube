@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   CLAUDE_INSTRUCTION,
+  LOCAL_CLAUDE_INSTRUCTION,
   CLAUDE_INSTRUCTION_FILE,
   CLAUDE_SETTINGS_FILE,
   claudeSettings
@@ -58,7 +59,15 @@ describe('the Claude settings file (#31 D15)', () => {
   it('ships in the bin directory beside board, with the instruction (D14, D16)', () => {
     const bin = join(__dirname, '..', '..', 'resources', 'bin')
     expect(readFileSync(join(bin, CLAUDE_SETTINGS_FILE), 'utf8')).toBe(claudeSettings())
-    expect(readFileSync(join(bin, CLAUDE_INSTRUCTION_FILE), 'utf8')).toBe(`${CLAUDE_INSTRUCTION}\n`)
+    expect(readFileSync(join(bin, CLAUDE_INSTRUCTION_FILE), 'utf8')).toBe(
+      `${LOCAL_CLAUDE_INSTRUCTION}\n`
+    )
+  })
+
+  it('tells local cards how to read the board and create cards', () => {
+    expect(LOCAL_CLAUDE_INSTRUCTION.startsWith(`${CLAUDE_INSTRUCTION} `)).toBe(true)
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$DROVR_BIN/board" list --json')
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$DROVR_BIN/board" create <column> <title>')
   })
 
   it('gives Claude the D16 instruction, with no backslash so the SSH copy stays fish-safe', () => {

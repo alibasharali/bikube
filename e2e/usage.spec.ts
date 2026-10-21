@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BOARD_USAGE } from '../src/core/board-args'
+import { BOARD_USAGE, SSH_BOARD_USAGE } from '../src/core/board-args'
 import { backToBoard, boardCard, closeCard, expectCardOpen } from './card-view'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -314,7 +314,7 @@ test("AC9: an SSH card's board doesn't know usage, and the card shows none", asy
   expect(await board(`board usage . ${join(root, 't.jsonl')}`)).toEqual({
     code: 2,
     stdout: '',
-    stderr: BOARD_USAGE
+    stderr: SSH_BOARD_USAGE
   })
   await backToBoard(page)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')

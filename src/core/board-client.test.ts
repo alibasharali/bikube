@@ -73,6 +73,23 @@ describe('runBoard', () => {
     })
   })
 
+  it("prints a reply's output to stdout (list, create)", async () => {
+    const handler = vi.fn(async () => ({ ok: true, output: 'c-new\n' }) as BoardReply)
+    await serve(handler)
+    expect(await board(['create', 'Backlog', 'Fix login'])).toEqual({
+      code: 0,
+      stdout: 'c-new\n',
+      stderr: ''
+    })
+    expect(handler).toHaveBeenCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'create',
+      column: 'Backlog',
+      title: 'Fix login'
+    })
+  })
+
   it("prints a refusal's reason to stderr and exits 1 (#9 D9)", async () => {
     await serve(async () => ({ ok: false, error: 'board: no card "ghost" in this workspace' }))
     expect(await board(['move', 'ghost', 'Done'])).toEqual({

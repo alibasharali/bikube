@@ -47,6 +47,23 @@ describe('BoardRelay', () => {
     await expect(reply).resolves.toEqual({ ok: false, error: 'board: x' })
   })
 
+  it("forwards a list and relays its answer's output, refusing a non-string output", async () => {
+    const reply = relay.handle({ v: 1, cardId: 'c1', command: 'list', format: 'json' })
+    expect(sent[0].command).toEqual({ command: 'list', format: 'json' })
+    expect(relay.answer(win, sent[0].requestId, { ok: true, output: 7 })).toBe(false)
+    expect(relay.answer(win, sent[0].requestId, { ok: true, output: '{}\n' })).toBe(true)
+    await expect(reply).resolves.toEqual({ ok: true, output: '{}\n' })
+  })
+
+  it('forwards a create and a rename with their titles', () => {
+    void relay.handle({ v: 1, cardId: 'c1', command: 'create', column: 'Backlog', title: 'x' })
+    void relay.handle({ v: 1, cardId: 'c1', command: 'rename', card: '.', title: 'y' })
+    expect(sent.map((s) => s.command)).toEqual([
+      { command: 'create', column: 'Backlog', title: 'x' },
+      { command: 'rename', card: '.', title: 'y' }
+    ])
+  })
+
   it('forwards a status command with its text', () => {
     void relay.handle({ v: 1, cardId: 'c1', command: 'status', card: 'web', text: 'hi' })
     expect(sent[0].command).toEqual({ command: 'status', card: 'web', text: 'hi' })

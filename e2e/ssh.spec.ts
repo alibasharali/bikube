@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { BOARD_USAGE } from '../src/core/board-args'
+import { SSH_BOARD_USAGE } from '../src/core/board-args'
 import { claudeSettings } from '../src/core/claude-hooks'
 import { addFakeAgents, agentLogLines } from './fake-agents'
 import { claudeLogLines, REMOTE_SETTINGS_ARGS } from './fake-claude'
@@ -854,7 +854,7 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   expect(await output('echo "$DROVR_CARD_ID"', 'id')).toBe(await cardId('api'))
   expect(await remoteRun('"$DROVR_BIN/board" help')).toEqual({
     code: 0,
-    stdout: BOARD_USAGE,
+    stdout: SSH_BOARD_USAGE,
     stderr: ''
   })
   await back()
@@ -874,7 +874,7 @@ test('#25 AC2, AC3: the same errors as a local card, and only its own card', asy
   expect(await remoteRun('board move . Nope')).toEqual(
     refused('board: no column "Nope"; columns are: Backlog, In Progress, Review, Done')
   )
-  expect(await remoteRun('board move')).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+  expect(await remoteRun('board move')).toEqual({ code: 2, stdout: '', stderr: SSH_BOARD_USAGE })
   expect(await remoteRun('board status web hey')).toEqual(ok)
 
   const web = await cardId('web')
@@ -977,7 +977,7 @@ test('#31 AC11: board activity works in an SSH card and its extra pane, cleared 
   expect(await remoteRun('board activity . busy')).toEqual({
     code: 2,
     stdout: '',
-    stderr: BOARD_USAGE
+    stderr: SSH_BOARD_USAGE
   })
 
   await splitRight(page)
@@ -991,7 +991,7 @@ test('#31 AC11: board activity works in an SSH card and its extra pane, cleared 
   expect(await remoteRun('board activity . busy', () => paneLines(1))).toEqual({
     code: 2,
     stdout: '',
-    stderr: BOARD_USAGE
+    stderr: SSH_BOARD_USAGE
   })
   expect(await remoteRun('board activity . working', () => paneLines(1))).toEqual(ok)
   await expectPill('Working')

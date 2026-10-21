@@ -30,7 +30,12 @@ export function listenForBoardRequests(): () => void {
           .workspaces.find((w) => w.cards.some((c) => c.id === card.id))
         if (workspace) continueAfterSetup(workspace.id, card)
       },
-      setCardUsage
+      setCardUsage,
+      (id) => {
+        const running = cardTerminals().runState(id)?.kind === 'running'
+        const status = cardTerminals().status(id)
+        return { running, activity: status?.activity, status: status?.agentStatus }
+      }
     )
   )
 }

@@ -4,9 +4,12 @@
  */
 import type { Activity } from './activity'
 import type { BoardCommand, SetupResult } from './board-args'
+import { boardListing, formatBoardListing, type CardRuntime } from './board-list'
 import {
   boardMoveTarget,
   cleanAgentStatus,
+  cleanCardTitle,
+  TITLE_REQUIRED,
   findCallingWorkspace,
   noSetupError,
   notRunningError,
@@ -25,26 +28,56 @@ import type { Card, WorkspaceStore } from './workspace-store'
  * only on the calling card, which must be running with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
  * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it. `usage`
  * needs a running card and hands the usage to `setUsage`, which keeps it runtime only (#50 D5, D7).
+ * `list` answers with the workspace's columns and cards (`runtime` gives each card's state);
+ * `create` adds a card, not started, at the bottom of a column and answers with its id; `rename`
+ * renames one. Both save through the store like any board change.
  */
 export function answerBoardCommand(
-  store: Pick<WorkspaceStore, 'getState' | 'moveCard' | 'setAgentSession' | 'clearCardSetup'>,
+  store: Pick<
+    WorkspaceStore,
+    'getState' | 'moveCard' | 'setAgentSession' | 'clearCardSetup' | 'createCard' | 'renameCard'
+  >,
   callingCardId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
   setAgentStatus: (cardId: string, text: string) => void,
   setActivity: (cardId: string, activity: Activity | null) => void = () => {},
   setupAnswered: (card: Card, result: SetupResult) => void = () => {},
-  setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {}
+  setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {},
+  runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) })
 ): BoardReply {
   const workspace = findCallingWorkspace(store.getState(), callingCardId)
   if (!workspace.ok) return workspace
   const ws = workspace.value
+  if (command.command === 'list') {
+    const listing = boardListing(ws, callingCardId, runtime)
+    const output =
+      command.format === 'json'
+        ? `${JSON.stringify(listing, null, 2)}\n`
+        : formatBoardListing(listing)
+    return { ok: true, output }
+  }
+  if (command.command === 'create') {
+    const title = cleanCardTitle(command.title)
+    if (!title) return { ok: false, error: TITLE_REQUIRED }
+    const column = resolveColumn(ws, command.column)
+    if (!column.ok) return column
+    const created = store.createCard(ws.id, column.value.id, title)
+    if (!created.ok) return { ok: false, error: `board: ${created.error.message}` }
+    return { ok: true, output: `${created.value.id}\n` }
+  }
   const card = resolveCard(ws, callingCardId, command.card)
   if (!card.ok) return card
   if (command.command === 'status') {
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
     setAgentStatus(card.value.id, cleanAgentStatus(command.text))
     return { ok: true }
+  }
+  if (command.command === 'rename') {
+    const title = cleanCardTitle(command.title)
+    if (!title) return { ok: false, error: TITLE_REQUIRED }
+    const renamed = store.renameCard(ws.id, card.value.id, title)
+    return renamed.ok ? { ok: true } : { ok: false, error: `board: ${renamed.error.message}` }
   }
   if (command.command === 'session') {
     // Drovr's Claude hooks: the session this card resumes from now on (a message sent, a /resume).

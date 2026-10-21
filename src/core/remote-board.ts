@@ -6,7 +6,7 @@
  * shell, fish included (#12 D3). Plain TS, no Node imports.
  */
 import { ACTIVITY_VALUES } from './activity'
-import { BOARD_USAGE } from './board-args'
+import { SSH_BOARD_USAGE } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { ANSWER_TIMEOUT_MS, BOARD_PROTOCOL_VERSION, NO_ANSWER } from './board-protocol'
 
@@ -70,7 +70,7 @@ use IO::Socket::UNIX;
 my $B = chr(92);
 my $Q = chr(34);
 my $NL = chr(10);
-my $USAGE = ${perlString(BOARD_USAGE)};
+my $USAGE = ${perlString(SSH_BOARD_USAGE)};
 sub fail { binmode STDERR, ":utf8"; print STDERR $_[0], $NL; exit 1 }
 my %KEY = (${entries(Object.entries(VALUE_KEYS), ' => ', perlString)});
 my %ACT = map { $_ => 1 } (${ACTIVITY_VALUES.map(perlString).join(', ')});
@@ -186,7 +186,7 @@ fail($NO);
 /** The python3 client: standard library only, arguments read as UTF-8 whatever the locale. */
 export function pythonClient(): string {
   return `import json, os, socket, stat, sys, time
-USAGE = ${pythonString(BOARD_USAGE)}
+USAGE = ${pythonString(SSH_BOARD_USAGE)}
 def out(stream, text, code):
     stream.buffer.write(text.encode("utf-8", "replace"))
     stream.flush()

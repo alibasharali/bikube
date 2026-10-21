@@ -89,6 +89,13 @@ export function cleanAgentStatus(text: string): string {
     : cleaned
 }
 
+/** A card title as `board create` and `board rename` take it: escapes removed, one line, trimmed. */
+export function cleanCardTitle(text: string): string {
+  return stripEscapes(text).replace(/\s+/g, ' ').trim()
+}
+
+export const TITLE_REQUIRED = 'board: a title is required'
+
 /** The refusal for `board status` on a card that isn't running (#9 D8). */
 export function notRunningError(card: Card): string {
   return `board: "${card.title}" is not running`

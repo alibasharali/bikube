@@ -2,8 +2,9 @@
  * The Claude settings file Drovr gives every Claude Code card (#31 D14, D15, D16): hooks that set
  * the calling card's activity with `board activity`, and a session start hook that tells Claude
  * to keep a one-line `board status`. The same text ships as `resources/bin/claude-settings.json`
- * and `resources/bin/claude-instruction.txt` (a test keeps them equal) and is written beside the
- * remote `board` in SSH cards. Plain TS.
+ * and `resources/bin/claude-instruction.txt` (the local instruction; a test keeps them equal) and
+ * is written beside the remote `board` in SSH cards, with the instruction SSH's `board` matches.
+ * Plain TS.
  */
 import type { Activity } from './activity'
 
@@ -25,6 +26,13 @@ export const CLAUDE_INSTRUCTION =
   'Tests green, PR ready for review. Run that command alone, as written: add nothing before or ' +
   "after it (no redirection, no || true, no ; or true). Do it silently: don't mention it to the " +
   'user. If it fails, ignore it and move on.'
+
+/** The local cards' instruction: their `board` also reads the board and creates cards. */
+export const LOCAL_CLAUDE_INSTRUCTION =
+  `${CLAUDE_INSTRUCTION} ` +
+  'When the user asks you to read this board or add cards to it (for example from their task ' +
+  `tracker), use "$DROVR_BIN/board" list --json and "$DROVR_BIN/board" create <column> <title>; ` +
+  `"$DROVR_BIN/board" help lists every command.`
 
 /** Every hook: a silent `board` call that never fails (D15). */
 const TIMEOUT = 5

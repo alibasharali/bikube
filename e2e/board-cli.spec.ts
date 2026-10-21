@@ -625,3 +625,49 @@ test('#31 AC11: board activity shows a pill until none, from the main and an ext
     refused('board: no card "old" in this workspace')
   )
 })
+
+test('board list shows the columns and cards, create adds a card it prints the id of, rename renames', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Done', 'shipped')
+  await back()
+  await newCard('Backlog', 'api')
+  const apiId = await writeCardId(alpha, 'api-id')
+
+  const created = await board(alpha, `board create 'in progress' 'Fix login (NOT-12)'`)
+  expect(created.code).toBe(0)
+  expect(created.stderr).toBe('')
+  const newId = created.stdout.trim()
+  expect(newId).not.toBe('')
+  expect(await board(alpha, `board rename shipped 'Shipped it'`)).toEqual(ok)
+
+  const listed = await board(alpha, 'board list --json')
+  expect(listed.code).toBe(0)
+  const listing = JSON.parse(listed.stdout)
+  expect(listing.workspace.name).toBe('alpha')
+  const cards = Object.fromEntries(
+    listing.columns.map((c: { name: string; cards: { id: string; title: string }[] }) => [
+      c.name,
+      c.cards.map((card) => ({ id: card.id, title: card.title }))
+    ])
+  )
+  expect(cards['Backlog']).toEqual([{ id: apiId, title: 'api' }])
+  expect(cards['In Progress']).toEqual([{ id: newId, title: 'Fix login (NOT-12)' }])
+  expect(cards['Done']).toEqual([{ id: expect.any(String), title: 'Shipped it' }])
+
+  const text = await board(alpha, 'board list')
+  expect(text.code).toBe(0)
+  expect(text.stdout).toContain(`  api  [${apiId}]  running, this card\n`)
+  expect(text.stdout).toContain(`  Fix login (NOT-12)  [${newId}]  stopped\n`)
+
+  expect(await board(alpha, `board create Later x`)).toEqual(
+    refused('board: no column "Later"; columns are: Backlog, In Progress, Review, Done')
+  )
+
+  // On the board: the new card is there, not started.
+  await back()
+  await expect(titlesIn('In Progress')).toHaveText(['Fix login (NOT-12)'])
+  await expect(card('Fix login (NOT-12)').getByTestId('card-status-label')).toHaveText('Stopped')
+  await expect(titlesIn('Done')).toHaveText(['Shipped it'])
+})

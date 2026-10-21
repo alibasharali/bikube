@@ -6,7 +6,12 @@
 import type { BoardCommand } from './board-args'
 import { NO_ANSWER } from './board-client'
 import { NOT_IN_A_CARD } from './board-commands'
-import { MAX_REQUEST_LINE_BYTES, type BoardReply, type BoardRequest } from './board-protocol'
+import {
+  MAX_REPLY_OUTPUT_LENGTH,
+  MAX_REQUEST_LINE_BYTES,
+  type BoardReply,
+  type BoardRequest
+} from './board-protocol'
 
 export const NO_WINDOW = 'board: Drovr has no open window'
 /** How long main waits for the window, under the CLI's 5 s so the CLI hears why (#9 D9). */
@@ -32,11 +37,20 @@ interface Pending<Owner> {
   timer: ReturnType<typeof setTimeout>
 }
 
-/** A reply as a window may send it: `{ ok: true }` or an error string of bounded length. */
+/**
+ * A reply as a window may send it: `{ ok: true }` with an optional output string, or an error
+ * string, each of bounded length.
+ */
 function asReply(value: unknown): BoardReply | null {
   if (typeof value !== 'object' || value === null) return null
-  const { ok, error } = value as { ok?: unknown; error?: unknown }
-  if (ok === true) return { ok: true }
+  const { ok, error, output } = value as { ok?: unknown; error?: unknown; output?: unknown }
+  if (ok === true) {
+    if (output === undefined) return { ok: true }
+    if (typeof output === 'string' && output.length <= MAX_REPLY_OUTPUT_LENGTH) {
+      return { ok: true, output }
+    }
+    return null
+  }
   if (ok === false && typeof error === 'string' && error.length <= MAX_REQUEST_LINE_BYTES) {
     return { ok: false, error }
   }
@@ -46,6 +60,12 @@ function asReply(value: unknown): BoardReply | null {
 /** The command in a request, without its version and calling card. */
 function commandOf(request: BoardRequest): BoardCommand {
   switch (request.command) {
+    case 'list':
+      return { command: 'list', format: request.format }
+    case 'create':
+      return { command: 'create', column: request.column, title: request.title }
+    case 'rename':
+      return { command: 'rename', card: request.card, title: request.title }
     case 'move':
       return { command: 'move', card: request.card, column: request.column }
     case 'status':

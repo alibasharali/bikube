@@ -4,7 +4,7 @@
  */
 
 import { isActivityValue } from './activity'
-import { isSessionId, isSetupResult } from './board-args'
+import { isListFormat, isSessionId, isSetupResult } from './board-args'
 import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-pricing'
 
@@ -22,7 +22,11 @@ export const ANSWER_TIMEOUT_MS = 5000
 /** A request as sent: the calling card's id plus one command. */
 export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand
 
-export type BoardReply = { ok: true } | { ok: false; error: string }
+/** `output`, when present, is what the CLI prints to stdout (`board list`, `board create`). */
+export type BoardReply = { ok: true; output?: string } | { ok: false; error: string }
+
+/** Longest output a reply may carry, in characters. */
+export const MAX_REPLY_OUTPUT_LENGTH = 1_000_000
 
 export type ParsedRequest = { ok: true; request: BoardRequest } | { ok: false; error: string }
 
@@ -40,6 +44,9 @@ export function isOverLineLimit(line: string): boolean {
 }
 
 const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
+  list: ['v', 'cardId', 'command', 'format'],
+  create: ['v', 'cardId', 'command', 'column', 'title'],
+  rename: ['v', 'cardId', 'command', 'card', 'title'],
   move: ['v', 'cardId', 'command', 'card', 'column'],
   status: ['v', 'cardId', 'command', 'card', 'text'],
   activity: ['v', 'cardId', 'command', 'card', 'activity'],
@@ -89,7 +96,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The request in one received line (a trailing newline is ignored), or the error reason to
- * reply with: anything but exactly a version-1 move, status, activity (#31 D12), session, setup
+ * reply with: anything but exactly a version-1 list (format `text` or `json`), create, rename, move, status, activity (#31 D12), session, setup
  * (#39 D4) or usage (#50 D5) with string fields, an activity's or a setup's value being one `board`
  * takes and a usage shaped as `asUsage` checks, is refused.
  */
@@ -107,6 +114,9 @@ export function parseRequestLine(line: string): ParsedRequest {
   }
   const command = value.command
   if (
+    command !== 'list' &&
+    command !== 'create' &&
+    command !== 'rename' &&
     command !== 'move' &&
     command !== 'status' &&
     command !== 'activity' &&
@@ -125,6 +135,18 @@ export function parseRequestLine(line: string): ParsedRequest {
     )
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
   const { cardId, card } = value as Record<string, string>
+  if (command === 'list') {
+    const format = value.format
+    if (!isListFormat(format)) return { ok: false, error: INVALID_REQUEST }
+    return { ok: true, request: { v: 1, cardId, command, format } }
+  }
+  if (command === 'create') {
+    const { column, title } = value as Record<string, string>
+    return { ok: true, request: { v: 1, cardId, command, column, title } }
+  }
+  if (command === 'rename') {
+    return { ok: true, request: { v: 1, cardId, command, card, title: value.title as string } }
+  }
   if (command === 'move') {
     return { ok: true, request: { v: 1, cardId, command, card, column: value.column as string } }
   }
@@ -153,7 +175,8 @@ export function parseRequestLine(line: string): ParsedRequest {
 
 /** The reply line main writes, newline included. */
 export function serializeReply(reply: BoardReply): string {
-  return `${JSON.stringify(reply.ok ? { ok: true } : { ok: false, error: reply.error })}\n`
+  if (!reply.ok) return `${JSON.stringify({ ok: false, error: reply.error })}\n`
+  return `${JSON.stringify(reply.output === undefined ? { ok: true } : { ok: true, output: reply.output })}\n`
 }
 
 /** The reply in one received line, or null when it is not a reply. */
@@ -165,7 +188,10 @@ export function parseReplyLine(line: string): BoardReply | null {
     return null
   }
   if (!isRecord(value)) return null
-  if (value.ok === true) return { ok: true }
+  if (value.ok === true) {
+    if (value.output === undefined) return { ok: true }
+    return typeof value.output === 'string' ? { ok: true, output: value.output } : null
+  }
   if (value.ok === false && typeof value.error === 'string')
     return { ok: false, error: value.error }
   return null

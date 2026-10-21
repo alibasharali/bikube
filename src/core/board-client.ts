@@ -98,7 +98,10 @@ export async function runBoard(
     command = args.command
   }
   const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), timeoutMs)
-  if (reply.ok) return 0
+  if (reply.ok) {
+    if (reply.output !== undefined) out.stdout(reply.output)
+    return 0
+  }
   out.stderr(`${reply.error}\n`)
   return 1
 }

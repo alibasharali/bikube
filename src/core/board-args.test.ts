@@ -121,4 +121,31 @@ describe('parseBoardArgs', () => {
     expect(BOARD_USAGE).not.toMatch(/board usage/)
     expect(BOARD_USAGE).not.toMatch(/^ +usage\b/m)
   })
+
+  it('parses list, list --json, create and rename', () => {
+    expect(parseBoardArgs(['list'])).toEqual({
+      kind: 'command',
+      command: { command: 'list', format: 'text' }
+    })
+    expect(parseBoardArgs(['list', '--json'])).toEqual({
+      kind: 'command',
+      command: { command: 'list', format: 'json' }
+    })
+    expect(parseBoardArgs(['create', 'Backlog', 'Fix login'])).toEqual({
+      kind: 'command',
+      command: { command: 'create', column: 'Backlog', title: 'Fix login' }
+    })
+    expect(parseBoardArgs(['rename', '.', 'New title'])).toEqual({
+      kind: 'command',
+      command: { command: 'rename', card: '.', title: 'New title' }
+    })
+    for (const argv of [
+      ['list', 'x'],
+      ['list', '--json', 'x'],
+      ['create', 'Backlog'],
+      ['rename', '.']
+    ]) {
+      expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
+    }
+  })
 })

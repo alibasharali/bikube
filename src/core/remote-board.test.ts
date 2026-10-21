@@ -5,7 +5,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BOARD_USAGE } from './board-args'
+import { SSH_BOARD_USAGE } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { NO_ANSWER, type BoardReply, type BoardRequest } from './board-protocol'
 import { startBoardServer, type BoardServer } from './board-server'
@@ -171,7 +171,7 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
         ['activity', '.', ''],
         ['activity', '.']
       ]) {
-        expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+        expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: SSH_BOARD_USAGE })
       }
       expect(handler).not.toHaveBeenCalled()
     }
@@ -202,13 +202,13 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
 
   it.skipIf(!language.path)('prints the usage for help, exit 0', async () => {
     for (const args of [[], ['help'], ['--help']]) {
-      expect(await run(args, env())).toEqual({ code: 0, stdout: BOARD_USAGE, stderr: '' })
+      expect(await run(args, env())).toEqual({ code: 0, stdout: SSH_BOARD_USAGE, stderr: '' })
     }
   })
 
   it.skipIf(!language.path)('prints the usage to stderr for a wrong shape, exit 2', async () => {
     for (const args of [['move'], ['move', '.'], ['jump', '.', 'x'], ['status', '.', 'a', 'b']]) {
-      expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: BOARD_USAGE })
+      expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: SSH_BOARD_USAGE })
     }
   })
 

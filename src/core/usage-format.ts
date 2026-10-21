@@ -3,6 +3,7 @@
  * DOM or Node imports, so the renderer and Vitest run it. Numbers are grouped the en-US way
  * whatever the locale.
  */
+import { contextLevel, contextPercent, contextWindow } from './claude-context'
 import type { ClaudeUsage } from './claude-pricing'
 
 const grouped = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
@@ -33,21 +34,32 @@ export function formatCost(cost: number): string {
 export const hasUsage = (u: ClaudeUsage | undefined): u is ClaudeUsage =>
   u !== undefined && u.tokens > 0
 
-/** The card's dim line (D8): `≈$0.02 · 3k ctx`, or `2k tokens · 1k ctx` when the cost is unknown. */
-export function usageLine(u: ClaudeUsage): string {
-  const amount = u.cost === undefined ? `${formatTokens(u.tokens)} tokens` : formatCost(u.cost)
-  return `${amount} · ${formatTokens(u.context)} ctx`
+/** A card's context bar: how much of its conversation's window is used. */
+export interface ContextUse {
+  used: number
+  window: number
+  percent: number
+  level: 'ok' | 'high' | 'full'
 }
 
-/** The card line's tooltip (D8), one line per `\n`; no model line when there is none. */
+export function contextUse(u: ClaudeUsage): ContextUse {
+  const window = contextWindow(u.model, u.context)
+  const percent = contextPercent(u.context, window)
+  return { used: u.context, window, percent, level: contextLevel(percent) }
+}
+
+/** The bar's label: `42% context`. */
+export const contextLabel = (use: ContextUse): string => `${use.percent}% context`
+
+/** The bar's tooltip, one line per `\n`: the context, then the token breakdown and the model. */
 export function usageTooltip(u: ClaudeUsage): string {
+  const use = contextUse(u)
   return [
-    'Claude Code usage (estimate)',
+    `Context ${formatCount(use.used)} of ${formatCount(use.window)} tokens (${use.percent}%)`,
     `Input ${formatCount(u.input)}`,
     `Output ${formatCount(u.output)}`,
     `Cache write ${formatCount(u.cacheWrite)}`,
     `Cache read ${formatCount(u.cacheRead)}`,
-    `Context ${formatCount(u.context)}`,
     ...(u.model === null ? [] : [`Model ${u.model}`])
   ].join('\n')
 }

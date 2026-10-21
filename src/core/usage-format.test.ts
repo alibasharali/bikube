@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { ClaudeUsage } from './claude-pricing'
 import {
+  contextLabel,
+  contextUse,
   formatCost,
   formatTokens,
   hasUsage,
-  usageLine,
   usageTooltip,
   workspaceUsage
 } from './usage-format'
 
-// A card's usage line and tooltip (#50 D8) and a workspace's total (D9).
+// A card's context bar and tooltip and a workspace's total (#50 D9).
 
 const usage = (u: Partial<ClaudeUsage>): ClaudeUsage => ({
   input: 0,
@@ -72,14 +73,18 @@ describe('formatCost', () => {
   })
 })
 
-describe('usageLine', () => {
-  it('shows the cost and context', () => {
-    expect(usageLine(ac1)).toBe('≈$0.02 · 3k ctx')
-    expect(usageLine(ac4)).toBe('≈$25.00 · 0 ctx')
-  })
-
-  it('shows the tokens when the cost is unknown', () => {
-    expect(usageLine(ac3)).toBe('2k tokens · 1k ctx')
+describe('contextUse', () => {
+  it("is the context's share of the model's window, labelled as a percentage", () => {
+    expect(contextUse(ac1)).toEqual({ used: 3010, window: 200_000, percent: 2, level: 'ok' })
+    expect(contextLabel(contextUse(ac1))).toBe('2% context')
+    expect(contextUse(ac4).percent).toBe(0)
+    const opus = usage({ tokens: 1, context: 750_000, model: 'claude-opus-5-5' })
+    expect(contextUse(opus)).toEqual({
+      used: 750_000,
+      window: 1_000_000,
+      percent: 75,
+      level: 'high'
+    })
   })
 })
 
@@ -92,14 +97,13 @@ describe('hasUsage', () => {
 })
 
 describe('usageTooltip', () => {
-  it('lists the full grouped counts and the model', () => {
+  it('gives the context of its window, then the full grouped counts and the model', () => {
     expect(usageTooltip(ac1).split('\n')).toEqual([
-      'Claude Code usage (estimate)',
+      'Context 3,010 of 200,000 tokens (2%)',
       'Input 1,010',
       'Output 700',
       'Cache write 2,000',
       'Cache read 3,000',
-      'Context 3,010',
       'Model claude-sonnet-4-5'
     ])
   })

@@ -176,12 +176,11 @@ function ac1Transcript(dir: string): void {
 }
 
 const AC1_TOOLTIP = [
-  'Claude Code usage (estimate)',
+  'Context 3,010 of 200,000 tokens (2%)',
   'Input 1,010',
   'Output 700',
   'Cache write 2,000',
   'Cache read 3,000',
-  'Context 3,010',
   'Model claude-sonnet-4-5'
 ].join('\n')
 
@@ -195,13 +194,13 @@ test('AC1, AC3: the board card shows the reported usage and its breakdown', asyn
 
   expect(await board('board usage . t.jsonl')).toEqual(ok)
   await backToBoard(page)
-  await expect(usageOf('api')).toHaveText('≈$0.02 · 3k ctx')
+  await expect(usageOf('api')).toHaveText('2% context')
   await expect(usageOf('api')).toHaveAttribute('title', AC1_TOOLTIP)
 
   await openCard('api')
   expect(await board('board usage . gpt.jsonl')).toEqual(ok)
   await backToBoard(page)
-  await expect(usageOf('api')).toHaveText('2k tokens · 1k ctx')
+  await expect(usageOf('api')).toHaveText('1% context')
   const tooltip = await usageOf('api').getAttribute('title')
   expect(tooltip).toContain('Model gpt-x')
   expect(tooltip).not.toContain('$')
@@ -219,7 +218,7 @@ test('AC4: a report replaces the line, Close keeps it, an empty transcript clear
   expect(await board('board usage . t.jsonl')).toEqual(ok)
   expect(await board('board usage . opus.jsonl')).toEqual(ok)
   await backToBoard(page)
-  await expect(usageOf('api')).toHaveText('≈$25.00 · 0 ctx')
+  await expect(usageOf('api')).toHaveText('0% context')
 
   // Closed, the card keeps its usage (#50 D7).
   await openCard('api')
@@ -227,13 +226,13 @@ test('AC4: a report replaces the line, Close keeps it, an empty transcript clear
   await page.getByTestId('confirm-close').click()
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
-  await expect(usageOf('api')).toHaveText('≈$25.00 · 0 ctx')
+  await expect(usageOf('api')).toHaveText('0% context')
 
   // Opened again it starts, still showing it, until an empty transcript clears it.
   await openCard('api')
   await backToBoard(page)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
-  await expect(usageOf('api')).toHaveText('≈$25.00 · 0 ctx')
+  await expect(usageOf('api')).toHaveText('0% context')
   await openCard('api')
   expect(await board('board usage . empty.jsonl')).toEqual(ok)
   await backToBoard(page)
@@ -243,7 +242,7 @@ test('AC4: a report replaces the line, Close keeps it, an empty transcript clear
   await openCard('api')
   expect(await board('board usage . t.jsonl')).toEqual(ok)
   await backToBoard(page)
-  await expect(usageOf('api')).toHaveText('≈$0.02 · 3k ctx')
+  await expect(usageOf('api')).toHaveText('2% context')
   await card('api').getByTestId('card-menu').click()
   await page.getByTestId('card-menu-delete').click()
   await page.getByTestId('confirm-delete').click()
@@ -282,7 +281,7 @@ test('AC8: usage is not kept across a restart nor saved', async () => {
   ac1Transcript(alpha)
   expect(await board('board usage . t.jsonl')).toEqual(ok)
   await backToBoard(page)
-  await expect(usageOf('api')).toHaveText('≈$0.02 · 3k ctx')
+  await expect(usageOf('api')).toHaveText('2% context')
 
   await app?.close()
   await launch()

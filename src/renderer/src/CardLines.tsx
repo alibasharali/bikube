@@ -1,13 +1,13 @@
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { cardPill, compactStatus, type CardStatus } from '../../core/card-status'
 import type { ClaudeUsage } from '../../core/claude-pricing'
-import { hasUsage, usageLine, usageTooltip } from '../../core/usage-format'
+import { contextLabel, contextUse, hasUsage, usageTooltip } from '../../core/usage-format'
 
 /**
  * A card's lines under its title (#31 D11): the status row with its label, or the setup's pill
  * (#39 D5), then, while running, the agent status (#9 D8) on up to 2 lines with its full text as
- * tooltip and the last output line in the terminal font, and last the Claude Code usage line
- * (#50 D8) when it has usage, running or not, its token breakdown as tooltip. While running, its
+ * tooltip and the last output line in the terminal font, and last the Claude Code context bar
+ * when it has usage, running or not: how full its window is, its token breakdown as tooltip. While running, its
  * status and activity (D13) are the icon before the title, as in the sidebar; Running and the
  * activity stay here for screen readers. The stop button (D10) sits beside the status row,
  * outside the card's open button (see `CardItem`). A card shown in its own window has the
@@ -73,12 +73,35 @@ function CardLines({
           {status.lastLine}
         </span>
       )}
-      {hasUsage(usage) && (
-        <span className="card-usage" data-testid="card-usage" title={usageTooltip(usage)}>
-          {usageLine(usage)}
-        </span>
-      )}
+      {hasUsage(usage) && <ContextBar usage={usage} />}
     </>
+  )
+}
+
+/** How full the card's Claude Code context window is: a thin bar and its percentage. */
+function ContextBar({ usage }: { usage: ClaudeUsage }): React.JSX.Element {
+  const use = contextUse(usage)
+  return (
+    <span
+      className="card-usage"
+      data-testid="card-usage"
+      data-level={use.level}
+      title={usageTooltip(usage)}
+    >
+      <span
+        className="card-context-track"
+        role="meter"
+        aria-label="Context used"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={use.percent}
+      >
+        <span className="card-context-fill" style={{ width: `${use.percent}%` }} />
+      </span>
+      <span className="card-context-text" data-testid="card-context-text">
+        {contextLabel(use)}
+      </span>
+    </span>
   )
 }
 

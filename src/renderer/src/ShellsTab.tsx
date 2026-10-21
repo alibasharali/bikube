@@ -37,8 +37,8 @@ import { workspaceStore } from './store'
  * a test watcher, a plain prompt), one row each with what it runs, where, and its dev servers.
  * The Default shell is always first; New shell adds a named one. A click on a row opens the shell,
  * starting it when stopped (a trigger's click runs it in the background unless it runs). Beside a worktree
- * card, each named shell says where it runs and offers Run in this worktree: from then on it runs
- * in that card's worktree.
+ * card, each named shell offers Run in this worktree (▶ and the worktree icon, beside where it
+ * runs): from then on it runs in that card's worktree.
  */
 function ShellsTab({
   workspace,
@@ -87,6 +87,11 @@ function ShellsTab({
       )}
     </div>
   )
+}
+
+/** A folder's last name: `/home/me/drovr/` → `drovr`. */
+function folderName(directory: string): string {
+  return directory.replace(/\/+$/, '').split('/').pop() || directory
 }
 
 /**
@@ -198,12 +203,6 @@ function ShellRow({
         <span className="shell-command" data-testid="shell-row-command">
           {command || 'Plain shell'}
         </span>
-        {where?.worktree && !runHere && (
-          <span className="shell-where" data-testid="shell-where" title={where.directory}>
-            <TreePine {...SMALL_ICON} />
-            <span>{where.worktree.branch}</span>
-          </span>
-        )}
       </button>
       <span className="shell-row-actions">
         {running ? (
@@ -335,23 +334,30 @@ function ShellRow({
           )}
         </MenuButton>
       </span>
-      {runHere && worktreeCard?.worktree && (
-        <span className="shell-run-here-line">
-          {where?.worktree ? <TreePine {...SMALL_ICON} /> : <Folder {...SMALL_ICON} />}
-          <span className="shell-run-here-from" data-testid="shell-runs-in">
-            {where?.worktree ? `Runs in ${where.worktree.branch}` : 'Runs in workspace folder'}
-          </span>
+      <span
+        className="shell-where"
+        data-testid="shell-where"
+        data-worktree={where?.worktree ? 'true' : undefined}
+        title={where?.directory ?? workspace.directory}
+      >
+        {where?.worktree ? <TreePine {...SMALL_ICON} /> : <Folder {...SMALL_ICON} />}
+        <span className="shell-where-text" data-testid="shell-where-text">
+          {where?.worktree ? where.worktree.branch : `/${folderName(workspace.directory)}`}
+        </span>
+        {runHere && worktreeCard?.worktree && (
           <button
             type="button"
-            className="shell-run-here"
+            className="icon-btn shell-run-here"
             data-testid="shell-run-here"
-            title={`Run ${shell.title} in ${worktreeCard.title}'s worktree (${worktreeCard.worktree.branch})`}
+            aria-label={`Run ${shell.title} in this worktree`}
+            title={`Run ${shell.title} in this worktree (${worktreeCard.worktree.branch})`}
             onClick={() => runShellIn(workspace, shell.id, worktreeCard.id, running, true)}
           >
-            Run in this worktree
+            <Play {...SMALL_ICON} />
+            <TreePine {...SMALL_ICON} />
           </button>
-        </span>
-      )}
+        )}
+      </span>
       {running && <DevServerChips cardId={shell.id} />}
       {deleting && (
         <ConfirmDialog

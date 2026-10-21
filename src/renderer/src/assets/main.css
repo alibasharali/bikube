@@ -3460,9 +3460,15 @@ button.dev-server-chip:focus-visible {
 }
 
 .shell-where {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+}
+
+/* In a worktree: the branch in the accent colour; the workspace's folder stays muted. */
+.shell-where[data-worktree='true'] {
   color: var(--accent);
 }
 
@@ -3470,7 +3476,8 @@ button.dev-server-chip:focus-visible {
   flex: none;
 }
 
-.shell-where > span {
+.shell-where-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3486,42 +3493,15 @@ button.dev-server-chip:focus-visible {
   height: 24px;
 }
 
-/* Beside a worktree card: where the shell runs now, and Run here to move it into that worktree. */
-.shell-run-here-line {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding-left: var(--shell-indent);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-.shell-run-here-line svg {
-  flex: none;
-}
-
-/* Its full text when it fits beside the button, else the button goes under it. */
-.shell-run-here-from {
-  max-width: calc(100% - 18px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* Run in this worktree, beside where the shell runs: ▶ and the worktree icon. */
 .shell-run-here {
   flex: none;
+  width: auto;
+  height: 20px;
   margin-left: auto;
-  padding: 1px 6px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  padding: 0 4px;
+  gap: 1px;
   color: var(--accent);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .shell-run-here:hover {

@@ -274,11 +274,16 @@ test("a shell runs in a worktree card's worktree from Run in this worktree, back
 
   // Beside a worktree card, Run in this worktree starts the shell there without opening it.
   const branch = await worktreeCard('Add search')
-  await expect(where.getByTestId('shell-runs-in')).toHaveText('Runs in workspace folder')
-  await expect(where.getByTestId('shell-run-here')).toHaveText('Run in this worktree')
+  // Where it runs, always shown: the workspace's folder by name, then Run in this worktree.
+  const runsIn = where.getByTestId('shell-where-text')
+  await expect(runsIn).toHaveText('/repo')
+  await expect(where.getByTestId('shell-run-here')).toHaveAttribute(
+    'aria-label',
+    'Run Where in this worktree'
+  )
   await where.getByTestId('shell-run-here').click()
   await expect(where).toHaveAttribute('data-running', 'true')
-  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await expect(runsIn).toHaveText(branch)
   await expect(where.getByTestId('shell-run-here')).toHaveCount(0)
   await expectCardOpen(page, 'Add search')
   await where.getByTestId('shell-open').click()
@@ -291,13 +296,13 @@ test("a shell runs in a worktree card's worktree from Run in this worktree, back
 
   // On the board, Run in moves it back: it restarts in the workspace folder.
   await backToBoard(page)
-  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await expect(runsIn).toHaveText(branch)
   await where.getByTestId('shell-menu').click()
   const runIn = page.getByTestId('shell-menu-run-in')
   await expect(runIn).toHaveText(['Workspace folder', `Add search · ${branch}`])
   await expect(runIn.nth(1)).toHaveAttribute('aria-checked', 'true')
   await runIn.first().click()
-  await expect(where.getByTestId('shell-where')).toHaveCount(0)
+  await expect(runsIn).toHaveText('/repo')
   await where.getByTestId('shell-open').click()
   await expectCardOpen(page, 'Where')
   await expect.poll(lines).toContain('at=main')
@@ -306,10 +311,10 @@ test("a shell runs in a worktree card's worktree from Run in this worktree, back
   // Moved there again, a deleted worktree card leaves it in the workspace folder.
   await where.getByTestId('shell-menu').click()
   await page.getByTestId('shell-menu-run-in').nth(1).click()
-  await expect(where.getByTestId('shell-where')).toHaveText(branch)
+  await expect(runsIn).toHaveText(branch)
   await card('Add search').getByTestId('card-menu').click()
   await page.getByTestId('card-menu-delete').click()
   await page.getByTestId('delete-keep-worktree').click()
   await expect(card('Add search')).toHaveCount(0)
-  await expect(where.getByTestId('shell-where')).toHaveCount(0)
+  await expect(runsIn).toHaveText('/repo')
 })

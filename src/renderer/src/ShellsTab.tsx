@@ -97,7 +97,8 @@ function folderName(directory: string): string {
 
 /**
  * Moves a named shell to `cardId`'s worktree (null: the workspace's folder): a running shell
- * starts again there; `start` starts a stopped one too (a trigger in the background).
+ * starts again there, unless it runs there already; `start` starts a stopped one too (a trigger
+ * in the background).
  */
 function runShellIn(
   workspace: Workspace,
@@ -106,9 +107,12 @@ function runShellIn(
   running: boolean,
   start: boolean
 ): void {
+  const named = workspace.shells.find((s) => s.id === shellId) ?? null
+  const moved = (shellWorktreeCard(workspace, named)?.id ?? null) !== cardId
   if (!workspaceStore.setShellRunIn(workspace.id, shellId, cardId).ok) return
-  if (running) restartCard(workspace.id, shellId)
-  else if (start) {
+  if (running) {
+    if (moved) restartCard(workspace.id, shellId)
+  } else if (start) {
     const trigger = workspace.shells.find((s) => s.id === shellId)?.type === 'trigger'
     if (trigger) startInBackground(workspace.id, shellId)
     else startCard(workspace.id, shellId)

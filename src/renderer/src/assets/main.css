@@ -460,20 +460,10 @@ button {
   font-weight: 600;
 }
 
-/* What a terminal runs (an agent, a Custom command): a faint tint, its logo and its stretch of
-   the tree's line in the kind's colour, as the board's tag. Shells stay neutral. */
+/* What a terminal runs (an agent, a Custom command): its logo and its stretch of the tree's line
+   in the kind's colour, as the board's tag. Shells stay neutral. */
 .workspace-terminals > li {
   position: relative;
-}
-
-.workspace-terminals > li[data-kind]:not([data-kind='shell']) .workspace-terminal:not(.active) {
-  background: color-mix(in srgb, var(--kind) 7%, transparent);
-}
-
-.workspace-terminals
-  > li[data-kind]:not([data-kind='shell'])
-  .workspace-terminal:not(.active):hover {
-  background: color-mix(in srgb, var(--kind) 14%, transparent);
 }
 
 .workspace-terminals > li[data-kind]:not([data-kind='shell'])::before {

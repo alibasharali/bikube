@@ -11,7 +11,14 @@ const workspace: Workspace = {
   nextCardNumber: 1,
   defaultStartup: { kind: 'claude' },
   shells: [
-    { id: 's1', name: 'Dev server', command: 'npm run dev', autostart: true, autoClose: false }
+    {
+      id: 's1',
+      name: 'Dev server',
+      command: 'npm run dev',
+      autostart: true,
+      autoClose: false,
+      background: false
+    }
   ],
   worktreeSetup: ''
 }
@@ -29,7 +36,7 @@ describe('workspace shells as cards', () => {
     const closing = (command: string, autoClose: boolean): boolean | undefined =>
       shellCards({
         ...workspace,
-        shells: [{ id: 's1', name: 'Dev', command, autostart: false, autoClose }]
+        shells: [{ id: 's1', name: 'Dev', command, autostart: false, autoClose, background: false }]
       })[1]!.exitAfterStartup
     expect(closing('npm run dev', true)).toBe(true)
     expect(closing('npm run dev', false)).toBeUndefined()

@@ -145,7 +145,8 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
       name: s.name,
       command: typeof s.command === 'string' ? s.command : '',
       autostart: s.autostart === true,
-      autoClose: s.autoClose === true
+      autoClose: s.autoClose === true,
+      background: s.background === true
     })
     if (!checked.ok || checked.value.name !== s.name) return 'bad shell'
     if (shells.some((other) => other.id === s.id)) return 'duplicate shell'

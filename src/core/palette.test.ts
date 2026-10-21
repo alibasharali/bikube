@@ -110,8 +110,22 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
   ])
   const beta = workspace('b', 'Beta', [card('three', 'three')], {
     shells: [
-      { id: 's1', name: 'Dev server', command: 'npm run dev', autostart: false, autoClose: false },
-      { id: 's2', name: 'Tests', command: '', autostart: false, autoClose: false }
+      {
+        id: 's1',
+        name: 'Dev server',
+        command: 'npm run dev',
+        autostart: false,
+        autoClose: false,
+        background: false
+      },
+      {
+        id: 's2',
+        name: 'Tests',
+        command: '',
+        autostart: false,
+        autoClose: false,
+        background: false
+      }
     ]
   })
   const gamma = workspace('g', 'Gamma', [card('four', 'four')])

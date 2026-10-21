@@ -20,12 +20,14 @@ export interface OpenTerminal {
 
 /**
  * The running cards and shells, by workspace in sidebar order, each workspace's cards in column
- * order, then its shells (the Default shell first).
+ * order, then its shells (the Default shell first). A background shell is left out until it has
+ * been opened (`opened`).
  */
 export function openTerminals(
   workspaces: readonly Workspace[],
   isRunning: (cardId: string) => boolean,
-  activity: (cardId: string) => Activity | undefined
+  activity: (cardId: string) => Activity | undefined,
+  opened: (shellId: string) => boolean = () => true
 ): OpenTerminal[] {
   const row = (
     kind: OpenTerminal['kind'],
@@ -45,6 +47,7 @@ export function openTerminals(
     ),
     ...shellCards(w)
       .filter((s) => isRunning(s.id))
+      .filter((s) => !w.shells.find((named) => named.id === s.id)?.background || opened(s.id))
       .map((s) =>
         row(
           'shell',

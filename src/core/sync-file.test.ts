@@ -328,7 +328,8 @@ describe('shells in the sync file', () => {
       name: 'Dev',
       command: 'npm run dev',
       autostart: true,
-      autoClose: true
+      autoClose: true,
+      background: false
     }
     const state: WorkspaceState = {
       activeId: 'w',

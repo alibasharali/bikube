@@ -15,6 +15,7 @@ import {
 } from '../../core/view-memory'
 import { nextWaitingCard } from '../../core/waiting'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
+import { startInBackground } from './background-shells'
 import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Workspace } from '../../core/workspace-store'
@@ -205,7 +206,8 @@ function App(): React.JSX.Element {
     autostarted.current.add(active.id)
     for (const shell of active.shells) {
       if (shell.autostart && cardTerminals().runState(shell.id)?.kind !== 'running') {
-        startCard(active.id, shell.id)
+        if (shell.background) startInBackground(active.id, shell.id)
+        else startCard(active.id, shell.id)
       }
     }
   }, [active])

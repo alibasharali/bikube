@@ -1119,8 +1119,19 @@ describe('shells', () => {
       name: 'Web',
       command: 'npm start',
       autostart: false,
-      autoClose: true
+      autoClose: true,
+      background: false
     })
+    expect(
+      ok(
+        s.updateShell(w.id, dev.id, {
+          name: 'Web',
+          command: '',
+          autostart: false,
+          background: true
+        })
+      ).background
+    ).toBe(true)
     // Closing after the command types `<command>; exit`: endings and comments that break it.
     for (const command of ['npm run dev;', 'npm run dev &', 'a |', 'a &&', 'npm run dev # note']) {
       expect(

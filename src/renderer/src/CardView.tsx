@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { markOpened } from './background-shells'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
@@ -188,6 +189,8 @@ function CardView({
   // The main window, or the card's own window (#53 D5): its keys, dialogs and focus are that one's.
   const view = useViewWindow()
   const runState = useCardRunState(card.id)
+  // Shown here, a background shell is an ordinary one from now on.
+  useEffect(() => markOpened(card.id), [card.id])
   const [closing, setClosing] = useState(false)
   // A card that stops or fails while its Close dialog is open has nothing left to close.
   if (closing && runState.kind !== 'running') setClosing(false)

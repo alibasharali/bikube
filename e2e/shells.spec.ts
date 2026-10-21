@@ -234,3 +234,47 @@ test('#48 AC7: the Default shell split into 2 panes zooms its focused pane and r
   await expect(panes.nth(1)).toBeVisible()
   await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
 })
+
+test('a background shell starts on a click without opening, hidden from the sidebar until opened', async () => {
+  await page.getByTestId('shell-add').click()
+  await page.getByTestId('shell-name').fill('Watcher')
+  await page.getByTestId('shell-command').fill('echo watching-$((40+2))')
+  await page.getByTestId('shell-background').check()
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
+  const tree = page.getByTestId('workspace-terminal')
+
+  // The first click starts it, green on its chip, with no view and nothing in the sidebar.
+  await shell('Watcher').getByTestId('shell-open').click()
+  await expect.poll(() => running('Watcher')).toBe('true')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(tree).toHaveCount(0)
+
+  // The second opens it, its command's output there, and from then on it is listed.
+  await shell('Watcher').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Watcher')
+  await expect.poll(lines).toContain('watching-42')
+  await backToBoard(page)
+  await expect(tree).toHaveText(['Watcher'])
+
+  // Started in the background again after a close: hidden again.
+  await shellMenu('Watcher', 'close')
+  await expect.poll(() => running('Watcher')).toBe('false')
+  await expect(tree).toHaveCount(0)
+  await shell('Watcher').getByTestId('shell-open').click()
+  await expect.poll(() => running('Watcher')).toBe('true')
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(tree).toHaveCount(0)
+
+  // Kept in the dialog, and turned off it opens on a click like any shell.
+  await shellMenu('Watcher', 'edit')
+  await expect(page.getByTestId('shell-background')).toBeChecked()
+  await page.getByTestId('shell-background').uncheck()
+  await page.getByTestId('shell-submit').click()
+  await expect(tree).toHaveText(['Watcher'])
+  await shellMenu('Watcher', 'close')
+  await expect.poll(() => running('Watcher')).toBe('false')
+  await shell('Watcher').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Watcher')
+})

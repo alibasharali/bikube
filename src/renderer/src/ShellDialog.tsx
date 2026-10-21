@@ -5,7 +5,8 @@ import { workspaceStore } from './store'
 
 /**
  * New shell, or editing one: its name, an optional command typed each time it starts (e.g.
- * `npm run dev`), whether it starts when the workspace is first opened, and whether it closes
+ * `npm run dev`), whether it starts when the workspace is first opened, whether a click starts it
+ * in the background instead of opening it, and whether it closes
  * once that command ends on its own (typed as `<command>; exit`, so a Ctrl+C keeps the prompt). No worktree: shells
  * run in the workspace's folder.
  */
@@ -24,12 +25,13 @@ function ShellDialog({
   const [command, setCommand] = useState(shell?.command ?? '')
   const [autostart, setAutostart] = useState(shell?.autostart ?? false)
   const [autoClose, setAutoClose] = useState(shell?.autoClose ?? false)
+  const [background, setBackground] = useState(shell?.background ?? false)
   const hasCommand = command.trim() !== ''
   const [errors, setErrors] = useState<{ name?: string; command?: string }>({})
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
-    const input = { name, command, autostart, autoClose: hasCommand && autoClose }
+    const input = { name, command, autostart, autoClose: hasCommand && autoClose, background }
     const result = shell
       ? workspaceStore.updateShell(workspaceId, shell.id, input)
       : workspaceStore.createShell(workspaceId, input)
@@ -114,6 +116,20 @@ function ShellDialog({
           />
           Start when the workspace opens
         </label>
+        <label className="new-card-check shell-autostart">
+          <input
+            type="checkbox"
+            data-testid="shell-background"
+            checked={background}
+            aria-describedby={`${id}-background-hint`}
+            onChange={(e) => setBackground(e.target.checked)}
+          />
+          Start in the background
+        </label>
+        <p className="field-hint shell-auto-close-hint" id={`${id}-background-hint`}>
+          A click starts it without opening it, and it stays out of the sidebar; click it again to
+          open it.
+        </p>
         <label className="new-card-check shell-autostart">
           <input
             type="checkbox"

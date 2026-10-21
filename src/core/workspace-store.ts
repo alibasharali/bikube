@@ -128,6 +128,11 @@ export interface WorkspaceShell {
    * prompt. Only with a command.
    */
   autoClose: boolean
+  /**
+   * Starts in the background: a click on its chip starts it without opening it, and it stays out
+   * of the sidebar until it is opened; a click on the running chip opens it.
+   */
+  background: boolean
 }
 
 export interface ShellInput {
@@ -136,6 +141,8 @@ export interface ShellInput {
   autostart: boolean
   /** Missing (an older file) is off. */
   autoClose?: boolean
+  /** Missing (an older file) is off. */
+  background?: boolean
 }
 
 export const MAX_SHELL_NAME_LENGTH = 100
@@ -804,7 +811,8 @@ export function checkShell(input: ShellInput): Result<Omit<WorkspaceShell, 'id'>
       name,
       command,
       autostart: input.autostart === true,
-      autoClose: input.autoClose === true
+      autoClose: input.autoClose === true,
+      background: input.background === true
     }
   }
 }

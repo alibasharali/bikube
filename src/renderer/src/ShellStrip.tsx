@@ -2,6 +2,7 @@ import { AppWindow, Pencil, Plus, RotateCw, Square, SquareTerminal, Trash2 } fro
 import { useState } from 'react'
 import { shellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
+import { startInBackground } from './background-shells'
 import { closeCard, removeShell, restartCard } from './card-actions'
 import { useCardRunState } from './card-terminals'
 import { openCardWindow, useInWindow } from './card-windows'
@@ -14,7 +15,8 @@ import ShellDialog from './ShellDialog'
 /**
  * The workspace's shells, above its board: terminals that aren't tasks, such as a dev server or a
  * plain prompt. The Default shell is always there; `+` adds a named one with an optional command.
- * Clicking a shell opens it at full size, starting it when stopped, like a card.
+ * Clicking a shell opens it at full size, starting it when stopped, like a card; a background
+ * shell's click starts it without opening it, and opens it once it runs.
  */
 function ShellStrip({
   workspace,
@@ -36,6 +38,7 @@ function ShellStrip({
           workspace={workspace}
           shell={shell}
           isDefault={shell.id === defaultShellId(workspace.id)}
+          background={workspace.shells.find((s) => s.id === shell.id)?.background === true}
           onOpen={() => onOpen(shell.id)}
           onEdit={() => setEditing({ id: shell.id })}
         />
@@ -69,16 +72,19 @@ function ShellChip({
   workspace,
   shell,
   isDefault,
+  background,
   onOpen,
   onEdit
 }: {
   workspace: Workspace
   shell: Card
   isDefault: boolean
+  background: boolean
   onOpen: () => void
   onEdit: () => void
 }): React.JSX.Element {
   const running = useCardRunState(shell.id).kind === 'running'
+  const startsHidden = background && !running
   const inWindow = useInWindow(shell.id)
   const [deleting, setDeleting] = useState(false)
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
@@ -89,8 +95,12 @@ function ShellChip({
         className="shell-chip"
         data-testid="shell-open"
         data-running={running}
-        title={command ? `${shell.title}: ${command}` : `${shell.title}: a plain shell`}
-        onClick={onOpen}
+        data-background={background || undefined}
+        title={
+          (command ? `${shell.title}: ${command}` : `${shell.title}: a plain shell`) +
+          (startsHidden ? ' (starts in the background; click again to open it)' : '')
+        }
+        onClick={startsHidden ? () => startInBackground(workspace.id, shell.id) : onOpen}
       >
         <span className="shell-dot" aria-hidden="true" />
         {isDefault ? <SquareTerminal {...SMALL_ICON} /> : null}
@@ -117,7 +127,11 @@ function ShellChip({
               role="menuitem"
               className="menu-item"
               data-testid="shell-menu-restart"
-              onClick={run(() => restartCard(workspace.id, shell.id))}
+              onClick={run(() =>
+                startsHidden
+                  ? startInBackground(workspace.id, shell.id)
+                  : restartCard(workspace.id, shell.id)
+              )}
             >
               <RotateCw {...MENU_ICON} />
               {running ? 'Restart' : 'Start'}

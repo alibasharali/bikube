@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { CLAUDE_INSTRUCTION, claudeSettings } from '../src/core/claude-hooks'
+import { LOCAL_CLAUDE_INSTRUCTION, claudeSettings } from '../src/core/claude-hooks'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -59,7 +59,7 @@ test('#31 AC12: the Claude settings file and its instruction ship beside board, 
   const settings = readFileSync(join(resources, 'bin', 'claude-settings.json'), 'utf8')
   expect(settings).toBe(claudeSettings())
   expect(readFileSync(join(resources, 'bin', 'claude-instruction.txt'), 'utf8')).toBe(
-    `${CLAUDE_INSTRUCTION}\n`
+    `${LOCAL_CLAUDE_INSTRUCTION}\n`
   )
 })
 

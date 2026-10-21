@@ -26,7 +26,7 @@ import {
   claudeResumeLine,
   LOCAL_CLAUDE_SETTINGS
 } from './fake-claude'
-import { CLAUDE_INSTRUCTION } from '../src/core/claude-hooks'
+import { LOCAL_CLAUDE_INSTRUCTION } from '../src/core/claude-hooks'
 
 // Startup commands (#5): choosing one at creation, the workspace default, changing a card's,
 // and the Claude Code resume. Electron runs with SHELL=/bin/bash and HOME set to a temp
@@ -349,7 +349,7 @@ test("#31 AC13: each hook command sets the card's pill, exits 0, also with Drovr
   }
   // SessionStart printed the instruction (D16), and nothing else printed a thing.
   const lines = await bufferLines()
-  expect(lines).toContain(CLAUDE_INSTRUCTION)
+  expect(lines).toContain(LOCAL_CLAUDE_INSTRUCTION)
   for (let i = 0; i < steps.length - 1; i++) {
     expect(lines[lines.findIndex((l) => l.endsWith(`echo "hook${i}=$?"`)) + 1]).toBe(`hook${i}=0`)
   }

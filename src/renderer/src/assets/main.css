@@ -3177,6 +3177,29 @@ button.dev-server-chip:focus-visible {
   white-space: nowrap;
 }
 
+/* A folder of branches: its chevron, its path and how many branches it holds. */
+.branch-menu-folder .branch-menu-name {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.branch-menu-count {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.branch-menu-more {
+  color: var(--accent);
+  font-family: var(--font-ui);
+}
+
 .branch-menu-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

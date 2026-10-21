@@ -528,3 +528,58 @@ test('a worktree card whose directory is gone shows no chip, not its saved branc
   rmSync(worktree, { recursive: true, force: true })
   await expect(chip()).toHaveCount(0, { timeout: 10_000 })
 })
+
+test('branches sit in folders by their `/` segments; many loose ones show the first and View all', async () => {
+  for (const name of ['ali/feature/a', 'ali/feature/b', 'ali/bug/x', 'feat/one']) {
+    git(repo, 'branch', name)
+  }
+  for (let n = 1; n <= 8; n++) git(repo, 'branch', `topic-${n}`)
+  await chip().click()
+  const local = menu().getByRole('group', { name: 'Local' })
+  const rows = local.locator('[data-testid=branch-item], [data-testid=branch-folder]')
+
+  // The first 8 loose branches (git's order, the lone `feat/one` as itself), View all, then
+  // every folder.
+  await expect(rows).toHaveText([
+    'main',
+    'feat/one',
+    'feature',
+    'topic-1',
+    'topic-2',
+    'topic-3',
+    'topic-4',
+    'topic-5',
+    'ali3'
+  ])
+  await expect(local.getByTestId('branch-view-all')).toHaveText('View all (11)')
+  await local.getByTestId('branch-view-all').click()
+  await expect(local.getByTestId('branch-view-all')).toHaveCount(0)
+  await expect(rows).toHaveCount(12)
+  await expect(rows.nth(8)).toBeFocused()
+  await expect(rows.nth(8)).toHaveText('topic-6')
+
+  // The folder `ali` holds 3 branches; open, `ali/feature` (2) and `bug/x`, a lone branch.
+  const ali = local.locator('[data-testid=branch-folder][data-path="ali"]')
+  await expect(ali).toHaveAttribute('aria-expanded', 'false')
+  await expect(ali).toContainText('3')
+  await ali.click()
+  const feature = local.locator('[data-testid=branch-folder][data-path="ali/feature"]')
+  await expect(local.locator('[data-branch="ali/bug/x"]')).toHaveText('bug/x')
+  await feature.press('ArrowRight')
+  await expect(feature).toHaveAttribute('aria-expanded', 'true')
+  await local.locator('[data-branch="ali/feature/b"]').click()
+  await expect(menu()).toHaveCount(0)
+  await expect(chip()).toHaveText('ali/feature/b')
+  expect(git(repo, 'branch', '--show-current')).toBe('ali/feature/b')
+
+  // Opened again, the folders holding the current branch are open, and it is marked there.
+  await chip().click()
+  await expect(local.locator('[data-testid=branch-folder][data-path="ali"]')).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  )
+  await expect(local.locator('[data-branch="ali/feature/b"]')).toHaveAttribute(
+    'aria-current',
+    'true'
+  )
+})

@@ -3,12 +3,20 @@ import {
   ArrowUpFromLine,
   Check,
   ChevronDown,
+  ChevronRight,
   GitBranch,
   GitBranchPlus,
   RefreshCw,
   TreePine
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  BRANCH_ROW_LIMIT,
+  branchTree,
+  foldersOf,
+  visibleRows,
+  type BranchNode
+} from '../../core/branch-tree'
 import type { AheadBehind, BranchList } from '../../core/git'
 import { clearGitResult, runGit, takeGitResult, useGitRun, type GitCommandResult } from './git-runs'
 import { MENU_ICON, SMALL_ICON } from './icons'
@@ -441,7 +449,12 @@ export function BranchChip({
   )
 }
 
-/** One section of the menu: `Local` or a remote, its branches by name. */
+/**
+ * One section of the menu: `Local` or a remote, its branches as a tree of folders by their `/`
+ * segments (`branch-tree`). The folders holding the current branch start open; a click, Enter,
+ * or Right and Left open and close one. At the top level it shows its first loose branches, View
+ * all, then every folder; an open folder shows everything in it.
+ */
 function BranchSection({
   name,
   branches,
@@ -456,31 +469,113 @@ function BranchSection({
   disabled: boolean
   onPick: (branch: string) => void
 }): React.JSX.Element {
-  return (
-    <div className="branch-menu-section" role="group" aria-label={name}>
-      <p className="menu-label" aria-hidden="true">
-        {name}
-      </p>
-      {branches.length === 0 && <p className="menu-hint">No branches</p>}
-      {branches.map((branch) => (
+  const tree = useMemo(() => branchTree(branches), [branches])
+  const [expanded, setExpanded] = useState(() => new Set(foldersOf(tree, current)))
+  const [showAll, setShowAll] = useState(false)
+  const section = useRef<HTMLDivElement>(null)
+  /** The first row View all showed, focused once it is there. */
+  const focusRow = useRef<number | null>(null)
+  const { branches: loose, folders, hidden } = visibleRows(tree, current, showAll)
+
+  useEffect(() => {
+    const at = focusRow.current
+    if (at === null) return
+    focusRow.current = null
+    section.current?.querySelector<HTMLElement>(`[data-top-row="${at}"]`)?.focus()
+  }, [showAll])
+
+  const setOpen = (path: string, open: boolean): void => {
+    setExpanded((was) => {
+      if (was.has(path) === open) return was
+      const next = new Set(was)
+      if (open) next.add(path)
+      else next.delete(path)
+      return next
+    })
+  }
+
+  const renderNode = (node: BranchNode, depth: number, topRow?: number): React.JSX.Element => {
+    const indent = { paddingLeft: `calc(var(--space-2) + ${depth * 14}px)` }
+    if (node.kind === 'branch') {
+      return (
         <button
-          key={branch}
+          key={`b:${node.branch}`}
           type="button"
           role="menuitem"
           className="menu-item branch-menu-item"
           data-testid="branch-item"
-          aria-current={branch === current ? 'true' : undefined}
+          data-branch={node.branch}
+          data-top-row={topRow}
+          style={indent}
+          title={node.branch}
+          aria-current={node.branch === current ? 'true' : undefined}
           disabled={disabled}
-          onClick={() => onPick(branch)}
+          onClick={() => onPick(node.branch)}
         >
-          {branch === current ? (
+          {node.branch === current ? (
             <Check {...MENU_ICON} />
           ) : (
             <span className="branch-menu-spacer" aria-hidden="true" />
           )}
-          <span className="branch-menu-name">{branch}</span>
+          <span className="branch-menu-name">{node.label}</span>
         </button>
-      ))}
+      )
+    }
+    const open = expanded.has(node.path)
+    const Chevron = open ? ChevronDown : ChevronRight
+    return (
+      <Fragment key={`f:${node.path}`}>
+        <button
+          type="button"
+          role="menuitem"
+          className="menu-item branch-menu-item branch-menu-folder"
+          data-testid="branch-folder"
+          data-path={node.path}
+          data-top-row={topRow}
+          style={indent}
+          aria-expanded={open}
+          title={`${node.path}/ (${node.count} branches)`}
+          onClick={() => setOpen(node.path, !open)}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+            e.preventDefault()
+            setOpen(node.path, e.key === 'ArrowRight')
+          }}
+        >
+          <Chevron {...MENU_ICON} />
+          <span className="branch-menu-name">{node.label}</span>
+          <span className="branch-menu-count" aria-label={`${node.count} branches`}>
+            {node.count}
+          </span>
+        </button>
+        {open && node.children.map((child) => renderNode(child, depth + 1))}
+      </Fragment>
+    )
+  }
+
+  return (
+    <div className="branch-menu-section" role="group" aria-label={name} ref={section}>
+      <p className="menu-label" aria-hidden="true">
+        {name}
+      </p>
+      {branches.length === 0 && <p className="menu-hint">No branches</p>}
+      {loose.map((node, i) => renderNode(node, 0, i))}
+      {hidden > 0 && (
+        <button
+          type="button"
+          role="menuitem"
+          className="menu-item branch-menu-item branch-menu-more"
+          data-testid="branch-view-all"
+          onClick={() => {
+            focusRow.current = BRANCH_ROW_LIMIT
+            setShowAll(true)
+          }}
+        >
+          <span className="branch-menu-spacer" aria-hidden="true" />
+          View all ({loose.length + hidden})
+        </button>
+      )}
+      {folders.map((node) => renderNode(node, 0))}
     </div>
   )
 }

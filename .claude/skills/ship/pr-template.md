@@ -10,6 +10,12 @@ Factory item: #<n> · Spec: `docs/specs/<n>-<slug>.md`
 |---|---|---|
 | AC1 <name> | ✅ | <page + steps, or request + response, on the running app> |
 
+### UX review
+
+Result: <the `ux-reviewer`'s result line and what it checked, or the skip reason>
+
+- <polish suggestion: page, what to improve. "None" if there were none.>
+
 ## Test on dev
 
 <Steps to try it on the dev environment once merged, from the start page.>

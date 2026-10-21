@@ -5,7 +5,7 @@ description: Implement an approved item spec slice by slice through fresh subage
 
 # Implement spec
 
-You are the **orchestrator**. You write no production code yourself. A fresh `slice-implementer` builds each slice, a `slice-reviewer` checks it, and a `verifier` checks the result on the running app. You hold the spec, the ledger and the developer's rulings; you are the only one who talks to the developer, and **the only one who commits**.
+You are the **orchestrator**. You write no production code yourself. A fresh `slice-implementer` builds each slice, a `slice-reviewer` checks it, a `verifier` checks the result on the running app, and a `ux-reviewer` checks how changed UI looks. You hold the spec, the ledger and the developer's rulings; you are the only one who talks to the developer, and **the only one who commits**.
 
 Why: one item in one context degrades toward the end. Fresh workers get a precise brief and nothing else; you stay small enough to think.
 
@@ -19,7 +19,7 @@ Why: one item in one context degrades toward the end. Fresh workers get a precis
 
 Call `update_item_status(N, "in_progress")` if the item isn't there yet.
 
-**Background workers:** the harness may run any dispatched worker (`slice-implementer`, `slice-reviewer`, `verifier`) in the background, whatever you asked for. When one comes back running, end your turn with one line saying what you're waiting for (e.g. "Waiting for the S2 implementer."), and don't touch the tree or git until that worker's report arrives: it wakes you.
+**Background workers:** the harness may run any dispatched worker (`slice-implementer`, `slice-reviewer`, `verifier`, `ux-reviewer`) in the background, whatever you asked for. When one comes back running, end your turn with one line saying what you're waiting for (e.g. "Waiting for the S2 implementer."), and don't touch the tree or git until that worker's report arrives: it wakes you.
 
 A slice that is only factory tool calls (`set_environment_urls`, `create_item`, `propose_stack_change`) needs no implementer or reviewer: make the calls yourself, record the result in the ledger, and commit the ledger.
 
@@ -53,8 +53,24 @@ If the spec turns out wrong or incomplete, stop and ask the developer. The spec 
 
 Green checks are not verification. Brief the `verifier` with the spec path and the *Test seams and verification* table.
 
-- `ALL PASS` → keep its summary for the PR, and `post_verification(N, summary)`.
+- `ALL PASS` → keep its summary for the PR and set the ledger's *Verification* to `done`. Don't post it yet: step 4 does, once.
 - `FAILED` → each failed AC is a bug: brief a `slice-implementer` with the AC and what the verifier saw, review the fix, then re-verify the failed ACs only.
-- `BLOCKED` → fix the environment (install, start the app) and re-dispatch. If the app genuinely can't run in this sandbox, verify what you can through tests and say plainly in the summary which ACs were not checked on a running app.
+- `BLOCKED` → fix the environment (install, start the app) and re-dispatch. If the app genuinely can't run in this sandbox, verify what you can through tests and say plainly in the summary which ACs were not checked on a running app; then set *Verification* to `done`.
 
-Done when every AC has a verdict. Next is `ship`.
+Done when every AC has a verdict.
+
+## 4. UX review
+
+Only once step 3 is done: after `ALL PASS` and its fix rounds, or, if step 3 ended with the app unable to run, set the ledger to `UX review: skipped: app can't run here` and go straight to the `post_verification` call below. Decide from the spec and `git diff --stat <base>...HEAD` whether the branch changes user-visible UI: pages/routes, components, styles, HTML templates, an Electron renderer, or any AC observed on a page. When in doubt, it runs.
+
+- **No UI change** → ledger `UX review: skipped: <why>`, with a one-line reason (e.g. "no UI change: server function only").
+- **UI change** → ledger `running`; brief the `ux-reviewer` with the spec path, the base branch, the pages/screens the change touches (from the ACs and the diff) and, per page, the states the change introduces.
+
+Route its report:
+
+- `CLEAN` → ledger `done`.
+- `<n> MUST-FIX` → ledger `<n> must-fix`; brief a `slice-implementer` with the findings verbatim (page, width, mode, what is wrong, which rule), commit `fix(ux): <what> (#<n>)`, have a `slice-reviewer` review the range, run `.claude/check.sh`, and re-dispatch the `ux-reviewer` on the failed checks only. At most two rounds; must-fix findings still open become a question for the developer (`ask_questions`: fix further, or accept and list it under the PR's *Trade-offs*). Accepted → record the ruling in the ledger's *Rulings* and set `done`; fix further → another round.
+- **Polish** → no fix round: keep the list for the PR's *UX review* part only.
+- `BLOCKED` → fix the environment (install, start the app) and re-dispatch. If the app genuinely can't run here (or an Electron app has no Playwright harness), ledger `UX review: skipped: <why>`, and say so in the summary and the PR.
+
+Then call `post_verification(N, summary)` once: the verifier's summary ending with one line for the UX review (its result or the skip reason). Next is `ship`.

@@ -10,6 +10,7 @@ description: Ship a finished item branch: review it in a fresh context, run the 
 - You are on `claude/<n>-*`, never on the base branch (`get_item`'s `delivery.baseBranch`) or `main`.
 - The working tree is clean.
 - The ledger's *Verification* is `done`. If not, go back to `implement-spec` step 3.
+- The ledger's `UX review` is `done` or `skipped: <why>`. If not, go back to `implement-spec` step 4.
 
 ## 2. Checks
 

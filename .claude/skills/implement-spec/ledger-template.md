@@ -17,3 +17,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - todo / running / <n> failed / done
+- UX review: todo / skipped: <why> / running / <n> must-fix / done

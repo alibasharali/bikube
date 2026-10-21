@@ -22,7 +22,7 @@ The developer described these in words. The first item sets them up, proves they
 
 ## Electron desktop app
 
-_Updated 2026-10-13._
+_Updated 2026-10-20._
 
 - Keep logic (sessions, board, storage) in plain TypeScript under `src/core` with no Electron imports, so Vitest tests it on Linux. Electron-only behaviour gets a Playwright-Electron smoke test run under `xvfb-run` in CI, after `check.sh` (it needs a display).
 - The renderer is sandboxed with `contextIsolation` on and `nodeIntegration` off. It reaches main only through a typed preload bridge (`window.<app>`, types in `src/shared`). Validate every IPC argument in main at runtime (types, ranges, size caps) and check the sender is the window's main frame; the compile-time types do not protect main.

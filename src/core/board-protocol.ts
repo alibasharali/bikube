@@ -6,7 +6,7 @@
 import { isActivityValue } from './activity'
 import { isListFormat, isSessionId, isSetupResult } from './board-args'
 import type { BoardCommand } from './board-args'
-import type { ClaudeUsage } from './claude-pricing'
+import type { ClaudeUsage } from './claude-usage-types'
 
 export const BOARD_PROTOCOL_VERSION = 1
 /** Longest request line main reads, in UTF-8 bytes without the newline (#9 D6). */
@@ -62,23 +62,20 @@ const USAGE_COUNTS = ['input', 'output', 'cacheWrite', 'cacheRead', 'tokens', 'c
 
 /**
  * A usage as `board usage` sends it (#50 D5): exactly the six counts as non-negative safe
- * integers, the model as a string of at most 200 characters or null, and the cost, when present,
- * a non-negative finite number. Null for anything else.
+ * integers and the model as a string of at most 200 characters or null. Null for anything else.
  */
 function asUsage(value: unknown): ClaudeUsage | null {
   if (!isRecord(value)) return null
   const keys = Object.keys(value)
-  const hasCost = 'cost' in value
-  if (keys.length !== USAGE_COUNTS.length + 1 + (hasCost ? 1 : 0)) return null
+  if (keys.length !== USAGE_COUNTS.length + 1) return null
   const count = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0
   if (!USAGE_COUNTS.every((key) => count(value[key]))) return null
-  const { model, cost } = value
+  const { model } = value
   if (!('model' in value)) return null
   if (model !== null && (typeof model !== 'string' || model.length > MAX_USAGE_MODEL_LENGTH)) {
     return null
   }
-  if (hasCost && (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0)) return null
-  const usage: ClaudeUsage = {
+  return {
     input: value.input as number,
     output: value.output as number,
     cacheWrite: value.cacheWrite as number,
@@ -87,8 +84,6 @@ function asUsage(value: unknown): ClaudeUsage | null {
     context: value.context as number,
     model
   }
-  if (hasCost) usage.cost = cost as number
-  return usage
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

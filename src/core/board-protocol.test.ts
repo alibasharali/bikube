@@ -87,8 +87,7 @@ describe('serializeRequest / parseRequestLine', () => {
       cacheRead: 3000,
       tokens: 6710,
       context: 3010,
-      model: 'claude-sonnet-4-5',
-      cost: 0.02193
+      model: 'claude-sonnet-4-5'
     }
     const request = (u: unknown): Record<string, unknown> => ({
       v: 1,
@@ -98,21 +97,19 @@ describe('serializeRequest / parseRequestLine', () => {
       usage: u
     })
 
-    it('round-trips a usage, with or without a cost and a model', () => {
+    it('round-trips a usage, with or without a model', () => {
       const s = serializeRequest('c1', { command: 'usage', card: '.', usage })
       expect(s).toBe(`${line(request(usage))}\n`)
       expect(parseRequestLine(s)).toEqual({ ok: true, request: request(usage) })
-      const noCost: Record<string, unknown> = { ...usage }
-      delete noCost.cost
-      const unknown = { ...noCost, model: null }
+      const unknown = { ...usage, model: null }
       expect(parseRequestLine(line(request(unknown)))).toEqual({
         ok: true,
         request: request(unknown)
       })
       const zero = { ...unknown, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, tokens: 0 }
-      expect(parseRequestLine(line(request({ ...zero, context: 0, cost: 0 })))).toEqual({
+      expect(parseRequestLine(line(request({ ...zero, context: 0 })))).toEqual({
         ok: true,
-        request: request({ ...zero, context: 0, cost: 0 })
+        request: request({ ...zero, context: 0 })
       })
     })
 
@@ -127,11 +124,9 @@ describe('serializeRequest / parseRequestLine', () => {
       }
     })
 
-    it('rejects a negative or mistyped cost and a model that is not a short string or null', () => {
+    it('rejects a cost and a model that is not a short string or null', () => {
       for (const bad of [
-        { ...usage, cost: -0.01 },
-        { ...usage, cost: '1' },
-        { ...usage, cost: null },
+        { ...usage, cost: 0.5 },
         { ...usage, model: 'm'.repeat(201) },
         { ...usage, model: 5 },
         { ...usage, extra: 1 },

@@ -204,6 +204,8 @@ test('AC1, AC3: the board card shows the reported usage and its breakdown', asyn
   const tooltip = await usageOf('api').getAttribute('title')
   expect(tooltip).toContain('Model gpt-x')
   expect(tooltip).not.toContain('$')
+  // No cost estimate anywhere, the title bar included.
+  await expect(page.getByTestId('titlebar')).not.toContainText('$')
 })
 
 test('AC4: a report replaces the line, Close keeps it, an empty transcript clears it, delete forgets it', async () => {
@@ -318,44 +320,4 @@ test("AC9: an SSH card's board doesn't know usage, and the card shows none", asy
   await backToBoard(page)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(usageOf('api')).toHaveCount(0)
-})
-
-test("AC7: the board's title bar sums its workspace's usage, hidden in a card and elsewhere", async () => {
-  await launch()
-  const alpha = makeDir('alpha')
-  const beta = makeDir('beta')
-  await createWorkspace(alpha, 'Alpha')
-  ac1Transcript(alpha)
-  transcript(alpha, 'opus.jsonl', [{ model: 'claude-opus-4-5', input: 0, output: 1_000_000 }])
-  const chip = page.getByTestId('titlebar-usage')
-
-  await newCard('A')
-  expect(await board('board usage . t.jsonl')).toEqual(ok)
-  await backToBoard(page)
-  await newCard('B')
-  expect(await board('board usage . opus.jsonl')).toEqual(ok)
-  // An open card shows no chip.
-  await expect(chip).toHaveCount(0)
-  await backToBoard(page)
-  await newCard('C')
-  await backToBoard(page)
-  await expect(card('C')).toHaveCount(1)
-
-  await expect(chip).toHaveText('≈$25.02')
-  await expect(chip).toHaveAttribute(
-    'title',
-    ["Claude Code usage of this workspace's cards (estimate)", 'Cards 2', 'Tokens 1,006,710'].join(
-      '\n'
-    )
-  )
-
-  await openCard('A')
-  await expect(chip).toHaveCount(0)
-  await backToBoard(page)
-  await expect(chip).toHaveText('≈$25.02')
-
-  // A workspace with no usage shows none.
-  await createWorkspace(beta, 'Beta')
-  await expect(page.getByTestId('board-title')).toHaveText('Beta')
-  await expect(chip).toHaveCount(0)
 })

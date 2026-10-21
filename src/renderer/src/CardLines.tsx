@@ -1,6 +1,6 @@
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { cardPill, compactStatus, type CardStatus } from '../../core/card-status'
-import type { ClaudeUsage } from '../../core/claude-pricing'
+import type { ClaudeUsage } from '../../core/claude-usage-types'
 import { contextLabel, contextUse, hasUsage, usageTooltip } from '../../core/usage-format'
 
 /**

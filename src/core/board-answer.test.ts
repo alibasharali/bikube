@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { answerBoardCommand } from './board-answer'
 import { NOT_IN_A_CARD } from './board-commands'
-import type { ClaudeUsage } from './claude-pricing'
+import type { ClaudeUsage } from './claude-usage-types'
 import {
   InMemoryWorkspaceStore,
   type Card,

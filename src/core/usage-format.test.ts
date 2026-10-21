@@ -1,16 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ClaudeUsage } from './claude-pricing'
-import {
-  contextLabel,
-  contextUse,
-  formatCost,
-  formatTokens,
-  hasUsage,
-  usageTooltip,
-  workspaceUsage
-} from './usage-format'
+import type { ClaudeUsage } from './claude-usage-types'
+import { contextLabel, contextUse, formatTokens, hasUsage, usageTooltip } from './usage-format'
 
-// A card's context bar and tooltip and a workspace's total (#50 D9).
+// A card's context bar and tooltip (#50).
 
 const usage = (u: Partial<ClaudeUsage>): ClaudeUsage => ({
   input: 0,
@@ -31,12 +23,11 @@ const ac1 = usage({
   cacheRead: 3000,
   tokens: 6710,
   context: 3010,
-  model: 'claude-sonnet-4-5',
-  cost: 0.02193
+  model: 'claude-sonnet-4-5'
 })
 
 /** AC4's card: one claude-opus-4-5 entry of a million output tokens. */
-const ac4 = usage({ output: 1_000_000, tokens: 1_000_000, model: 'claude-opus-4-5', cost: 25 })
+const ac4 = usage({ output: 1_000_000, tokens: 1_000_000, model: 'claude-opus-4-5' })
 
 /** AC3's card: one gpt-x entry. */
 const ac3 = usage({ input: 1000, output: 1000, tokens: 2000, context: 1000, model: 'gpt-x' })
@@ -59,20 +50,6 @@ describe('formatTokens', () => {
   })
 })
 
-describe('formatCost', () => {
-  it.each([
-    [0.02193, '≈$0.02'],
-    [1.24, '≈$1.24'],
-    [25, '≈$25.00'],
-    [1204.5, '≈$1,204.50'],
-    [0.01, '≈$0.01'],
-    [0.0099, '<$0.01'],
-    [0, '<$0.01']
-  ])('reads %d as %s', (cost, text) => {
-    expect(formatCost(cost)).toBe(text)
-  })
-})
-
 describe('contextUse', () => {
   it("is the context's share of the model's window, labelled as a percentage", () => {
     expect(contextUse(ac1)).toEqual({ used: 3010, window: 200_000, percent: 2, level: 'ok' })
@@ -91,7 +68,7 @@ describe('contextUse', () => {
 describe('hasUsage', () => {
   it('is true only above 0 tokens', () => {
     expect(hasUsage(ac1)).toBe(true)
-    expect(hasUsage(usage({ cost: 0 }))).toBe(false)
+    expect(hasUsage(usage({}))).toBe(false)
     expect(hasUsage(undefined)).toBe(false)
   })
 })
@@ -108,7 +85,7 @@ describe('usageTooltip', () => {
     ])
   })
 
-  it('has no cost line, also when the cost is unknown', () => {
+  it('has no cost line', () => {
     const lines = usageTooltip(ac3).split('\n')
     expect(lines).toContain('Model gpt-x')
     expect(lines.some((l) => l.includes('$') || /cost/i.test(l))).toBe(false)
@@ -116,38 +93,5 @@ describe('usageTooltip', () => {
 
   it('leaves the model line out when there is no model', () => {
     expect(usageTooltip(usage({ output: 5, tokens: 5 }))).not.toContain('Model')
-  })
-})
-
-describe('workspaceUsage', () => {
-  it('sums the known costs of the cards with usage', () => {
-    expect(workspaceUsage([ac1, ac4, usage({}), undefined])).toEqual({
-      text: '≈$25.02',
-      tooltip: [
-        "Claude Code usage of this workspace's cards (estimate)",
-        'Cards 2',
-        'Tokens 1,006,710'
-      ].join('\n')
-    })
-  })
-
-  it("says when some cards' cost is unknown", () => {
-    const total = workspaceUsage([ac1, ac3])
-    expect(total?.text).toBe('≈$0.02')
-    expect(total?.tooltip.split('\n')).toEqual([
-      "Claude Code usage of this workspace's cards (estimate)",
-      'Cards 2',
-      'Tokens 8,710',
-      "Some cards' cost unknown"
-    ])
-  })
-
-  it('sums tokens when no card has a cost', () => {
-    expect(workspaceUsage([ac3, ac3])?.text).toBe('4k tokens')
-  })
-
-  it('is null when no card has usage', () => {
-    expect(workspaceUsage([])).toBeNull()
-    expect(workspaceUsage([usage({}), undefined])).toBeNull()
   })
 })

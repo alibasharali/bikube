@@ -1,15 +1,15 @@
 /**
  * Reading a Claude Code session transcript (#50 D2, D3): the local `board` CLI streams the JSONL
- * file a hook names, line by line, plus its session's subagent transcripts, and sums the tokens
- * and estimated cost (D4, `claude-pricing.ts`). Never run by main or the renderer.
+ * file a hook names, line by line, plus its session's subagent transcripts, and sums the tokens.
+ * Never run by main or the renderer.
  */
 import { createReadStream } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { entryCost, type ClaudeUsage, type TokenCounts } from './claude-pricing'
+import type { ClaudeUsage, TokenCounts } from './claude-usage-types'
 
-export type { ClaudeUsage } from './claude-pricing'
+export type { ClaudeUsage } from './claude-usage-types'
 
 /** A counted transcript entry (D2). */
 interface Entry {
@@ -97,8 +97,7 @@ async function subagentFiles(transcriptPath: string): Promise<string[]> {
 
 /**
  * A conversation's usage (D3) from its transcript and its subagents' (D2): rejects when any of
- * them can't be read. Context and model come from the transcript itself only; the cost is absent
- * when a counted entry's model has no price (D4).
+ * them can't be read. Context and model come from the transcript itself only.
  */
 export async function readClaudeUsage(transcriptPath: string): Promise<ClaudeUsage> {
   const keyed = new Map<string, Entry>()
@@ -125,14 +124,11 @@ export async function readClaudeUsage(transcriptPath: string): Promise<ClaudeUsa
     context: 0,
     model: null
   }
-  let cost: number | null = 0
-  for (const { counts, model } of [...keyed.values(), ...unkeyed]) {
+  for (const { counts } of [...keyed.values(), ...unkeyed]) {
     usage.input += counts.input
     usage.output += counts.output
     usage.cacheWrite += counts.cacheWrite
     usage.cacheRead += counts.cacheRead
-    const price = entryCost(model, counts)
-    cost = cost === null || price === null ? null : cost + price
   }
   usage.tokens = usage.input + usage.output + usage.cacheWrite + usage.cacheRead
   const last = latest as Entry | null
@@ -140,6 +136,5 @@ export async function readClaudeUsage(transcriptPath: string): Promise<ClaudeUsa
     usage.context = last.counts.input + last.counts.cacheWrite + last.counts.cacheRead
     usage.model = last.model
   }
-  if (cost !== null) usage.cost = cost
   return usage
 }

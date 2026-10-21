@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ClaudeUsage } from '../../core/claude-pricing'
+import type { ClaudeUsage } from '../../core/claude-usage-types'
 import { cardUsage, clearCardUsage, setCardUsage, subscribeUsage } from './usage'
 
 // Each card's Claude Code usage, runtime only (#50 D7).
@@ -11,8 +11,7 @@ const usage = (tokens: number): ClaudeUsage => ({
   cacheRead: 0,
   tokens,
   context: tokens,
-  model: 'claude-sonnet-4-5',
-  cost: 0.5
+  model: 'claude-sonnet-4-5'
 })
 
 describe('card usage', () => {

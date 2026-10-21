@@ -51,7 +51,7 @@ const transcript = (lines: string[], name = 'session.jsonl'): string => {
 }
 
 describe('readClaudeUsage', () => {
-  it("sums AC1's two entries, with the latest one's context and model and the priced cost", async () => {
+  it("sums AC1's two entries, with the latest one's context and model", async () => {
     const path = transcript([
       entry({ input: 1000, output: 500, cacheWrite: 2000, id: 'm1', requestId: 'r1' }),
       entry({ input: 10, output: 200, cacheRead: 3000, id: 'm2', requestId: 'r2' })
@@ -64,10 +64,8 @@ describe('readClaudeUsage', () => {
       cacheRead: 3000,
       tokens: 6710,
       context: 3010,
-      model: 'claude-sonnet-4-5',
-      cost: expect.any(Number)
+      model: 'claude-sonnet-4-5'
     })
-    expect(usage.cost).toBeCloseTo(0.02193, 10)
   })
 
   it('counts a streamed message once, the last copy read, and entries lacking both ids each', async () => {
@@ -84,7 +82,7 @@ describe('readClaudeUsage', () => {
     expect(usage.tokens).toBe(24)
   })
 
-  it("adds the session's subagent transcripts to the totals and cost but not the context", async () => {
+  it("adds the session's subagent transcripts to the totals but not the context", async () => {
     const path = transcript([
       entry({ input: 100, output: 10, id: 'm1', requestId: 'r1' }),
       entry({ input: 100, output: 20, id: 'm1', requestId: 'r1' }),
@@ -105,7 +103,6 @@ describe('readClaudeUsage', () => {
       context: 100,
       model: 'claude-sonnet-4-5'
     })
-    expect(usage.cost).toBeCloseTo(0.0003 + 0.00045 + 0.005 + 0.005, 10)
   })
 
   it('takes the context from the latest entry not on a sidechain', async () => {
@@ -164,7 +161,7 @@ describe('readClaudeUsage', () => {
     expect((await readClaudeUsage(path)).model).toBe('m'.repeat(200))
   })
 
-  it('leaves the cost unknown when any counted entry has no price, keeping tokens and context', async () => {
+  it('counts a model without a known window, with no cost', async () => {
     const path = transcript([entry({ model: 'gpt-x', input: 1000, output: 1000 })])
     const usage = await readClaudeUsage(path)
     expect(usage).toEqual({
@@ -179,13 +176,6 @@ describe('readClaudeUsage', () => {
     expect('cost' in usage).toBe(false)
   })
 
-  it("prices AC4's one opus-4-5 entry of a million output tokens at $25", async () => {
-    const path = transcript([entry({ model: 'claude-opus-4-5', output: 1_000_000 })])
-    const usage = await readClaudeUsage(path)
-    expect(usage).toMatchObject({ tokens: 1_000_000, context: 0, model: 'claude-opus-4-5' })
-    expect(usage.cost).toBeCloseTo(25, 10)
-  })
-
   it('reads an empty transcript as zero usage', async () => {
     const path = transcript([])
     expect(await readClaudeUsage(path)).toEqual({
@@ -195,8 +185,7 @@ describe('readClaudeUsage', () => {
       cacheRead: 0,
       tokens: 0,
       context: 0,
-      model: null,
-      cost: 0
+      model: null
     })
   })
 

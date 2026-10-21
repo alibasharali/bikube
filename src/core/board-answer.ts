@@ -17,7 +17,7 @@ import {
   resolveColumn
 } from './board-commands'
 import type { BoardReply } from './board-protocol'
-import type { ClaudeUsage } from './claude-pricing'
+import type { ClaudeUsage } from './claude-usage-types'
 import type { Card, WorkspaceStore } from './workspace-store'
 
 /**

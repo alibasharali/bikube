@@ -4,7 +4,7 @@
  */
 
 import { isActivityValue, type ActivityValue } from './activity'
-import type { ClaudeUsage } from './claude-pricing'
+import type { ClaudeUsage } from './claude-usage-types'
 
 /** What SSH cards' `board` takes (#25): the card commands only. */
 export const SSH_BOARD_USAGE = `usage: board move <card> <column>

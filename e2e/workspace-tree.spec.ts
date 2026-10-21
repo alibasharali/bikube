@@ -239,10 +239,12 @@ test('the terminal digits open the active workspace’s running cards; held modi
   await page.keyboard.up(TERMINAL_MOD)
   await expect(page.getByTestId('terminal-number')).toHaveCount(0)
 
-  // A combo pressed at once shows nothing.
+  // Another key with the modifier is a combo: the numbers go until the modifier is pressed again.
   await page.keyboard.press(`${MOD}+2`)
   await expect(activeWorkspace()).toContainText('Beta')
-  // Past the hold that shows them.
-  await page.waitForTimeout(500)
+  await page.keyboard.down(MOD)
+  await expect(page.getByTestId('workspace-number')).toHaveText(['1', '2'])
+  await page.keyboard.press('KeyB')
   await expect(page.getByTestId('workspace-number')).toHaveCount(0)
+  await page.keyboard.up(MOD)
 })

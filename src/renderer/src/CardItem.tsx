@@ -39,6 +39,7 @@ import {
   moveCardByKey,
   moveCardToColumn,
   removeCard,
+  requestCloseCard,
   removeWorktreeCard,
   retrySetup,
   skipSetup,
@@ -472,7 +473,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
             // Opens the Close confirmation, never the card (#31 D10).
             e.stopPropagation()
             cancelPendingOpen()
-            setClosing(true)
+            requestCloseCard(card.id, () => setClosing(true))
           }}
         >
           <Square size={12} fill="currentColor" aria-hidden="true" />
@@ -579,7 +580,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
                 data-testid="card-menu-close"
                 onClick={run(() => {
                   cancelPendingOpen()
-                  setClosing(true)
+                  requestCloseCard(card.id, () => setClosing(true))
                 })}
               >
                 <Square {...MENU_ICON} />

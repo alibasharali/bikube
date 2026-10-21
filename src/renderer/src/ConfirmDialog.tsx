@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
   confirmLabel: string
   /** The confirm button's test id; deletes keep the default. */
   confirmTestId?: string
+  /** Extra controls between the message and the buttons. */
+  children?: React.ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -19,6 +21,7 @@ function ConfirmDialog({
   detail,
   confirmLabel,
   confirmTestId = 'confirm-delete',
+  children,
   onConfirm,
   onCancel
 }: ConfirmDialogProps): React.JSX.Element {
@@ -35,6 +38,7 @@ function ConfirmDialog({
           {detail}
         </p>
       )}
+      {children}
       <div className="modal-actions">
         <button type="button" className="btn" data-testid="confirm-cancel" onClick={onCancel}>
           Cancel

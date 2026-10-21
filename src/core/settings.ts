@@ -113,6 +113,8 @@ export interface Preferences {
   editorCommand: string
   /** A card's main pane output is kept on this machine when it stops (#46 D8). */
   keepOutput: boolean
+  /** Closing a running card asks first (#7 D4); its dialog's Don't ask again turns it off. */
+  confirmClose: boolean
   /** Bringing Drovr forward with the global shortcut opens the next waiting card (#51 D4). */
   openWaitingOnShow: boolean
 }
@@ -139,6 +141,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   editor: 'vscode',
   editorCommand: '',
   keepOutput: true,
+  confirmClose: true,
   openWaitingOnShow: true
 })
 
@@ -181,6 +184,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   editorCommand: (v): v is string =>
     typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v),
   keepOutput: isBoolean,
+  confirmClose: isBoolean,
   openWaitingOnShow: isBoolean
 }
 

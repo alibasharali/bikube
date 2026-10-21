@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
+import { requestCloseCard } from './card-actions'
 import CloseCardDialog from './CloseCardDialog'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
@@ -265,7 +266,7 @@ function CardView({
       } else if (running) {
         // Close card, or Close pane in the main pane: the Close confirmation (#7), only while
         // the card runs.
-        setClosing(true)
+        requestCloseCard(card.id, () => setClosing(true))
       }
     }
   }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])

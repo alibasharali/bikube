@@ -13,6 +13,7 @@ import { claudeLogLines, fakeClaudeHome, SETTINGS_ARGS, claudeResumeLine } from 
 
 let app: ElectronApplication
 let page: Page
+let dataDir: string
 let root: string
 let log: string
 
@@ -26,7 +27,7 @@ test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'drovr-close-'))
   const fake = fakeClaudeHome(root)
   log = fake.log
-  ;({ app, page } = await launchApp({ env: fake.env }))
+  ;({ app, page, dataDir } = await launchApp({ env: fake.env }))
 })
 
 test.afterEach(async () => {
@@ -372,4 +373,55 @@ test('AC6: a closed card is deleted without asking and not counted as running', 
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
   await expect(card('api')).toHaveCount(0)
   await expect(card('sh')).toHaveCount(1)
+})
+
+test("Don't ask again closes at once from then on, until Settings turns the question back on", async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('In Progress', 'api')
+  await back()
+
+  // Unchecked by default; Cancel with it checked saves nothing.
+  await menuClose('api')
+  const dontAsk = page.getByTestId('confirm-dont-ask')
+  await expect(dontAsk).not.toBeChecked()
+  await dontAsk.check()
+  await page.getByTestId('confirm-cancel').click()
+  await expect(status('api')).toHaveText('Running')
+  await menuClose('api')
+  await expect(dontAsk).not.toBeChecked()
+
+  // Checked and closed: saved, and the next Close (menu, button, shortcut) asks nothing.
+  await dontAsk.check()
+  await confirmClose()
+  await expect(status('api')).toHaveText('Stopped')
+  const settingsFile = join(dataDir, 'drovr-settings.json')
+  await expect
+    .poll(
+      () => existsSync(settingsFile) && JSON.parse(readFileSync(settingsFile, 'utf8')).confirmClose
+    )
+    .toBe(false)
+  await openCard('api')
+  await back()
+  await openMenu('api')
+  await page.getByTestId('card-menu-close').click()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect(status('api')).toHaveText('Stopped')
+  await openCard('api')
+  await closeCard(page)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect(status('api')).toHaveText('Stopped')
+
+  // Settings turns it back on.
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-terminal').click()
+  const ask = page.getByTestId('settings-confirm-close')
+  await expect(ask).not.toBeChecked()
+  await ask.click()
+  await expect(ask).toBeChecked()
+  await page.getByTestId('settings-done').click()
+  await openCard('api')
+  await back()
+  await menuClose('api')
+  await expect(page.getByTestId('confirm-close')).toBeVisible()
 })

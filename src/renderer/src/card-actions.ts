@@ -3,6 +3,7 @@ import type { Workspace, Card } from '../../core/workspace-store'
 import type { FirstStart } from '../../core/startup-command'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
+import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 import { clearCardUsage } from './usage'
 
@@ -57,6 +58,15 @@ export function skipSetup(workspaceId: string, cardId: string): void {
  */
 export function closeCard(cardId: string): void {
   cardTerminals().close(cardId)
+}
+
+/**
+ * Close from the card's menu, its button or a shortcut: `ask` opens the Close confirmation, or
+ * the card closes at once when the user chose Don't ask again.
+ */
+export function requestCloseCard(cardId: string, ask: () => void): void {
+  if (settingsStore.get().confirmClose) ask()
+  else closeCard(cardId)
 }
 
 /**

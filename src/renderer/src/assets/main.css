@@ -3756,3 +3756,8 @@ button.dev-server-chip:focus-visible {
   opacity: 0;
   cursor: pointer;
 }
+
+/* The Close card dialog's Don't ask again, above its buttons. */
+.confirm-dont-ask {
+  margin-top: var(--space-2);
+}

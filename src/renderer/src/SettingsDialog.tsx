@@ -647,6 +647,13 @@ function TerminalBehaviourRows(): React.JSX.Element {
         checked={settings.keepOutput}
         onChange={(keepOutput) => settingsStore.update({ keepOutput })}
       />
+      <SwitchRow
+        label="Ask before closing a card"
+        hint="Closing a running card or shell asks first. Its dialog's Don't ask again turns this off."
+        testId="settings-confirm-close"
+        checked={settings.confirmClose}
+        onChange={(confirmClose) => settingsStore.update({ confirmClose })}
+      />
       <SegmentedRow
         label="Bell"
         testId="settings-bell"

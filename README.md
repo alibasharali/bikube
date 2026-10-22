@@ -1,5 +1,7 @@
 <!-- software-factory:readme -->
 
+<img src="build/icon.png" alt="" width="128">
+
 # Bikube
 
 A kanban board for macOS and Linux where every card is a live terminal, for running many coding agents side by side.

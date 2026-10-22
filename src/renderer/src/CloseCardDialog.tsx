@@ -37,7 +37,7 @@ function CloseCardDialog({ cardId, title, onDone }: CloseCardDialogProps): React
           checked={dontAsk}
           onChange={(e) => setDontAsk(e.target.checked)}
         />
-        Don't ask again
+        Don&apos;t ask again
       </label>
     </ConfirmDialog>
   )

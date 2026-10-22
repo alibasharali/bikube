@@ -11,6 +11,7 @@ import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } fro
 import { registerAttention } from './attention'
 import { allowCardWindows, appWindow, registerCardWindows } from './card-windows'
 import { registerClipboard } from './clipboard'
+import { moveOldData } from './data-migration'
 import { registerDirectories } from './directories'
 import { registerFiles } from './files'
 import { registerAgents } from './agents'
@@ -105,6 +106,8 @@ const userDataDir =
   process.env['BIKUBE_USER_DATA_DIR'] ??
   (app.isPackaged ? undefined : join(app.getPath('appData'), 'bikube-dev'))
 if (userDataDir) app.setPath('userData', userDataDir)
+// Drovr's data, once, before anything reads or locks the folder.
+moveOldData()
 
 // A Wayland desktop with the portal can grant the global shortcut (#51 D8); set before ready.
 enableGlobalShortcutsPortal()

@@ -45,27 +45,51 @@ export function lastOutputLine(
 }
 
 /** Most lines a trigger's exit keeps (`outputTail`). */
-export const TAIL_LINES = 20
+export const TAIL_LINES = 50
+
+/** Rows a typed line may wrap over and still be found (`outputTail`). */
+const MAX_TYPED_ROWS = 12
+
+const squeeze = (text: string): string => text.replace(/\s+/g, '')
 
 /**
- * The screen's last lines at or above the cursor row, at most `max`, without escapes or prompt
- * glyphs and right-trimmed (spacing kept, so indentation stays), with blank and `skip`ped lines at
- * the end and blank lines at the start dropped.
+ * What a command printed, from the screen at its exit: the rows after the last one ending the
+ * echo of `typed` (the line Drovr typed, found across wrapped rows with whitespace ignored), or
+ * the whole screen when it scrolled away; at or above the cursor row, at most `max`. Rows lose
+ * escapes and prompt glyphs and are right-trimmed (indentation kept); `skip`ped and blank rows at
+ * the end and blank rows at the start go, and runs of blank rows inside become one.
  */
 export function outputTail(
   lines: readonly string[],
   cursorRow: number,
+  typed: string | null,
   skip: (text: string) => boolean = () => false,
   max = TAIL_LINES
 ): string[] {
-  const tail: string[] = []
-  for (let row = Math.min(cursorRow, lines.length - 1); row >= 0 && tail.length < max; row--) {
-    const text = stripEscapes(lines[row]).replace(PRIVATE_USE, '').trimEnd()
-    if (tail.length === 0 && (!text.trim() || skip(text.trim()))) continue
-    tail.unshift(text)
+  const rows = lines
+    .slice(0, Math.min(cursorRow, lines.length - 1) + 1)
+    .map((line) => stripEscapes(line).replace(PRIVATE_USE, '').trimEnd())
+  let start = 0
+  const want = typed === null ? '' : squeeze(typed)
+  if (want) {
+    search: for (let end = rows.length - 1; end >= 0; end--) {
+      let joined = ''
+      for (let row = end; row >= 0 && row > end - MAX_TYPED_ROWS; row--) {
+        joined = squeeze(rows[row]) + joined
+        if (joined.endsWith(want)) {
+          start = end + 1
+          break search
+        }
+      }
+    }
   }
-  while (tail.length > 0 && !tail[0].trim()) tail.shift()
-  return tail
+  const out = rows.slice(start)
+  while (out.length > 0 && (!out[out.length - 1].trim() || skip(out[out.length - 1].trim()))) {
+    out.pop()
+  }
+  while (out.length > 0 && !out[0].trim()) out.shift()
+  const squeezed = out.filter((row, i) => row.trim() !== '' || out[i - 1]?.trim() !== '')
+  return squeezed.slice(-max)
 }
 
 /** What an interactive shell prints as it exits (bash's `exit`, a login shell's `logout`). */

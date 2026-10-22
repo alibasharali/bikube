@@ -2,7 +2,6 @@ import {
   AppWindow,
   Check,
   ChevronDown,
-  ChevronRight,
   Folder,
   LoaderCircle,
   Pencil,
@@ -35,6 +34,7 @@ import DevServerChips from './DevServerChips'
 import { useDevServers } from './dev-servers'
 import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
+import Modal from './Modal'
 import ShellDialog from './ShellDialog'
 import StatusIcon from './StatusIcon'
 import { workspaceStore } from './store'
@@ -441,7 +441,9 @@ function ShellRow({
         </span>
       )}
       {running && <DevServerChips cardId={shell.id} />}
-      {status?.kind === 'failed' && <TriggerFailure status={status} />}
+      {status?.kind === 'failed' && (
+        <TriggerFailure title={shell.title} command={command} status={status} />
+      )}
       {deleting && (
         <ConfirmDialog
           title="Delete shell"
@@ -459,36 +461,66 @@ function ShellRow({
 }
 
 /**
- * What a failed trigger printed, under its row: its last line, a click showing the screen's last
- * lines (the shell, and so its screen, is gone once the command ends).
+ * A failed trigger under its row: its last line, a click opening what it printed in a dialog (its
+ * shell, and so its screen, is gone once the command ends).
  */
 function TriggerFailure({
+  title,
+  command,
   status
 }: {
+  title: string
+  command: string
   status: Extract<TriggerStatus, { kind: 'failed' }>
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const heading = failureHeading(status)
-  const lines = status.tail.length > 0 ? status.tail : [status.line]
   return (
-    <div className="trigger-failure" data-testid="trigger-failure" data-open={open}>
+    <div className="trigger-failure" data-testid="trigger-failure">
       <button
         type="button"
         className="trigger-failure-toggle"
         data-testid="trigger-failure-toggle"
-        aria-expanded={open}
-        title={open ? 'Hide output' : 'Show output'}
-        onClick={() => setOpen((o) => !o)}
+        title="Show output"
+        onClick={() => setOpen(true)}
       >
-        {open ? <ChevronDown {...SMALL_ICON} /> : <ChevronRight {...SMALL_ICON} />}
         <span className="trigger-failure-line" data-testid="trigger-failure-line">
-          {open || !status.line ? heading : status.line}
+          {status.line || heading}
         </span>
       </button>
       {open && (
-        <pre className="trigger-failure-output" data-testid="trigger-failure-output">
-          {lines.join('\n')}
-        </pre>
+        <Modal
+          title={`${title}: ${heading}`}
+          onClose={() => setOpen(false)}
+          testId="trigger-failure-dialog"
+          className="modal-output"
+          closeOnOutsideClick
+        >
+          {command && (
+            <p className="trigger-failure-command" data-testid="trigger-failure-command">
+              {command}
+            </p>
+          )}
+          {status.tail.length > 0 ? (
+            <pre className="trigger-failure-output" data-testid="trigger-failure-output">
+              {status.tail.join('\n')}
+            </pre>
+          ) : (
+            <p className="modal-message" data-testid="trigger-failure-empty">
+              It printed nothing.
+            </p>
+          )}
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="trigger-failure-close"
+              onClick={() => setOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )

@@ -22,7 +22,7 @@ describe('outputTail', () => {
       '',
       'below'
     ]
-    expect(outputTail(lines, 6, isShellExitLine)).toEqual([
+    expect(outputTail(lines, 6, null, isShellExitLine)).toEqual([
       '$ make',
       'make: *** [all] Error 1',
       '  at a.c:3'
@@ -30,8 +30,30 @@ describe('outputTail', () => {
   })
 
   it('keeps at most the given number of lines, the newest', () => {
-    expect(outputTail(['a', 'b', 'c', 'd'], 3, undefined, 2)).toEqual(['c', 'd'])
-    expect(outputTail(['', ' '], 1)).toEqual([])
+    expect(outputTail(['a', 'b', 'c', 'd'], 3, null, undefined, 2)).toEqual(['c', 'd'])
+    expect(outputTail(['', ' '], 1, null)).toEqual([])
+  })
+
+  it('starts after the typed line, also wrapped over rows, and keeps one blank row of a run', () => {
+    const lines = [
+      'Welcome banner',
+      'host % npm run bu',
+      'ild; exit',
+      'step 1',
+      '',
+      '',
+      'Error: boom',
+      'exit'
+    ]
+    expect(outputTail(lines, 7, 'npm run build; exit', isShellExitLine)).toEqual([
+      'step 1',
+      '',
+      'Error: boom'
+    ])
+    // A command that printed nothing keeps nothing, never the banner above it.
+    expect(
+      outputTail(['banner', 'host % false; exit', 'exit'], 2, 'false; exit', isShellExitLine)
+    ).toEqual([])
   })
 })
 

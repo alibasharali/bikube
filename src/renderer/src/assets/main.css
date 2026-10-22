@@ -3427,7 +3427,7 @@ button.dev-server-chip:focus-visible {
   color: var(--danger);
 }
 
-/* What a failed trigger printed, under its row (`TriggerFailure`). */
+/* A failed trigger's last line under its row (`TriggerFailure`); a click opens its output. */
 .trigger-failure {
   grid-column: 1 / -1;
   min-width: 0;
@@ -3435,9 +3435,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .trigger-failure-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -3450,29 +3448,42 @@ button.dev-server-chip:focus-visible {
   cursor: pointer;
 }
 
-.trigger-failure-toggle svg {
-  flex: none;
+.trigger-failure-toggle:hover .trigger-failure-line {
+  text-decoration: underline;
 }
 
 .trigger-failure-line {
-  min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The output dialog: wide, the terminal's lines kept as printed. */
+.modal-output {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.trigger-failure-command {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 .trigger-failure-output {
-  max-height: 240px;
-  margin: 4px 0 0;
-  padding: 6px 8px;
+  max-height: min(480px, calc(100vh - 220px));
+  margin: 0;
+  padding: var(--space-3);
   overflow: auto;
-  border-left: 2px solid var(--danger);
-  border-radius: 4px;
-  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.4;
+  font-size: var(--text-sm);
+  line-height: 1.45;
   white-space: pre;
   user-select: text;
 }

@@ -181,16 +181,31 @@ test('a trigger runs its command in the background and shows done or failed; a c
   await shell('Build').getByTestId('shell-open').click()
   await expect(status).toHaveAttribute('data-status', 'failed', { timeout: 10_000 })
   await expect(status).toHaveAttribute('title', 'Failed (exit 1): broke-2')
-  // Its last line shows under the row; a click shows what it printed before it.
+  // Its last line shows under the row; a click opens what it printed, from the typed line on.
   const failure = shell('Build').getByTestId('trigger-failure')
   await expect(failure.getByTestId('trigger-failure-line')).toHaveText('broke-2')
-  await expect(failure.getByTestId('trigger-failure-output')).toHaveCount(0)
   await failure.getByTestId('trigger-failure-toggle').click()
-  await expect(failure.getByTestId('trigger-failure-line')).toHaveText('Failed (exit 1)')
-  const output = failure.getByTestId('trigger-failure-output')
-  await expect(output).toContainText('step-1')
-  await expect(output).toContainText('broke-2')
-  expect((await output.textContent())?.trimEnd().endsWith('broke-2')).toBe(true)
+  const outputDialog = page.getByTestId('trigger-failure-dialog')
+  await expect(outputDialog.getByRole('heading')).toHaveText('Build: Failed (exit 1)')
+  await expect(outputDialog.getByTestId('trigger-failure-command')).toHaveText(
+    'echo step-$((0+1)); echo broke-$((1+1)); false'
+  )
+  await expect(outputDialog.getByTestId('trigger-failure-output')).toHaveText('step-1\nbroke-2')
+  await outputDialog.getByTestId('trigger-failure-close').click()
+  await expect(outputDialog).toHaveCount(0)
+
+  // A command that printed nothing says so, and shows nothing printed before it.
+  await shellMenu('Build', 'edit')
+  await dialog.getByTestId('shell-command').fill('false')
+  await dialog.getByTestId('shell-submit').click()
+  await shell('Build').getByTestId('shell-open').click()
+  await expect(failure.getByTestId('trigger-failure-line')).toHaveText('Failed (exit 1)', {
+    timeout: 10_000
+  })
+  await failure.getByTestId('trigger-failure-toggle').click()
+  await expect(outputDialog.getByTestId('trigger-failure-empty')).toHaveText('It printed nothing.')
+  await page.keyboard.press('Escape')
+  await expect(outputDialog).toHaveCount(0)
 
   // While it runs, a click opens it, and from then on it is in the sidebar.
   await shellMenu('Build', 'edit')

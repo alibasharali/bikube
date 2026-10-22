@@ -36,10 +36,11 @@ export interface CardScreen {
   onInput(listener: (data: string) => void): void
   onResize(listener: (size: { cols: number; rows: number }) => void): void
   /**
-   * The visible screen's lines (bottom of scrollback) and the cursor's row in them. Rows above
-   * the one `markSessionStart` marked read as blank.
+   * The visible screen's lines (bottom of scrollback) and the cursor's row in them, or with
+   * `withScrollback` every line from the top of the scrollback. Rows above the one
+   * `markSessionStart` marked read as blank.
    */
-  screen(): { lines: string[]; cursorRow: number }
+  screen(withScrollback?: boolean): { lines: string[]; cursorRow: number }
   /**
    * Everything above the cursor's row is a previous run's restored output (#46 D5a, D9): from
    * now on `screen()` reads those rows as blank, so the status reads only this session's rows.
@@ -520,7 +521,8 @@ export class CardSessions<S extends CardScreen> {
       const { lines, cursorRow } = screen.screen()
       if (reportsExit) {
         // Only what the command printed: never its prompt or what the shell printed before.
-        const tail = outputTail(lines, cursorRow, entry.commandLine, isShellExitLine)
+        const all = screen.screen(true)
+        const tail = outputTail(all.lines, all.cursorRow, entry.commandLine, isShellExitLine)
         const exit = { code: exitCode, line: tail.at(-1)?.trim() ?? '', tail }
         return this.stopped(cardId, entry, { kind: 'stopped', exit })
       }

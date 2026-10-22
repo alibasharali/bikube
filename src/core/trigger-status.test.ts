@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { triggerStatus, triggerStatusLabel } from './trigger-status'
+import {
+  triggerFailureNotice,
+  triggerStatus,
+  triggerStatusLabel,
+  type TriggerStatus
+} from './trigger-status'
 
 describe('triggerStatus', () => {
   it('is idle before a run and after a Close', () => {
@@ -49,5 +54,32 @@ describe('triggerStatusLabel', () => {
     expect(triggerStatusLabel({ kind: 'failed', code: null, line: 'no folder', tail: [] })).toBe(
       "Couldn't start: no folder"
     )
+  })
+})
+
+describe('triggerFailureNotice', () => {
+  const failed: Extract<TriggerStatus, { kind: 'failed' }> = {
+    kind: 'failed',
+    code: 2,
+    line: 'error TS2304',
+    tail: []
+  }
+
+  it('tells of a failure with its workspace and last line', () => {
+    expect(triggerFailureNotice(failed, 'alpha', false)).toEqual({
+      body: 'Failed (exit 2) · alpha\nerror TS2304'
+    })
+    expect(triggerFailureNotice({ ...failed, line: '' }, 'alpha', false)).toEqual({
+      body: 'Failed (exit 2) · alpha'
+    })
+    expect(
+      triggerFailureNotice({ ...failed, code: null, line: 'no folder' }, 'alpha', false)
+    ).toEqual({ body: "Couldn't start · alpha\nno folder" })
+  })
+
+  it('says nothing while its Shells tab is in view, or for anything but a failure', () => {
+    expect(triggerFailureNotice(failed, 'alpha', true)).toBeNull()
+    expect(triggerFailureNotice({ kind: 'done', line: 'ok' }, 'alpha', false)).toBeNull()
+    expect(triggerFailureNotice({ kind: 'idle' }, 'alpha', false)).toBeNull()
   })
 })

@@ -51,3 +51,18 @@ export function triggerStatusLabel(status: TriggerStatus): string {
     }
   }
 }
+
+/**
+ * The notification for a trigger that just ended (its title is the trigger's): a failure only,
+ * unless its workspace's Shells tab is in view (`shellsInView`), where its row shows it. Its body
+ * is the heading and workspace, then the last line it printed.
+ */
+export function triggerFailureNotice(
+  status: TriggerStatus,
+  workspace: string,
+  shellsInView: boolean
+): { body: string } | null {
+  if (status.kind !== 'failed' || shellsInView) return null
+  const head = `${failureHeading(status)} · ${workspace}`
+  return { body: status.line ? `${head}\n${status.line}` : head }
+}

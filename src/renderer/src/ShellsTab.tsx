@@ -16,7 +16,7 @@ import {
   X,
   Zap
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   failureHeading,
   triggerStatus,
@@ -36,6 +36,7 @@ import { MENU_ICON, SMALL_ICON } from './icons'
 import MenuButton from './MenuButton'
 import Modal from './Modal'
 import ShellDialog from './ShellDialog'
+import { useTriggerFailureRequest } from './trigger-failures'
 import StatusIcon from './StatusIcon'
 import { workspaceStore } from './store'
 
@@ -442,7 +443,13 @@ function ShellRow({
       )}
       {running && <DevServerChips cardId={shell.id} />}
       {status?.kind === 'failed' && (
-        <TriggerFailure title={shell.title} command={command} status={status} />
+        <TriggerFailure
+          title={shell.title}
+          command={command}
+          status={status}
+          shellId={shell.id}
+          onRunAgain={() => startInBackground(workspace.id, shell.id)}
+        />
       )}
       {deleting && (
         <ConfirmDialog
@@ -461,20 +468,36 @@ function ShellRow({
 }
 
 /**
- * A failed trigger under its row: its last line, a click opening what it printed in a dialog (its
- * shell, and so its screen, is gone once the command ends).
+ * A failed trigger under its row: its last line, a click (or its notification's) opening what it
+ * printed in a dialog, scrolled to the end, with Copy and Run again (its shell, and so its screen,
+ * is gone once the command ends).
  */
 function TriggerFailure({
   title,
   command,
-  status
+  status,
+  shellId,
+  onRunAgain
 }: {
   title: string
   command: string
   status: Extract<TriggerStatus, { kind: 'failed' }>
+  shellId: string
+  onRunAgain: () => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const output = useRef<HTMLPreElement>(null)
   const heading = failureHeading(status)
+  useTriggerFailureRequest(
+    shellId,
+    useCallback(() => setOpen(true), [])
+  )
+  // The error is usually at the end.
+  useEffect(() => {
+    if (open && output.current) output.current.scrollTop = output.current.scrollHeight
+    if (!open) setCopied(false)
+  }, [open])
   return (
     <div className="trigger-failure" data-testid="trigger-failure">
       <button
@@ -502,7 +525,11 @@ function TriggerFailure({
             </p>
           )}
           {status.tail.length > 0 ? (
-            <pre className="trigger-failure-output" data-testid="trigger-failure-output">
+            <pre
+              ref={output}
+              className="trigger-failure-output"
+              data-testid="trigger-failure-output"
+            >
               {status.tail.join('\n')}
             </pre>
           ) : (
@@ -511,13 +538,37 @@ function TriggerFailure({
             </p>
           )}
           <div className="modal-actions">
+            {status.tail.length > 0 && (
+              <button
+                type="button"
+                className="btn"
+                data-testid="trigger-failure-copy"
+                onClick={() => {
+                  void window.drovr.clipboard.write(status.tail.join('\n'))
+                  setCopied(true)
+                }}
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            )}
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn"
               data-testid="trigger-failure-close"
               onClick={() => setOpen(false)}
             >
               Close
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-testid="trigger-failure-run"
+              onClick={() => {
+                setOpen(false)
+                onRunAgain()
+              }}
+            >
+              Run again
             </button>
           </div>
         </Modal>

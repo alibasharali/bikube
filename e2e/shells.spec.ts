@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SHORTCUTS, backToBoard, expectCardOpen, splitRight, zoomPane } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
@@ -237,6 +238,81 @@ test('Close pane in a shell asks to close it on the first press', async () => {
   await page.getByTestId('confirm-close').click()
   await expect(page.getByTestId('board')).toBeVisible()
   await expect.poll(() => running('Dev')).toBe('false')
+})
+
+/** Replaces the page's `Notification` with one recording each notification sent. */
+async function stubNotifications(): Promise<void> {
+  await page.evaluate(() => {
+    const sent: { title: string; body: string; click: () => void }[] = []
+    class Recorded {
+      onclick: (() => void) | null = null
+      constructor(title: string, options: { body: string }) {
+        sent.push({ title, body: options.body, click: () => this.onclick?.() })
+      }
+    }
+    Object.assign(window, { __sent: sent, Notification: Recorded })
+  })
+}
+
+const notifications = (): Promise<{ title: string; body: string }[]> =>
+  page.evaluate(() =>
+    (window as unknown as { __sent: { title: string; body: string }[] }).__sent.map(
+      ({ title, body }) => ({ title, body })
+    )
+  )
+
+test("a failed trigger's dialog shows all it printed, copies it and runs it again; a failure out of sight notifies", async () => {
+  await recordClipboardWrites(app!)
+  await stubNotifications()
+  await page.getByTestId('shell-add').click()
+  const dialog = page.getByTestId('shell-dialog')
+  await dialog.getByTestId('shell-type-trigger').check()
+  await dialog.getByTestId('shell-name').fill('Test')
+  // More lines than the screen holds; the typed line holds none of them.
+  await dialog
+    .getByTestId('shell-command')
+    .fill("seq 1 150 | sed 's/^/line-/'; echo boom-$((6*7)); sleep 1; false")
+  await dialog.getByTestId('shell-submit').click()
+  await expect(dialog).toHaveCount(0)
+
+  // Run with the Shells tab in view: no notification.
+  const status = shell('Test').getByTestId('trigger-status')
+  await shell('Test').getByTestId('shell-open').click()
+  await expect(status).toHaveAttribute('data-status', 'failed', { timeout: 10_000 })
+  const failure = shell('Test').getByTestId('trigger-failure')
+  await expect(failure.getByTestId('trigger-failure-line')).toHaveText('boom-42')
+  expect(await notifications()).toEqual([])
+
+  // Every line, from the first, scrolled to the end; Copy copies them.
+  await failure.getByTestId('trigger-failure-toggle').click()
+  const output = page.getByTestId('trigger-failure-output')
+  const expected = [...Array.from({ length: 150 }, (_, i) => `line-${i + 1}`), 'boom-42'].join('\n')
+  await expect(output).toHaveText(expected)
+  await expect
+    .poll(() =>
+      output.evaluate((el) => Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 2)
+    )
+    .toBe(true)
+  await page.getByTestId('trigger-failure-copy').click()
+  await expect(page.getByTestId('trigger-failure-copy')).toHaveText('Copied')
+  await expect.poll(() => clipboardWrites(app!)).toEqual([expected])
+
+  // Run again closes the dialog and runs it; with the Files tab showing, its failure notifies.
+  await page.getByTestId('trigger-failure-run').click()
+  await expect(page.getByTestId('trigger-failure-dialog')).toHaveCount(0)
+  await expect(status).toHaveAttribute('data-status', 'running')
+  await page.getByTestId('side-panel-tab-files').click()
+  await expect
+    .poll(notifications, { timeout: 10_000 })
+    .toEqual([{ title: 'Test', body: 'Failed (exit 1) · alpha\nboom-42' }])
+
+  // Its click shows the Shells tab with the output open.
+  await page.evaluate(() =>
+    (window as unknown as { __sent: { click: () => void }[] }).__sent[0].click()
+  )
+  await expect(page.getByTestId('side-panel-tab-shells')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('trigger-failure-dialog')).toBeVisible()
+  await expect(output).toContainText('boom-42')
 })
 
 test('a shell must have a name and a one-line command; the Default one has no edit or delete', async () => {

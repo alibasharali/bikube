@@ -44,8 +44,8 @@ export function lastOutputLine(
   return ''
 }
 
-/** Most lines a trigger's exit keeps (`outputTail`). */
-export const TAIL_LINES = 50
+/** Most lines a trigger's exit keeps (`outputTail`): runtime only, never saved. */
+export const TAIL_LINES = 2000
 
 /** Rows a typed line may wrap over and still be found (`outputTail`). */
 const MAX_TYPED_ROWS = 12

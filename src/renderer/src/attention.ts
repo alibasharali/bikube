@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { ACTIVITY_LABELS, type Activity } from '../../core/activity'
 import { longCommandNotice } from '../../core/long-commands'
+import { triggerFailureNotice, triggerStatus } from '../../core/trigger-status'
 import type { ShellCommand } from '../../core/shell-marks'
 import { isWaiting, withActivity, withoutDeleted } from '../../core/waiting'
 import { findShellCard } from '../../core/workspace-shells'
@@ -9,6 +10,7 @@ import { startCard } from './card-actions'
 import { cardPanes, cardTerminals, onScreenCreated } from './card-terminals'
 import { focusCardWindow } from './card-windows'
 import { settingsStore } from './settings'
+import { showTriggerFailure } from './trigger-failures'
 import { workspaceStore } from './store'
 import { anyWindowFocused, focusedCardWindow, onAnyWindowFocus } from './window-focus'
 
@@ -17,7 +19,8 @@ import { anyWindowFocused, focusedCardWindow, onAnyWindowFocus } from './window-
  * activity becomes Waiting for you or Needs your answer, unless the user is looking at that card
  * (open in the focused main window, or its own window focused, #53 D10); the Dock badge counts the
  * cards waiting. Clicking a notification opens its card, or brings its own window forward.
- * A long command that ends out of sight gets one too (#45 D7), changing nothing else here.
+ * A long command that ends out of sight gets one too (#45 D7), and so does a trigger that fails
+ * while its workspace's Shells tab isn't in view; neither changes anything else here.
  * The waiting cards and shells, oldest first (#41 D2), are a queue the sidebar follows.
  * Waiting for you is a notification: once the user looks at the card (opens it, or is looking at
  * it as it starts waiting), it is seen and clears, as `board activity . none` would. Needs your
@@ -181,6 +184,45 @@ function notifyLongCommand(cardId: string, paneId: string, command: ShellCommand
   window.drovr.app.requestAttention()
 }
 
+/**
+ * A trigger that ended: tells of a failure unless its workspace's Shells tab is in view. Clicking
+ * it shows that tab with the trigger's output dialog open.
+ */
+function notifyTriggerEnded(shellId: string): void {
+  const settings = settingsStore.get()
+  if (!settings.notifications) return
+  const state = workspaceStore.getState()
+  const workspace = state.workspaces.find((w) =>
+    w.shells.some((s) => s.id === shellId && s.type === 'trigger')
+  )
+  const shell = workspace && findShellCard(workspace, shellId)
+  if (!workspace || !shell) return
+  const shellsInView =
+    anyWindowFocused() &&
+    state.activeId === workspace.id &&
+    settings.sidePanelOpen &&
+    settings.sidePanelTab === 'shells'
+  const notice = triggerFailureNotice(
+    triggerStatus(cardTerminals().runState(shellId), []),
+    workspace.name,
+    shellsInView
+  )
+  if (!notice) return
+  try {
+    const notification = new Notification(shell.title, { body: notice.body, silent: true })
+    notification.onclick = () => {
+      window.drovr.app.focus()
+      workspaceStore.selectWorkspace(workspace.id)
+      settingsStore.update({ sidePanelOpen: true, sidePanelTab: 'shells' })
+      showTriggerFailure(shellId)
+    }
+  } catch {
+    // Notifications unavailable: the trigger's row still shows it.
+  }
+  if (settings.notificationSound) playTone(660, 0.18)
+  window.drovr.app.requestAttention()
+}
+
 /** Watches every card's activity; called once, before the first render. */
 export function startAttention(): void {
   if (started) return
@@ -192,6 +234,7 @@ export function startAttention(): void {
   })
   // Coming back to a window with a waiting card in view: it is seen now.
   onAnyWindowFocus(acknowledgeLookedAt)
+  cardTerminals().onEnded(notifyTriggerEnded)
   onScreenCreated((screen, cardId, paneId) =>
     screen.marks.onCommandEnded((command) => notifyLongCommand(cardId, paneId, command))
   )

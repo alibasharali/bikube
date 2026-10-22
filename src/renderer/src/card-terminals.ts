@@ -368,18 +368,18 @@ export class XtermScreen implements CardScreen {
     this.term.onResize(listener)
   }
 
-  screen(): { lines: string[]; cursorRow: number } {
+  screen(withScrollback = false): { lines: string[]; cursorRow: number } {
     const buffer = this.term.buffer.active
     // Rows above the new session's first are a previous run's (#46 D5a); a marker trimmed off
     // the scrollback or erased (xterm disposes it) has line -1, and one the cursor went above
     // is gone (`markSessionStart`). The alternate screen is all this session's.
     const first = buffer.type === 'normal' ? (this.sessionStart?.line ?? -1) : -1
     const lines: string[] = []
-    for (let row = 0; row < this.term.rows; row++) {
-      const line = buffer.baseY + row
+    const top = withScrollback ? 0 : buffer.baseY
+    for (let line = top; line < buffer.baseY + this.term.rows; line++) {
       lines.push(line < first ? '' : (buffer.getLine(line)?.translateToString(true) ?? ''))
     }
-    return { lines, cursorRow: buffer.cursorY }
+    return { lines, cursorRow: buffer.baseY - top + buffer.cursorY }
   }
 
   /**

@@ -92,7 +92,10 @@ describe('migrateDataDir', () => {
   it('moves the folder, renames its drovr files and keeps the rest', () => {
     mkdirSync(join(from, 'scrollback'), { recursive: true })
     writeFileSync(join(from, 'scrollback', 'abc'), 'kept output')
-    writeFileSync(join(from, 'drovr-settings.json'), '{"fontSize":14}')
+    writeJson(join(from, 'drovr-settings.json'), {
+      version: 1,
+      settings: { fontSize: 14, terminalThemeDark: 'Drovr Dark', terminalThemeLight: 'Drovr Light' }
+    })
     writeFileSync(join(from, 'drovr-update.json'), '{"skipped":"0.1.4"}')
     writeFileSync(join(from, 'drovr-state.corrupt-1.json'), 'not json')
     writeJson(join(from, 'drovr-state.json'), { version: 1, state: { workspaces: [] } })
@@ -100,7 +103,14 @@ describe('migrateDataDir', () => {
     expect(migrate()).toBe('moved')
     expect(existsSync(from)).toBe(false)
     expect(readFileSync(join(to, 'scrollback', 'abc'), 'utf8')).toBe('kept output')
-    expect(readJson(join(to, 'bikube-settings.json'))).toEqual({ fontSize: 14 })
+    expect(readJson(join(to, 'bikube-settings.json'))).toEqual({
+      version: 1,
+      settings: {
+        fontSize: 14,
+        terminalThemeDark: 'Bikube Dark',
+        terminalThemeLight: 'Bikube Light'
+      }
+    })
     expect(readJson(join(to, 'bikube-update.json'))).toEqual({ skipped: '0.1.4' })
     expect(readFileSync(join(to, 'bikube-state.corrupt-1.json'), 'utf8')).toBe('not json')
     expect(readJson(join(to, 'bikube-state.json'))).toEqual({

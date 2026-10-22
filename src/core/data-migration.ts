@@ -53,7 +53,7 @@ export function migrateDataDir(m: DataMigration): MigrationResult {
   }
 
   const moved = rewriteFile(join(m.to, `${NEW_NAME}-state.json`), m.from, m.to)
-  rewriteFile(join(m.to, `${NEW_NAME}-settings.json`), m.from, m.to)
+  rewriteFile(join(m.to, `${NEW_NAME}-settings.json`), m.from, m.to, RENAMED_THEMES)
   for (const { path, repo } of worktrees(moved)) {
     try {
       m.git(['worktree', 'repair', path], repo)
@@ -77,8 +77,22 @@ function lockedByLiveApp(dir: string, isAlive: (pid: number) => boolean): boolea
   return Number.isInteger(pid) && pid > 0 && isAlive(pid)
 }
 
-/** Rewrites every string at or under `from` in a JSON file; gives the parsed result, else null. */
-function rewriteFile(file: string, from: string, to: string): unknown {
+/** The bundled terminal themes renamed with the app, as saved settings name them. */
+const RENAMED_THEMES: Record<string, string> = {
+  'Drovr Dark': 'Bikube Dark',
+  'Drovr Light': 'Bikube Light'
+}
+
+/**
+ * Rewrites every string at or under `from` in a JSON file, and each string `renamed` names;
+ * gives the parsed result, else null.
+ */
+function rewriteFile(
+  file: string,
+  from: string,
+  to: string,
+  renamed: Record<string, string> = {}
+): unknown {
   let parsed: unknown
   try {
     parsed = JSON.parse(readFileSync(file, 'utf8'))
@@ -86,21 +100,29 @@ function rewriteFile(file: string, from: string, to: string): unknown {
     // Missing or unreadable: the app's own reader handles that as before.
     return null
   }
-  const rewritten = rewritePaths(parsed, from, to)
+  const rewritten = rewritePaths(parsed, from, to, renamed)
   const tmp = `${file}.tmp`
   writeFileSync(tmp, JSON.stringify(rewritten))
   renameSync(tmp, file)
   return rewritten
 }
 
-/** `value` with every string equal to `from` or under `from/` moved to `to`. */
-export function rewritePaths(value: unknown, from: string, to: string): unknown {
+/** `value` with every string equal to `from` or under `from/` moved to `to`, and `renamed` applied. */
+export function rewritePaths(
+  value: unknown,
+  from: string,
+  to: string,
+  renamed: Record<string, string> = {}
+): unknown {
   if (typeof value === 'string') {
+    if (Object.hasOwn(renamed, value)) return renamed[value]
     return value === from || value.startsWith(`${from}/`) ? to + value.slice(from.length) : value
   }
-  if (Array.isArray(value)) return value.map((v) => rewritePaths(v, from, to))
+  if (Array.isArray(value)) return value.map((v) => rewritePaths(v, from, to, renamed))
   if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rewritePaths(v, from, to)]))
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, rewritePaths(v, from, to, renamed)])
+    )
   }
   return value
 }

@@ -37,7 +37,7 @@ export interface BoardServer {
   close(): Promise<void>
 }
 
-const HANDLER_FAILED: BoardReply = { ok: false, error: 'board: no answer from Drovr' }
+const HANDLER_FAILED: BoardReply = { ok: false, error: 'board: no answer from Bikube' }
 
 function removeFile(path: string): void {
   rmSync(path, { force: true })

@@ -52,7 +52,7 @@ export interface CreateRequest {
   dir: string
   /** The new branch, made from the repository's current HEAD. */
   branch: string
-  /** Where Drovr keeps worktrees: one folder per repository inside it. */
+  /** Where Bikube keeps worktrees: one folder per repository inside it. */
   worktreesRoot: string
   platform: NodeJS.Platform
 }

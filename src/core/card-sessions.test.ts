@@ -280,7 +280,7 @@ describe('CardSessions', () => {
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID}\r`
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
       ],
       ['s1', 'x'],
       ['s1', 'y']
@@ -297,8 +297,8 @@ describe('CardSessions', () => {
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID} || ` +
-          `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID}\r`
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID} || ` +
+          `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID}\r`
       ]
     ])
     expect(claudeStarted).not.toHaveBeenCalled()
@@ -782,14 +782,14 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     const claudeStarted = vi.fn()
     await startedSsh('c1', { kind: 'claude' }, claudeStarted)
     api.emitData('s1', 'Password: ')
-    api.emitData('s1', '\r\n\x1b]6973;drovr')
+    api.emitData('s1', '\r\n\x1b]6973;bikube')
     expect(api.writes).toEqual([])
     expect(claudeStarted).not.toHaveBeenCalled()
     api.emitData('s1', '-ready\x07$ ')
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${UUID}\r`
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
       ]
     ])
     expect(claudeStarted).not.toHaveBeenCalled()
@@ -1056,7 +1056,7 @@ describe('typing while an SSH shell is starting', () => {
 
 describe('pending setup (#39 D3, D4)', () => {
   const SETUP_LINE =
-    'npm ci && "$DROVR_BIN/board" setup . ok || "$DROVR_BIN/board" setup . failed\r'
+    'npm ci && "$BIKUBE_BIN/board" setup . ok || "$BIKUBE_BIN/board" setup . failed\r'
 
   it('types the setup line instead of the start line, recording no first start (D3)', async () => {
     const firstStart = vi.fn()

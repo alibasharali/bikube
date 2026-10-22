@@ -15,7 +15,7 @@ let root: string
 let dataDir: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-auto-move-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-auto-move-'))
   dataDir = newDataDir()
   ;({ app, page } = await launchApp({ dataDir }))
 })
@@ -162,7 +162,7 @@ test('#42 AC9: the rules survive a restart and are in the state file', async () 
   expect(await chosen(rule('When working'))).toBe("Don't move")
   expect(await chosen(rule('When stopped'))).toBe("Don't move")
   await closeDialog('workspace-cancel')
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   const [alpha, beta] = saved.state.workspaces
   const needsMe = alpha.columns.find((c: { name: string }) => c.name === 'Needs me')
   expect(alpha.autoMove).toEqual({ waiting: needsMe.id })
@@ -227,7 +227,7 @@ let commands = 0
 async function board(command: string): Promise<void> {
   const file = join(root, 'alpha', `rc-${++commands}`)
   await run(`${command}; echo $? > ${file}`)
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect
     .poll(() => (existsSync(file) ? readFileSync(file, 'utf8').trim() : ''), { timeout: 15_000 })
     .toBe('0')
@@ -382,7 +382,7 @@ test('#42 AC6: a restart leaves restored Stopped cards where they were', async (
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
   await expect(titlesIn('Running')).toHaveText(['api'])
   await expect(titlesIn('Done')).toHaveCount(0)
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   const [alpha] = saved.state.workspaces
   const running = alpha.columns.find((c: { name: string }) => c.name === 'Running')
   expect(alpha.cards.map((c: { columnId: string }) => c.columnId)).toEqual([running.id])

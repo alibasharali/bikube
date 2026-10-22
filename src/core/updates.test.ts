@@ -38,14 +38,14 @@ function release(over: Record<string, unknown> = {}, asset: Record<string, unkno
     html_url: `${RELEASES_URL}tag/v0.3.0`,
     assets: [
       {
-        name: 'drovr-0.3.0.dmg',
-        browser_download_url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0.dmg`,
+        name: 'bikube-0.3.0.dmg',
+        browser_download_url: `${RELEASES_URL}download/v0.3.0/bikube-0.3.0.dmg`,
         size: 10,
         digest: `sha256:${'b'.repeat(64)}`
       },
       {
-        name: 'drovr-0.3.0-arm64-mac.zip',
-        browser_download_url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0-arm64-mac.zip`,
+        name: 'bikube-0.3.0-arm64-mac.zip',
+        browser_download_url: `${RELEASES_URL}download/v0.3.0/bikube-0.3.0-arm64-mac.zip`,
         size: 81_474_355,
         digest: `sha256:${DIGEST.toUpperCase()}`,
         ...asset
@@ -83,8 +83,8 @@ describe('versions', () => {
   })
 
   it('names the file each platform installs from', () => {
-    expect(assetName('1.0.0', 'darwin', 'arm64')).toBe('drovr-1.0.0-arm64-mac.zip')
-    expect(assetName('1.0.0', 'linux', 'x64')).toBe('drovr-1.0.0-x86_64.AppImage')
+    expect(assetName('1.0.0', 'darwin', 'arm64')).toBe('bikube-1.0.0-arm64-mac.zip')
+    expect(assetName('1.0.0', 'linux', 'x64')).toBe('bikube-1.0.0-x86_64.AppImage')
     expect(assetName('1.0.0', 'darwin', 'x64')).toBeNull()
     expect(assetName('1.0.0', 'win32', 'x64')).toBeNull()
   })
@@ -97,8 +97,8 @@ describe('the latest release', () => {
       publishedAt: '2026-10-13T09:00:00Z',
       pageUrl: `${RELEASES_URL}tag/v0.3.0`,
       asset: {
-        name: 'drovr-0.3.0-arm64-mac.zip',
-        url: `${RELEASES_URL}download/v0.3.0/drovr-0.3.0-arm64-mac.zip`,
+        name: 'bikube-0.3.0-arm64-mac.zip',
+        url: `${RELEASES_URL}download/v0.3.0/bikube-0.3.0-arm64-mac.zip`,
         size: 81_474_355,
         sha256: DIGEST
       },
@@ -138,7 +138,7 @@ describe('the latest release', () => {
     expect(newerRelease(release({ html_url: 'https://evil.example/tag/v0.3.0' }), MAC)).toBeNull()
     expect(
       newerRelease(
-        release({ html_url: 'https://github.com/someone/drovr/releases/tag/v0.3.0' }),
+        release({ html_url: 'https://github.com/someone/bikube/releases/tag/v0.3.0' }),
         MAC
       )
     ).toBeNull()
@@ -148,7 +148,7 @@ describe('the latest release', () => {
     const fileOf = (asset: Record<string, unknown>): unknown =>
       newerRelease(release({}, asset), MAC)?.asset
     expect(newerRelease(release(), { ...MAC, platform: 'linux', arch: 'x64' })?.asset).toBeNull()
-    expect(fileOf({ browser_download_url: 'https://evil.example/drovr.zip' })).toBeNull()
+    expect(fileOf({ browser_download_url: 'https://evil.example/bikube.zip' })).toBeNull()
     expect(fileOf({ digest: 'md5:abc' })).toBeNull()
     expect(newerRelease(release({}, { digest: 'md5:abc' }), MAC)?.waiting).toBe(false)
     expect(fileOf({ size: 0 })).toBeNull()
@@ -195,12 +195,15 @@ describe('rechecks of a release whose file isn’t up yet', () => {
 describe('what an install replaces', () => {
   it('is the .app bundle on macOS, unless macOS runs a translocated copy', () => {
     expect(
-      installTarget({ platform: 'darwin', exePath: '/Applications/Drovr.app/Contents/MacOS/Drovr' })
-    ).toEqual({ kind: 'mac', path: '/Applications/Drovr.app' })
+      installTarget({
+        platform: 'darwin',
+        exePath: '/Applications/Bikube.app/Contents/MacOS/Bikube'
+      })
+    ).toEqual({ kind: 'mac', path: '/Applications/Bikube.app' })
     expect(
       installTarget({
         platform: 'darwin',
-        exePath: '/private/var/folders/x/AppTranslocation/ABC/d/Drovr.app/Contents/MacOS/Drovr'
+        exePath: '/private/var/folders/x/AppTranslocation/ABC/d/Bikube.app/Contents/MacOS/Bikube'
       })
     ).toBeNull()
     expect(
@@ -212,11 +215,11 @@ describe('what an install replaces', () => {
     expect(
       installTarget({
         platform: 'linux',
-        exePath: '/tmp/.mount_x/drovr',
-        appImage: '/home/me/Drovr.AppImage'
+        exePath: '/tmp/.mount_x/bikube',
+        appImage: '/home/me/Bikube.AppImage'
       })
-    ).toEqual({ kind: 'appimage', path: '/home/me/Drovr.AppImage' })
-    expect(installTarget({ platform: 'linux', exePath: '/opt/Drovr/drovr' })).toBeNull()
+    ).toEqual({ kind: 'appimage', path: '/home/me/Bikube.AppImage' })
+    expect(installTarget({ platform: 'linux', exePath: '/opt/Bikube/bikube' })).toBeNull()
     expect(
       installTarget({ platform: 'linux', exePath: '/x', appImage: 'rel/x.AppImage' })
     ).toBeNull()
@@ -225,31 +228,33 @@ describe('what an install replaces', () => {
 
 describe('what an install swaps', () => {
   it('is the bundle’s Contents on macOS, needing only the bundle writable', () => {
-    expect(installPaths('mac', '/data/updates/app/Drovr.app', '/Applications/Drovr.app')).toEqual({
-      from: '/data/updates/app/Drovr.app/Contents',
-      to: '/Applications/Drovr.app/Contents',
-      app: '/Applications/Drovr.app',
-      writable: ['/Applications/Drovr.app', '/Applications/Drovr.app/Contents']
-    })
+    expect(installPaths('mac', '/data/updates/app/Bikube.app', '/Applications/Bikube.app')).toEqual(
+      {
+        from: '/data/updates/app/Bikube.app/Contents',
+        to: '/Applications/Bikube.app/Contents',
+        app: '/Applications/Bikube.app',
+        writable: ['/Applications/Bikube.app', '/Applications/Bikube.app/Contents']
+      }
+    )
   })
 
   it('is the AppImage file, needing its folder writable', () => {
     expect(
-      installPaths('appimage', '/data/updates/new.AppImage', '/home/me/Drovr.AppImage')
+      installPaths('appimage', '/data/updates/new.AppImage', '/home/me/Bikube.AppImage')
     ).toEqual({
       from: '/data/updates/new.AppImage',
-      to: '/home/me/Drovr.AppImage',
-      app: '/home/me/Drovr.AppImage',
-      writable: ['/home/me', '/home/me/Drovr.AppImage']
+      to: '/home/me/Bikube.AppImage',
+      app: '/home/me/Bikube.AppImage',
+      writable: ['/home/me', '/home/me/Bikube.AppImage']
     })
-    expect(installPaths('appimage', '/n', '/Drovr.AppImage').writable[0]).toBe('/')
+    expect(installPaths('appimage', '/n', '/Bikube.AppImage').writable[0]).toBe('/')
   })
 })
 
 describe('the install script', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-update-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-update-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -266,35 +271,35 @@ describe('the install script', () => {
 
   it('swaps a bundle’s Contents in a folder the user can’t write, as /Applications for a standard account', async () => {
     const apps = join(dir, 'Applications')
-    mkdirSync(join(apps, 'Drovr.app/Contents'), { recursive: true })
-    writeFileSync(join(apps, 'Drovr.app/Contents/v'), 'old')
-    mkdirSync(join(dir, 'new/Drovr.app/Contents'), { recursive: true })
-    writeFileSync(join(dir, 'new/Drovr.app/Contents/v'), 'new')
-    const { from, to } = installPaths('mac', join(dir, 'new/Drovr.app'), join(apps, 'Drovr.app'))
+    mkdirSync(join(apps, 'Bikube.app/Contents'), { recursive: true })
+    writeFileSync(join(apps, 'Bikube.app/Contents/v'), 'old')
+    mkdirSync(join(dir, 'new/Bikube.app/Contents'), { recursive: true })
+    writeFileSync(join(dir, 'new/Bikube.app/Contents/v'), 'new')
+    const { from, to } = installPaths('mac', join(dir, 'new/Bikube.app'), join(apps, 'Bikube.app'))
     chmodSync(apps, 0o555)
     try {
       expect(await install(gonePid(), from, to)).toBe(0)
     } finally {
       chmodSync(apps, 0o755)
     }
-    expect(readFileSync(join(apps, 'Drovr.app/Contents/v'), 'utf8')).toBe('new')
-    expect(readdirSync(join(apps, 'Drovr.app'))).toEqual(['Contents'])
-    expect(readdirSync(join(dir, 'new/Drovr.app'))).toEqual([])
+    expect(readFileSync(join(apps, 'Bikube.app/Contents/v'), 'utf8')).toBe('new')
+    expect(readdirSync(join(apps, 'Bikube.app'))).toEqual(['Contents'])
+    expect(readdirSync(join(dir, 'new/Bikube.app'))).toEqual([])
     expect(existsSync(failed())).toBe(false)
   })
 
   it('swaps a file, in a path with spaces', async () => {
-    const target = join(dir, 'my apps', 'Drovr.AppImage')
+    const target = join(dir, 'my apps', 'Bikube.AppImage')
     mkdirSync(join(dir, 'my apps'))
     writeFileSync(target, 'old')
     writeFileSync(join(dir, 'next'), 'new')
     expect(await install(gonePid(), join(dir, 'next'), target)).toBe(0)
     expect(readFileSync(target, 'utf8')).toBe('new')
-    expect(readdirSync(join(dir, 'my apps'))).toEqual(['Drovr.AppImage'])
+    expect(readdirSync(join(dir, 'my apps'))).toEqual(['Bikube.AppImage'])
   })
 
   it('waits for the process to end before touching anything', async () => {
-    const target = join(dir, 'Drovr.AppImage')
+    const target = join(dir, 'Bikube.AppImage')
     writeFileSync(target, 'old')
     writeFileSync(join(dir, 'next'), 'new')
     const app = spawn('sleep', ['1'])
@@ -306,26 +311,26 @@ describe('the install script', () => {
   })
 
   it('keeps the old app when the new one is missing, and says why', async () => {
-    const target = join(dir, 'Drovr.AppImage')
+    const target = join(dir, 'Bikube.AppImage')
     writeFileSync(target, 'old')
     expect(await install(gonePid(), join(dir, 'missing'), target)).toBe(1)
     expect(readFileSync(target, 'utf8')).toBe('old')
-    expect(readdirSync(dir).sort()).toEqual(['Drovr.AppImage', 'install-failed'])
+    expect(readdirSync(dir).sort()).toEqual(['Bikube.AppImage', 'install-failed'])
     expect(readFileSync(failed(), 'utf8')).toContain('missing')
   })
 
   it('keeps the old app when its folder can’t be written, and says why', async () => {
     const apps = join(dir, 'apps')
     mkdirSync(apps)
-    writeFileSync(join(apps, 'Drovr.AppImage'), 'old')
+    writeFileSync(join(apps, 'Bikube.AppImage'), 'old')
     writeFileSync(join(dir, 'next'), 'new')
     chmodSync(apps, 0o555)
     try {
-      expect(await install(gonePid(), join(dir, 'next'), join(apps, 'Drovr.AppImage'))).toBe(1)
+      expect(await install(gonePid(), join(dir, 'next'), join(apps, 'Bikube.AppImage'))).toBe(1)
     } finally {
       chmodSync(apps, 0o755)
     }
-    expect(readFileSync(join(apps, 'Drovr.AppImage'), 'utf8')).toBe('old')
+    expect(readFileSync(join(apps, 'Bikube.AppImage'), 'utf8')).toBe('old')
     expect(readFileSync(failed(), 'utf8')).toMatch(/denied/i)
   })
 })
@@ -338,9 +343,9 @@ describe('the popup’s words', () => {
   })
 
   it('names the terminals an install stops', () => {
-    expect(installMessage(0)).toBe('Drovr quits, installs the update and opens again.')
+    expect(installMessage(0)).toBe('Bikube quits, installs the update and opens again.')
     expect(installMessage(1)).toBe(
-      'Drovr quits, installs the update and opens again. 1 terminal is running and will be stopped.'
+      'Bikube quits, installs the update and opens again. 1 terminal is running and will be stopped.'
     )
     expect(installMessage(3)).toContain('3 terminals are running')
   })

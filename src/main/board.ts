@@ -10,7 +10,7 @@ import type { Terminals } from './terminals'
 
 /**
  * `<userData>/board/board.sock` (#9 D5), in a private directory the server creates;
- * `DROVR_USER_DATA_DIR` gives each test its own.
+ * `BIKUBE_USER_DATA_DIR` gives each test its own.
  */
 export function boardSocketPath(): string {
   return join(app.getPath('userData'), 'board', 'board.sock')

@@ -31,7 +31,7 @@ const EDITOR_COMMANDS: Record<'vscode' | 'cursor' | 'zed', string> = {
 const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
 
 /** The `$0` a POSIX shell is given, shown in its own error messages. */
-const ARG0 = 'drovr'
+const ARG0 = 'bikube'
 
 /** How an open runs: a login shell command, the OS's default app, or nothing (no custom command). */
 export type EditorPlan =

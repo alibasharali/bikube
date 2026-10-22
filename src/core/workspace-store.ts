@@ -268,7 +268,7 @@ export interface WorkspaceStore {
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
   /**
-   * The Claude Code session the card resumes from now on, reported by Drovr's hooks once it has
+   * The Claude Code session the card resumes from now on, reported by Bikube's hooks once it has
    * a conversation (a message sent, a `/resume`): its agent session id, and started.
    */
   setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card>

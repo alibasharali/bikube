@@ -21,7 +21,7 @@ let socketPath: string
 const servers: BoardServer[] = []
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'drovr-sock-'))
+  dir = await mkdtemp(join(tmpdir(), 'bikube-sock-'))
   boardDir = join(dir, 'board')
   socketPath = join(boardDir, 'board.sock')
 })
@@ -177,7 +177,7 @@ describe('startBoardServer', () => {
     const reply = await exchange(
       serializeRequest('c1', { command: 'move', card: '.', column: 'x' })
     )
-    expect(reply).toBe('{"ok":false,"error":"board: no answer from Drovr"}\n')
+    expect(reply).toBe('{"ok":false,"error":"board: no answer from Bikube"}\n')
   })
 
   it(`serves at most ${MAX_CONNECTIONS} connections at once (#9 D5)`, async () => {

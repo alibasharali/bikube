@@ -1,5 +1,5 @@
 /**
- * Which Drovr window has the focus (#53 D10): the main window or a card's own window, which this
+ * Which Bikube window has the focus (#53 D10): the main window or a card's own window, which this
  * page draws into. Everything that refreshes "while the window is focused" or "on focus" counts
  * any of them, and a card is looked at while its own window is focused.
  */
@@ -36,7 +36,7 @@ const focused = (view: Window): boolean => {
   }
 }
 
-/** Whether any Drovr window, the main one or a card's, has the focus. */
+/** Whether any Bikube window, the main one or a card's, has the focus. */
 export function anyWindowFocused(): boolean {
   return document.hasFocus() || [...cardWindows.values()].some(focused)
 }
@@ -48,7 +48,7 @@ export function focusedCardWindow(): string | null {
 }
 
 /**
- * Calls `listener` each time a Drovr window gains the focus, card windows opened later included.
+ * Calls `listener` each time a Bikube window gains the focus, card windows opened later included.
  * Returns the unsubscribe function.
  */
 export function onAnyWindowFocus(listener: () => void): () => void {

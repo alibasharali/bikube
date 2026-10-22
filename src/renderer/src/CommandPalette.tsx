@@ -152,7 +152,7 @@ function CommandPalette({
           view: openView(open, runState, layout),
           theme,
           keymap: currentKeymap(),
-          platform: window.drovr?.platform ?? '',
+          platform: window.bikube?.platform ?? '',
           waiting
         }),
         query
@@ -318,7 +318,7 @@ function ActionRowContent({ row }: { row: ActionRow }): React.JSX.Element {
       </span>
       {row.shortcut && (
         <span className="palette-row-shortcut" data-testid="palette-row-shortcut">
-          <ShortcutKeys shortcut={row.shortcut} platform={window.drovr?.platform ?? ''} />
+          <ShortcutKeys shortcut={row.shortcut} platform={window.bikube?.platform ?? ''} />
         </span>
       )}
     </>

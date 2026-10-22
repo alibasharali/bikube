@@ -64,8 +64,8 @@ describe('SessionManager', () => {
   it('adds the given environment variables to the shell (#9 D3)', async () => {
     const m = create()
     const { output } = collect(m)
-    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24, env: { DROVR_X: 'card-7' } })
-    m.write(id, 'echo "x=$DROVR_X"\n')
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24, env: { BIKUBE_X: 'card-7' } })
+    m.write(id, 'echo "x=$BIKUBE_X"\n')
     await until(() => /x=card-7\r?\n/.test(output.get(id) ?? ''), 'env output')
   })
 
@@ -218,7 +218,7 @@ describe('SessionManager', () => {
     const m = create()
     const { output, exits } = collect(m)
     const { id, pid } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
-    m.write(id, 'yes drovr-flow\n')
+    m.write(id, 'yes bikube-flow\n')
     await new Promise((r) => setTimeout(r, 200))
     m.pause(id)
     // While paused, `yes` fills the PTY's buffer.
@@ -237,7 +237,7 @@ describe('SessionManager', () => {
     const m = create()
     const { output, exits } = collect(m)
     const sessions = [0, 1].map(() => m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 }))
-    sessions.forEach(({ id }) => m.write(id, 'yes drovr-flow\n'))
+    sessions.forEach(({ id }) => m.write(id, 'yes bikube-flow\n'))
     await new Promise((r) => setTimeout(r, 200))
     sessions.forEach(({ id }) => m.pause(id))
     await new Promise((r) => setTimeout(r, 100))

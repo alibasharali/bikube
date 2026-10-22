@@ -397,15 +397,15 @@ describe('cards: create and default titles (AC2)', () => {
 describe('cards: working directory (AC8)', () => {
   it('copies the directory at creation; later workspace edits only affect new cards', () => {
     const s = make()
-    const w = create(s, 'alpha', '/tmp/drovr-alpha')
+    const w = create(s, 'alpha', '/tmp/bikube-alpha')
     const one = card(s, w, 'one')
-    ok(s.updateWorkspace(w.id, { directory: '/tmp/drovr-other' }))
+    ok(s.updateWorkspace(w.id, { directory: '/tmp/bikube-other' }))
     const two = card(s, w, 'two')
-    expect(one.directory).toBe('/tmp/drovr-alpha')
-    expect(two.directory).toBe('/tmp/drovr-other')
+    expect(one.directory).toBe('/tmp/bikube-alpha')
+    expect(two.directory).toBe('/tmp/bikube-other')
     expect(s.getState().workspaces[0].cards.map((c) => c.directory)).toEqual([
-      '/tmp/drovr-alpha',
-      '/tmp/drovr-other'
+      '/tmp/bikube-alpha',
+      '/tmp/bikube-other'
     ])
   })
 })
@@ -553,8 +553,8 @@ describe('startup commands (#5 D2, D4, D10)', () => {
       kind: 'claude'
     })
     expect(
-      ok(s.createCard(w.id, col, 'c', { kind: 'custom', command: ' echo drovr-custom ' })).startup
-    ).toEqual({ kind: 'custom', command: 'echo drovr-custom' })
+      ok(s.createCard(w.id, col, 'c', { kind: 'custom', command: ' echo bikube-custom ' })).startup
+    ).toEqual({ kind: 'custom', command: 'echo bikube-custom' })
     expect(s.createCard(w.id, col, 'bad', { kind: 'custom', command: '' })).toEqual({
       ok: false,
       error: { field: 'command', message: 'Command is required' }
@@ -1056,7 +1056,7 @@ describe('cards with their own worktree', () => {
     directory: '/data/worktrees/repo-abc123/fix-login/app',
     worktree: {
       path: '/data/worktrees/repo-abc123/fix-login',
-      branch: 'drovr/fix-login',
+      branch: 'bikube/fix-login',
       repo: '/tmp/repo'
     }
   }
@@ -1202,7 +1202,7 @@ describe('worktree setup (#39 D1)', () => {
 describe("a card's pending setup (#39 D2)", () => {
   const worktree = {
     directory: '/data/worktrees/repo-abc123/fix',
-    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'bikube/fix', repo: '/tmp/repo' }
   }
 
   it('is copied from the workspace to a card created with its own worktree only', () => {
@@ -1323,7 +1323,7 @@ describe('automatic move rules (#42 D2, D9, AC12)', () => {
 describe('moveCardToWorktree', () => {
   const worktree = {
     directory: '/data/worktrees/repo-abc123/fix',
-    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'bikube/fix', repo: '/tmp/repo' }
   }
 
   it('moves a plain local card into the worktree, with the setup and a fresh agent session', () => {
@@ -1369,7 +1369,7 @@ describe('moveCardToWorktree', () => {
 describe('setShellRunIn', () => {
   const worktree = {
     directory: '/data/worktrees/repo-abc123/fix',
-    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'bikube/fix', repo: '/tmp/repo' }
   }
 
   it("sets a shell's worktree card and clears it; an edit keeps it", () => {

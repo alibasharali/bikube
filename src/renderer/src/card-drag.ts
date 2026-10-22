@@ -3,7 +3,7 @@
  * id under its own type; this says which workspace it belongs to, so a column accepts only
  * cards of its own board.
  */
-export const CARD_DRAG_TYPE = 'application/x-drovr-card'
+export const CARD_DRAG_TYPE = 'application/x-bikube-card'
 
 export interface CardDrag {
   workspaceId: string

@@ -33,7 +33,7 @@ function MoveToWorktreeDialog({
 
   useEffect(() => {
     let live = true
-    void window.drovr.worktree.info(card.directory).then((info) => live && setRepo(info))
+    void window.bikube.worktree.info(card.directory).then((info) => live && setRepo(info))
     return () => {
       live = false
     }
@@ -48,7 +48,7 @@ function MoveToWorktreeDialog({
       return
     }
     setCreating(true)
-    void window.drovr.worktree.create(card.directory, branch).then(async (made) => {
+    void window.bikube.worktree.create(card.directory, branch).then(async (made) => {
       if (!made.ok) {
         setCreating(false)
         setError(made.reason)
@@ -56,7 +56,7 @@ function MoveToWorktreeDialog({
       }
       // Started while git made the worktree: it keeps running where it is.
       if (cardTerminals().runState(card.id)?.kind === 'running') {
-        await window.drovr.worktree.remove(card.directory, made.path, false)
+        await window.bikube.worktree.remove(card.directory, made.path, false)
         setCreating(false)
         setError('The card started; close it first')
         return
@@ -66,7 +66,7 @@ function MoveToWorktreeDialog({
         worktree: { path: made.path, branch: made.branch, repo: card.directory }
       })
       if (!moved.ok) {
-        await window.drovr.worktree.remove(card.directory, made.path, false)
+        await window.bikube.worktree.remove(card.directory, made.path, false)
         setCreating(false)
         setError(moved.error.message)
         return

@@ -182,7 +182,7 @@ function PullRequestChip({ worktree }: { worktree: CardWorktree }): React.JSX.El
       data-state={pr.state}
       data-ci={ci ?? undefined}
       title={`Pull request #${pr.number}: ${what}`}
-      onClick={() => window.drovr.link.open(pr.url)}
+      onClick={() => window.bikube.link.open(pr.url)}
     >
       {ci !== null && <span className="card-pr-dot" aria-hidden="true" />}
       {open ? `#${pr.number}` : `#${pr.number} ${pr.state}`}
@@ -223,7 +223,7 @@ function PullRequestItem({
           ? undefined
           : run(() => {
               void runCardGitAction(cardId, 'Pushing…', () =>
-                window.drovr.git.openPullRequest(worktree.path)
+                window.bikube.git.openPullRequest(worktree.path)
               ).then((result) => {
                 if (result?.ok) refreshPullRequest(worktree.path)
               })
@@ -389,7 +389,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
     const worktree = card.worktree
     if (!worktree) return
     void runCardGitAction(card.id, 'Merging…', () =>
-      window.drovr.git.merge(worktree.path, worktree.repo, cardBranch, branch)
+      window.bikube.git.merge(worktree.path, worktree.repo, cardBranch, branch)
     ).then((result) => {
       // The workspace folder's chips show what the merge left (D11).
       if (result) refreshBranch(worktree.repo)

@@ -19,9 +19,9 @@
 
 import { isGlobalShortcut } from './global-hotkey'
 import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides } from './keymap'
-import { DROVR_DARK, DROVR_LIGHT, isTerminalThemeName } from './terminal-themes'
+import { BIKUBE_DARK, BIKUBE_LIGHT, isTerminalThemeName } from './terminal-themes'
 
-export const SETTINGS_FILE_NAME = 'drovr-settings.json'
+export const SETTINGS_FILE_NAME = 'bikube-settings.json'
 export const SETTINGS_VERSION = 1
 
 export const THEMES = ['system', 'dark', 'light'] as const
@@ -42,7 +42,7 @@ export interface Settings extends Preferences {
   useGhosttyTheme: boolean
   /** The shortcuts that differ from this OS's default (#31 D9); absent when none do. */
   shortcuts?: ShortcutOverrides
-  /** The system-wide shortcut that shows or hides Drovr (#51 D9), as D7 text; absent when none. */
+  /** The system-wide shortcut that shows or hides Bikube (#51 D9), as D7 text; absent when none. */
   globalShortcut?: string
 }
 
@@ -97,7 +97,7 @@ export interface Preferences {
   notificationSound: boolean
   /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
   claudeStatus: boolean
-  /** Local zsh, bash and fish shells start with Drovr's integration scripts (#45 D3, D4). */
+  /** Local zsh, bash and fish shells start with Bikube's integration scripts (#45 D3, D4). */
   shellIntegration: boolean
   /** Sixel and iTerm2 images show in terminals created while it is on (#52 D3). */
   inlineImages: boolean
@@ -115,7 +115,7 @@ export interface Preferences {
   keepOutput: boolean
   /** Closing a running card asks first (#7 D4); its dialog's Don't ask again turns it off. */
   confirmClose: boolean
-  /** Bringing Drovr forward with the global shortcut opens the next waiting card (#51 D4). */
+  /** Bringing Bikube forward with the global shortcut opens the next waiting card (#51 D4). */
   openWaitingOnShow: boolean
 }
 
@@ -200,8 +200,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   fontSize: 13,
   fontFamily: DEFAULT_FONT_FAMILY,
   shell: '',
-  terminalThemeDark: DROVR_DARK,
-  terminalThemeLight: DROVR_LIGHT,
+  terminalThemeDark: BIKUBE_DARK,
+  terminalThemeLight: BIKUBE_LIGHT,
   useGhosttyTheme: false,
   ...PREFERENCE_DEFAULTS
 })

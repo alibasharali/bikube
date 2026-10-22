@@ -10,19 +10,19 @@ describe('startLine (D2, D5)', () => {
     ).toBeNull()
   })
 
-  it("starts Claude Code with Drovr's settings and the session id, resuming it if it exists", () => {
+  it("starts Claude Code with Bikube's settings and the session id, resuming it if it exists", () => {
     expect(
       startLine({ startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: false })
     ).toBe(
-      `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${U} || ` +
-        `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${U}`
+      `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${U} || ` +
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${U}`
     )
   })
 
   it('resumes, falling back to the same session id, once Claude was started (AC4, AC9, #31 D14)', () => {
     expect(startLine({ startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: true })).toBe(
-      `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${U} || ` +
-        `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${U}`
+      `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${U} || ` +
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${U}`
     )
   })
 
@@ -44,11 +44,11 @@ describe('startLine (D2, D5)', () => {
   it('types a Custom command as written (AC7)', () => {
     expect(
       startLine({
-        startup: { kind: 'custom', command: 'echo drovr-custom' },
+        startup: { kind: 'custom', command: 'echo bikube-custom' },
         agentSessionId: U,
         claudeStarted: true
       })
-    ).toBe('echo drovr-custom')
+    ).toBe('echo bikube-custom')
   })
 
   it('follows a workspace shell’s command with `; exit` when it closes once the command ends', () => {

@@ -59,9 +59,9 @@ describe('outputTail', () => {
 
 describe('lastOutputLine (D9)', () => {
   it('returns the last non-blank line at or above the cursor, trimmed', () => {
-    const screen = ['$ printf hi', '  drovr-marker  ', '', '   ', 'below the cursor']
-    expect(lastOutputLine(screen, 3)).toBe('drovr-marker')
-    expect(lastOutputLine(screen, 1)).toBe('drovr-marker')
+    const screen = ['$ printf hi', '  bikube-marker  ', '', '   ', 'below the cursor']
+    expect(lastOutputLine(screen, 3)).toBe('bikube-marker')
+    expect(lastOutputLine(screen, 1)).toBe('bikube-marker')
     expect(lastOutputLine(screen, 0)).toBe('$ printf hi')
   })
   it('removes escape sequences and treats a line of only escapes as blank', () => {
@@ -121,10 +121,10 @@ describe('SSH failed (#12 D7)', () => {
 
 describe('cardStatus (D9)', () => {
   it('pairs the label with the last output line, except when stopped or it could not start', () => {
-    expect(cardStatus({ kind: 'running' }, 'drovr-marker')).toEqual({
+    expect(cardStatus({ kind: 'running' }, 'bikube-marker')).toEqual({
       label: 'Running',
       agentStatus: '',
-      lastLine: 'drovr-marker'
+      lastLine: 'bikube-marker'
     })
     expect(cardStatus({ kind: 'stopped' }, '$ exit 3')).toEqual({
       label: 'Stopped',

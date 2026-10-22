@@ -18,7 +18,7 @@ import type { StateFileFs } from './state-file'
 export const SETTINGS_SAVE_INTERVAL_MS = 200
 
 export interface SettingsFileOptions {
-  /** The directory holding `drovr-settings.json` (Electron's `userData`). */
+  /** The directory holding `bikube-settings.json` (Electron's `userData`). */
   dir: string
   fs: StateFileFs
   /** The OS the app runs on (`process.platform`), whose default shortcuts apply (#31 D6, D9). */

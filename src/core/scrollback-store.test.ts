@@ -43,7 +43,7 @@ const recordingFs = (): ScrollbackFs => ({
 })
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-scrollback-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-scrollback-'))
   dir = join(root, 'scrollback')
   calls = []
   store = new ScrollbackStore({ dir, fs: recordingFs(), log: () => {} })

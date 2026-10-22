@@ -13,7 +13,7 @@ const card = (id: string, columnId: string, title = id): Card => ({
   id,
   columnId,
   title,
-  directory: '/tmp/drovr-alpha',
+  directory: '/tmp/bikube-alpha',
   startup: { kind: 'shell' },
   agentSessionId: 'x',
   claudeStarted: false,
@@ -23,7 +23,7 @@ const card = (id: string, columnId: string, title = id): Card => ({
 const workspace = (id: string, cards: Card[]): Workspace => ({
   id,
   name: id,
-  directory: `/tmp/drovr-${id}`,
+  directory: `/tmp/bikube-${id}`,
   columns: [
     { id: 'backlog', name: 'Backlog' },
     { id: 'running', name: 'Running' },
@@ -418,7 +418,11 @@ describe('answerBoardCommand: list, create and rename', () => {
     )
     if (!reply.ok || reply.output === undefined) throw new Error('no output')
     const listing = JSON.parse(reply.output)
-    expect(listing.workspace).toEqual({ id: 'alpha', name: 'alpha', directory: '/tmp/drovr-alpha' })
+    expect(listing.workspace).toEqual({
+      id: 'alpha',
+      name: 'alpha',
+      directory: '/tmp/bikube-alpha'
+    })
     expect(listing.columns.map((c: { name: string }) => c.name)).toEqual([
       'Backlog',
       'Running',
@@ -448,7 +452,7 @@ describe('answerBoardCommand: list, create and rename', () => {
     expect(reply).toEqual({
       ok: true,
       output: [
-        'alpha (/tmp/drovr-alpha)',
+        'alpha (/tmp/bikube-alpha)',
         '',
         'Backlog (3)',
         '  api  [c-api]  running, working',

@@ -1,6 +1,6 @@
 /**
  * The sync file's format (#13 D3, D5, D6). Plain TS: no Electron or Node imports. The file
- * `drovr-board.json` in the sync folder holds
+ * `bikube-board.json` in the sync folder holds
  * `{ "version": 1, "savedAt": "<ISO 8601 UTC>", "board": { "workspaces": [...] } }`.
  */
 
@@ -9,7 +9,7 @@ import { validateWorkspaceState } from './saved-state'
 import type { StartupCommand } from './startup-command'
 import type { Card, Workspace, WorkspaceState } from './workspace-store'
 
-export const SYNC_FILE_NAME = 'drovr-board.json'
+export const SYNC_FILE_NAME = 'bikube-board.json'
 
 /** `home` without trailing separators (but `/` stays `/`). */
 function trimHome(home: string): string {

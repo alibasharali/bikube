@@ -19,7 +19,7 @@ const write = (path: string, text = ''): void => {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-tree-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-tree-'))
   root = join(dir, 'repo')
   mkdirSync(root)
 })

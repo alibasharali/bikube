@@ -56,7 +56,7 @@ export function useInWindow(cardId: string): boolean {
  */
 export function focusCardWindow(cardId: string): boolean {
   if (!windows.has(cardId)) return false
-  window.drovr.cardWindow.focus(cardId)
+  window.bikube.cardWindow.focus(cardId)
   return true
 }
 
@@ -98,7 +98,7 @@ export function returnCardWindow(cardId: string): void {
   const open = windows.get(cardId)
   if (!open) return
   closeCardWindow(cardId)
-  window.drovr.app.focus()
+  window.bikube.app.focus()
   returnRequest?.(open.workspaceId, cardId)
 }
 

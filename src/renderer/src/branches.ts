@@ -3,7 +3,7 @@ import { onAnyWindowFocus } from './window-focus'
 
 /**
  * The current branch of each local workspace's folder, for the sidebar and the title bar: read
- * when first shown, every few seconds while shown, and when a Drovr window gets the focus (a card's
+ * when first shown, every few seconds while shown, and when a Bikube window gets the focus (a card's
  * own window too, #53 D10), since the user (or an agent) switches branches in a terminal. One store
  * for every folder shown.
  */
@@ -20,7 +20,7 @@ let timer: ReturnType<typeof setInterval> | null = null
 let stopFocus: (() => void) | null = null
 
 function read(dir: string): void {
-  void window.drovr.worktree.info(dir).then((info) => {
+  void window.bikube.worktree.info(dir).then((info) => {
     const next = info === null ? null : (info.branch ?? 'detached')
     if (branches.get(dir) === next) return
     branches.set(dir, next)

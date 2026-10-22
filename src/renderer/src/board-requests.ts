@@ -12,7 +12,7 @@ import { setCardUsage } from './usage'
  * card (#39 D4, D5). A usage is kept for the card's usage line, runtime only (#50 D7).
  */
 export function listenForBoardRequests(): () => void {
-  return window.drovr.board.onRequest((cardId, command) =>
+  return window.bikube.board.onRequest((cardId, command) =>
     answerBoardCommand(
       workspaceStore,
       cardId,

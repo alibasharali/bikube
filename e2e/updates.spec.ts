@@ -20,9 +20,9 @@ import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// The updater against a local release feed (DROVR_UPDATE_FEED, honoured by the development build
-// only): its file is a zip of a fake `Drovr.app` on macOS, a fake AppImage on Linux, and an
-// install replaces a fake app in a temporary folder (DROVR_UPDATE_TARGET), never Drovr itself.
+// The updater against a local release feed (BIKUBE_UPDATE_FEED, honoured by the development build
+// only): its file is a zip of a fake `Bikube.app` on macOS, a fake AppImage on Linux, and an
+// install replaces a fake app in a temporary folder (BIKUBE_UPDATE_TARGET), never Bikube itself.
 
 const NAME = assetName('0.3.0', process.platform, process.arch)
 test.skip(NAME === null, 'the updater installs only on Apple silicon macOS and x64 Linux')
@@ -42,17 +42,17 @@ let app: ElectronApplication | undefined
 let page: Page
 
 /** The fake app an install replaces, and the text inside it that tells old from new. */
-const target = (): string => join(root, 'apps', MAC ? 'Drovr.app' : 'Drovr.AppImage')
+const target = (): string => join(root, 'apps', MAC ? 'Bikube.app' : 'Bikube.AppImage')
 const marker = (): string => (MAC ? join(target(), 'Contents', 'marker') : target())
 
 /** The release file for `version`: a zipped `.app` holding `new <version>`, or that text. */
 function releaseFile(version: string): Buffer {
   if (!MAC) return Buffer.from(`new ${version}`)
   const build = join(root, `build-${version}`)
-  mkdirSync(join(build, 'Drovr.app', 'Contents'), { recursive: true })
-  writeFileSync(join(build, 'Drovr.app', 'Contents', 'marker'), `new ${version}`)
+  mkdirSync(join(build, 'Bikube.app', 'Contents'), { recursive: true })
+  writeFileSync(join(build, 'Bikube.app', 'Contents', 'marker'), `new ${version}`)
   const zip = join(build, 'release.zip')
-  execFileSync('ditto', ['-c', '-k', '--keepParent', join(build, 'Drovr.app'), zip])
+  execFileSync('ditto', ['-c', '-k', '--keepParent', join(build, 'Bikube.app'), zip])
   return readFileSync(zip)
 }
 
@@ -82,7 +82,7 @@ function latest(): unknown {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-updates-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-updates-'))
   feed = { version: '0.3.0', status: 200, badDigest: false, fileMissing: false }
   files = new Map()
   mkdirSync(join(root, 'apps'))
@@ -125,13 +125,13 @@ async function launch(
 ): Promise<string> {
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
-    DROVR_UPDATE_FEED: `${base}latest`,
-    DROVR_UPDATE_CURRENT: options.current ?? '0.2.0',
+    BIKUBE_UPDATE_FEED: `${base}latest`,
+    BIKUBE_UPDATE_CURRENT: options.current ?? '0.2.0',
     // A release whose file isn't up yet is checked again this soon (2 minutes in the app).
-    DROVR_UPDATE_WAITING_MS: '300'
+    BIKUBE_UPDATE_WAITING_MS: '300'
   }
-  if (options.withTarget !== false) env['DROVR_UPDATE_TARGET'] = target()
-  if (options.waitingChecks) env['DROVR_UPDATE_WAITING_CHECKS'] = String(options.waitingChecks)
+  if (options.withTarget !== false) env['BIKUBE_UPDATE_TARGET'] = target()
+  if (options.waitingChecks) env['BIKUBE_UPDATE_WAITING_CHECKS'] = String(options.waitingChecks)
   const launched = await launchApp({ dataDir: options.dataDir, env })
   app = launched.app
   page = launched.page
@@ -172,14 +172,14 @@ test('a newer release shows the button; the popup gives its version, size and da
   await expect(popup().getByTestId('update-size')).toHaveText(/\d+ KB/)
   await expect(popup().getByTestId('update-released')).toContainText('2026')
   await expect(install()).toHaveText('Install and Relaunch')
-  await expect(popup()).toContainText('Or it installs when you quit Drovr.')
+  await expect(popup()).toContainText('Or it installs when you quit Bikube.')
   // Nothing is replaced until the user installs.
   expect(readFileSync(marker(), 'utf8')).toBe('old')
 
   await install().click()
   await exited()
   await expect.poll(() => readFileSync(marker(), 'utf8')).toBe('new 0.3.0')
-  expect(readdirSync(join(root, 'apps'))).toEqual([MAC ? 'Drovr.app' : 'Drovr.AppImage'])
+  expect(readdirSync(join(root, 'apps'))).toEqual([MAC ? 'Bikube.app' : 'Bikube.AppImage'])
 })
 
 test('Install and Relaunch names the running terminals; Cancel keeps everything', async () => {
@@ -204,7 +204,7 @@ test('Install and Relaunch names the running terminals; Cancel keeps everything'
   await install().click()
   const confirm = page.getByTestId('confirm-dialog')
   await expect(confirm).toContainText(
-    'Drovr quits, installs the update and opens again. 1 terminal is running and will be stopped.'
+    'Bikube quits, installs the update and opens again. 1 terminal is running and will be stopped.'
   )
   await confirm.getByTestId('confirm-cancel').click()
   await expect(confirm).toHaveCount(0)
@@ -269,7 +269,7 @@ test('a version skipped after its download offers Install and Relaunch when chec
   await expect(popup().getByTestId('update-version')).toHaveText('0.3.0')
   await expect(install()).toHaveText('Install and Relaunch')
   // Skipped: it no longer installs at quit, so the popup doesn't say it does.
-  await expect(popup()).not.toContainText('Or it installs when you quit Drovr.')
+  await expect(popup()).not.toContainText('Or it installs when you quit Bikube.')
   await page.keyboard.press('Escape')
   await app!.close()
   app = undefined
@@ -297,7 +297,7 @@ test('a release found before its file is up says so, then installs once the file
   await launch()
   await openPopup()
   await expect(popup().getByTestId('update-waiting')).toHaveText(
-    'The download for 0.3.0 isn’t ready yet. Drovr checks again in a few minutes.'
+    'The download for 0.3.0 isn’t ready yet. Bikube checks again in a few minutes.'
   )
   await expect(install()).toHaveText('Not Ready Yet')
   await expect(install()).toBeDisabled()
@@ -334,7 +334,7 @@ test('a check from Settings says up to date, or that it failed', async () => {
   await launch({ current: '0.3.0' })
   await expect(button()).toHaveCount(0)
   await checkFromSettings()
-  await expect(page.getByTestId('update-status')).toContainText('Drovr is up to date')
+  await expect(page.getByTestId('update-status')).toContainText('Bikube is up to date')
   await expect(page.getByTestId('update-status')).toContainText('Version 0.3.0 is the latest.')
   await page.keyboard.press('Escape')
 
@@ -382,7 +382,7 @@ test('an install that can’t swap the app keeps the old one and says so at the 
   expect(existsSync(join(dataDir, 'update-install-failed'))).toBe(false)
 })
 
-test('a failed install’s reason shows at the next launch also where Drovr can only link to the release', async () => {
+test('a failed install’s reason shows at the next launch also where Bikube can only link to the release', async () => {
   const dataDir = newDataDir()
   writeFileSync(join(dataDir, 'update-install-failed'), 'mv: Permission denied')
   await launch({ dataDir, withTarget: false })
@@ -394,7 +394,7 @@ test('a failed install’s reason shows at the next launch also where Drovr can 
   expect(existsSync(join(dataDir, 'update-install-failed'))).toBe(false)
 })
 
-test('a copy Drovr cannot replace offers the release page instead', async () => {
+test('a copy Bikube cannot replace offers the release page instead', async () => {
   await launch({ withTarget: false })
   await openPopup()
   await expect(install()).toHaveText('Download')

@@ -86,7 +86,7 @@ function NewCardForm({
   useEffect(() => {
     if (!workspace || workspace.host !== undefined) return
     let live = true
-    void window.drovr.worktree.info(workspace.directory).then((info) => live && setRepo(info))
+    void window.bikube.worktree.info(workspace.directory).then((info) => live && setRepo(info))
     return () => {
       live = false
     }
@@ -107,7 +107,7 @@ function NewCardForm({
       return
     }
     setCreating(true)
-    void window.drovr.worktree.create(workspace.directory, branch).then((made) => {
+    void window.bikube.worktree.create(workspace.directory, branch).then((made) => {
       setCreating(false)
       if (!made.ok) {
         setBranchError(made.reason)

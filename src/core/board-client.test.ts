@@ -25,7 +25,7 @@ async function listenRaw(onConnection: (socket: Socket) => void): Promise<void> 
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'drovr-cli-'))
+  dir = await mkdtemp(join(tmpdir(), 'bikube-cli-'))
   socketPath = join(dir, 'board.sock')
 })
 
@@ -45,7 +45,7 @@ async function serve(handler: (request: BoardRequest) => Promise<BoardReply>): P
 /** Runs `board <argv>` with the given environment; returns its exit code and output. */
 async function board(
   argv: string[],
-  env: Record<string, string | undefined> = { DROVR_CARD_ID: 'c1', DROVR_SOCKET: socketPath },
+  env: Record<string, string | undefined> = { BIKUBE_CARD_ID: 'c1', BIKUBE_SOCKET: socketPath },
   timeoutMs?: number
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   let stdout = ''
@@ -153,7 +153,7 @@ describe('runBoard', () => {
       stdout: '',
       stderr: `${NOT_IN_A_CARD}\n`
     })
-    expect(await board(['usage', '.', '/nope.jsonl'], { DROVR_CARD_ID: 'c1' })).toEqual({
+    expect(await board(['usage', '.', '/nope.jsonl'], { BIKUBE_CARD_ID: 'c1' })).toEqual({
       code: 1,
       stdout: '',
       stderr: `${NOT_RUNNING}\n`
@@ -163,7 +163,7 @@ describe('runBoard', () => {
   it('refuses without a card id (#9 D3, AC8)', async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler)
-    expect(await board(['move', '.', 'Done'], { DROVR_SOCKET: socketPath })).toEqual({
+    expect(await board(['move', '.', 'Done'], { BIKUBE_SOCKET: socketPath })).toEqual({
       code: 1,
       stdout: '',
       stderr: `${NOT_IN_A_CARD}\n`
@@ -171,12 +171,12 @@ describe('runBoard', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
-  it('reports Drovr not running when nothing listens on the socket (#9 D9, AC8)', async () => {
+  it('reports Bikube not running when nothing listens on the socket (#9 D9, AC8)', async () => {
     expect(await board(['move', '.', 'Done'])).toMatchObject({
       code: 1,
       stderr: `${NOT_RUNNING}\n`
     })
-    expect(await board(['move', '.', 'Done'], { DROVR_CARD_ID: 'c1' })).toMatchObject({
+    expect(await board(['move', '.', 'Done'], { BIKUBE_CARD_ID: 'c1' })).toMatchObject({
       code: 1,
       stderr: `${NOT_RUNNING}\n`
     })

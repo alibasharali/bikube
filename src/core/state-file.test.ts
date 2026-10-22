@@ -4,8 +4,8 @@ import { serializeSavedState } from './saved-state'
 import { SAVE_INTERVAL_MS, StateFile, type StateFileFs } from './state-file'
 
 const DIR = '/data'
-const FILE = '/data/drovr-state.json'
-const TMP = '/data/drovr-state.json.tmp'
+const FILE = '/data/bikube-state.json'
+const TMP = '/data/bikube-state.json.tmp'
 const EMPTY: WorkspaceState = { workspaces: [], activeId: null }
 
 /** An in-memory directory that records every write and rename in order. */
@@ -105,8 +105,8 @@ describe('StateFile.load (#8 D4, AC7)', () => {
   it('renames a rejected file aside with a UTC timestamp and gives an empty board', () => {
     fs.files.set(FILE, '{"version": 2, "state": {}}')
     expect(open().load()).toEqual(EMPTY)
-    expect(fs.ops).toEqual([`rename ${FILE} -> /data/drovr-state.corrupt-20261013T141500Z.json`])
-    expect(fs.files.get('/data/drovr-state.corrupt-20261013T141500Z.json')).toBe(
+    expect(fs.ops).toEqual([`rename ${FILE} -> /data/bikube-state.corrupt-20261013T141500Z.json`])
+    expect(fs.files.get('/data/bikube-state.corrupt-20261013T141500Z.json')).toBe(
       '{"version": 2, "state": {}}'
     )
     expect(fs.files.has(FILE)).toBe(false)
@@ -202,8 +202,8 @@ describe('StateFile edge cases (#8 D3, D5, D6)', () => {
     const file = open()
     file.save(stateNamed('a'))
     file.flush()
-    expect(fs.ops[0]).toBe(`rename ${FILE} -> /data/drovr-state.corrupt-20261013T141500Z.json`)
-    expect(fs.files.get('/data/drovr-state.corrupt-20261013T141500Z.json')).toBe('not json')
+    expect(fs.ops[0]).toBe(`rename ${FILE} -> /data/bikube-state.corrupt-20261013T141500Z.json`)
+    expect(fs.files.get('/data/bikube-state.corrupt-20261013T141500Z.json')).toBe('not json')
   })
 
   it('keeps the state pending when a write fails, and the next flush retries', () => {
@@ -219,7 +219,7 @@ describe('StateFile edge cases (#8 D3, D5, D6)', () => {
 })
 
 describe('StateFile with an unreadable file (#8 D4)', () => {
-  const ASIDE = '/data/drovr-state.corrupt-20261013T141500Z.json'
+  const ASIDE = '/data/bikube-state.corrupt-20261013T141500Z.json'
 
   it('moves a file it cannot read aside, then saves normally', () => {
     fs.files.set(FILE, 'secret')

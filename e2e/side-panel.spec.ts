@@ -19,7 +19,7 @@ import { showShells } from './shells-tab'
 
 // The side panel beside an open card (#55 S1) and beside the board (#57): shown by default,
 // toggled by its title bar button, its hide button and the Toggle panel shortcut, resized from its
-// left edge, saved app-wide in drovr-settings.json, and its Files tab's SSH message.
+// left edge, saved app-wide in bikube-settings.json, and its Files tab's SSH message.
 
 const darwin = process.platform === 'darwin'
 /** The Toggle panel default (#55 D2) as a Playwright press. */
@@ -56,7 +56,7 @@ function makeRepo(dir: string): void {
 
 test.beforeEach(() => {
   dataDir = newDataDir()
-  root = mkdtempSync(join(tmpdir(), 'drovr-panel-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-panel-'))
   repo = join(root, 'repo')
   makeRepo(repo)
 })
@@ -78,7 +78,7 @@ async function restart(): Promise<void> {
   await launch()
 }
 
-const settingsPath = (): string => join(dataDir, 'drovr-settings.json')
+const settingsPath = (): string => join(dataDir, 'bikube-settings.json')
 /** The settings file's `settings` object; empty while there is no file. */
 const savedSettings = (): Record<string, unknown> =>
   existsSync(settingsPath())
@@ -373,7 +373,7 @@ test('#55 AC4: dragging the left edge resizes it, kept across a restart, between
 })
 
 test.describe('over SSH', () => {
-  const REMOTE_DIR = '/tmp/drovr-remote'
+  const REMOTE_DIR = '/tmp/bikube-remote'
   let fake: FakeSshHome
 
   test.beforeEach(() => {

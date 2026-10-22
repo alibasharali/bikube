@@ -51,7 +51,7 @@ export interface Terminals {
  * (#12 D5): each SSH session instead gets its own socket from `sessionSockets`, forwarded by
  * `ssh -R` (#25 D1, D2), closed when the session exits. A local shell is the Shell setting's
  * (`shellSetting`, '' for the login shell); the local shell running `ssh` is always the login shell.
- * A local zsh, bash or fish starts with Drovr's integration script while `shellIntegration` is on
+ * A local zsh, bash or fish starts with Bikube's integration script while `shellIntegration` is on
  * (#45 D3, D4), read at each spawn so a change applies to new terminals only.
  */
 export function registerTerminals(
@@ -66,8 +66,8 @@ export function registerTerminals(
   // Pauses a session's PTY while the renderer is behind on parsing its output (#16 D1).
   const flow = new FlowControl(manager)
   // The benchmark's backlog reading (#16 D7), read through `app.evaluate`; only when it runs.
-  if (process.env.DROVR_BENCH) {
-    ;(globalThis as { __drovrFlowPeak?: { read(): number; reset(): void } }).__drovrFlowPeak = {
+  if (process.env.BIKUBE_BENCH) {
+    ;(globalThis as { __bikubeFlowPeak?: { read(): number; reset(): void } }).__bikubeFlowPeak = {
       read: () => flow.peakUnacked(),
       reset: () => flow.resetPeak()
     }
@@ -170,7 +170,7 @@ export function registerTerminals(
                   ...shellEnv(cardId),
                   ...(shell && { SHELL: shell }),
                   // Read by the Claude Code session start hook (claude-hooks.ts).
-                  DROVR_CLAUDE_STATUS: claudeStatus() ? '1' : '0',
+                  BIKUBE_CLAUDE_STATUS: claudeStatus() ? '1' : '0',
                   ...integration?.env
                 }
               : undefined
@@ -227,7 +227,7 @@ export function registerTerminals(
   }
 }
 
-/** Drovr's shell integration scripts (#45 D3): `resources/shell-integration`, packaged beside `bin`. */
+/** Bikube's shell integration scripts (#45 D3): `resources/shell-integration`, packaged beside `bin`. */
 function shellIntegrationDir(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'shell-integration')

@@ -63,17 +63,17 @@ export let settingsStore: SettingsStore
 
 /** Loads the settings from main once and creates the app-wide store from them (#10 D6). */
 export async function loadSettingsStore(): Promise<void> {
-  const loaded = await window.drovr.settings.load()
+  const loaded = await window.bikube.settings.load()
   settingsStore = createSettingsStore(
     loaded,
-    (next) => window.drovr.settings.save(next),
-    window.drovr.platform
+    (next) => window.bikube.settings.save(next),
+    window.bikube.platform
   )
 }
 
 /** Every configurable shortcut in effect now (#31 D5, D9); read at the time of each key press. */
 export function currentKeymap(): Keymap {
-  return resolveKeymap(settingsStore.get().shortcuts, window.drovr.platform)
+  return resolveKeymap(settingsStore.get().shortcuts, window.bikube.platform)
 }
 
 export function useSettings(): Settings {

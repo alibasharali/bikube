@@ -18,8 +18,8 @@ describe('cardWindowOpen', () => {
   it('denies any other frame name or an invalid card id', () => {
     expect(cardWindowOpen({ ...open, frameName: 'x' })).toBeNull()
     expect(cardWindowOpen({ ...open, frameName: '' })).toBeNull()
-    expect(cardWindowOpen({ ...open, frameName: 'drovr-card:' })).toBeNull()
-    expect(cardWindowOpen({ ...open, frameName: `drovr-card:${'a'.repeat(101)}` })).toBeNull()
+    expect(cardWindowOpen({ ...open, frameName: 'bikube-card:' })).toBeNull()
+    expect(cardWindowOpen({ ...open, frameName: `bikube-card:${'a'.repeat(101)}` })).toBeNull()
   })
 
   it('denies an open from anything but the main window', () => {

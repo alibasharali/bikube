@@ -27,7 +27,7 @@ test.afterEach(async () => {
 })
 
 async function createWorkspace(name: string): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'drovr-workspace-tree-'))
+  const dir = mkdtempSync(join(tmpdir(), 'bikube-workspace-tree-'))
   dirs.push(dir)
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
@@ -127,7 +127,7 @@ test('shows each terminal’s status: running, working, question; waiting while 
   await expectCardOpen(page, 'Agent A')
   await page.getByTestId('card-view').getByTestId('terminal').click()
   const set = async (activity: string): Promise<void> => {
-    await page.keyboard.type(`"$DROVR_BIN/board" activity . ${activity}`)
+    await page.keyboard.type(`"$BIKUBE_BIN/board" activity . ${activity}`)
     await page.keyboard.press('Enter')
   }
   for (const [activity, label] of [
@@ -135,7 +135,7 @@ test('shows each terminal’s status: running, working, question; waiting while 
     ['question', 'Needs your answer']
   ]) {
     await set(activity)
-    // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+    // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
     await expect(mark).toHaveAttribute('data-activity', activity, { timeout: 15_000 })
     await expect(mark).toHaveAttribute('title', label)
   }
@@ -156,7 +156,7 @@ test('shows each terminal’s status: running, working, question; waiting while 
 
 test('shows what each terminal runs: its agent’s logo and colour, a shell neutral', async () => {
   // The fake `claude`, `codex`, `gemini` and `opencode` on the login PATH.
-  const root = mkdtempSync(join(tmpdir(), 'drovr-workspace-tree-agents-'))
+  const root = mkdtempSync(join(tmpdir(), 'bikube-workspace-tree-agents-'))
   dirs.push(root)
   const fake = fakeAgentsHome(root)
   await app.close()

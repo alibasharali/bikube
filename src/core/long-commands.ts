@@ -34,7 +34,7 @@ export function longCommandNotice(
   return { body: `${what} · ${workspace}` }
 }
 
-const ARG = '--drovr-long-command-ms='
+const ARG = '--bikube-long-command-ms='
 
 /** The renderer's argument carrying a shortened threshold (the development build's tests only). */
 export const longCommandMsArg = (ms: number | string): string => `${ARG}${ms}`

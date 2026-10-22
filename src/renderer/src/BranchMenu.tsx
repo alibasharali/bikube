@@ -86,10 +86,10 @@ export function BranchChip({
   }, [open])
 
   const load = (): void => {
-    void window.drovr.git.branches(dir).then((next) => {
+    void window.bikube.git.branches(dir).then((next) => {
       if (openRef.current) setList(next)
     })
-    void window.drovr.git.aheadBehind(dir).then((next) => {
+    void window.bikube.git.aheadBehind(dir).then((next) => {
       if (openRef.current) setSync(next)
     })
   }
@@ -221,18 +221,18 @@ export function BranchChip({
 
   const switchTo = (name: string): void => {
     if (name === list?.current) return
-    void act('Switching…', () => window.drovr.git.switch(dir, name))
+    void act('Switching…', () => window.bikube.git.switch(dir, name))
   }
   const track = (remote: string, name: string): void => {
     if (name === list?.current) return
-    void act('Switching…', () => window.drovr.git.track(dir, remote, name))
+    void act('Switching…', () => window.bikube.git.track(dir, remote, name))
   }
 
   const create = (e: React.FormEvent): void => {
     e.preventDefault()
     if (naming === null) return
     setNameProblem(null)
-    void act('Creating…', () => window.drovr.git.create(dir, naming))
+    void act('Creating…', () => window.bikube.git.create(dir, naming))
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
@@ -258,11 +258,11 @@ export function BranchChip({
       setNameProblem(null)
       setNaming('')
     } else if (testId === 'branch-fetch') {
-      void act('Fetching…', () => window.drovr.git.fetch(dir))
+      void act('Fetching…', () => window.bikube.git.fetch(dir))
     } else if (testId === 'branch-pull') {
-      void act('Pulling…', () => window.drovr.git.pull(dir))
+      void act('Pulling…', () => window.bikube.git.pull(dir))
     } else if (testId === 'branch-push') {
-      void act('Pushing…', () => window.drovr.git.push(dir))
+      void act('Pushing…', () => window.bikube.git.push(dir))
     }
   }
 

@@ -63,7 +63,7 @@ describe('ghPlan (#38 D7, AC10)', () => {
         '-l',
         '-c',
         'command -v "$1" >/dev/null 2>&1 || exit 127; exec "$@"',
-        'drovr',
+        'bikube',
         'gh',
         ...VIEW,
         '$(touch x); feat/a b'
@@ -158,7 +158,7 @@ describe('readPullRequest (#38 D7)', () => {
     })
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-gh-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-gh-'))
     bin = join(dir, 'bin')
     mkdirSync(bin)
     const home = join(dir, 'home')

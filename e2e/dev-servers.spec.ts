@@ -32,7 +32,7 @@ const servers: Server[] = []
 const CHIP_MS = 4000
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-dev-servers-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-dev-servers-'))
   fake = undefined
 })
 

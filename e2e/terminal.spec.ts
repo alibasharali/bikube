@@ -17,7 +17,7 @@ let root: string
 const TERMINAL = '[data-testid=card-view] [data-testid=terminal]'
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-terminal-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-terminal-'))
   ;({ app, page } = await launchApp())
   await openNewCard()
 })

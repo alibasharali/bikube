@@ -24,7 +24,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-close-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-close-'))
   const fake = fakeClaudeHome(root)
   log = fake.log
   ;({ app, page, dataDir } = await launchApp({ env: fake.env }))
@@ -394,7 +394,7 @@ test("Don't ask again closes at once from then on, until Settings turns the ques
   await dontAsk.check()
   await confirmClose()
   await expect(status('api')).toHaveText('Stopped')
-  const settingsFile = join(dataDir, 'drovr-settings.json')
+  const settingsFile = join(dataDir, 'bikube-settings.json')
   await expect
     .poll(
       () => existsSync(settingsFile) && JSON.parse(readFileSync(settingsFile, 'utf8')).confirmClose

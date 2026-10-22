@@ -18,7 +18,7 @@ let root: string
 let dataDir: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-images-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-images-'))
   const dir = join(root, 'alpha')
   mkdirSync(dir)
   ;({ app, page, dataDir } = await launchApp())
@@ -260,9 +260,9 @@ test('AC8: kept output shows the text printed after an image, and no image', asy
   expect(imageRows(s)).toEqual([])
 })
 
-/** `drovr-settings.json`'s settings, or null before it is written. */
+/** `bikube-settings.json`'s settings, or null before it is written. */
 const savedSettings = (): Record<string, unknown> | null => {
-  const path = join(dataDir, 'drovr-settings.json')
+  const path = join(dataDir, 'bikube-settings.json')
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).settings : null
 }
 

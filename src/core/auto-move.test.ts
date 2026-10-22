@@ -7,7 +7,7 @@ const card = (id: string, columnId: string): Card => ({
   id,
   columnId,
   title: id,
-  directory: '/tmp/drovr-alpha',
+  directory: '/tmp/bikube-alpha',
   startup: { kind: 'shell' },
   agentSessionId: 'x',
   claudeStarted: false,
@@ -17,7 +17,7 @@ const card = (id: string, columnId: string): Card => ({
 const workspace = (autoMove: AutoMove | undefined, cards: Card[]): Workspace => ({
   id: 'alpha',
   name: 'alpha',
-  directory: '/tmp/drovr-alpha',
+  directory: '/tmp/bikube-alpha',
   columns: [
     { id: 'backlog', name: 'Backlog' },
     { id: 'running', name: 'Running' },

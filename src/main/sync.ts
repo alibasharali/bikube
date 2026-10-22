@@ -62,7 +62,7 @@ const UNAVAILABLE_RETRY_MS = 2000
  */
 export function registerSync(state: MainState, settings: MainSettings): MainSync {
   // D15: a test can give each instance its own home, which D5 maps to `~`.
-  const home = process.env['DROVR_HOME_DIR'] || homedir()
+  const home = process.env['BIKUBE_HOME_DIR'] || homedir()
   const sync = new SyncFolder({
     // #26 D1: async fs, so a stalled folder never blocks main.
     fs: { readFile, stat, open, rename },

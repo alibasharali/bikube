@@ -1,5 +1,5 @@
 /**
- * The shape of a card terminal's colours (#10 D3), matching xterm.js's `ITheme`, and Drovr's own
+ * The shape of a card terminal's colours (#10 D3), matching xterm.js's `ITheme`, and Bikube's own
  * dark and light palettes. Plain TS.
  */
 import type { ResolvedTheme } from './settings'

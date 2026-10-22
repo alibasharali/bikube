@@ -123,7 +123,7 @@ export function ghPlan(shell: string, branch: string): { command: string; args: 
       '-l',
       '-c',
       'command -v "$1" >/dev/null 2>&1 || exit 127; exec "$@"',
-      'drovr',
+      'bikube',
       'gh',
       ...GH_VIEW,
       branch

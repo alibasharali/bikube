@@ -77,7 +77,7 @@ export function requestCloseCard(cardId: string, ask: () => void): void {
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
-  window.drovr.scrollback.delete(cardId)
+  window.bikube.scrollback.delete(cardId)
   clearCardUsage(cardId)
 }
 
@@ -100,7 +100,7 @@ export function removeWorktreeCard(
   removeCard(workspaceId, card.id)
   if (!removeWorktree || !card.worktree) return
   const { repo, path } = card.worktree
-  void window.drovr.worktree.remove(repo, path, force).then((result) => {
+  void window.bikube.worktree.remove(repo, path, force).then((result) => {
     if (!result.ok) console.error(`worktree not removed (${path}): ${result.reason}`)
   })
 }

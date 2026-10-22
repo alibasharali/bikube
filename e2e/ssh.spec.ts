@@ -30,9 +30,9 @@ import { plainCards } from './plain-cards'
 // host in the saved-state file, and SSH cards connecting. Each test has its own data directory
 // and "restarts" by closing the app and launching it again on the same one. Electron runs with
 // SHELL=/bin/bash and a temp HOME whose .bash_profile puts the fake `ssh` and `claude` first on
-// PATH (e2e/fake-ssh.ts). `/tmp/drovr-remote` is an existing directory.
+// PATH (e2e/fake-ssh.ts). `/tmp/bikube-remote` is an existing directory.
 
-const REMOTE_DIR = '/tmp/drovr-remote'
+const REMOTE_DIR = '/tmp/bikube-remote'
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -47,7 +47,7 @@ test.beforeAll(() => {
 
 test.beforeEach(() => {
   dataDir = newDataDir()
-  root = mkdtempSync(join(tmpdir(), 'drovr-ssh-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-ssh-'))
   fake = fakeSshHome(root)
   extraEnv = {}
 })
@@ -74,7 +74,7 @@ async function restart(): Promise<void> {
 /** The fake ssh's log, one line of arguments per connection. */
 const sshLog = (): string[] => sshLogLines(fake.sshLog)
 
-const stateFile = (): string => join(dataDir, 'drovr-state.json')
+const stateFile = (): string => join(dataDir, 'bikube-state.json')
 
 const dialog = (): Locator => page.getByTestId('workspace-dialog')
 
@@ -184,13 +184,13 @@ test('AC1: creates an SSH workspace; the picker is hidden and the tooltip shows 
   await expect(page.getByTestId('workspace-browse')).toHaveCount(0)
   await page.getByTestId('workspace-host').fill('me@devbox')
   await page.getByTestId('workspace-directory').fill(REMOTE_DIR)
-  await expect(page.getByTestId('workspace-name')).toHaveValue('drovr-remote')
+  await expect(page.getByTestId('workspace-name')).toHaveValue('bikube-remote')
   await expect(page.getByTestId('workspace-browse')).toHaveCount(0)
   await submit()
 
   await expect(page.getByTestId('workspace-item')).toHaveCount(1)
-  await expect(workspaceItem('drovr-remote')).toHaveAttribute('title', `me@devbox:${REMOTE_DIR}`)
-  await expect(page.getByTestId('board-title')).toHaveText('drovr-remote')
+  await expect(workspaceItem('bikube-remote')).toHaveAttribute('title', `me@devbox:${REMOTE_DIR}`)
+  await expect(page.getByTestId('board-title')).toHaveText('bikube-remote')
 })
 
 test('AC1: bad hosts and directories show inline errors and create nothing', async () => {
@@ -343,7 +343,7 @@ test('AC3: a file whose card has host -x is moved aside and the app starts empty
   await launch()
   await expect(page.getByTestId('empty-state')).toBeVisible()
   await expect(page.getByTestId('workspace-item')).toHaveCount(0)
-  const corrupt = readdirSync(dataDir).filter((f) => /^drovr-state\.corrupt-.*\.json$/.test(f))
+  const corrupt = readdirSync(dataDir).filter((f) => /^bikube-state\.corrupt-.*\.json$/.test(f))
   expect(corrupt).toHaveLength(1)
   expect(readFileSync(join(dataDir, corrupt[0]), 'utf8')).toBe(contents)
 })
@@ -469,16 +469,16 @@ test('AC4: a card runs on its host, in the remote directory; the local ssh has n
   await connected()
   await expect.poll(sshLog).toHaveLength(1)
   expect(sshLog()[0]).toMatch(
-    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /
+    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/bikube-remote' \|\| exit 255; /
   )
   expect(await output('pwd', 'pwd')).toBe(REMOTE_DIR)
   // The remote shell has the card's id for `board` (#25 D4) ...
-  expect(await output('echo "[$DROVR_CARD_ID]"', 'card')).toBe(`[${await cardId('api')}]`)
+  expect(await output('echo "[$BIKUBE_CARD_ID]"', 'card')).toBe(`[${await cardId('api')}]`)
   // ... but the local shell that ran ssh had none of the `board` variables (#12 D5, #25 D2).
   expect(sshLogLines(fake.sshEnvLog)).toEqual(['card=[] bin=[]'])
   await back()
   await expect(tileStatus('api')).toHaveText('Running')
-  await expect(card('api').getByTestId('card-status-line')).not.toContainText('drovr-ready')
+  await expect(card('api').getByTestId('card-status-line')).not.toContainText('bikube-ready')
 
   // A local workspace's tooltip has no host.
   await createLocal('/tmp', 'local')
@@ -542,11 +542,11 @@ test('AC5: the startup command is typed once, after the ready marker', async () 
   const password = screen.indexOf('Password:')
   expect(password).toBeGreaterThanOrEqual(0)
   expect(screen.slice(0, password)).not.toContain('claude')
-  expect(screen).not.toContain('drovr-ready')
+  expect(screen).not.toContain('bikube-ready')
   await page.waitForTimeout(500)
   expect(claudeLogLines(fake.log)).toHaveLength(1)
   await back()
-  await expect(card('agent').getByTestId('card-status-line')).not.toContainText('drovr-ready')
+  await expect(card('agent').getByTestId('card-status-line')).not.toContainText('bikube-ready')
 })
 
 test("#31 AC12: an SSH card's claude gets a copy of the settings in its private directory, removed after", async () => {
@@ -656,7 +656,7 @@ test('AC7: main refuses a bad host or remote directory from the page', async () 
   rmSync('/tmp/pwned', { force: true })
   await launch()
   const spawn = (cwd: string, host: string | null): Promise<unknown> =>
-    page.evaluate(({ cwd, host }) => window.drovr.terminal.spawn(80, 24, cwd, 'some-card', host), {
+    page.evaluate(({ cwd, host }) => window.bikube.terminal.spawn(80, 24, cwd, 'some-card', host), {
       cwd,
       host
     })
@@ -718,7 +718,7 @@ test('AC8: a split pane of an SSH card connects to its host, with no startup com
   await expect(panes()).toHaveCount(2)
   await expect.poll(sshLog).toHaveLength(2)
   expect(sshLog()[1]).toMatch(
-    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/drovr-remote' \|\| exit 255; /
+    /^-o ExitOnForwardFailure=no -R \S+ -t -- me@devbox cd '\/tmp\/bikube-remote' \|\| exit 255; /
   )
   await run('echo "pwd:$(pwd)"')
   await expect.poll(() => paneLines(1)).toContain(`pwd:${REMOTE_DIR}`)
@@ -844,15 +844,15 @@ test('#25 AC1: board works in an SSH card through a forwarded socket', async () 
   await expect.poll(sshLog).toHaveLength(1)
   expect(sshLog()[0]).toMatch(
     new RegExp(
-      `^-o ExitOnForwardFailure=no -R /tmp/drovr-[0-9a-f]{32}\\.sock:${escaped(join(dataDir, 'board'))}/s-[0-9a-f]{16}\\.sock -t -- me@devbox `
+      `^-o ExitOnForwardFailure=no -R /tmp/bikube-[0-9a-f]{32}\\.sock:${escaped(join(dataDir, 'board'))}/s-[0-9a-f]{16}\\.sock -t -- me@devbox `
     )
   )
 
   expect(await remoteRun('board status . hi')).toEqual(ok)
   await checkOnBoard(page, 'api', (tile) => expectAgentStatus(tile, 'hi'))
   expect(await remoteRun('board move . Done')).toEqual(ok)
-  expect(await output('echo "$DROVR_CARD_ID"', 'id')).toBe(await cardId('api'))
-  expect(await remoteRun('"$DROVR_BIN/board" help')).toEqual({
+  expect(await output('echo "$BIKUBE_CARD_ID"', 'id')).toBe(await cardId('api'))
+  expect(await remoteRun('"$BIKUBE_BIN/board" help')).toEqual({
     code: 0,
     stdout: SSH_BOARD_USAGE,
     stderr: ''
@@ -878,7 +878,7 @@ test('#25 AC2, AC3: the same errors as a local card, and only its own card', asy
   expect(await remoteRun('board status web hey')).toEqual(ok)
 
   const web = await cardId('web')
-  expect(await remoteRun(`DROVR_CARD_ID=${web} board status . x`)).toEqual(
+  expect(await remoteRun(`BIKUBE_CARD_ID=${web} board status . x`)).toEqual(
     refused('board: invalid request')
   )
   await back()
@@ -917,8 +917,8 @@ test('#25 AC5: exit removes the remote socket, the remote directory and the loca
   await connected()
   await expect.poll(sshLog).toHaveLength(1)
   const forward = forwardOf(sshLog()[0])!
-  const bin = await output('echo "$DROVR_BIN"', 'bin')
-  expect(bin).toMatch(new RegExp(`^${escaped(join(fake.home, 'tmp'))}/drovr\\.[A-Za-z0-9]{8}$`))
+  const bin = await output('echo "$BIKUBE_BIN"', 'bin')
+  expect(bin).toMatch(new RegExp(`^${escaped(join(fake.home, 'tmp'))}/bikube\\.[A-Za-z0-9]{8}$`))
   expect(present(forward.remote)).toBe(true)
   expect(present(bin)).toBe(true)
   expect(present(forward.local)).toBe(true)

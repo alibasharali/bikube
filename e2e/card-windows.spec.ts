@@ -21,7 +21,7 @@ const darwin = process.platform === 'darwin'
 const WORKSPACE = 'cw'
 
 test.beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-card-windows-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-card-windows-'))
   ;({ app, page, dataDir } = await launchApp())
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
@@ -161,15 +161,15 @@ test('AC14: only a card window opens, and it has no bridge', async () => {
   await newCard('Agent A')
   await backToBoard(page)
   const window = await openInWindow('Agent A')
-  expect(await window.evaluate(() => 'drovr' in globalThis)).toBe(false)
+  expect(await window.evaluate(() => 'bikube' in globalThis)).toBe(false)
   const before = app.windows().length
   await page.evaluate(() => {
     globalThis.open('https://example.com')
     globalThis.open('about:blank', 'x')
-    globalThis.open('about:blank', 'drovr-card:')
+    globalThis.open('about:blank', 'bikube-card:')
   })
   // A card window can't open one either, even named after a card.
-  await window.evaluate(() => globalThis.open('about:blank', 'drovr-card:other'))
+  await window.evaluate(() => globalThis.open('about:blank', 'bikube-card:other'))
   await page.waitForTimeout(500)
   expect(app.windows()).toHaveLength(before)
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(2)
@@ -482,7 +482,7 @@ test('AC11: a reload of the main window closes every card window; none is kept',
   await gone
   await page.waitForSelector('[data-testid=app]')
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1)
-  const state = readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')
+  const state = readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')
   // No key about windows (D9); the test folder's path has the word in it.
   expect(state).not.toMatch(/"[^"/]*window[^"/]*":/i)
 })
@@ -706,7 +706,7 @@ test('AC4: a palette pick and Next waiting card focus its window, changing nothi
   // The main window focused: the card in its window isn't looked at, so it stays waiting.
   await focusWindow(page, window)
   await run(window, 'board activity . waiting')
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect(card('Agent A').getByTestId('card-activity')).toHaveText('Waiting for you', {
     timeout: 15_000
   })
@@ -752,7 +752,7 @@ test('AC13: Settings lists Open in new window, recorded, refused, saved and rese
   const field = settings.getByTestId('settings-shortcut-openInWindow')
   const error = settings.getByTestId('settings-shortcut-error-openInWindow')
   const reset = settings.getByTestId('settings-shortcut-reset-openInWindow')
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
   const defaultText = darwin ? 'Shift+Cmd+O' : 'Ctrl+Shift+O'
   const openSettings = async (): Promise<void> => {
@@ -850,7 +850,7 @@ test("AC12: a card waiting in its focused window notifies nothing; with the main
   // Its own window focused: the user is looking at it, so its Waiting for you is seen at once.
   await focusWindow(window, page)
   await run(window, 'board activity . working')
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect(activity).toHaveText('Working', { timeout: 15_000 })
   await run(window, 'board activity . waiting')
   await expect(activity).toHaveCount(0)

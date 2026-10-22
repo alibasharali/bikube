@@ -47,7 +47,7 @@ describe('checkHost (D2)', () => {
 
 describe('checkRemoteDirectory (D3)', () => {
   it('accepts absolute paths, ~ and ~/…, trimmed', () => {
-    for (const dir of ['/tmp/drovr-remote', '/', '~', '~/src/api', '/nope/with space']) {
+    for (const dir of ['/tmp/bikube-remote', '/', '~', '~/src/api', '/nope/with space']) {
       expect(checkRemoteDirectory(` ${dir} `)).toEqual({ ok: true, value: dir })
     }
   })

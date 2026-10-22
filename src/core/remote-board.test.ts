@@ -37,7 +37,7 @@ let raw: Server | undefined
 const rawSockets: Socket[] = []
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'drovr-rb-'))
+  dir = await mkdtemp(join(tmpdir(), 'bikube-rb-'))
   socketPath = join(dir, 'board.sock')
   script = join(dir, 'board')
   writeFileSync(script, remoteBoardScript())
@@ -93,8 +93,8 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     PATH: binWith(`bin-${Math.random().toString(16).slice(2)}`, {
       [language.name]: language.path ?? ''
     }),
-    DROVR_CARD_ID: 'card-1',
-    DROVR_SOCKET: socketPath,
+    BIKUBE_CARD_ID: 'card-1',
+    BIKUBE_SOCKET: socketPath,
     ...extra
   })
 
@@ -124,7 +124,7 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     })
   })
 
-  it.skipIf(!language.path)("sends a session, which Drovr's Claude hooks report", async () => {
+  it.skipIf(!language.path)("sends a session, which Bikube's Claude hooks report", async () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
     await serve(handler)
     expect(await run(['session', '.', '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11'], env())).toEqual({
@@ -181,7 +181,7 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
     await serve(handler)
     const text = 'say "hi" \\ back\nnext é\t🙂'
-    expect((await run(['status', '.', text], env({ DROVR_CARD_ID: 'id "\\é' }))).code).toBe(0)
+    expect((await run(['status', '.', text], env({ BIKUBE_CARD_ID: 'id "\\é' }))).code).toBe(0)
     expect(handler).toHaveBeenCalledWith({
       v: 1,
       cardId: 'id "\\é',
@@ -299,7 +299,7 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
       await serve(handler)
       const link = join(dir, 'link.sock')
       symlinkSync(socketPath, link)
-      expect(await run(['status', '.', 'x'], env({ DROVR_SOCKET: link }))).toEqual({
+      expect(await run(['status', '.', 'x'], env({ BIKUBE_SOCKET: link }))).toEqual({
         code: 1,
         stdout: '',
         stderr: `${CANT_REACH}\n`
@@ -310,7 +310,7 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
 
   it.skipIf(!language.path)('says not running inside a card without its variables', async () => {
     await serve(async () => ({ ok: true }))
-    for (const missing of [{ DROVR_CARD_ID: '' }, { DROVR_SOCKET: '' }] as Record<
+    for (const missing of [{ BIKUBE_CARD_ID: '' }, { BIKUBE_SOCKET: '' }] as Record<
       string,
       string
     >[]) {
@@ -327,7 +327,7 @@ describe('the remote board script with neither perl nor python3 (#25 D5)', () =>
   it('says it needs one, exit 1', async () => {
     const bin = binWith('bin-empty', {})
     expect(
-      await run(['status', '.', 'x'], { PATH: bin, DROVR_CARD_ID: 'c', DROVR_SOCKET: socketPath })
+      await run(['status', '.', 'x'], { PATH: bin, BIKUBE_CARD_ID: 'c', BIKUBE_SOCKET: socketPath })
     ).toEqual({ code: 1, stdout: '', stderr: `${NEEDS_PERL_OR_PYTHON}\n` })
   })
 })

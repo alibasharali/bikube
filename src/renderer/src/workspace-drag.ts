@@ -3,7 +3,7 @@
  * under its own type, never the card type, so the workspace list takes no card and a column
  * takes no workspace.
  */
-export const WORKSPACE_DRAG_TYPE = 'application/x-drovr-workspace'
+export const WORKSPACE_DRAG_TYPE = 'application/x-bikube-workspace'
 
 let current: string | null = null
 

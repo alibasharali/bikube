@@ -288,7 +288,7 @@ describe('joining the boards when sync is turned on (#13 D9, AC3)', () => {
 
 describe('worktree cards in the sync file', () => {
   it('writes the worktree with home as ~ and reads it back expanded', () => {
-    const worktree = { path: `${HOME}/wt/fix`, branch: 'drovr/fix', repo: `${HOME}/proj` }
+    const worktree = { path: `${HOME}/wt/fix`, branch: 'bikube/fix', repo: `${HOME}/proj` }
     const state: WorkspaceState = {
       activeId: 'w',
       workspaces: [
@@ -300,7 +300,7 @@ describe('worktree cards in the sync file', () => {
     const board = toSyncBoard(state, HOME)
     expect(board.workspaces[0]!.cards[0]!.worktree).toEqual({
       path: '~/wt/fix',
-      branch: 'drovr/fix',
+      branch: 'bikube/fix',
       repo: '~/proj'
     })
     const read = parseSyncFile(serializeSyncFile(board, new Date(0)), HOME)

@@ -16,7 +16,7 @@ const card = (id: string, columnId: string, title = id): Card => ({
   id,
   columnId,
   title,
-  directory: '/tmp/drovr-alpha',
+  directory: '/tmp/bikube-alpha',
   startup: { kind: 'shell' },
   agentSessionId: 'x',
   claudeStarted: false,
@@ -26,7 +26,7 @@ const card = (id: string, columnId: string, title = id): Card => ({
 const workspace = (id: string, cards: Card[]): Workspace => ({
   id,
   name: id,
-  directory: `/tmp/drovr-${id}`,
+  directory: `/tmp/bikube-${id}`,
   columns: [
     { id: 'backlog', name: 'Backlog' },
     { id: 'running', name: 'Running' },
@@ -60,7 +60,7 @@ describe('findCallingWorkspace', () => {
     for (const id of ['ghost', '']) {
       expect(findCallingWorkspace(state, id)).toEqual({ ok: false, error: NOT_IN_A_CARD })
     }
-    expect(NOT_IN_A_CARD).toBe('board: not running inside a Drovr card')
+    expect(NOT_IN_A_CARD).toBe('board: not running inside a Bikube card')
   })
 })
 

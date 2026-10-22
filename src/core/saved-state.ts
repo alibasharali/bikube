@@ -19,7 +19,7 @@ import {
   type WorkspaceState
 } from './workspace-store'
 
-export const STATE_FILE_NAME = 'drovr-state.json'
+export const STATE_FILE_NAME = 'bikube-state.json'
 export const SAVED_STATE_VERSION = 1
 
 export type SavedStateResult = { ok: true; value: WorkspaceState } | { ok: false; reason: string }
@@ -45,7 +45,7 @@ export function parseSavedState(text: string): SavedStateResult {
 /** The name the rejected file is renamed to (D4), with `now` as a UTC timestamp. */
 export function corruptFileName(now: Date): string {
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')
-  return `drovr-state.corrupt-${stamp}.json`
+  return `bikube-state.corrupt-${stamp}.json`
 }
 
 /**

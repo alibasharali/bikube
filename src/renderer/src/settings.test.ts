@@ -5,8 +5,8 @@ import { createSettingsStore } from './settings'
 /** The settings after #10's three, at their defaults. */
 const NEW_FIELDS = {
   shell: '',
-  terminalThemeDark: 'Drovr Dark',
-  terminalThemeLight: 'Drovr Light',
+  terminalThemeDark: 'Bikube Dark',
+  terminalThemeLight: 'Bikube Light',
   useGhosttyTheme: false,
   ...PREFERENCE_DEFAULTS
 }

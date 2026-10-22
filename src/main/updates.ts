@@ -47,22 +47,22 @@ function testOverrides(): {
   waitingMs: number | null
   waitingChecks: number | null
 } | null {
-  const feed = process.env['DROVR_UPDATE_FEED']
+  const feed = process.env['BIKUBE_UPDATE_FEED']
   if (app.isPackaged || !feed) return null
-  const waitingMs = Number(process.env['DROVR_UPDATE_WAITING_MS'])
-  const waitingChecks = Number(process.env['DROVR_UPDATE_WAITING_CHECKS'])
+  const waitingMs = Number(process.env['BIKUBE_UPDATE_WAITING_MS'])
+  const waitingChecks = Number(process.env['BIKUBE_UPDATE_WAITING_CHECKS'])
   return {
     feed,
-    current: process.env['DROVR_UPDATE_CURRENT'] ?? '0.0.0',
-    target: process.env['DROVR_UPDATE_TARGET'] || null,
+    current: process.env['BIKUBE_UPDATE_CURRENT'] ?? '0.0.0',
+    target: process.env['BIKUBE_UPDATE_TARGET'] || null,
     waitingMs: Number.isInteger(waitingMs) && waitingMs > 0 ? waitingMs : null,
     waitingChecks: Number.isInteger(waitingChecks) && waitingChecks > 0 ? waitingChecks : null
   }
 }
 
-/** The update the user skipped, kept in `<userData>/drovr-update.json`. */
+/** The update the user skipped, kept in `<userData>/bikube-update.json`. */
 function skipFile(): { read(): string | null; write(version: string): void } {
-  const path = join(app.getPath('userData'), 'drovr-update.json')
+  const path = join(app.getPath('userData'), 'bikube-update.json')
   return {
     read: () => {
       try {
@@ -92,7 +92,7 @@ const run = (command: string, args: string[]): Promise<void> =>
 /**
  * Updates from GitHub Releases (see `src/core/updates.ts`): checked at launch and every few
  * hours, this platform's file downloaded and checked against its SHA-256, and installed by a
- * detached script once Drovr has quit, on Install and Relaunch or at the next quit.
+ * detached script once Bikube has quit, on Install and Relaunch or at the next quit.
  */
 export function registerUpdates(runningTerminals: () => number): MainUpdates {
   const test = testOverrides()
@@ -142,7 +142,7 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
   async function installKind(release: Release): Promise<InstallKind> {
     if (!target || (!release.asset && !release.waiting)) return 'manual'
     try {
-      // `access` alone: a standard account owns its `Drovr.app` but can't write `/Applications`.
+      // `access` alone: a standard account owns its `Bikube.app` but can't write `/Applications`.
       for (const path of installPaths(target.kind, '', target.path).writable)
         await access(path, constants.W_OK)
       return target.kind
@@ -262,7 +262,7 @@ export function registerUpdates(runningTerminals: () => number): MainUpdates {
     await run('ditto', ['-x', '-k', file, out])
     const bundle = (await readdir(out)).find((name) => name.endsWith('.app'))
     if (!bundle) throw new Error('no app in the download')
-    // Downloaded by Drovr itself it shouldn't be quarantined; cleared in case a tool marked it.
+    // Downloaded by Bikube itself it shouldn't be quarantined; cleared in case a tool marked it.
     await run('xattr', ['-dr', 'com.apple.quarantine', join(out, bundle)]).catch(() => undefined)
     await rm(file, { force: true })
     return join(out, bundle)

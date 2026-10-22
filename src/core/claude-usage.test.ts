@@ -9,7 +9,7 @@ import { readClaudeUsage } from './claude-usage'
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-usage-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-usage-'))
 })
 
 afterEach(() => {

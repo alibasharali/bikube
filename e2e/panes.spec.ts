@@ -20,7 +20,7 @@ import { plainCards } from './plain-cards'
 // the card's directory; extra panes close from their own button or when their shell exits.
 
 /** The spec's workspace directory: `pwd` in a pane prints it. */
-const ALPHA = '/tmp/drovr-alpha'
+const ALPHA = '/tmp/bikube-alpha'
 
 let app: ElectronApplication
 let page: Page
@@ -29,7 +29,7 @@ let dataDir: string
 
 test.beforeEach(async () => {
   mkdirSync(ALPHA, { recursive: true })
-  root = mkdtempSync(join(tmpdir(), 'drovr-panes-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-panes-'))
   ;({ app, page, dataDir } = await launchApp())
 })
 
@@ -127,7 +127,7 @@ async function box(
   return b
 }
 
-/** Workspace `alpha` in /tmp/drovr-alpha with card `api` open, its shell ready. */
+/** Workspace `alpha` in /tmp/bikube-alpha with card `api` open, its shell ready. */
 async function openApi(): Promise<void> {
   await createWorkspace(ALPHA, 'alpha')
   await newCard('In Progress', 'api')
@@ -631,7 +631,7 @@ test('AC10: panes are not kept across a restart', async () => {
   await expectStatusOnBoard(page, 'api', 'Running')
   await expect(panes()).toHaveCount(1)
 
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   expect(saved.version).toBe(1)
   expect(keysOf(saved).filter((key) => /pane|layout|split|focus/i.test(key))).toEqual([])
 })

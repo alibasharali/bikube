@@ -75,7 +75,7 @@ function storeStatus(folder: string, status: FolderStatus): boolean {
 
 async function readStatus(folder: string): Promise<FolderStatus> {
   try {
-    return await window.drovr.files.status(folder)
+    return await window.bikube.files.status(folder)
   } catch {
     return { ok: false, reason: 'failed' }
   }
@@ -83,7 +83,7 @@ async function readStatus(folder: string): Promise<FolderStatus> {
 
 async function read(folder: string, path: string): Promise<FolderListing> {
   try {
-    return await window.drovr.files.list(folder, path)
+    return await window.bikube.files.list(folder, path)
   } catch {
     return { ok: false, reason: 'unreadable' }
   }

@@ -12,7 +12,7 @@ let boardDir: string
 let sockets: SessionSockets | undefined
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'drovr-ss-'))
+  dir = await mkdtemp(join(tmpdir(), 'bikube-ss-'))
   boardDir = join(dir, 'board')
 })
 
@@ -45,7 +45,7 @@ describe('SessionSockets (#25 D2, D3)', () => {
     const two = await sockets.open('card-1')
     const local = one.forward.localSocket!
     expect(local).toMatch(new RegExp(`^${boardDir}/s-[0-9a-f]{16}\\.sock$`))
-    expect(one.forward.remoteSocket).toMatch(/^\/tmp\/drovr-[0-9a-f]{32}\.sock$/)
+    expect(one.forward.remoteSocket).toMatch(/^\/tmp\/bikube-[0-9a-f]{32}\.sock$/)
     expect(two.forward.localSocket).not.toBe(local)
     expect(two.forward.remoteSocket).not.toBe(one.forward.remoteSocket)
     expect(await sendBoardRequest(local, status('card-1', 'hi'))).toEqual({
@@ -87,7 +87,7 @@ describe('SessionSockets (#25 D2, D3)', () => {
     sockets = new SessionSockets(boardDir, async () => ({ ok: true }))
     const session = await sockets.open('card-1')
     expect(session.forward).toMatchObject({ cardId: 'card-1', localSocket: null })
-    expect(session.forward.remoteSocket).toMatch(/^\/tmp\/drovr-[0-9a-f]{32}\.sock$/)
+    expect(session.forward.remoteSocket).toMatch(/^\/tmp\/bikube-[0-9a-f]{32}\.sock$/)
   })
 
   it('closes every socket on quit, and one still starting as soon as it listens', async () => {

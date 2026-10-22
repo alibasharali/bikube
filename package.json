@@ -1,10 +1,10 @@
 {
-  "name": "drovr",
+  "name": "bikube",
   "version": "0.0.1",
   "description": "A kanban board where every card is a live terminal",
   "main": "./out/main/index.js",
-  "author": "Drovr",
-  "homepage": "https://github.com/alibasharali/drovr",
+  "author": "Bikube",
+  "homepage": "https://github.com/alibasharali/bikube",
   "private": true,
   "scripts": {
     "format": "prettier --write .",

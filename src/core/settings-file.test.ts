@@ -6,8 +6,8 @@ import type { StateFileFs } from './state-file'
 /** The settings after #10's three, at their defaults. */
 const NEW_FIELDS = {
   shell: '',
-  terminalThemeDark: 'Drovr Dark',
-  terminalThemeLight: 'Drovr Light',
+  terminalThemeDark: 'Bikube Dark',
+  terminalThemeLight: 'Bikube Light',
   useGhosttyTheme: false,
   ...PREFERENCE_DEFAULTS
 }
@@ -15,14 +15,14 @@ const NEW_FIELDS = {
 /** The same fields as the file holds them: preferences at their defaults are left out. */
 const FILE_FIELDS = {
   shell: '',
-  terminalThemeDark: 'Drovr Dark',
-  terminalThemeLight: 'Drovr Light',
+  terminalThemeDark: 'Bikube Dark',
+  terminalThemeLight: 'Bikube Light',
   useGhosttyTheme: false
 }
 
 const DIR = '/data'
-const FILE = '/data/drovr-settings.json'
-const TMP = '/data/drovr-settings.json.tmp'
+const FILE = '/data/bikube-settings.json'
+const TMP = '/data/bikube-settings.json.tmp'
 
 /** An in-memory directory that records every call that changes it, in order. */
 class FakeFs implements StateFileFs {
@@ -90,7 +90,7 @@ describe('SettingsFile.load (#10 D6, D7)', () => {
 
   it('keeps valid fields, logs the replaced ones and never renames the file (AC8)', () => {
     const text =
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     fs.files.set(FILE, text)
     const file = open()
     expect(file.load()).toEqual({
@@ -124,7 +124,7 @@ describe('SettingsFile.save (#10 D6)', () => {
   it('writes the whole file within 200 ms after a change, via temp, fsync and rename (AC8)', () => {
     fs.files.set(
       FILE,
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
     const file = open()
     const loaded = file.load()
@@ -145,7 +145,7 @@ describe('SettingsFile.save (#10 D6)', () => {
       `rename ${TMP} -> ${FILE}`
     ])
     expect(fs.files.get(FILE)).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
   })
 
@@ -187,7 +187,7 @@ describe('SettingsFile.save (#10 D6)', () => {
     ).toEqual({ theme: 'light', fontSize: 16, fontFamily: 'Courier New, monospace', ...NEW_FIELDS })
     file.flush()
     expect(fs.files.get(FILE)).toBe(
-      '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
     expect(
       file.save({ theme: 'light', fontSize: 16, fontFamily: '   ', ...NEW_FIELDS })?.fontFamily
@@ -222,7 +222,7 @@ describe('SettingsFile sync folder (#13 D10, AC12)', () => {
     expect(open().syncFolder()).toBeNull()
     fs.files.set(
       FILE,
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
     )
     const file = open()
     expect(file.syncFolder()).toBe('/sync')
@@ -235,7 +235,7 @@ describe('SettingsFile sync folder (#13 D10, AC12)', () => {
     expect(file.syncFolder()).toBe('/sync')
     vi.advanceTimersByTime(SETTINGS_SAVE_INTERVAL_MS)
     expect(fs.files.get(FILE)).toBe(
-      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
+      '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
     )
     file.setSyncFolder(null)
     file.flush()
@@ -245,7 +245,7 @@ describe('SettingsFile sync folder (#13 D10, AC12)', () => {
   it('keeps the sync folder when settings are saved, whatever the payload holds', () => {
     fs.files.set(
       FILE,
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"syncFolder":"/sync"}}'
     )
     const file = open()
     file.save({

@@ -25,7 +25,7 @@ let page: Page
 let root: string
 let dataDir: string
 
-const NOT_IN_A_CARD = 'board: not running inside a Drovr card'
+const NOT_IN_A_CARD = 'board: not running inside a Bikube card'
 
 function makeDir(name: string): string {
   const dir = join(root, name)
@@ -34,7 +34,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-board-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-board-'))
   dataDir = newDataDir()
 })
 
@@ -148,7 +148,7 @@ async function board(
   // after the rc on the same row once readline redraws (seen on CI: `c1 rc=0ove . done ...`).
   const pattern = new RegExp(`^${tag} rc=(\\d+)`)
   let code = -1
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache, which
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache, which
   // can take over 5 s on a CI runner (the run's first test timed out there); later ones are fast.
   await expect
     .poll(
@@ -172,10 +172,10 @@ async function board(
   }
 }
 
-/** Has the open card's shell write its `DROVR_CARD_ID` to `<dir>/<file>`; returns the id. */
+/** Has the open card's shell write its `BIKUBE_CARD_ID` to `<dir>/<file>`; returns the id. */
 async function writeCardId(dir: string, file: string): Promise<string> {
   const path = join(dir, file)
-  await run(`echo "$DROVR_CARD_ID" > ${file}`)
+  await run(`echo "$BIKUBE_CARD_ID" > ${file}`)
   await expect.poll(() => existsSync(path) && readFileSync(path, 'utf8').trim() !== '').toBe(true)
   return readFileSync(path, 'utf8').trim()
 }
@@ -333,17 +333,17 @@ test('AC8: outside a live card, or with no app listening, board is refused', asy
   await expect(card('gone')).toHaveCount(0)
 
   await newCard('Backlog', 'api')
-  expect(await board(alpha, 'env -u DROVR_CARD_ID board move . Done')).toEqual(
+  expect(await board(alpha, 'env -u BIKUBE_CARD_ID board move . Done')).toEqual(
     refused(NOT_IN_A_CARD)
   )
-  expect(await board(alpha, 'DROVR_CARD_ID="$(cat old-id)" board move . Done')).toEqual(
+  expect(await board(alpha, 'BIKUBE_CARD_ID="$(cat old-id)" board move . Done')).toEqual(
     refused(NOT_IN_A_CARD)
   )
-  expect(await board(alpha, 'DROVR_CARD_ID="$(cat gone-id)" board move . Done')).toEqual(
+  expect(await board(alpha, 'BIKUBE_CARD_ID="$(cat gone-id)" board move . Done')).toEqual(
     refused(NOT_IN_A_CARD)
   )
-  expect(await board(alpha, `DROVR_SOCKET=${join(root, 'none.sock')} board move . Done`)).toEqual(
-    refused('board: Drovr is not running')
+  expect(await board(alpha, `BIKUBE_SOCKET=${join(root, 'none.sock')} board move . Done`)).toEqual(
+    refused('board: Bikube is not running')
   )
 
   await back()
@@ -365,12 +365,12 @@ test('AC9: the socket is user-only, replaces a stale file, and is gone after qui
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('Backlog', 'api')
-  expect(await board(alpha, 'test "$DROVR_SOCKET" = ' + socketPath)).toEqual(ok)
-  expect(await board(alpha, 'ls -ld "$(dirname "$DROVR_SOCKET")"')).toMatchObject({
+  expect(await board(alpha, 'test "$BIKUBE_SOCKET" = ' + socketPath)).toEqual(ok)
+  expect(await board(alpha, 'ls -ld "$(dirname "$BIKUBE_SOCKET")"')).toMatchObject({
     code: 0,
     stdout: expect.stringMatching(/^drwx------ /)
   })
-  expect(await board(alpha, 'ls -l "$DROVR_SOCKET"')).toMatchObject({
+  expect(await board(alpha, 'ls -l "$BIKUBE_SOCKET"')).toMatchObject({
     code: 0,
     stdout: expect.stringMatching(/^srw------- /)
   })
@@ -459,9 +459,9 @@ test('AC5: board status shows on the status line, cleaned and cut, until cleared
   expect(await board(alpha, `board status . ${long}`)).toEqual(ok)
   await expectOnBoard(['card-agent-status', long.slice(0, 200)])
 
-  await run(`board status . "" && printf 'drovr-marker'; sleep 30`)
+  await run(`board status . "" && printf 'bikube-marker'; sleep 30`)
   await back()
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('bikube-marker')
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('api').getByTestId('card-agent-status')).toHaveCount(0)
 })

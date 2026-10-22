@@ -18,7 +18,7 @@ export function enableGlobalShortcutsPortal(): void {
 }
 
 /** Where the development build puts main's press handler for the smoke tests (AC4). */
-const TEST_HOOK = '__drovrGlobalShortcutPress'
+const TEST_HOOK = '__bikubeGlobalShortcutPress'
 
 /**
  * The global shortcut (#51): registered at once from the saved settings and again after each save

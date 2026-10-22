@@ -6,7 +6,7 @@ type Colour = keyof TerminalPalette
 type Run = [text: string, colour?: Colour, bold?: boolean]
 
 const PROMPT: Run[] = [
-  ['~/Repos/drovr', 'blue', true],
+  ['~/Repos/bikube', 'blue', true],
   [' on ', 'foreground'],
   [' main', 'magenta', true],
   [' [!?]', 'red'],

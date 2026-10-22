@@ -1,7 +1,7 @@
 /**
  * Previous prompt and Next prompt (#45 D5), free of DOM imports: the buffer row a jump makes the
  * viewport's top row. Rows are absolute buffer lines; prompts may come in any order, and two on
- * one row (fish 4 sends its own marks beside Drovr's) count as one.
+ * one row (fish 4 sends its own marks beside Bikube's) count as one.
  */
 export type PromptJump = 'previous' | 'next'
 

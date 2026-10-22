@@ -25,7 +25,7 @@ export interface StateFileFs {
 }
 
 export interface StateFileOptions {
-  /** The directory holding `drovr-state.json` (Electron's `userData`). */
+  /** The directory holding `bikube-state.json` (Electron's `userData`). */
   dir: string
   fs: StateFileFs
   now?: () => Date

@@ -27,8 +27,8 @@ export let workspaceStore: InMemoryWorkspaceStore
 
 /** Loads the saved state from main once and creates the app-wide store from it (#8 D5). */
 export async function loadWorkspaceStore(): Promise<void> {
-  const state = await window.drovr.state.load()
-  workspaceStore = createWorkspaceStore(state, (next) => window.drovr.state.save(next))
+  const state = await window.bikube.state.load()
+  workspaceStore = createWorkspaceStore(state, (next) => window.bikube.state.save(next))
 }
 
 export function useWorkspaceState(): WorkspaceState {

@@ -23,7 +23,7 @@ export const AGENT_COMMANDS: Readonly<Record<AgentChoice, string>> = {
 const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
 
 /** Each found command's line, so whatever a login profile prints is never read as one. */
-const FOUND = 'drovr-found'
+const FOUND = 'bikube-found'
 
 /**
  * How the login shell `shell` checks `commands`: they are positional arguments, never in the text
@@ -51,7 +51,7 @@ export function installedPlan(
       '-l',
       '-c',
       `for c in "$@"; do command -v "$c" >/dev/null 2>&1 && printf '${FOUND} %s\\n' "$c"; done; exit 0`,
-      'drovr',
+      'bikube',
       ...commands
     ]
   }

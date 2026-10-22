@@ -13,7 +13,7 @@ import {
   type BoardRequest
 } from './board-protocol'
 
-export const NO_WINDOW = 'board: Drovr has no open window'
+export const NO_WINDOW = 'board: Bikube has no open window'
 /** How long main waits for the window, under the CLI's 5 s so the CLI hears why (#9 D9). */
 export const RELAY_TIMEOUT_MS = 4000
 

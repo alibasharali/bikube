@@ -18,7 +18,7 @@ const folderName = (folder: string): string =>
     .pop() || folder
 
 /**
- * Reads `folder`'s tree at once, every 3 seconds while a Drovr window is focused, and when one
+ * Reads `folder`'s tree at once, every 3 seconds while a Bikube window is focused, and when one
  * gains the focus (D12, #53 D10: a card's own window counts); nothing once the tab is gone (panel
  * hidden, card or shell closed).
  */

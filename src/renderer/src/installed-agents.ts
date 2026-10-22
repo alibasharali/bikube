@@ -18,7 +18,7 @@ const listeners = new Set<() => void>()
 function check(): void {
   if (Date.now() - lastCheck < RECHECK_MS) return
   lastCheck = Date.now()
-  void window.drovr.agents.installed().then(
+  void window.bikube.agents.installed().then(
     (list) => {
       const next = list ? new Set(list) : null
       if (

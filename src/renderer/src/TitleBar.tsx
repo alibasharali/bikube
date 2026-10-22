@@ -99,7 +99,7 @@ function TitleBar({
             )}
           </>
         ) : (
-          <span className="titlebar-current">Drovr</span>
+          <span className="titlebar-current">Bikube</span>
         )}
         {workspace && !sidePanelOpen && <RunningShellsChip workspace={workspace} />}
         {/* On the board as in a card (#57 D4). */}
@@ -170,8 +170,8 @@ function WorkspaceLocation({ workspace }: { workspace: Workspace }): React.JSX.E
       type="button"
       className="titlebar-location titlebar-location-button"
       data-testid="board-location"
-      title={`${workspace.directory}\nOpen in ${window.drovr.platform === 'darwin' ? 'Finder' : 'the file manager'}`}
-      onClick={() => window.drovr.app.reveal(workspace.directory)}
+      title={`${workspace.directory}\nOpen in ${window.bikube.platform === 'darwin' ? 'Finder' : 'the file manager'}`}
+      onClick={() => window.bikube.app.reveal(workspace.directory)}
     >
       <Folder {...SMALL_ICON} />
       <span className="titlebar-location-text">{displayPath(workspace.directory, homeDir())}</span>

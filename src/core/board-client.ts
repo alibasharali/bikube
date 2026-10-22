@@ -15,7 +15,7 @@ import {
 } from './board-protocol'
 
 export { ANSWER_TIMEOUT_MS, NO_ANSWER }
-export const NOT_RUNNING = 'board: Drovr is not running'
+export const NOT_RUNNING = 'board: Bikube is not running'
 
 export interface BoardOutput {
   stdout(text: string): void
@@ -61,7 +61,7 @@ export function sendBoardRequest(
 }
 
 /**
- * Runs `board <argv>` with `env`'s `DROVR_CARD_ID` and `DROVR_SOCKET`; resolves with the exit code.
+ * Runs `board <argv>` with `env`'s `BIKUBE_CARD_ID` and `BIKUBE_SOCKET`; resolves with the exit code.
  * `board usage` reads its transcript first (#50 D5): one that can't be read sends nothing.
  */
 export async function runBoard(
@@ -79,8 +79,8 @@ export async function runBoard(
     out.stderr(args.stderr)
     return args.exitCode
   }
-  const cardId = env.DROVR_CARD_ID
-  const socketPath = env.DROVR_SOCKET
+  const cardId = env.BIKUBE_CARD_ID
+  const socketPath = env.BIKUBE_SOCKET
   // Checked before a transcript is read: outside a card, `board usage` reads nothing.
   if (!cardId || !socketPath) {
     out.stderr(`${cardId ? NOT_RUNNING : NOT_IN_A_CARD}\n`)

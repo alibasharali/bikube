@@ -1,11 +1,11 @@
 /**
  * App updates from GitHub Releases, without code signing: main checks the latest full release,
  * downloads this platform's file, checks its SHA-256 against the one GitHub publishes, and on
- * install a detached script swaps the app once Drovr has quit. Plain TS: no Electron or Node
+ * install a detached script swaps the app once Bikube has quit. Plain TS: no Electron or Node
  * imports.
  */
 
-export const REPOSITORY = 'alibasharali/drovr'
+export const REPOSITORY = 'alibasharali/bikube'
 export const LATEST_RELEASE_URL = `https://api.github.com/repos/${REPOSITORY}/releases/latest`
 export const RELEASES_URL = `https://github.com/${REPOSITORY}/releases/`
 
@@ -42,12 +42,12 @@ export class WaitingRechecks {
   }
 }
 
-/** Largest release file Drovr downloads (the macOS zip is about 110 MB). */
+/** Largest release file Bikube downloads (the macOS zip is about 110 MB). */
 export const MAX_ASSET_BYTES = 500 * 1024 * 1024
 
 /** How an update reaches this install. */
 export type InstallKind =
-  /** A macOS app bundle in a folder the user can write: swapped for the zip's `Drovr.app`. */
+  /** A macOS app bundle in a folder the user can write: swapped for the zip's `Bikube.app`. */
   | 'mac'
   /** An AppImage in a folder the user can write: swapped for the new AppImage. */
   | 'appimage'
@@ -105,8 +105,8 @@ export function isNewer(candidate: string, current: string): boolean {
 
 /** The release file this platform installs from, as the release workflow names it. */
 export function assetName(version: string, platform: string, arch: string): string | null {
-  if (platform === 'darwin' && arch === 'arm64') return `drovr-${version}-arm64-mac.zip`
-  if (platform === 'linux' && arch === 'x64') return `drovr-${version}-x86_64.AppImage`
+  if (platform === 'darwin' && arch === 'arm64') return `bikube-${version}-arm64-mac.zip`
+  if (platform === 'linux' && arch === 'x64') return `bikube-${version}-x86_64.AppImage`
   return null
 }
 
@@ -157,7 +157,7 @@ export function newerRelease(
 
 /**
  * What an install replaces: the `.app` bundle the executable is in on macOS, the AppImage file
- * on Linux; null when Drovr isn't running from one (a development build, the .deb). A bundle
+ * on Linux; null when Bikube isn't running from one (a development build, the .deb). A bundle
  * macOS runs from a randomized read-only copy (App Translocation, before it was moved out of
  * Downloads) can't be replaced.
  */
@@ -180,7 +180,7 @@ export function installTarget(opts: {
 /**
  * The paths an install swaps, and the app it reopens. On macOS it replaces the bundle's
  * `Contents` folder (its code, resources and signature) rather than the bundle: a standard
- * account can't rename anything in `/Applications`, but owns the `Drovr.app` it copied there.
+ * account can't rename anything in `/Applications`, but owns the `Bikube.app` it copied there.
  * An AppImage is one file, swapped in its folder.
  */
 export function installPaths(
@@ -202,7 +202,7 @@ export function installPaths(
 
 /**
  * The detached script that installs a downloaded update: `sh -c SCRIPT sh <pid> <from> <to>
- * <relaunch> <failed> <app>`. It waits (at most 60 s) for Drovr's process `pid` to end, moves
+ * <relaunch> <failed> <app>`. It waits (at most 60 s) for Bikube's process `pid` to end, moves
  * `to` aside, moves `from` into its place (putting the old one back if that fails) and removes
  * the old one. When it can't, it writes why to the file `failed`, for the next launch to say, and
  * the old app stays. Either way it reopens `app`: `open` (macOS, after touching the bundle so
@@ -214,10 +214,10 @@ export const INSTALL_SCRIPT = [
   'i=0',
   'while kill -0 "$pid" 2>/dev/null; do',
   '  i=$((i + 1))',
-  '  [ "$i" -gt 600 ] && { echo "Drovr did not quit" > "$failed"; exit 1; }',
+  '  [ "$i" -gt 600 ] && { echo "Bikube did not quit" > "$failed"; exit 1; }',
   '  sleep 0.1',
   'done',
-  'old="$to.drovr-old-$$"',
+  'old="$to.bikube-old-$$"',
   'ok=0',
   'if err=$(mv "$to" "$old" 2>&1); then',
   '  if err=$(mv "$from" "$to" 2>&1); then ok=1; rm -rf "$old"; else mv "$old" "$to"; fi',
@@ -247,7 +247,7 @@ export type UpdateState =
       skipped: boolean
       /** Downloading or preparing failed; Install falls back to the release page. */
       error?: string
-      /** The release's file isn't up yet and Drovr will check again soon by itself. */
+      /** The release's file isn't up yet and Bikube will check again soon by itself. */
       rechecking?: boolean
     }
 
@@ -259,7 +259,7 @@ export function formatSize(bytes: number): string {
 
 /** The confirmation before installing, naming the terminals it stops. */
 export function installMessage(running: number): string {
-  const base = 'Drovr quits, installs the update and opens again.'
+  const base = 'Bikube quits, installs the update and opens again.'
   if (running === 0) return base
   const terminals = running === 1 ? '1 terminal is' : `${running} terminals are`
   return `${base} ${terminals} running and will be stopped.`

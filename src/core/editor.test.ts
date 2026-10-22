@@ -43,7 +43,7 @@ describe('editorPlan (#55 D13, D14, D15, AC16)', () => {
           '-l',
           '-c',
           'command -v "$1" >/dev/null 2>&1 || exit 127; exec "$@"',
-          'drovr',
+          'bikube',
           name,
           folder,
           file
@@ -57,7 +57,7 @@ describe('editorPlan (#55 D13, D14, D15, AC16)', () => {
       kind: 'run',
       name: 'subl',
       command: '/bin/bash',
-      args: ['-l', '-c', 'subl -n "$1"', 'drovr', file]
+      args: ['-l', '-c', 'subl -n "$1"', 'bikube', file]
     })
   })
 
@@ -105,7 +105,7 @@ function fakeCommand(
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-editor-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-editor-'))
   bin = join(dir, 'bin')
   mkdirSync(bin)
   const home = join(dir, 'home')

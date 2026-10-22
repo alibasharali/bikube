@@ -29,7 +29,7 @@ describe('isDirectory', () => {
   let dir: string
   let file: string
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'drovr-dir-'))
+    dir = await mkdtemp(join(tmpdir(), 'bikube-dir-'))
     file = join(dir, 'f.txt')
     await writeFile(file, 'x')
   })

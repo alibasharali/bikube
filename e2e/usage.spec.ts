@@ -19,7 +19,7 @@ let dataDir: string
 let fake: FakeSshHome | undefined
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-usage-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-usage-'))
   dataDir = newDataDir()
   fake = undefined
 })
@@ -290,7 +290,7 @@ test('AC8: usage is not kept across a restart nor saved', async () => {
   await expect(card('api')).toHaveCount(1)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
   await expect(usageOf('api')).toHaveCount(0)
-  const saved = readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')
+  const saved = readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')
   expect(saved).toContain('"api"')
   // No usage key anywhere (the temp folder's name has `usage` in it, so keys are matched).
   expect(saved).not.toMatch(/"(usage|tokens|context|cost|cacheRead|cacheWrite)":/i)
@@ -299,8 +299,8 @@ test('AC8: usage is not kept across a restart nor saved', async () => {
 test("AC9: an SSH card's board doesn't know usage, and the card shows none", async () => {
   fake = fakeSshHome(root)
   await launch(fake.env)
-  mkdirSync('/tmp/drovr-remote', { recursive: true })
-  await createWorkspace('/tmp/drovr-remote', 'remote', 'me@devbox')
+  mkdirSync('/tmp/bikube-remote', { recursive: true })
+  await createWorkspace('/tmp/bikube-remote', 'remote', 'me@devbox')
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('api')
   await page.getByTestId('new-card-input').press('Enter')

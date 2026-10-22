@@ -171,7 +171,7 @@ function SidePanel({
           <FilesTab
             folder={folder}
             ssh={ssh}
-            onOpenFile={(path) => window.drovr.files.open(folder, path)}
+            onOpenFile={(path) => window.bikube.files.open(folder, path)}
           />
         )}
         {tab === 'shells' && workspace && (

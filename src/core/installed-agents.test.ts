@@ -15,7 +15,7 @@ describe('installedPlan', () => {
     const plan = installedPlan('/bin/zsh', ['claude', '$(touch x)'])
     expect(plan.command).toBe('/bin/zsh')
     expect(plan.args.slice(0, 2)).toEqual(['-l', '-c'])
-    expect(plan.args.slice(3)).toEqual(['drovr', 'claude', '$(touch x)'])
+    expect(plan.args.slice(3)).toEqual(['bikube', 'claude', '$(touch x)'])
     expect(plan.args[2]).not.toContain('claude')
   })
 
@@ -28,9 +28,9 @@ describe('installedPlan', () => {
 
 describe('parseInstalled', () => {
   it('reads only the marked lines, whatever a profile printed', () => {
-    expect(parseInstalled('Welcome back\ndrovr-found codex\nclaude\ndrovr-found claude\n')).toEqual(
-      ['claude', 'codex']
-    )
+    expect(
+      parseInstalled('Welcome back\nbikube-found codex\nclaude\nbikube-found claude\n')
+    ).toEqual(['claude', 'codex'])
     expect(parseInstalled('')).toEqual([])
   })
 
@@ -57,7 +57,7 @@ describe('readInstalledAgents', () => {
   }
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-agents-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-agents-'))
     bin = join(dir, 'bin')
     home = join(dir, 'home')
     mkdirSync(bin)

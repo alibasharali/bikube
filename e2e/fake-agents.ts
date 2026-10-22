@@ -3,12 +3,12 @@ import { join } from 'node:path'
 import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 
 // The fake `codex`, `gemini` and `opencode` of #21's smoke tests: each appends `<name> <args>` as
-// one line to the shared $DROVR_AGENT_LOG, prints `fake-<name> <args>`, and waits on stdin. With
+// one line to the shared $BIKUBE_AGENT_LOG, prints `fake-<name> <args>`, and waits on stdin. With
 // FAKE_AGENT_RESUME_FAILS=1 a resume run (`codex resume …`, `gemini --resume …`,
 // `opencode --continue`) exits 1 at once.
 function fakeAgent(name: string, resumeTest: string): string {
   return `#!/bin/bash
-echo "${name}\${*:+ $*}" >> "$DROVR_AGENT_LOG"
+echo "${name}\${*:+ $*}" >> "$BIKUBE_AGENT_LOG"
 echo "fake-${name}\${*:+ $*}"
 if ${resumeTest} && [ "$FAKE_AGENT_RESUME_FAILS" = "1" ]; then exit 1; fi
 read -r _
@@ -40,7 +40,7 @@ export function addFakeAgents(home: string, agentLog: string): void {
   }
   appendFileSync(
     join(home, '.bash_profile'),
-    `[ -n "$DROVR_AGENT_LOG" ] || export DROVR_AGENT_LOG='${agentLog}'\n`
+    `[ -n "$BIKUBE_AGENT_LOG" ] || export BIKUBE_AGENT_LOG='${agentLog}'\n`
   )
 }
 
@@ -52,7 +52,7 @@ export function fakeAgentsHome(root: string): FakeAgentsHome {
   const claude = fakeClaudeHome(root)
   const agentLog = join(root, 'agents.log')
   addFakeAgents(claude.home, agentLog)
-  return { ...claude, agentLog, env: { ...claude.env, DROVR_AGENT_LOG: agentLog } }
+  return { ...claude, agentLog, env: { ...claude.env, BIKUBE_AGENT_LOG: agentLog } }
 }
 
 /** The fake agents' log, one line per run. */

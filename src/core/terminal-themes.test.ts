@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ANSI_COLOUR_NAMES, TERMINAL_PALETTES } from './terminal-palette'
 import {
-  DROVR_DARK,
-  DROVR_LIGHT,
+  BIKUBE_DARK,
+  BIKUBE_LIGHT,
   TERMINAL_THEME_NAMES,
   filterThemeNames,
   isDarkPalette,
@@ -11,15 +11,15 @@ import {
 } from './terminal-themes'
 
 describe('terminal themes', () => {
-  it("lists Drovr's two palettes first, then every bundled Ghostty theme", () => {
-    expect(TERMINAL_THEME_NAMES.slice(0, 2)).toEqual([DROVR_DARK, DROVR_LIGHT])
+  it("lists Bikube's two palettes first, then every bundled Ghostty theme", () => {
+    expect(TERMINAL_THEME_NAMES.slice(0, 2)).toEqual([BIKUBE_DARK, BIKUBE_LIGHT])
     expect(TERMINAL_THEME_NAMES.length).toBeGreaterThan(400)
     expect(new Set(TERMINAL_THEME_NAMES).size).toBe(TERMINAL_THEME_NAMES.length)
   })
 
-  it("gives Drovr's own palettes for its names", () => {
-    expect(terminalTheme(DROVR_DARK)).toBe(TERMINAL_PALETTES.dark)
-    expect(terminalTheme(DROVR_LIGHT)).toBe(TERMINAL_PALETTES.light)
+  it("gives Bikube's own palettes for its names", () => {
+    expect(terminalTheme(BIKUBE_DARK)).toBe(TERMINAL_PALETTES.dark)
+    expect(terminalTheme(BIKUBE_LIGHT)).toBe(TERMINAL_PALETTES.light)
   })
 
   it("reads a Ghostty theme's colours as Ghostty's file has them", () => {

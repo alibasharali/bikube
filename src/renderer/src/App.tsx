@@ -193,7 +193,7 @@ function App(): React.JSX.Element {
   // The global shortcut brought the window forward (#51 D4): the same, unless a dialog is open.
   useEffect(
     () =>
-      window.drovr?.app.onGlobalShow(() => {
+      window.bikube?.app.onGlobalShow(() => {
         if (!document.querySelector('[aria-modal="true"]')) openNextWaiting.current()
       }),
     []
@@ -213,7 +213,7 @@ function App(): React.JSX.Element {
   }, [active])
 
   // On macOS the title bar leaves room for the window buttons (main hides the native one).
-  const darwin = window.drovr?.platform === 'darwin'
+  const darwin = window.bikube?.platform === 'darwin'
 
   const [dialog, setDialog] = useState<
     { kind: 'create' } | { kind: 'edit'; id: string } | { kind: 'delete'; id: string } | null
@@ -319,7 +319,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const ids = workspaceIds.split('\n')
     const onKey = (event: KeyboardEvent): void => {
-      const number = workspaceShortcut(event, window.drovr?.platform ?? '')
+      const number = workspaceShortcut(event, window.bikube?.platform ?? '')
       if (number === null) return
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
@@ -344,7 +344,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const rows = terminalKeys.split('\n').filter(Boolean)
     const onKey = (event: KeyboardEvent): void => {
-      const number = terminalShortcut(event, window.drovr?.platform ?? '')
+      const number = terminalShortcut(event, window.bikube?.platform ?? '')
       if (number === null) return
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
@@ -361,7 +361,7 @@ function App(): React.JSX.Element {
       for (const type of types) window.removeEventListener(type, onKey, true)
     }
   }, [terminalKeys, onPaletteOpen])
-  const held = useHeldNumbers(window.drovr?.platform ?? '')
+  const held = useHeldNumbers(window.bikube?.platform ?? '')
 
   return (
     <div className={darwin ? 'app app-darwin' : 'app'} data-testid="app">

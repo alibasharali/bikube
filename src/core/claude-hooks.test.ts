@@ -66,14 +66,14 @@ describe('the Claude settings file (#31 D15)', () => {
 
   it('tells local cards how to read the board and create cards', () => {
     expect(LOCAL_CLAUDE_INSTRUCTION.startsWith(`${CLAUDE_INSTRUCTION} `)).toBe(true)
-    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$DROVR_BIN/board" list --json')
-    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$DROVR_BIN/board" create <column> <title>')
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$BIKUBE_BIN/board" list --json')
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$BIKUBE_BIN/board" create <column> <title>')
   })
 
   it('gives Claude the D16 instruction, with no backslash so the SSH copy stays fish-safe', () => {
     expect(CLAUDE_INSTRUCTION).toBe(
-      'You are running inside a Drovr card, a kanban board card that shows your status. ' +
-        `At the end of every turn, run exactly: "$DROVR_BIN/board" status . '<one line>' — one ` +
+      'You are running inside a Bikube card, a kanban board card that shows your status. ' +
+        `At the end of every turn, run exactly: "$BIKUBE_BIN/board" status . '<one line>' — one ` +
         'short line, at most 80 characters, saying what you did or what you are waiting for, for ' +
         'example: Tests green, PR ready for review. Run that command alone, as written: add ' +
         'nothing before or after it (no redirection, no || true, no ; or true). Do it silently: ' +
@@ -90,7 +90,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
   let usageLog: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-hooks-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-hooks-'))
     // A bin directory with a space, a fake board that logs its arguments, talks and fails.
     bin = join(dir, 'my bin')
     execFileSync('mkdir', [bin])
@@ -136,7 +136,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     const result = spawnSync(shell, ['-c', command(event)], {
       input: JSON.stringify(input),
       encoding: 'utf8',
-      env: { PATH: '/usr/bin:/bin', DROVR_BIN: bin, ...env }
+      env: { PATH: '/usr/bin:/bin', BIKUBE_BIN: bin, ...env }
     })
     return { status: result.status, stdout: result.stdout, stderr: result.stderr }
   }
@@ -197,7 +197,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
         spawnSync(shell, ['-c', command('SessionStart')], {
           input: spaced,
           encoding: 'utf8',
-          env: { PATH: '/usr/bin:/bin', DROVR_BIN: bin }
+          env: { PATH: '/usr/bin:/bin', BIKUBE_BIN: bin }
         }).status
       ).toBe(0)
       expect(loggedLines(3).at(-1)).toBe(`session . ${resumed}`)
@@ -206,7 +206,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
     it(`exits 0 when board fails or is missing (${shell})`, () => {
       for (const [event, input] of samples) {
         expect(run(shell, event, input, { FAKE_BOARD_EXIT: '1' }).status).toBe(0)
-        expect(run(shell, event, input, { DROVR_BIN: join(dir, 'nowhere') })).toEqual({
+        expect(run(shell, event, input, { BIKUBE_BIN: join(dir, 'nowhere') })).toEqual({
           status: 0,
           stdout: '',
           stderr: ''
@@ -222,7 +222,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
         stderr: ''
       })
       expect(logged()).toEqual([])
-      expect(run(shell, 'SessionStart', input, { DROVR_BIN: join(dir, 'nowhere') })).toEqual({
+      expect(run(shell, 'SessionStart', input, { BIKUBE_BIN: join(dir, 'nowhere') })).toEqual({
         status: 0,
         stdout: '',
         stderr: ''
@@ -231,12 +231,12 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
 
     it(`prints nothing at session start with status updates off (${shell})`, () => {
       const input = { ...base, hook_event_name: 'SessionStart', source: 'startup' }
-      expect(run(shell, 'SessionStart', input, { DROVR_CLAUDE_STATUS: '0' })).toEqual({
+      expect(run(shell, 'SessionStart', input, { BIKUBE_CLAUDE_STATUS: '0' })).toEqual({
         status: 0,
         stdout: '',
         stderr: ''
       })
-      expect(run(shell, 'SessionStart', input, { DROVR_CLAUDE_STATUS: '1' }).stdout).toBe(
+      expect(run(shell, 'SessionStart', input, { BIKUBE_CLAUDE_STATUS: '1' }).stdout).toBe(
         `${CLAUDE_INSTRUCTION}\n`
       )
     })
@@ -312,7 +312,7 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
         spawnSync('/bin/sh', ['-c', command('Stop')], {
           input: spaced,
           encoding: 'utf8',
-          env: { PATH: '/usr/bin:/bin', DROVR_BIN: bin }
+          env: { PATH: '/usr/bin:/bin', BIKUBE_BIN: bin }
         }).status
       ).toBe(0)
       expect(usageLines(1)).toEqual(['usage . /tmp/x y/t.jsonl'])

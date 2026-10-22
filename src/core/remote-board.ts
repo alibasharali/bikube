@@ -11,10 +11,10 @@ import { NOT_IN_A_CARD } from './board-commands'
 import { ANSWER_TIMEOUT_MS, BOARD_PROTOCOL_VERSION, NO_ANSWER } from './board-protocol'
 
 /**
- * `DROVR_SOCKET` is not a socket owned by the remote user (checked with `lstat`, so a symlink is
+ * `BIKUBE_SOCKET` is not a socket owned by the remote user (checked with `lstat`, so a symlink is
  * refused, D3), or connecting to it fails (D6).
  */
-export const CANT_REACH = "board: can't reach Drovr from this host"
+export const CANT_REACH = "board: can't reach Bikube from this host"
 /** The remote host has neither interpreter (D5). */
 export const NEEDS_PERL_OR_PYTHON = 'board: needs perl or python3 on this host'
 
@@ -77,8 +77,8 @@ my %ACT = map { $_ => 1 } (${ACTIVITY_VALUES.map(perlString).join(', ')});
 my @a = @ARGV;
 if (!@a || (@a == 1 && ($a[0] eq "help" || $a[0] eq "--help"))) { print STDOUT $USAGE; exit 0 }
 if (!(@a == 3 && exists $KEY{$a[0]} && ($a[0] ne "activity" || $ACT{$a[2]}))) { print STDERR $USAGE; exit 2 }
-my $id = $ENV{DROVR_CARD_ID};
-my $path = $ENV{DROVR_SOCKET};
+my $id = $ENV{BIKUBE_CARD_ID};
+my $path = $ENV{BIKUBE_SOCKET};
 fail(${perlString(NOT_IN_A_CARD)}) unless defined $id && length $id && defined $path && length $path;
 my @st = lstat($path);
 fail(${perlString(CANT_REACH)}) unless @st && -S _ && $st[4] == $>;
@@ -202,8 +202,8 @@ if not a or (len(a) == 1 and a[0] in ("help", "--help")):
     out(sys.stdout, USAGE, 0)
 if not (len(a) == 3 and a[0] in KEY and (a[0] != "activity" or a[2] in ACT)):
     out(sys.stderr, USAGE, 2)
-card_id = text(os.environ.get("DROVR_CARD_ID", ""))
-path = os.environ.get("DROVR_SOCKET", "")
+card_id = text(os.environ.get("BIKUBE_CARD_ID", ""))
+path = os.environ.get("BIKUBE_SOCKET", "")
 if not card_id or not path:
     fail(${pythonString(NOT_IN_A_CARD)})
 CANT = ${pythonString(CANT_REACH)}

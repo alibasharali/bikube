@@ -16,7 +16,7 @@ function ok<T>(r: Result<T>): T {
 
 function alpha(): { s: InMemoryWorkspaceStore; ws: () => Workspace } {
   const s = new InMemoryWorkspaceStore()
-  const id = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/drovr-alpha' })).id
+  const id = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/bikube-alpha' })).id
   return { s, ws: () => s.getState().workspaces.find((w) => w.id === id)! }
 }
 

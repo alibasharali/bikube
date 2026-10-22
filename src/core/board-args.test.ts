@@ -102,7 +102,7 @@ describe('parseBoardArgs', () => {
     }
   })
 
-  it("keeps setup out of the usage text: it is Drovr's own plumbing (#39 D4)", () => {
+  it("keeps setup out of the usage text: it is Bikube's own plumbing (#39 D4)", () => {
     expect(BOARD_USAGE).not.toContain('setup')
   })
 
@@ -117,7 +117,7 @@ describe('parseBoardArgs', () => {
     }
   })
 
-  it("keeps usage out of the usage text: Drovr's hooks run it (#50 D5)", () => {
+  it("keeps usage out of the usage text: Bikube's hooks run it (#50 D5)", () => {
     expect(BOARD_USAGE).not.toMatch(/board usage/)
     expect(BOARD_USAGE).not.toMatch(/^ +usage\b/m)
   })

@@ -47,7 +47,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-startup-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-startup-'))
   // The fake `claude`, and the fake `codex` an agent switch picks (installed, so it can be chosen).
   const fake = fakeAgentsHome(root)
   home = fake.home
@@ -294,7 +294,7 @@ test('#31 AC12: claude gets the settings file with the hooks, first start and re
   expect(logLines().at(-1)).toBe(`--settings ${LOCAL_CLAUDE_SETTINGS} --resume ${u}`)
 })
 
-test("#31 AC13: each hook command sets the card's pill, exits 0, also with Drovr unreachable", async () => {
+test("#31 AC13: each hook command sets the card's pill, exits 0, also with Bikube unreachable", async () => {
   const dir = makeDir('alpha')
   await claudeAgent(dir)
   // Quit the fake claude: its shell runs the hooks as Claude Code would, with its environment.
@@ -354,9 +354,9 @@ test("#31 AC13: each hook command sets the card's pill, exits 0, also with Drovr
     expect(lines[lines.findIndex((l) => l.endsWith(`echo "hook${i}=$?"`)) + 1]).toBe(`hook${i}=0`)
   }
 
-  // Drovr unreachable: every command still exits 0, silently, and the pill stays.
+  // Bikube unreachable: every command still exits 0, silently, and the pill stays.
   for (const i of steps.keys()) {
-    await run(`${hook(i, `DROVR_SOCKET=${join(root, 'dead.sock')} `)}; echo "dead${i}=$?"`)
+    await run(`${hook(i, `BIKUBE_SOCKET=${join(root, 'dead.sock')} `)}; echo "dead${i}=$?"`)
     await expect.poll(bufferLines).toContain(`dead${i}=0`)
   }
   await pill('Needs your answer')
@@ -377,18 +377,18 @@ test('AC7: a Custom card runs its command on every start; an empty command is re
   await expect(page.getByTestId('new-card-form')).toHaveCount(0)
   await expect(page.getByTestId('card')).toHaveCount(0)
 
-  await newCard('c', 'Custom…', 'echo drovr-custom')
-  await expect.poll(bufferLines).toContain('drovr-custom')
+  await newCard('c', 'Custom…', 'echo bikube-custom')
+  await expect.poll(bufferLines).toContain('bikube-custom')
   await back()
   const tag = card('c').getByTestId('card-tag')
   await expect(tag).toHaveText('Custom')
-  await expect(tag).toHaveAttribute('title', 'echo drovr-custom')
+  await expect(tag).toHaveAttribute('title', 'echo bikube-custom')
 
   await openCard('c')
   await run('exit')
   await stoppedToBoard('c')
   await openCard('c')
-  await expect.poll(bufferLines).toContain('drovr-custom')
+  await expect.poll(bufferLines).toContain('bikube-custom')
 })
 
 /** The open card's raw buffer rows, unjoined: each row's text and whether it continues a wrap. */
@@ -423,7 +423,7 @@ function viewSize(): Promise<{ cols: number; rows: number } | undefined> {
 
 test("#22 AC3: a startup line longer than 80 columns is typed at the open view's size", async () => {
   // A known prompt, so the line's length doesn't depend on the user, host or directory.
-  appendFileSync(join(home, '.bash_profile'), "PS1='drovr> '\n")
+  appendFileSync(join(home, '.bash_profile'), "PS1='bikube> '\n")
   // The shell records its PTY's size as it starts, before anything could resize it (D1).
   const shell = join(root, 'sized-bash')
   const sizeLog = join(root, 'pty-size')
@@ -441,13 +441,13 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
     process.env.SHELL = path
   }, shell)
   // Longer than 80 columns with the prompt, short enough for the open view (about 103).
-  const word = 'drovr-long-startup-line-'.padEnd(70, 'x')
+  const word = 'bikube-long-startup-line-'.padEnd(70, 'x')
   const command = `tput cols; echo ${word}`
   await newCard('long', 'Custom…', command)
   await expect.poll(bufferLines).toContain(word)
   const size = await viewSize()
   // Wide enough for the prompt and the command on one row (more than 80 columns).
-  expect(size?.cols).toBeGreaterThan(`drovr> ${command}`.length)
+  expect(size?.cols).toBeGreaterThan(`bikube> ${command}`.length)
   // The shell's PTY has the open view's columns, and had them from the start.
   const lines = await settledScreen()
   expect(lines[lines.indexOf(word) - 1]).toBe(String(size?.cols))
@@ -455,7 +455,7 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
   // The typed command sits on one unwrapped row, right after the prompt, and nothing wraps
   // onto the next row.
   const rows = await rawRows()
-  const at = rows.findIndex((r) => r.text === `drovr> ${command}`)
+  const at = rows.findIndex((r) => r.text === `bikube> ${command}`)
   expect(at, rows.map((r) => r.text).join('\n')).toBeGreaterThanOrEqual(0)
   expect(rows[at].text.length).toBeGreaterThan(80)
   expect(rows[at].wrapped).toBe(false)
@@ -510,12 +510,12 @@ test('AC8: the workspace default presets new cards and never changes existing on
   await page.getByTestId('workspace-startup').selectOption({ label: 'Custom…' })
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-error-command')).toHaveText('Command is required')
-  await page.getByTestId('workspace-command').fill('echo drovr-default')
+  await page.getByTestId('workspace-command').fill('echo bikube-default')
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
   await column('Backlog').getByTestId('new-card').click()
   await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Custom…')
-  await expect(page.getByTestId('new-card-command')).toHaveValue('echo drovr-default')
+  await expect(page.getByTestId('new-card-command')).toHaveValue('echo bikube-default')
 })
 
 /** Sets a card's startup command from its menu (#5 D11); `save: false` cancels instead. */
@@ -629,15 +629,15 @@ test('AC9/D2: a Custom command set from the menu is required and shown in the ta
   await dialog.getByTestId('startup-dialog-command').fill('')
   await dialog.getByTestId('startup-dialog-save').click()
   await expect(dialog.getByTestId('startup-dialog-error-command')).toHaveText('Command is required')
-  await dialog.getByTestId('startup-dialog-command').fill('  echo drovr-menu  ')
+  await dialog.getByTestId('startup-dialog-command').fill('  echo bikube-menu  ')
   await dialog.getByTestId('startup-dialog-command').press('Enter')
   await expect(dialog).toHaveCount(0)
-  await expect(card('sh').getByTestId('card-tag')).toHaveAttribute('title', 'echo drovr-menu')
+  await expect(card('sh').getByTestId('card-tag')).toHaveAttribute('title', 'echo bikube-menu')
 
   await card('sh').getByTestId('card-menu').click()
   await page.getByTestId('card-menu-startup').click()
   await expect(selected(dialog.getByTestId('startup-dialog-startup'))).toHaveText('Custom…')
-  await expect(dialog.getByTestId('startup-dialog-command')).toHaveValue('echo drovr-menu')
+  await expect(dialog.getByTestId('startup-dialog-command')).toHaveValue('echo bikube-menu')
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
 })

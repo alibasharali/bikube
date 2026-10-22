@@ -27,7 +27,7 @@ function MergeCardDialog({
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
     let live = true
-    void window.drovr.worktree.dirty(worktree.path).then((d) => {
+    void window.bikube.worktree.dirty(worktree.path).then((d) => {
       if (live) setDirty(d === true)
     })
     return () => {

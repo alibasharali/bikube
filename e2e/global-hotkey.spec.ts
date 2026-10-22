@@ -6,8 +6,8 @@ import { backToBoard, boardCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// The global shortcut (#51): set in `drovr-settings.json`, registered by main with the OS, and a
-// press shows or hides Drovr (D3), opening the card that waited longest (D4). xvfb can't send an
+// The global shortcut (#51): set in `bikube-settings.json`, registered by main with the OS, and a
+// press shows or hides Bikube (D3), opening the card that waited longest (D4). xvfb can't send an
 // OS-wide key, so the development build hands the tests main's press handler (AC4). xvfb has no
 // window manager, so `minimize()` does nothing there: a test puts the window away with `hide()`
 // (not visible, as a minimized window is to the user) or `blur()`, and sees the hiding press call
@@ -22,7 +22,7 @@ let page: Page
 let root: string
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-global-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-global-'))
 })
 
 test.afterEach(async () => {
@@ -35,7 +35,7 @@ test.afterEach(async () => {
 async function launchWith(settings: Record<string, unknown>): Promise<void> {
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
+    join(dataDir, 'bikube-settings.json'),
     JSON.stringify({ version: 1, settings: { theme: 'system', ...settings } })
   )
   ;({ app, page } = await launchApp({ dataDir }))
@@ -45,8 +45,8 @@ async function launchWith(settings: Record<string, unknown>): Promise<void> {
 async function pressGlobal(): Promise<void> {
   await app!.evaluate(() => {
     ;(
-      globalThis as unknown as { __drovrGlobalShortcutPress: () => void }
-    ).__drovrGlobalShortcutPress()
+      globalThis as unknown as { __bikubeGlobalShortcutPress: () => void }
+    ).__bikubeGlobalShortcutPress()
   })
 }
 
@@ -118,7 +118,7 @@ function isRegistered(accelerator: string): Promise<boolean> {
 
 /** Main's state of the global shortcut, as the renderer reads it (#51 D8). */
 function shortcutState(): Promise<string> {
-  return page.evaluate(() => window.drovr.globalShortcut.state())
+  return page.evaluate(() => window.bikube.globalShortcut.state())
 }
 
 async function createWorkspace(name: string): Promise<void> {
@@ -174,7 +174,7 @@ async function setWaiting(title: string): Promise<void> {
   await page.keyboard.type('sleep 1; board activity . waiting')
   await page.keyboard.press('Enter')
   await backToBoard(page)
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect(boardCard(page, title).getByTestId('card-activity')).toHaveText('Waiting for you', {
     timeout: 15_000
   })
@@ -279,10 +279,12 @@ test('AC8: a bad global shortcut in the file registers nothing', async () => {
     expect(await shortcutState()).toBe('none')
     for (const accelerator of candidates) expect(await isRegistered(accelerator)).toBe(false)
     // An invalid switch reads as on (D9).
-    expect(await page.evaluate(() => window.drovr.settings.load())).toMatchObject({
+    expect(await page.evaluate(() => window.bikube.settings.load())).toMatchObject({
       openWaitingOnShow: true
     })
-    expect((await page.evaluate(() => window.drovr.settings.load())).globalShortcut).toBe(undefined)
+    expect((await page.evaluate(() => window.bikube.settings.load())).globalShortcut).toBe(
+      undefined
+    )
     await app!.close()
     app = undefined
   }
@@ -308,7 +310,7 @@ async function openShortcuts(): Promise<void> {
 
 /** The settings file's `settings`, or null while there is none. */
 function savedSettings(dataDir: string): Record<string, unknown> | null {
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   if (!existsSync(file)) return null
   return (JSON.parse(readFileSync(file, 'utf8')) as { settings: Record<string, unknown> }).settings
 }
@@ -381,7 +383,7 @@ test.describe('the Settings row', () => {
     await splitRight.click()
     await page.keyboard.press('Control+Alt+Shift+D')
     await expect(settingsDialog().getByTestId('settings-shortcut-error-splitRight')).toHaveText(
-      'Already used by Show or hide Drovr'
+      'Already used by Show or hide Bikube'
     )
     await expect(splitRight).toHaveAttribute('data-recording', 'true')
   })

@@ -21,7 +21,7 @@ import { plainCards } from './plain-cards'
 // `board status` round trip. Not part of `npm run test:smoke` (playwright.config.ts ignores it).
 
 const unpacked = resolve(__dirname, '..', 'dist', 'linux-unpacked')
-const executable = join(unpacked, 'drovr')
+const executable = join(unpacked, 'bikube')
 const resources = join(unpacked, 'resources')
 
 let app: ElectronApplication | undefined
@@ -71,9 +71,9 @@ test('#45 AC9: the unpacked app ships the zsh, bash and fish shell integration s
   const scripts = join(resources, 'shell-integration')
   for (const script of [
     'zsh/.zshenv',
-    'zsh/drovr-integration.zsh',
-    'bash/drovr.bash',
-    'fish/vendor_conf.d/drovr-shell-integration.fish'
+    'zsh/bikube-integration.zsh',
+    'bash/bikube.bash',
+    'fish/vendor_conf.d/bikube-shell-integration.fish'
   ]) {
     expect(readFileSync(join(scripts, script), 'utf8')).toBe(
       readFileSync(resolve(__dirname, '..', 'resources', 'shell-integration', script), 'utf8')
@@ -82,7 +82,7 @@ test('#45 AC9: the unpacked app ships the zsh, bash and fish shell integration s
 })
 
 test('AC4: the packaged app opens, makes a workspace and a card, and board status shows on it', async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-packaged-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-packaged-'))
   const dir = join(root, 'alpha')
   mkdirSync(dir)
 

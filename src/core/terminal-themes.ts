@@ -1,24 +1,24 @@
 /**
- * The terminal colour themes to pick from: Drovr's own two palettes and every theme Ghostty ships
+ * The terminal colour themes to pick from: Bikube's own two palettes and every theme Ghostty ships
  * (from iTerm2-Color-Schemes, licence in THIRD_PARTY_NOTICES; `scripts/import-ghostty-themes.mjs` builds the JSON). Plain TS.
  */
 import GHOSTTY_THEMES from './ghostty-themes.json'
 import { ANSI_COLOUR_NAMES, TERMINAL_PALETTES, type TerminalPalette } from './terminal-palette'
 
-export const DROVR_DARK = 'Drovr Dark'
-export const DROVR_LIGHT = 'Drovr Light'
+export const BIKUBE_DARK = 'Bikube Dark'
+export const BIKUBE_LIGHT = 'Bikube Light'
 
 const BUILT_IN: Readonly<Record<string, Readonly<TerminalPalette>>> = {
-  [DROVR_DARK]: TERMINAL_PALETTES.dark,
-  [DROVR_LIGHT]: TERMINAL_PALETTES.light
+  [BIKUBE_DARK]: TERMINAL_PALETTES.dark,
+  [BIKUBE_LIGHT]: TERMINAL_PALETTES.light
 }
 
 const RAW = GHOSTTY_THEMES as Record<string, string>
 
-/** Every theme name, Drovr's first, then Ghostty's in their file order (case-insensitive A–Z). */
+/** Every theme name, Bikube's first, then Ghostty's in their file order (case-insensitive A–Z). */
 export const TERMINAL_THEME_NAMES: readonly string[] = Object.freeze([
-  DROVR_DARK,
-  DROVR_LIGHT,
+  BIKUBE_DARK,
+  BIKUBE_LIGHT,
   ...Object.keys(RAW)
 ])
 
@@ -33,7 +33,7 @@ export function terminalTheme(name: string): Readonly<TerminalPalette> | undefin
   return Object.hasOwn(BUILT_IN, name) ? BUILT_IN[name] : ghosttyTheme(name)
 }
 
-/** The palette of the Ghostty theme `name` Drovr bundles, or undefined. */
+/** The palette of the Ghostty theme `name` Bikube bundles, or undefined. */
 export function ghosttyTheme(name: string): Readonly<TerminalPalette> | undefined {
   if (!Object.hasOwn(RAW, name)) return undefined
   let palette = cache.get(name)

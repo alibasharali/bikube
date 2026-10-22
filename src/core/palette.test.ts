@@ -96,8 +96,8 @@ describe('matchScore (#40 D4)', () => {
   })
 
   it('counts a word start after punctuation such as a branch name', () => {
-    const wordStart = matchScore('search', 'x drovr/search-index', 'x')!
-    const contiguous = matchScore('earch', 'x drovr/search-index', 'x')!
+    const wordStart = matchScore('search', 'x bikube/search-index', 'x')!
+    const contiguous = matchScore('earch', 'x bikube/search-index', 'x')!
     expect(wordStart).toBeGreaterThan(contiguous)
   })
 })
@@ -153,7 +153,7 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
 
   it('shows a worktree branch, the live status label and the activity pill text', () => {
     const tree = card('wt', 'search', 'backlog', {
-      worktree: { path: '/w', branch: 'drovr/search-index', repo: '/tmp' }
+      worktree: { path: '/w', branch: 'bikube/search-index', repo: '/tmp' }
     })
     const state = {
       workspaces: [workspace('a', 'Alpha', [tree, card('r', 'agent')])],
@@ -162,7 +162,7 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
     const status = (id: string): RowStatus =>
       id === 'r' ? { label: 'Running', activity: 'question' } : { label: 'Stopped' }
     const [wt, running] = paletteItems(input(state, { status })).cards
-    expect(wt).toMatchObject({ branch: 'drovr/search-index', statusLabel: 'Stopped' })
+    expect(wt).toMatchObject({ branch: 'bikube/search-index', statusLabel: 'Stopped' })
     expect(wt.activityText).toBeUndefined()
     expect(running).toMatchObject({ statusLabel: 'Running', activityText: 'Needs your answer' })
     expect(running.branch).toBeUndefined()
@@ -453,7 +453,7 @@ describe('filterPalette (#40 D4)', () => {
 
   it('matches a worktree branch and the activity text', () => {
     const tree = card('wt', 'index work', 'backlog', {
-      worktree: { path: '/w', branch: 'drovr/search-index', repo: '/tmp' }
+      worktree: { path: '/w', branch: 'bikube/search-index', repo: '/tmp' }
     })
     const s = { workspaces: [workspace('a', 'Alpha', [tree, card('q', 'agent')])], activeId: 'a' }
     const status = (id: string): RowStatus =>

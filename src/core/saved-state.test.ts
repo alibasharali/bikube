@@ -20,11 +20,11 @@ function fullState(): WorkspaceState {
     generateId: () => `id-${++n}`,
     generateSessionId: () => `00000000-0000-4000-8000-00000000000${n}`
   })
-  const alpha = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/drovr-alpha' }))
+  const alpha = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/bikube-alpha' }))
   const beta = ok(
     s.createWorkspace({
       name: 'beta',
-      directory: '/tmp/drovr-beta',
+      directory: '/tmp/bikube-beta',
       defaultStartup: { kind: 'claude' }
     })
   )
@@ -39,7 +39,7 @@ function fullState(): WorkspaceState {
   ok(s.renameCard(alpha.id, api.id, 'server'))
   ok(
     s.updateWorkspace(alpha.id, {
-      directory: '/tmp/drovr-beta',
+      directory: '/tmp/bikube-beta',
       defaultStartup: { kind: 'claude' }
     })
   )
@@ -172,9 +172,9 @@ describe('validateWorkspaceState (#8 D3, D6)', () => {
 
 describe('file names (#8 D2, D4)', () => {
   it('names the state file and the corrupt copy by UTC timestamp', () => {
-    expect(STATE_FILE_NAME).toBe('drovr-state.json')
+    expect(STATE_FILE_NAME).toBe('bikube-state.json')
     expect(corruptFileName(new Date(Date.UTC(2026, 9, 13, 14, 15, 0, 123)))).toBe(
-      'drovr-state.corrupt-20261013T141500Z.json'
+      'bikube-state.corrupt-20261013T141500Z.json'
     )
   })
 })
@@ -339,7 +339,7 @@ describe('saved worktree cards', () => {
         ]
       }
     })
-  const worktree = { path: '/data/wt/fix', branch: 'drovr/fix', repo: '/tmp/repo' }
+  const worktree = { path: '/data/wt/fix', branch: 'bikube/fix', repo: '/tmp/repo' }
 
   it('keeps a valid worktree, and reads a card without one as before', () => {
     const parsed = parseSavedState(state({ worktree }))

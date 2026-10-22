@@ -20,7 +20,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-moves-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-moves-'))
   ;({ app, page } = await launchApp())
 })
 
@@ -239,8 +239,8 @@ test('D8: with one column the card menu has no Move to group', async () => {
 test('AC1/D4: a moved running card keeps its process, output and status', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
-  await run("export DROVR_X=7; printf 'drovr-marker'; sleep 30")
-  await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
+  await run("export BIKUBE_X=7; printf 'bikube-marker'; sleep 30")
+  await expect.poll(async () => (await bufferLines()).includes('bikube-marker')).toBe(true)
   await back()
 
   await menuMove('api', 'In Progress')
@@ -248,19 +248,19 @@ test('AC1/D4: a moved running card keeps its process, output and status', async 
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
   await expect(column('In Progress').getByTestId('column-count')).toHaveText('1')
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('bikube-marker')
 
   // The keyboard moves it on without touching the terminal either.
   await card('api').getByTestId('card-open').focus()
   await page.keyboard.press('Alt+ArrowRight')
   await expect(titles('Review')).toHaveText(['api'])
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('bikube-marker')
 
   await openCard('api')
-  expect(await bufferLines()).toContain('drovr-marker')
+  expect(await bufferLines()).toContain('bikube-marker')
   await expect.poll(terminalFocused).toBe(true)
   await page.keyboard.press('Control+C')
-  await run('echo $DROVR_X')
+  await run('echo $BIKUBE_X')
   await expect.poll(bufferLines).toContain('7')
 })
 
@@ -406,8 +406,8 @@ test('D6: dropping in the gap between cards or just above the first uses the nea
 test('AC1/AC6: a running card dragged to another column keeps its terminal and still opens', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
-  await run("export DROVR_X=7; printf 'drovr-marker'; sleep 30")
-  await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
+  await run("export BIKUBE_X=7; printf 'bikube-marker'; sleep 30")
+  await expect.poll(async () => (await bufferLines()).includes('bikube-marker')).toBe(true)
   await back()
 
   await drag('api', column('In Progress'))
@@ -415,17 +415,17 @@ test('AC1/AC6: a running card dragged to another column keeps its terminal and s
   await expect(column('Backlog').getByTestId('column-count')).toHaveText('0')
   await expect(column('In Progress').getByTestId('column-count')).toHaveText('1')
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('bikube-marker')
   await page.waitForTimeout(400)
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 
   // AC6: a click on the moved card opens it at full size.
   await card('api').getByTestId('card-title').click()
   await expectCardOpen(page, 'api')
-  expect(await bufferLines()).toContain('drovr-marker')
+  expect(await bufferLines()).toContain('bikube-marker')
   await expect.poll(terminalFocused).toBe(true)
   await page.keyboard.press('Control+C')
-  await run('echo $DROVR_X')
+  await run('echo $BIKUBE_X')
   await expect.poll(bufferLines).toContain('7')
 })
 

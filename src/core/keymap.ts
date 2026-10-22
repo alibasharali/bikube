@@ -358,7 +358,7 @@ export function modifierMessage(platform: string): string {
 }
 
 /** The global shortcut's name in refusals (#51 D5). */
-export const GLOBAL_SHORTCUT_LABEL = 'Show or hide Drovr'
+export const GLOBAL_SHORTCUT_LABEL = 'Show or hide Bikube'
 
 /**
  * The shortcut a press makes while a field records (D8), or the result that ends there: a

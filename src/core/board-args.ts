@@ -16,7 +16,7 @@ export const SSH_BOARD_USAGE = `usage: board move <card> <column>
   <column>  a column title of this workspace (any case)
   <text>    the card's status text; "" clears it
   activity  working, waiting for you, or a question for you; none clears it
-  session   the Claude Code session the card resumes (Drovr's Claude hooks set it)
+  session   the Claude Code session the card resumes (Bikube's Claude hooks set it)
 `
 
 export const BOARD_USAGE = `usage: board list [--json]
@@ -33,7 +33,7 @@ export const BOARD_USAGE = `usage: board list [--json]
   <column>  a column title of this workspace (any case)
   <text>    the card's status text; "" clears it
   activity  working, waiting for you, or a question for you; none clears it
-  session   the Claude Code session the card resumes (Drovr's Claude hooks set it)
+  session   the Claude Code session the card resumes (Bikube's Claude hooks set it)
 `
 
 export type BoardCommand =

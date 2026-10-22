@@ -107,7 +107,7 @@ describe('workingDirectoryProblem', () => {
   let file: string
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'drovr-cwd-'))
+    dir = await mkdtemp(join(tmpdir(), 'bikube-cwd-'))
     file = join(dir, 'file.txt')
     await writeFile(file, 'x')
   })

@@ -1,5 +1,5 @@
-appId: com.drovr.app
-productName: Drovr
+appId: com.bikube.app
+productName: Bikube
 directories:
   buildResources: build
 files:
@@ -50,8 +50,8 @@ linux:
       arch:
         - x64
   category: Development
-  executableName: drovr
-  maintainer: Drovr
+  executableName: bikube
+  maintainer: Bikube
 appImage:
   artifactName: ${name}-${version}-x86_64.${ext}
   # electron-builder otherwise puts --no-sandbox in the AppImage's desktop entry.

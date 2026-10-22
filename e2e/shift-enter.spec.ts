@@ -39,7 +39,7 @@ echo probe-done
 `
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-shift-enter-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-shift-enter-'))
   const fake = fakeClaudeHome(root)
   writeFileSync(join(fake.home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(fake.home, 'bin', 'claude'), 0o755)

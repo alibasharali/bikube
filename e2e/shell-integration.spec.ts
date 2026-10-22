@@ -9,7 +9,7 @@ import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
 
 // Shell integration (#45): the marks a shell sends around its prompts and commands (OSC 133,
-// OSC 633, OSC 7), and what Drovr shows from them: a failed command's mark on its line (D6),
+// OSC 633, OSC 7), and what Bikube shows from them: a failed command's mark on its line (D6),
 // prompt jumps (D5), and a notification when a long command ends out of sight (D7).
 
 let app: ElectronApplication | undefined
@@ -18,7 +18,7 @@ let root: string
 let dataDir: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-shell-integration-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-shell-integration-'))
 })
 
 test.afterEach(async () => {
@@ -35,7 +35,7 @@ test.afterEach(async () => {
 async function launchWithShell(shell: string, env: Record<string, string> = {}): Promise<void> {
   dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
+    join(dataDir, 'bikube-settings.json'),
     JSON.stringify({ version: 1, settings: { shell } })
   )
   const base: Record<string, string> = {}
@@ -52,7 +52,7 @@ async function launchWithShell(shell: string, env: Record<string, string> = {}):
 /** The saved settings file. */
 function readSettings(): unknown {
   try {
-    return JSON.parse(readFileSync(join(dataDir, 'drovr-settings.json'), 'utf8'))
+    return JSON.parse(readFileSync(join(dataDir, 'bikube-settings.json'), 'utf8'))
   } catch {
     return null
   }
@@ -366,7 +366,7 @@ const longCommand = (delay: number, code: number, done: string): string =>
 
 test('AC7: a long command ending out of sight sends a notification; in the focused pane in view, or with Notifications off, none', async () => {
   // Commands of 0.5 s or more count (development build only), so the test needn't wait 10 s.
-  await launchWithShell('/bin/sh', { DROVR_LONG_COMMAND_MS: '500' })
+  await launchWithShell('/bin/sh', { BIKUBE_LONG_COMMAND_MS: '500' })
   await stubNotifications()
   await openDefaultShell()
   await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.focus())

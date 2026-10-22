@@ -20,7 +20,7 @@ export {
   type TerminalPalette
 } from './terminal-palette'
 
-/** The icon font Drovr bundles, so prompts like starship show their Nerd Font glyphs. */
+/** The icon font Bikube bundles, so prompts like starship show their Nerd Font glyphs. */
 export const SYMBOLS_FONT_FAMILY = 'Symbols Nerd Font Mono'
 
 /** The xterm.js options the terminal preferences set (names as xterm's `ITerminalOptions`). */

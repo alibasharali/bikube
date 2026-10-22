@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
-import type { DrovrApi } from '../../shared/api'
+import type { BikubeApi } from '../../shared/api'
 
 declare global {
   interface Window {
-    drovr: DrovrApi
+    bikube: BikubeApi
   }
 }

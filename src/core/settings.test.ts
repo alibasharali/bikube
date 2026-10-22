@@ -13,8 +13,8 @@ import {
 /** The settings after #10's three, at their defaults. */
 const NEW_FIELDS = {
   shell: '',
-  terminalThemeDark: 'Drovr Dark',
-  terminalThemeLight: 'Drovr Light',
+  terminalThemeDark: 'Bikube Dark',
+  terminalThemeLight: 'Bikube Light',
   useGhosttyTheme: false,
   ...PREFERENCE_DEFAULTS
 }
@@ -22,7 +22,7 @@ const NEW_FIELDS = {
 describe('parseSettingsFile (#10 D7, AC8)', () => {
   it('replaces the invalid fields with defaults and keeps the valid ones', () => {
     const parsed = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}',
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}',
       'linux'
     )
     expect(parsed.settings).toEqual({
@@ -42,11 +42,11 @@ describe('parseSettingsFile (#10 D7, AC8)', () => {
 
   it('serializes a change to dark as exactly the expected file', () => {
     const { settings } = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}',
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}',
       'linux'
     )
     expect(serializeSettings({ ...settings, theme: 'dark' })).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
   })
 })
@@ -271,10 +271,10 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
   it('writes syncFolder after the font family, and leaves it out when off', () => {
     const settings = { theme: 'dark' as const, fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
     expect(serializeSettings(settings, '/Users/me/Sync')).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false,"syncFolder":"/Users/me/Sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"syncFolder":"/Users/me/Sync"}}'
     )
     expect(serializeSettings(settings, null)).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
   })
 
@@ -386,10 +386,10 @@ describe('shortcuts in the settings file (#31 D9, AC8)', () => {
     expect(parsed.settings.shortcuts).toEqual({ splitRight: 'Ctrl+Alt+R' })
     expect(parsed.replaced).toEqual([])
     expect(serializeSettings(parsed.settings, '/Sync')).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false,"shortcuts":{"splitRight":"Ctrl+Alt+R"},"syncFolder":"/Sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"shortcuts":{"splitRight":"Ctrl+Alt+R"},"syncFolder":"/Sync"}}'
     )
     expect(serializeSettings({ ...parsed.settings, shortcuts: {} })).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
     )
   })
 

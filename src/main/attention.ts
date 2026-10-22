@@ -31,7 +31,7 @@ export function registerAttention(): void {
     window.show()
     window.focus()
   })
-  ipcMain.handle(IPC.appHome, () => process.env['DROVR_HOME_DIR'] || homedir())
+  ipcMain.handle(IPC.appHome, () => process.env['BIKUBE_HOME_DIR'] || homedir())
   ipcMain.on(IPC.appReveal, (event, path: unknown) => {
     if (!fromMainFrame(event) || typeof path !== 'string' || !isAbsolute(path)) return
     void stat(path)

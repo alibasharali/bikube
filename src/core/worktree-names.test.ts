@@ -21,16 +21,16 @@ describe('titleSlug', () => {
 })
 
 describe('suggestBranch', () => {
-  it('prefixes drovr/ and counts on when the name is taken', () => {
-    expect(suggestBranch('Fix login', new Set())).toBe('drovr/fix-login')
-    expect(suggestBranch('Fix login', new Set(['drovr/fix-login', 'drovr/fix-login-2']))).toBe(
-      'drovr/fix-login-3'
+  it('prefixes bikube/ and counts on when the name is taken', () => {
+    expect(suggestBranch('Fix login', new Set())).toBe('bikube/fix-login')
+    expect(suggestBranch('Fix login', new Set(['bikube/fix-login', 'bikube/fix-login-2']))).toBe(
+      'bikube/fix-login-3'
     )
   })
 })
 
 describe('branchProblem', () => {
-  it.each(['drovr/fix-login', 'feature/a.b_c', 'v2'])('accepts %j', (name) => {
+  it.each(['bikube/fix-login', 'feature/a.b_c', 'v2'])('accepts %j', (name) => {
     expect(branchProblem(name)).toBeNull()
   })
 
@@ -51,7 +51,7 @@ describe('branchProblem', () => {
 
 describe('worktreeFolder', () => {
   it("is the branch's last part", () => {
-    expect(worktreeFolder('drovr/fix-login')).toBe('fix-login')
+    expect(worktreeFolder('bikube/fix-login')).toBe('fix-login')
     expect(worktreeFolder('feature/a b')).toBe('a-b')
   })
 })

@@ -27,7 +27,7 @@ function apply(cardId: string, event: AutoMoveEvent): void {
 export function startAutoMoves(): void {
   if (started) return
   started = true
-  window.drovr.app.onQuitting(() => {
+  window.bikube.app.onQuitting(() => {
     quitting = true
   })
   const terminals = cardTerminals()

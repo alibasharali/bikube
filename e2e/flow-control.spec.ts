@@ -14,7 +14,7 @@ let page: Page
 let root: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-flow-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-flow-'))
   ;({ app, page } = await launchApp())
   const dir = join(root, 'alpha')
   mkdirSync(dir)
@@ -132,11 +132,11 @@ async function streaming(pattern: RegExp): Promise<void> {
     .toBeGreaterThan(10)
 }
 
-const NUMBERED = /^(\d+)\s+drovr-flow$/
+const NUMBERED = /^(\d+)\s+bikube-flow$/
 
 test("AC4: a stalled renderer doesn't build a backlog and no output is dropped", async () => {
   await newCard('api')
-  await run('yes drovr-flow | cat -n')
+  await run('yes bikube-flow | cat -n')
   await streaming(NUMBERED)
 
   await blockRenderer(3_000)
@@ -166,8 +166,8 @@ test('AC5: a paused card still stops when Closed, and still ends when deleted', 
 
   await newCard('api')
   const apiPid = await shellPid()
-  await run('yes drovr-flow')
-  await streaming(/^drovr-flow$/)
+  await run('yes bikube-flow')
+  await streaming(/^bikube-flow$/)
   await blockRenderer(2_000)
 
   await closeCard(page)

@@ -80,7 +80,7 @@ export function answerBoardCommand(
     return renamed.ok ? { ok: true } : { ok: false, error: `board: ${renamed.error.message}` }
   }
   if (command.command === 'session') {
-    // Drovr's Claude hooks: the session this card resumes from now on (a message sent, a /resume).
+    // Bikube's Claude hooks: the session this card resumes from now on (a message sent, a /resume).
     const set = store.setAgentSession(ws.id, card.value.id, command.session.toLowerCase())
     return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
   }

@@ -21,7 +21,7 @@ let dataDir: string
 let root: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-palette-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-palette-'))
   ;({ app, page, dataDir } = await launchApp())
 })
 
@@ -323,7 +323,7 @@ test('AC6: a worktree card matches its branch; a card matches its activity, whic
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('search index')
   await page.getByTestId('new-card-worktree').check()
-  await expect(page.getByTestId('new-card-branch')).toHaveValue('drovr/search-index')
+  await expect(page.getByTestId('new-card-branch')).toHaveValue('bikube/search-index')
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, 'search index')
   await backToBoard(page)
@@ -335,7 +335,7 @@ test('AC6: a worktree card matches its branch; a card matches its activity, whic
   await page.keyboard.type('search-index')
   await expect(row('search index')).toHaveCount(1)
   await expect(row('search index').getByTestId('palette-row-meta')).toHaveText(
-    'repo · drovr/search-index · Running'
+    'repo · bikube/search-index · Running'
   )
 
   await search().fill('needs')
@@ -403,7 +403,7 @@ test('AC12: a recorded shortcut opens the palette instead of the default, saved,
   await createWorkspace('Alpha')
   const settings = page.getByTestId('settings-dialog')
   const field = settings.getByTestId('settings-shortcut-palette')
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
 
   await page.getByTestId('settings-open').click()
@@ -599,7 +599,7 @@ test('#60 AC6: Copy command output is listed with its shortcut and copies as the
   // Shell /bin/sh, so only the marks the test prints reach the terminal (no shell integration).
   await app?.close()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
+    join(dataDir, 'bikube-settings.json'),
     JSON.stringify({ version: 1, settings: { shell: '/bin/sh' } })
   )
   ;({ app, page } = await launchApp({ dataDir }))

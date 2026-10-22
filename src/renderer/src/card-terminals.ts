@@ -216,7 +216,7 @@ export class XtermScreen implements CardScreen {
   constructor(private readonly claudeCode = false) {
     const { fontFamily, fontSize, theme, behaviour } = currentAppearance()
     this.palette = theme
-    const { platform, link } = window.drovr
+    const { platform, link } = window.bikube
     // Plain URLs (the addon) and OSC 8 links (the handler) open in the browser on Mod+click.
     const openLink = (event: MouseEvent, uri: string): void => {
       if (opensLink(event, platform)) link.open(uri)
@@ -251,7 +251,7 @@ export class XtermScreen implements CardScreen {
       this.term.loadAddon(images)
       this.host.__images = images
     }
-    const clipboard = window.drovr.clipboard
+    const clipboard = window.bikube.clipboard
     // While a find is applied, only a selection made with the mouse is the user's (#35 D9). The
     // flag outlasts xterm's own mouseup handler, which reports the finished selection.
     this.host.addEventListener('mousedown', () => (this.pointerSelecting = true), true)
@@ -302,8 +302,8 @@ export class XtermScreen implements CardScreen {
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18) or the terminal digits.
       if (keymapAction(event, currentKeymap())) return false
-      if (workspaceShortcut(event, window.drovr.platform) !== null) return false
-      if (terminalShortcut(event, window.drovr.platform) !== null) return false
+      if (workspaceShortcut(event, window.bikube.platform) !== null) return false
+      if (terminalShortcut(event, window.bikube.platform) !== null) return false
       if (isShiftEnter(event) && this.claudeCodeRunning()) {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin)
@@ -311,13 +311,13 @@ export class XtermScreen implements CardScreen {
         return false
       }
       // macOS line editing (Cmd+Backspace and the like), as other macOS terminals send it.
-      const edit = macLineEditKey(event, window.drovr.platform)
+      const edit = macLineEditKey(event, window.bikube.platform)
       if (edit !== null) {
         event.preventDefault()
         if (event.type === 'keydown' && !this.term.options.disableStdin) this.term.input(edit)
         return false
       }
-      const action = clipboardShortcut(event, window.drovr.platform)
+      const action = clipboardShortcut(event, window.bikube.platform)
       if (!action) return true
       // Stop the native paste event too, or xterm would paste twice.
       event.preventDefault()
@@ -747,7 +747,7 @@ export class XtermScreen implements CardScreen {
     }
     // Find's selection is gone: the next Find step selects its match again (#35 D6, #60 D2).
     this.findSelected = false
-    void window.drovr.clipboard.write(this.term.getSelection())
+    void window.bikube.clipboard.write(this.term.getSelection())
   }
 
   /** The row the cursor is on, as a marker that follows scrolling (#45 D1). */
@@ -826,7 +826,7 @@ let paneRegistry: CardPanes<XtermScreen> | undefined
 
 /** The one router of terminal events, shared by cards' own terminals and their extra panes. */
 function sessionRouter(): SessionRouter {
-  router ??= new SessionRouter(window.drovr.terminal)
+  router ??= new SessionRouter(window.bikube.terminal)
   return router
 }
 
@@ -867,9 +867,9 @@ const keepingOutput = (): boolean => settingsStore.get().keepOutput
 const outputKeeper: OutputKeeper = {
   keeps: (cardId) => keepingOutput() && isCard(cardId),
   scrollback: () => settingsStore.get().scrollback,
-  read: async (cardId) => (keepingOutput() ? window.drovr.scrollback.read(cardId) : null),
+  read: async (cardId) => (keepingOutput() ? window.bikube.scrollback.read(cardId) : null),
   save: (cardId, data) => {
-    if (keepingOutput()) window.drovr.scrollback.save(cardId, data)
+    if (keepingOutput()) window.bikube.scrollback.save(cardId, data)
   }
 }
 
@@ -877,7 +877,7 @@ const outputKeeper: OutputKeeper = {
 export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(
-      window.drovr.terminal,
+      window.bikube.terminal,
       (cardId) => created(new XtermScreen(startsClaudeCode(cardId)), cardId, MAIN_PANE),
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
@@ -896,9 +896,9 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     // Every running card's output is saved as the app starts quitting, before main stops the
     // shells (#46 D2).
     const cards = registry
-    window.drovr.app.onQuitting(() => {
+    window.bikube.app.onQuitting(() => {
       cards.keepRunning()
-      window.drovr.scrollback.quitSaved()
+      window.bikube.scrollback.quitSaved()
     })
   }
   return registry
@@ -908,7 +908,7 @@ export function cardTerminals(): CardSessions<XtermScreen> {
 export function cardPanes(): CardPanes<XtermScreen> {
   if (!paneRegistry) {
     paneRegistry = new CardPanes(
-      window.drovr.terminal,
+      window.bikube.terminal,
       sessionRouter(),
       (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
       (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
@@ -921,7 +921,7 @@ export function cardPanes(): CardPanes<XtermScreen> {
         return splitDirectory(screen?.marks.directory(), {
           cardDirectory: card.directory,
           sshHost: card.host,
-          localHostName: window.drovr.hostName
+          localHostName: window.bikube.hostName
         })
       }
     )

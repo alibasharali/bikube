@@ -10,7 +10,7 @@ import {
 import { join } from 'node:path'
 import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 
-// The fake `ssh` of #12's smoke tests. It logs its arguments to $DROVR_SSH_LOG; for host
+// The fake `ssh` of #12's smoke tests. It logs its arguments to $BIKUBE_SSH_LOG; for host
 // `unreachable` it prints ssh's resolve error and exits 255; otherwise it runs the remote command
 // with `sh -c` under a cleared environment, like a fresh login on the remote machine, whose
 // TMPDIR is `<home>/tmp` so each session's `board` directory goes with the test's root (and
@@ -18,7 +18,7 @@ import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 // Each connection's arguments are logged on one line, newlines as spaces.
 // FAKE_SSH_DELAY=<s>: first prints `Password:` and reads a hidden line for up to <s> seconds,
 // as a password prompt would (so a start line typed too early is swallowed, never run).
-// It also logs the local side's `board` variables to $DROVR_SSH_ENV_LOG (#12 D5: none).
+// It also logs the local side's `board` variables to $BIKUBE_SSH_ENV_LOG (#12 D5: none).
 // FAKE_SSH_FAIL_AFTER=<n>: every connection after the first <n> fails with exit code 255.
 // `-R <remote>:<local>` (#25 D1): the forward is a real Unix socket listening at `<remote>` that
 // relays each connection to `<local>` (FAKE_SSH_RELAY, a perl process; the remote client refuses a
@@ -28,15 +28,15 @@ import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 // `AllowStreamLocalForwarding no` would. `-o <option>` is skipped.
 
 /** In every fake relay process's arguments, so a leftover relay can be found with `ps`. */
-export const RELAY_MARKER = 'drovr-fake-ssh-relay'
+export const RELAY_MARKER = 'bikube-fake-ssh-relay'
 
 const FAKE_SSH = `#!/bin/bash
-[ -n "$DROVR_SSH_ENV_LOG" ] && echo "card=[$DROVR_CARD_ID] bin=[$DROVR_BIN]" >> "$DROVR_SSH_ENV_LOG"
+[ -n "$BIKUBE_SSH_ENV_LOG" ] && echo "card=[$BIKUBE_CARD_ID] bin=[$BIKUBE_BIN]" >> "$BIKUBE_SSH_ENV_LOG"
 connections=0
-[ -f "$DROVR_SSH_LOG" ] && connections=$(wc -l < "$DROVR_SSH_LOG")
+[ -f "$BIKUBE_SSH_LOG" ] && connections=$(wc -l < "$BIKUBE_SSH_LOG")
 # One line per connection: the remote command's newlines (its board script) as spaces.
 args="$*"
-echo "\${args//$'\\n'/ }" >> "$DROVR_SSH_LOG"
+echo "\${args//$'\\n'/ }" >> "$BIKUBE_SSH_LOG"
 forward=
 while [ $# -gt 0 ] && [ "$1" != "--" ]; do
   case "$1" in
@@ -171,13 +171,13 @@ export function fakeSshHome(root: string): FakeSshHome {
   writeFileSync(join(claude.home, 'bin', 'fake-ssh-relay'), FAKE_SSH_RELAY)
   appendFileSync(
     join(claude.home, '.bash_profile'),
-    `[ -n "$DROVR_CLAUDE_LOG" ] || export DROVR_CLAUDE_LOG='${claude.log}'\n`
+    `[ -n "$BIKUBE_CLAUDE_LOG" ] || export BIKUBE_CLAUDE_LOG='${claude.log}'\n`
   )
   return {
     ...claude,
     sshLog,
     sshEnvLog,
-    env: { ...claude.env, DROVR_SSH_LOG: sshLog, DROVR_SSH_ENV_LOG: sshEnvLog }
+    env: { ...claude.env, BIKUBE_SSH_LOG: sshLog, BIKUBE_SSH_ENV_LOG: sshEnvLog }
   }
 }
 
@@ -199,6 +199,6 @@ export function sshLogLines(log: string): string[] {
 export function removeRemoteForwards(log: string): void {
   for (const line of sshLogLines(log)) {
     const remote = /^(?:-o \S+ )*-R (\S+?):/.exec(line)?.[1]
-    if (remote?.startsWith('/tmp/drovr-')) rmSync(remote, { force: true })
+    if (remote?.startsWith('/tmp/bikube-')) rmSync(remote, { force: true })
   }
 }

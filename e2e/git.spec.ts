@@ -56,7 +56,7 @@ async function addWorkspace(name: string, directory: string): Promise<void> {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-git-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-git-'))
   repo = join(root, 'repo')
   makeRepos()
   ;({ app, page } = await launchApp())
@@ -251,17 +251,17 @@ test('switching from the menu leaves a running card running, its output kept', a
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, 'Runner')
   await page.getByTestId('card-view').getByTestId('terminal').click()
-  await page.keyboard.type('echo drovr-mark""er')
+  await page.keyboard.type('echo bikube-mark""er')
   await page.keyboard.press('Enter')
-  await expect.poll(terminalText).toMatch(/^drovr-marker$/m)
+  await expect.poll(terminalText).toMatch(/^bikube-marker$/m)
 
   await chip().click()
   await section('Local').getByText('feature', { exact: true }).click()
   await expect(chip()).toHaveText('feature')
   expect(git(repo, 'branch', '--show-current')).toBe('feature')
-  await expect.poll(terminalText).toMatch(/^drovr-marker$/m)
+  await expect.poll(terminalText).toMatch(/^bikube-marker$/m)
   await expectStatusOnBoard(page, 'Runner', 'Running')
-  await expect.poll(terminalText).toMatch(/^drovr-marker$/m)
+  await expect.poll(terminalText).toMatch(/^bikube-marker$/m)
 })
 
 test("switching workspace with the menu open drops the old workspace's menu", async () => {
@@ -416,7 +416,7 @@ async function httpOrigin(answer: (response: ServerResponse) => void): Promise<S
 
 test('a remote that wants a password fails at once with how to set up credentials', async () => {
   const server = await httpOrigin((response) => {
-    response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="drovr"' })
+    response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="bikube"' })
     response.end()
   })
   try {

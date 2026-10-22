@@ -35,7 +35,7 @@ echo claude-done
 `
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-image-paste-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-image-paste-'))
   const fake = fakeClaudeHome(root)
   writeFileSync(join(fake.home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(fake.home, 'bin', 'claude'), 0o755)

@@ -260,7 +260,7 @@ export function splitDirectory(
   return local ? reported.path : cardDirectory
 }
 
-const HOST_NAME_ARG = '--drovr-host-name='
+const HOST_NAME_ARG = '--bikube-host-name='
 
 /** The renderer's argument carrying this machine's host name (#45 D8), which it can't read. */
 export const hostNameArg = (name: string): string => `${HOST_NAME_ARG}${name}`

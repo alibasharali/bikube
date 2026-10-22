@@ -104,7 +104,7 @@ let panes: CardPanes<FakeScreen>
 /** Whether the card's main shell runs, as `isRunning` reports it to the panes. */
 let mainRunning: boolean
 
-const API = { id: 'card-1', directory: '/tmp/drovr-alpha' }
+const API = { id: 'card-1', directory: '/tmp/bikube-alpha' }
 
 beforeEach(() => {
   api = new FakeApi()
@@ -348,7 +348,7 @@ describe('CardPanes failures and the limit', () => {
 })
 
 describe('CardPanes in an SSH card (#12 D8)', () => {
-  const REMOTE = { id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }
+  const REMOTE = { id: 'card-2', directory: '/tmp/bikube-remote', host: 'me@devbox' }
 
   it("connects each extra pane to the card's host and directory, with no startup line", async () => {
     panes.split(REMOTE, 'right')
@@ -499,7 +499,7 @@ describe('CardPanes typing while a pane is starting', () => {
   })
 
   it("keeps none for an SSH card's pane, so it never answers ssh prompts (#25 D10)", async () => {
-    panes.split({ id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }, 'right')
+    panes.split({ id: 'card-2', directory: '/tmp/bikube-remote', host: 'me@devbox' }, 'right')
     screens[0].inputListener?.('yes\r')
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await flush()
@@ -544,7 +544,7 @@ describe('CardPanes.toggleZoom (#48 D1, D4)', () => {
 })
 
 describe('CardPanes.watchOutput (#49 D2, D3, D5, D6)', () => {
-  const REMOTE = { id: 'card-2', directory: '/tmp/drovr-remote', host: 'me@devbox' }
+  const REMOTE = { id: 'card-2', directory: '/tmp/bikube-remote', host: 'me@devbox' }
   /** Records what the watcher is told, in order. */
   function watch(): string[] {
     const told: string[] = []

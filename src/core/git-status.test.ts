@@ -26,7 +26,7 @@ const write = (path: string, text = ''): void => {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-status-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-status-'))
   repo = join(dir, 'repo')
   mkdirSync(repo)
   write('README.md', '# repo\n')

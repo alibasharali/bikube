@@ -15,7 +15,7 @@ export const MAX_REQUEST_LINE_BYTES = 8192
 export const INVALID_REQUEST = 'board: invalid request'
 export const REQUEST_TOO_LONG = 'board: request too long'
 /** The board did not answer: timed out, failed, or its page reloaded or crashed (#9 D9). */
-export const NO_ANSWER = 'board: no answer from Drovr'
+export const NO_ANSWER = 'board: no answer from Bikube'
 /** How long `board` waits for main's reply (#9 D9), locally and in SSH cards (#25 D5). */
 export const ANSWER_TIMEOUT_MS = 5000
 

@@ -15,7 +15,7 @@ import {
 
 export type BoardResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
-export const NOT_IN_A_CARD = 'board: not running inside a Drovr card'
+export const NOT_IN_A_CARD = 'board: not running inside a Bikube card'
 /** Longest agent status, in characters (#9 D8). */
 export const MAX_AGENT_STATUS_LENGTH = 200
 

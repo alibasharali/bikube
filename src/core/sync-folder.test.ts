@@ -11,8 +11,8 @@ import type { Workspace, WorkspaceState } from './workspace-store'
 
 const HOME = '/home/me'
 const F = '/sync'
-const FILE = '/sync/drovr-board.json'
-const TMP = '/sync/drovr-board.json.tmp'
+const FILE = '/sync/bikube-board.json'
+const TMP = '/sync/bikube-board.json.tmp'
 const NOW = new Date(Date.UTC(2026, 9, 14, 9, 5, 0))
 
 /**
@@ -307,7 +307,7 @@ describe('turning sync off (#13 D10, AC11)', () => {
     sync.noteBoard(state({ ...api, name: 'pending' }))
     await sync.setFolder('/other', state({ ...api, name: 'pending' }))
     expect(written().board.workspaces[0].name).toBe('pending')
-    expect(JSON.parse(fs.files.get('/other/drovr-board.json')!).board.workspaces[0].name).toBe(
+    expect(JSON.parse(fs.files.get('/other/bikube-board.json')!).board.workspaces[0].name).toBe(
       'pending'
     )
   })
@@ -996,7 +996,7 @@ describe('a board change while the launch read runs (#26 D2, #13 D11)', () => {
     fs.releaseRead()
     expect(await launched).toEqual([api])
     expect(await joined).toEqual([web, api])
-    const fileB = JSON.parse(fs.files.get(`${B}/drovr-board.json`)!) as {
+    const fileB = JSON.parse(fs.files.get(`${B}/bikube-board.json`)!) as {
       board: { workspaces: Workspace[] }
     }
     expect(fileB.board.workspaces.map((w) => w.id)).toEqual(['web', 'api'])

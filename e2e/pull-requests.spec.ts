@@ -162,7 +162,7 @@ async function confirmMerge(): Promise<void> {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-pr-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-pr-'))
   makeRepos()
   fake = fakeSshHome(root)
   fakeGh()

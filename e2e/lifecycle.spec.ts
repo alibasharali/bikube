@@ -3,11 +3,11 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { launchApp, removeDataDirs } from './launch'
-import type { DrovrApi } from '../src/shared/api'
+import type { BikubeApi } from '../src/shared/api'
 
 declare global {
   interface Window {
-    drovr: DrovrApi
+    bikube: BikubeApi
   }
 }
 
@@ -46,13 +46,13 @@ const alive = (pid: number): boolean => {
  * keeps its pid and the ignored hangup but never reads the terminal, so no EOF ends it (#18 D1).
  */
 async function spawnShell({ ignoreHangup = false } = {}): Promise<{ id: string; pid: number }> {
-  const dir = mkdtempSync(join(tmpdir(), 'drovr-pid-'))
+  const dir = mkdtempSync(join(tmpdir(), 'bikube-pid-'))
   const file = join(dir, 'pid')
   const id = await page.evaluate(
     async ({ dir, line }) => {
-      const result = await window.drovr.terminal.spawn(80, 24, dir, 'lifecycle-card')
+      const result = await window.bikube.terminal.spawn(80, 24, dir, 'lifecycle-card')
       if (!result.ok) throw new Error(result.reason)
-      window.drovr.terminal.write(result.id, `${line}\r`)
+      window.bikube.terminal.write(result.id, `${line}\r`)
       return result.id
     },
     {
@@ -105,9 +105,9 @@ test('reloading the page kills its shells', async () => {
 test('many shells in one window add no listener per session', async () => {
   await page.evaluate(async (cwd) => {
     const results = await Promise.all(
-      Array.from({ length: 12 }, () => window.drovr.terminal.spawn(80, 24, cwd, 'lifecycle-card'))
+      Array.from({ length: 12 }, () => window.bikube.terminal.spawn(80, 24, cwd, 'lifecycle-card'))
     )
-    results.forEach((result) => result.ok && window.drovr.terminal.kill(result.id))
+    results.forEach((result) => result.ok && window.bikube.terminal.kill(result.id))
   }, tmpdir())
   await page.waitForTimeout(500)
   expect(stderr).not.toContain('MaxListenersExceededWarning')
@@ -173,10 +173,10 @@ test('closing a card escalates to SIGKILL when its shell ignores the hangup (#18
   await page.evaluate(() => {
     const exits: string[] = []
     ;(window as unknown as { exits: string[] }).exits = exits
-    window.drovr.terminal.onExit(({ id }) => exits.push(id))
+    window.bikube.terminal.onExit(({ id }) => exits.push(id))
   })
   const { id, pid } = await spawnShell({ ignoreHangup: true })
-  await page.evaluate((id) => window.drovr.terminal.kill(id), id)
+  await page.evaluate((id) => window.bikube.terminal.kill(id), id)
   await expect.poll(() => alive(pid), { timeout: 4_000 }).toBe(false)
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { exits: string[] }).exits))

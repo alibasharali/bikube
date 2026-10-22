@@ -10,7 +10,7 @@ describe('spawnInDirectory', () => {
   let dir: string
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'drovr-spawn-'))
+    dir = await mkdtemp(join(tmpdir(), 'bikube-spawn-'))
   })
 
   afterAll(async () => {
@@ -99,7 +99,7 @@ describe('spawnInDirectory', () => {
       const spawn = vi.fn(() => ({ id: '3', pid: 1 }))
       const board = {
         cardId: 'card-1',
-        remoteSocket: '/tmp/drovr-r.sock',
+        remoteSocket: '/tmp/bikube-r.sock',
         localSocket: '/l/board/s-1.sock'
       }
       await spawnInDirectory({ cols: 80, rows: 24, cwd: '/srv', host: 'me@devbox', board }, spawn)

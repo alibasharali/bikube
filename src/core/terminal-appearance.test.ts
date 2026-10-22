@@ -66,7 +66,7 @@ describe('terminal palettes (#10 D3)', () => {
 })
 
 describe('terminalAppearance (#10 D3, D4)', () => {
-  it('defaults: 13 px Menlo, Consolas, monospace with the symbols font, Drovr Dark under a dark OS', () => {
+  it('defaults: 13 px Menlo, Consolas, monospace with the symbols font, Bikube Dark under a dark OS', () => {
     expect(terminalAppearance(DEFAULT_SETTINGS, true)).toEqual({
       fontSize: 13,
       fontFamily: 'Menlo, Consolas, monospace, "Symbols Nerd Font Mono"',

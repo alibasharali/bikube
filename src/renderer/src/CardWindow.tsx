@@ -44,7 +44,7 @@ function CardWindow({
   const { workspaces } = useWorkspaceState()
   // Its shortcut on the button, as Settings has it now.
   const { shortcuts } = useSettings()
-  const keymap = resolveKeymap(shortcuts, window.drovr.platform)
+  const keymap = resolveKeymap(shortcuts, window.bikube.platform)
   const workspace = workspaces.find((w) => w.id === workspaceId)
   const card =
     workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))
@@ -64,8 +64,8 @@ function CardWindow({
       if (action === null) {
         // Mod+1…9 and the terminal digits, as in the main window, are left alone while a dialog owns this window's keyboard.
         const digits =
-          workspaceShortcut(event, window.drovr.platform) !== null ||
-          terminalShortcut(event, window.drovr.platform) !== null
+          workspaceShortcut(event, window.bikube.platform) !== null ||
+          terminalShortcut(event, window.bikube.platform) !== null
         if (!digits || dialogOpenIn(view)) return
         event.preventDefault()
         event.stopPropagation()
@@ -107,7 +107,7 @@ function CardWindow({
           >
             <PanelLeftOpen {...SMALL_ICON} />
             <span>Move to main window</span>
-            <ShortcutKeys shortcut={keymap.openInWindow} platform={window.drovr.platform} />
+            <ShortcutKeys shortcut={keymap.openInWindow} platform={window.bikube.platform} />
           </button>
         </div>
         <main className="main">

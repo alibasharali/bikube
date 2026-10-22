@@ -84,7 +84,7 @@ function WorkspaceDialog({
   const [busy, setBusy] = useState(false)
 
   const browse = async (): Promise<void> => {
-    const picked = await window.drovr.dialog.pickDirectory()
+    const picked = await window.bikube.dialog.pickDirectory()
     if (picked) {
       setDraft((d) => applyDirectory(d, picked))
       setErrors((e) => ({ ...e, directory: undefined }))
@@ -98,7 +98,7 @@ function WorkspaceDialog({
     try {
       const result = await validateDraft(draft, {
         existingNames: workspaces.filter((w) => w.id !== workspace?.id).map((w) => w.name),
-        isDirectory: (p) => window.drovr.fs.isDirectory(p)
+        isDirectory: (p) => window.bikube.fs.isDirectory(p)
       })
       const command = checkCardStartup(draftStartup(startup))
       setCommandError(command.ok ? undefined : command.error.message)

@@ -12,8 +12,8 @@ import {
 import { remoteBoardScript, shellQuote } from './remote-board'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 
-/** `ESC ] 6973 ; drovr-ready BEL`: the remote shell is about to start (D6). */
-export const READY_MARKER = '\x1b]6973;drovr-ready\x07'
+/** `ESC ] 6973 ; bikube-ready BEL`: the remote shell is about to start (D6). */
+export const READY_MARKER = '\x1b]6973;bikube-ready\x07'
 
 /** Why main refuses an SSH spawn (D12); shown after "Couldn't start: ". */
 export const SSH_REFUSAL = {
@@ -36,7 +36,7 @@ function remoteDirectory(directory: string, quoted: (text: string) => string = q
 /** What the remote side needs for `board` (#25 D4): the card and the forwarded socket's path. */
 export interface RemoteBoard {
   cardId: string
-  /** The remote end of the forward, `/tmp/drovr-<32 hex>.sock` (D3). */
+  /** The remote end of the forward, `/tmp/bikube-<32 hex>.sock` (D3). */
   remoteSocket: string
   /** False when Claude Code cards shouldn't keep a status line (the setting); true by default. */
   claudeStatus?: boolean
@@ -52,7 +52,7 @@ export interface BoardForward extends RemoteBoard {
 const REMOTE_SOCKET = /^\/[A-Za-z0-9._/-]+$/
 
 /** Removes the private directory and the remote socket; never prints, never fails. */
-const CLEANUP = `[ -z "$d" ] || rm -rf "$d" 2>/dev/null; rm -f "$DROVR_SOCKET" 2>/dev/null`
+const CLEANUP = `[ -z "$d" ] || rm -rf "$d" 2>/dev/null; rm -f "$BIKUBE_SOCKET" 2>/dev/null`
 
 /**
  * The D4 setup between the `cd` and the ready marker: the card's variables, cleanup on exit,
@@ -61,21 +61,21 @@ const CLEANUP = `[ -z "$d" ] || rm -rf "$d" 2>/dev/null; rm -f "$DROVR_SOCKET" 2
  */
 function boardSetup({ cardId, remoteSocket }: RemoteBoard): string {
   return (
-    `DROVR_CARD_ID=${shellQuote(cardId)}; DROVR_SOCKET=${shellQuote(remoteSocket)}; ` +
-    'export DROVR_CARD_ID DROVR_SOCKET; d=; ' +
+    `BIKUBE_CARD_ID=${shellQuote(cardId)}; BIKUBE_SOCKET=${shellQuote(remoteSocket)}; ` +
+    'export BIKUBE_CARD_ID BIKUBE_SOCKET; d=; ' +
     `trap ${shellQuote(CLEANUP)} EXIT; ` +
     `trap ${shellQuote(`${CLEANUP}; exit 129`)} HUP; ` +
     `trap ${shellQuote(`${CLEANUP}; exit 143`)} TERM; ` +
-    'd=$( (umask 077 && mktemp -d "${TMPDIR:-/tmp}/drovr.XXXXXXXX") 2>/dev/null) || d=; ' +
+    'd=$( (umask 077 && mktemp -d "${TMPDIR:-/tmp}/bikube.XXXXXXXX") 2>/dev/null) || d=; ' +
     `if [ -n "$d" ] && printf %s ${shellQuote(remoteBoardScript())} >"$d/board" 2>/dev/null && ` +
-    'chmod 700 "$d/board" 2>/dev/null; then DROVR_BIN=$d; PATH=$d:$PATH; export DROVR_BIN PATH; ' +
+    'chmod 700 "$d/board" 2>/dev/null; then BIKUBE_BIN=$d; PATH=$d:$PATH; export BIKUBE_BIN PATH; ' +
     `${claudeSetup()}fi; `
   )
 }
 
 /**
  * Inside the `board` setup (#31 D14): copies of the Claude settings file and its instruction
- * beside `board`, removed with it, and `DROVR_CLAUDE_SETTINGS` naming the copy. The JSON's
+ * beside `board`, removed with it, and `BIKUBE_CLAUDE_SETTINGS` naming the copy. The JSON's
  * backslashes (each `\"` in a hook command) are written as `$b`, a backslash `awk` prints, so
  * the command keeps none (#12 D3). When anything fails the variable keeps `{}` (#31 round 3).
  */
@@ -85,7 +85,7 @@ function claudeSetup(): string {
     `b=$(awk ${shellQuote('BEGIN { printf "%c", 92 }')} 2>/dev/null) || b=; ` +
     `if [ -n "$b" ] && printf %s ${json} >"$d/${CLAUDE_SETTINGS_FILE}" 2>/dev/null && ` +
     `printf %s ${shellQuote(`${CLAUDE_INSTRUCTION}\n`)} >"$d/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
-    `then DROVR_CLAUDE_SETTINGS=$d/${CLAUDE_SETTINGS_FILE}; export DROVR_CLAUDE_SETTINGS; fi; `
+    `then BIKUBE_CLAUDE_SETTINGS=$d/${CLAUDE_SETTINGS_FILE}; export BIKUBE_CLAUDE_SETTINGS; fi; `
   )
 }
 
@@ -93,10 +93,10 @@ function claudeSetup(): string {
  * An empty Claude settings JSON, which `claude --settings` accepts: an SSH card whose remote setup
  * failed, or that has no `board`, still starts Claude, without hooks (#31 round 3).
  */
-const NO_CLAUDE_SETTINGS = "DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETTINGS; "
+const NO_CLAUDE_SETTINGS = "BIKUBE_CLAUDE_SETTINGS='{}'; export BIKUBE_CLAUDE_SETTINGS; "
 
 /** The Claude Code status updates setting off: the session start hook prints nothing. */
-const NO_CLAUDE_STATUS = 'DROVR_CLAUDE_STATUS=0; export DROVR_CLAUDE_STATUS; '
+const NO_CLAUDE_STATUS = 'BIKUBE_CLAUDE_STATUS=0; export BIKUBE_CLAUDE_STATUS; '
 
 /**
  * The command a POSIX remote login shell runs: `cd` to the directory (or exit 255, which shows
@@ -112,7 +112,7 @@ export function remoteCommand(directory: string, board?: RemoteBoard): string {
     : `cd ${remoteDirectory(directory)} || exit 255; ${NO_CLAUDE_SETTINGS}`
   return (
     cd +
-    `printf '\\033]6973;drovr-ready\\007'; ` +
+    `printf '\\033]6973;bikube-ready\\007'; ` +
     `"\${SHELL:-/bin/sh}" -l; s=$?; [ $s = 255 ] && s=254; exit $s`
   )
 }

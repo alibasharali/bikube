@@ -50,7 +50,7 @@ const create = (branch: string, at = repo): ReturnType<typeof createWorktree> =>
   createWorktree({ dir: at, branch, worktreesRoot, platform: process.platform }, run, fs)
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-worktrees-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-worktrees-'))
   repo = join(dir, 'repo')
   worktreesRoot = join(dir, 'worktrees')
   mkdirSync(join(repo, 'app'), { recursive: true })
@@ -80,8 +80,8 @@ describe('worktrees', () => {
   })
 
   it('creates the worktree on a new branch from HEAD, with the ignored files copied', async () => {
-    const result = await create('drovr/fix-login')
-    expect(result).toMatchObject({ ok: true, branch: 'drovr/fix-login', notCopied: [] })
+    const result = await create('bikube/fix-login')
+    expect(result).toMatchObject({ ok: true, branch: 'bikube/fix-login', notCopied: [] })
     if (!result.ok) return
     const root = await git('rev-parse', '--show-toplevel')
     expect(result.path).toBe(join(worktreesRoot, repoFolder(root), 'fix-login'))
@@ -90,7 +90,7 @@ describe('worktrees', () => {
     expect(readFileSync(join(result.path, 'local.conf'), 'utf8')).toBe('port=4000\n')
     expect(existsSync(join(result.path, 'node_modules', 'left-pad', 'index.js'))).toBe(true)
     expect((await run('git', ['branch', '--show-current'], result.path)).stdout).toBe(
-      'drovr/fix-login\n'
+      'bikube/fix-login\n'
     )
     // The repository itself is untouched: still on main, with nothing new to commit.
     expect(await git('branch', '--show-current')).toBe('main')
@@ -98,7 +98,7 @@ describe('worktrees', () => {
   })
 
   it("puts the card in the workspace's own folder inside the worktree", async () => {
-    const result = await create('drovr/app', join(repo, 'app'))
+    const result = await create('bikube/app', join(repo, 'app'))
     if (!result.ok) throw new Error(result.reason)
     expect(result.directory).toBe(join(result.path, 'app'))
   })
@@ -106,7 +106,7 @@ describe('worktrees', () => {
   it('refuses a branch that exists or is invalid, and a folder outside a repository', async () => {
     expect(await create('main')).toEqual({ ok: false, reason: 'Branch already exists' })
     expect(await create('bad name')).toEqual({ ok: false, reason: 'Not a valid branch name' })
-    expect(await create('drovr/x', dir)).toEqual({ ok: false, reason: 'not a git repository' })
+    expect(await create('bikube/x', dir)).toEqual({ ok: false, reason: 'not a git repository' })
   })
 
   it('picks a free folder when the name is taken', async () => {
@@ -117,7 +117,7 @@ describe('worktrees', () => {
   })
 
   it('tells uncommitted changes, and removes the worktree keeping its branch', async () => {
-    const result = await create('drovr/work')
+    const result = await create('bikube/work')
     if (!result.ok) throw new Error(result.reason)
     expect(await worktreeDirty(result.path, run)).toBe(false)
     writeFileSync(join(result.path, 'app', 'new.ts'), 'x\n')
@@ -126,11 +126,11 @@ describe('worktrees', () => {
     expect((await removeWorktree(repo, result.path, false, run, fs)).ok).toBe(false)
     expect(await removeWorktree(repo, result.path, true, run, fs)).toEqual({ ok: true })
     expect(existsSync(result.path)).toBe(false)
-    expect(await git('branch', '--list', 'drovr/work')).toContain('drovr/work')
+    expect(await git('branch', '--list', 'bikube/work')).toContain('bikube/work')
   })
 
   it('prunes a worktree whose folder is already gone', async () => {
-    const result = await create('drovr/gone')
+    const result = await create('bikube/gone')
     if (!result.ok) throw new Error(result.reason)
     rmSync(result.path, { recursive: true, force: true })
     expect(await removeWorktree(repo, result.path, false, run, fs)).toEqual({ ok: true })

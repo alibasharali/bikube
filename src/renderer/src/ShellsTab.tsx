@@ -97,7 +97,7 @@ function ShellsTab({
   )
 }
 
-/** A folder's last name: `/home/me/drovr/` → `drovr`. */
+/** A folder's last name: `/home/me/bikube/` → `bikube`. */
 function folderName(directory: string): string {
   return directory.replace(/\/+$/, '').split('/').pop() || directory
 }
@@ -545,7 +545,7 @@ function TriggerFailure({
                 className="btn"
                 data-testid="trigger-failure-copy"
                 onClick={() => {
-                  void window.drovr.clipboard.write(status.tail.join('\n'))
+                  void window.bikube.clipboard.write(status.tail.join('\n'))
                   setCopied(true)
                 }}
               >

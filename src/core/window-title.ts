@@ -6,7 +6,7 @@ export function windowTitle(
   card: { title: string } | null | undefined
 ): string {
   if (workspace && card) return `${card.title} — ${workspace.name}`
-  return workspace?.name ?? 'Drovr'
+  return workspace?.name ?? 'Bikube'
 }
 
 /** A card window's title (#53 D4): its card (or shell) as shown, then its workspace. */

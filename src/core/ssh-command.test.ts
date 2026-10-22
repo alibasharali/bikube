@@ -51,8 +51,8 @@ function remoteDirectory(directory: string, home: string): string {
 describe('remoteCommand (#12 D5)', () => {
   it('cds to the directory, prints the ready marker, then runs the login shell without exec', () => {
     expect(remoteCommand('/srv/api')).toBe(
-      `cd '/srv/api' || exit 255; DROVR_CLAUDE_SETTINGS='{}'; export DROVR_CLAUDE_SETTINGS; ` +
-        `printf '\\033]6973;drovr-ready\\007'; ` +
+      `cd '/srv/api' || exit 255; BIKUBE_CLAUDE_SETTINGS='{}'; export BIKUBE_CLAUDE_SETTINGS; ` +
+        `printf '\\033]6973;bikube-ready\\007'; ` +
         `"\${SHELL:-/bin/sh}" -l; s=$?; [ $s = 255 ] && s=254; exit $s`
     )
   })
@@ -61,7 +61,7 @@ describe('remoteCommand (#12 D5)', () => {
     expect(remoteCommand('~')).toMatch(/^cd ~ \|\| exit 255;/)
     expect(remoteCommand('~/x')).toMatch(/^cd ~\/'x' \|\| exit 255;/)
     expect(remoteDirectory('~', '/tmp')).toBe('/tmp')
-    const home = mkdtempSync(join(tmpdir(), 'drovr-home-'))
+    const home = mkdtempSync(join(tmpdir(), 'bikube-home-'))
     mkdirSync(join(home, "it's $x"))
     expect(remoteDirectory("~/it's $x", home)).toBe(join(home, "it's $x"))
     rmSync(home, { recursive: true })
@@ -85,7 +85,7 @@ describe('remoteCommand (#12 D5)', () => {
   })
 
   it("reports the login shell's own exit 255 as 254 and passes other codes through", () => {
-    const dir = mkdtempSync(join(tmpdir(), 'drovr-shell-'))
+    const dir = mkdtempSync(join(tmpdir(), 'bikube-shell-'))
     const status = (code: number): number => {
       const shell = join(dir, `shell-${code}`)
       writeFileSync(shell, `#!/bin/sh\nexit ${code}\n`)
@@ -107,15 +107,15 @@ describe('remoteCommand (#12 D5)', () => {
   })
 
   it('prints the ready marker', () => {
-    expect(READY_MARKER).toBe('\x1b]6973;drovr-ready\x07')
+    expect(READY_MARKER).toBe('\x1b]6973;bikube-ready\x07')
   })
 })
 
 describe('remoteCommand and the Claude Code status updates setting', () => {
-  const board = { cardId: 'k1', remoteSocket: '/tmp/drovr-none.sock' }
+  const board = { cardId: 'k1', remoteSocket: '/tmp/bikube-none.sock' }
 
-  it('exports DROVR_CLAUDE_STATUS=0 only when the setting is off', () => {
-    const off = 'DROVR_CLAUDE_STATUS=0; export DROVR_CLAUDE_STATUS; '
+  it('exports BIKUBE_CLAUDE_STATUS=0 only when the setting is off', () => {
+    const off = 'BIKUBE_CLAUDE_STATUS=0; export BIKUBE_CLAUDE_STATUS; '
     expect(remoteCommand('/srv/api', { ...board, claudeStatus: false })).toContain(off)
     expect(remoteCommand('/srv/api', { ...board, claudeStatus: true })).not.toContain(off)
     expect(remoteCommand('/srv/api', board)).not.toContain(off)
@@ -164,7 +164,7 @@ describe('sshShellLine (#12 D5)', () => {
 })
 
 describe('the SSH line with board (#25 D1, D4, D7)', () => {
-  const board = { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock', localSocket: '/l/s-1.sock' }
+  const board = { cardId: 'card-1', remoteSocket: '/tmp/bikube-r.sock', localSocket: '/l/s-1.sock' }
 
   it('forwards the remote socket to the local one before -t --, a refused forward never fatal', () => {
     const result = sshShellLine('me@devbox', '/srv/api', board)
@@ -176,11 +176,11 @@ describe('the SSH line with board (#25 D1, D4, D7)', () => {
       '-o',
       'ExitOnForwardFailure=no',
       '-R',
-      '/tmp/drovr-r.sock:/l/s-1.sock',
+      '/tmp/bikube-r.sock:/l/s-1.sock',
       '-t',
       '--',
       'me@devbox',
-      remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock' })
+      remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/bikube-r.sock' })
     ])
   })
 
@@ -192,7 +192,7 @@ describe('the SSH line with board (#25 D1, D4, D7)', () => {
         '-t',
         '--',
         'me@devbox',
-        remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/drovr-r.sock' })
+        remoteCommand('/srv/api', { cardId: 'card-1', remoteSocket: '/tmp/bikube-r.sock' })
       ])
     }
   })
@@ -241,7 +241,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
   let relay: Server | undefined
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-rc-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-rc-'))
   })
 
   afterEach(async () => {
@@ -283,7 +283,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
     const local = join(dir, 'board', 's-1.sock')
     server = await startBoardServer(local, handler)
-    const remote = join(dir, 'drovr-r.sock')
+    const remote = join(dir, 'bikube-r.sock')
     // The forward: a real socket at the remote path relaying to the local one, as ssh -R makes.
     relay = createServer({ allowHalfOpen: true }, (client) => {
       const upstream = connect(local)
@@ -293,7 +293,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     await new Promise<void>((done) => relay!.listen(remote, done))
     const seen = join(dir, 'seen')
     const login = shell(
-      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "$DROVR_BIN" "\${PATH%%:*}" > ${seen}\n` +
+      `printf '%s|%s|%s|%s' "$BIKUBE_CARD_ID" "$BIKUBE_SOCKET" "$BIKUBE_BIN" "\${PATH%%:*}" > ${seen}\n` +
         `board status . hi || exit 9\nexit 3`
     )
     const result = await runRemote(remoteCommand(dir, { cardId, remoteSocket: remote }), {
@@ -304,7 +304,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     expect(result).toEqual({ code: 3, stdout: READY_MARKER, stderr: '' })
     const [id, socket, bin, first] = readFileSync(seen, 'utf8').split('|')
     expect([id, socket, first]).toEqual([cardId, remote, bin])
-    expect(bin).toMatch(/\/drovr\.[A-Za-z0-9]{8}$/)
+    expect(bin).toMatch(/\/bikube\.[A-Za-z0-9]{8}$/)
     expect(handler).toHaveBeenCalledWith({ v: 1, cardId, command: 'status', card: '.', text: 'hi' })
     expect(existsSync(bin)).toBe(false)
     expect(existsSync(remote)).toBe(false)
@@ -314,12 +314,12 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     const seen = join(dir, 'seen')
     const copies = join(dir, 'copies')
     const login = shell(
-      `printf '%s|%s' "$DROVR_BIN" "$DROVR_CLAUDE_SETTINGS" > ${seen}\n` +
-        `cat "$DROVR_CLAUDE_SETTINGS" > ${copies}.json\n` +
-        `cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" > ${copies}.txt`
+      `printf '%s|%s' "$BIKUBE_BIN" "$BIKUBE_CLAUDE_SETTINGS" > ${seen}\n` +
+        `cat "$BIKUBE_CLAUDE_SETTINGS" > ${copies}.json\n` +
+        `cat "$BIKUBE_BIN/${CLAUDE_INSTRUCTION_FILE}" > ${copies}.txt`
     )
     const result = await runRemote(
-      remoteCommand(dir, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      remoteCommand(dir, { cardId, remoteSocket: '/tmp/bikube-none.sock' }),
       { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login }
     )
     expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
@@ -336,7 +336,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     mkdirSync(odd)
     const seen = join(dir, 'seen')
     const result = await runRemote(
-      remoteCommand(odd, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      remoteCommand(odd, { cardId, remoteSocket: '/tmp/bikube-none.sock' }),
       { PATH: '/usr/bin:/bin', HOME: dir, SHELL: shell(`pwd > ${seen}\nexit 255`) }
     )
     expect(result.code).toBe(254)
@@ -346,15 +346,15 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
   it('starts the shell with the card variables, no board and empty Claude settings when mktemp fails', async () => {
     const seen = join(dir, 'seen')
     const login = shell(
-      `printf '%s|%s|%s|%s' "$DROVR_CARD_ID" "$DROVR_SOCKET" "\${DROVR_BIN-unset}" "$PATH" > ${seen}\n` +
-        `printf %s "\${DROVR_CLAUDE_SETTINGS-unset}" > ${seen}-claude`
+      `printf '%s|%s|%s|%s' "$BIKUBE_CARD_ID" "$BIKUBE_SOCKET" "\${BIKUBE_BIN-unset}" "$PATH" > ${seen}\n` +
+        `printf %s "\${BIKUBE_CLAUDE_SETTINGS-unset}" > ${seen}-claude`
     )
     const result = await runRemote(
-      remoteCommand(dir, { cardId, remoteSocket: '/tmp/drovr-none.sock' }),
+      remoteCommand(dir, { cardId, remoteSocket: '/tmp/bikube-none.sock' }),
       { PATH: '/usr/bin:/bin', HOME: dir, SHELL: login, TMPDIR: join(dir, 'missing') }
     )
     expect(result).toEqual({ code: 0, stdout: READY_MARKER, stderr: '' })
-    expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/drovr-none.sock|unset|/usr/bin:/bin`)
+    expect(readFileSync(seen, 'utf8')).toBe(`${cardId}|/tmp/bikube-none.sock|unset|/usr/bin:/bin`)
     expect(readFileSync(`${seen}-claude`, 'utf8')).toBe('{}')
   })
 })

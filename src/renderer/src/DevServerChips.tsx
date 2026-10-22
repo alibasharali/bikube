@@ -23,7 +23,7 @@ function DevServerChips({ cardId }: { cardId: string }): React.JSX.Element | nul
           className="dev-server-chip"
           data-testid="dev-server-chip"
           title={`Open ${url}`}
-          onClick={() => window.drovr.link.open(url)}
+          onClick={() => window.bikube.link.open(url)}
         >
           {`localhost:${port}`}
         </button>

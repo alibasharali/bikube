@@ -9,9 +9,9 @@ export interface BoardEnvInput {
   cardId: string
   /** Absolute path of main's `board/board.sock`. */
   socketPath: string
-  /** Drovr's bin directory, holding the `board` wrapper. */
+  /** Bikube's bin directory, holding the `board` wrapper. */
   binDir: string
-  /** Drovr's own executable, which the wrapper runs as Node. */
+  /** Bikube's own executable, which the wrapper runs as Node. */
   executable: string
   /** The bundled CLI module the wrapper runs. */
   cliPath: string
@@ -20,21 +20,21 @@ export interface BoardEnvInput {
 }
 
 /**
- * `DROVR_CARD_ID`, `DROVR_SOCKET`, `DROVR_BIN` and PATH with the bin directory first (#9 D3):
- * a login shell's profile may reorder PATH, `"$DROVR_BIN/board"` works regardless. Plus the
+ * `BIKUBE_CARD_ID`, `BIKUBE_SOCKET`, `BIKUBE_BIN` and PATH with the bin directory first (#9 D3):
+ * a login shell's profile may reorder PATH, `"$BIKUBE_BIN/board"` works regardless. Plus the
  * executable and module the wrapper needs (#9 D4). `ELECTRON_RUN_AS_NODE` is set only inside
  * the wrapper: in the shell it would turn every Electron app the card starts into Node.
- * `DROVR_CLAUDE_SETTINGS` names the Claude settings file beside `board`, which a Claude Code
+ * `BIKUBE_CLAUDE_SETTINGS` names the Claude settings file beside `board`, which a Claude Code
  * card's start line passes to `claude --settings` (#31 D14).
  */
 export function boardShellEnv(input: BoardEnvInput): Record<string, string> {
   return {
-    DROVR_CARD_ID: input.cardId,
-    DROVR_SOCKET: input.socketPath,
-    DROVR_BIN: input.binDir,
-    DROVR_EXECUTABLE: input.executable,
-    DROVR_BOARD_CLI: input.cliPath,
-    DROVR_CLAUDE_SETTINGS: `${input.binDir}/${CLAUDE_SETTINGS_FILE}`,
+    BIKUBE_CARD_ID: input.cardId,
+    BIKUBE_SOCKET: input.socketPath,
+    BIKUBE_BIN: input.binDir,
+    BIKUBE_EXECUTABLE: input.executable,
+    BIKUBE_BOARD_CLI: input.cliPath,
+    BIKUBE_CLAUDE_SETTINGS: `${input.binDir}/${CLAUDE_SETTINGS_FILE}`,
     PATH: input.path ? `${input.binDir}:${input.path}` : input.binDir
   }
 }

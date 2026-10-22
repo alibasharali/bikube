@@ -65,8 +65,8 @@ describe('the development build’s threshold argument', () => {
   it('round-trips a positive whole number of ms, and ignores anything else', () => {
     expect(parseLongCommandMs(['electron', longCommandMsArg(200)])).toBe(200)
     expect(parseLongCommandMs(['electron'])).toBeUndefined()
-    expect(parseLongCommandMs(['--drovr-long-command-ms=0'])).toBeUndefined()
-    expect(parseLongCommandMs(['--drovr-long-command-ms=abc'])).toBeUndefined()
-    expect(parseLongCommandMs(['--drovr-long-command-ms=1.5'])).toBeUndefined()
+    expect(parseLongCommandMs(['--bikube-long-command-ms=0'])).toBeUndefined()
+    expect(parseLongCommandMs(['--bikube-long-command-ms=abc'])).toBeUndefined()
+    expect(parseLongCommandMs(['--bikube-long-command-ms=1.5'])).toBeUndefined()
   })
 })

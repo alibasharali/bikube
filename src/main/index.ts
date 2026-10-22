@@ -37,18 +37,18 @@ const QUIT_WAIT_MS = KILL_GRACE_MS + 1_000
 const QUIT_SAVE_WAIT_MS = 1_000
 
 /**
- * Smoke tests on macOS run with the window never shown and no Dock icon (`DROVR_E2E_HIDDEN=1`, set
+ * Smoke tests on macOS run with the window never shown and no Dock icon (`BIKUBE_E2E_HIDDEN=1`, set
  * by `e2e/launch.ts`), so a run doesn't take over the screen; Chromium's throttling of hidden
  * windows is off then, so timers and drawing run as in a shown one. Only the development build
  * the tests launch honours it: a packaged app always shows its window.
  */
-const hiddenForTests = !app.isPackaged && process.env['DROVR_E2E_HIDDEN'] === '1'
+const hiddenForTests = !app.isPackaged && process.env['BIKUBE_E2E_HIDDEN'] === '1'
 
 /**
- * The tests' shortened threshold for long command notifications (#45 D7), `DROVR_LONG_COMMAND_MS`,
+ * The tests' shortened threshold for long command notifications (#45 D7), `BIKUBE_LONG_COMMAND_MS`,
  * passed to the renderer as an argument; only the development build honours it.
  */
-const longCommandMs = app.isPackaged ? undefined : process.env['DROVR_LONG_COMMAND_MS']
+const longCommandMs = app.isPackaged ? undefined : process.env['BIKUBE_LONG_COMMAND_MS']
 
 /** The app icon for the development build, which has no bundle of its own (Linux reads it per window). */
 const devIcon = join(app.getAppPath(), 'build', 'icon.png')
@@ -58,14 +58,14 @@ function createWindow(settings: MainSettings): void {
     width: 1100,
     height: 720,
     show: false,
-    title: 'Drovr',
+    title: 'Bikube',
     // The resolved theme's background (#10 D2), so a light launch doesn't flash dark.
     backgroundColor: settings.backgroundColor(),
     ...(!app.isPackaged && process.platform === 'linux' && { icon: devIcon }),
     // Off macOS the default menu bar stays hidden until Alt is pressed; its accelerators still
     // work (#14 D9). macOS keeps its app menu.
     autoHideMenuBar: process.platform !== 'darwin',
-    // On macOS Drovr draws its own title bar, with the window buttons inset over the sidebar.
+    // On macOS Bikube draws its own title bar, with the window buttons inset over the sidebar.
     ...(process.platform === 'darwin' && {
       titleBarStyle: 'hiddenInset' as const,
       trafficLightPosition: { x: 14, y: 13 }
@@ -100,10 +100,10 @@ function createWindow(settings: MainSettings): void {
 }
 
 // Smoke tests give each launch its own data directory (#8 D11); the development build otherwise
-// uses `drovr-dev`, so it runs beside an installed Drovr. Must be set before ready.
+// uses `bikube-dev`, so it runs beside an installed Bikube. Must be set before ready.
 const userDataDir =
-  process.env['DROVR_USER_DATA_DIR'] ??
-  (app.isPackaged ? undefined : join(app.getPath('appData'), 'drovr-dev'))
+  process.env['BIKUBE_USER_DATA_DIR'] ??
+  (app.isPackaged ? undefined : join(app.getPath('appData'), 'bikube-dev'))
 if (userDataDir) app.setPath('userData', userDataDir)
 
 // A Wayland desktop with the portal can grant the global shortcut (#51 D8); set before ready.

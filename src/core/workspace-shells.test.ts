@@ -68,7 +68,7 @@ describe('a shell running in a worktree card', () => {
     directory: '/data/worktrees/alpha/add-search',
     worktree: {
       path: '/data/worktrees/alpha/add-search',
-      branch: 'drovr/add-search',
+      branch: 'bikube/add-search',
       repo: '/tmp/alpha'
     },
     startup: { kind: 'shell' as const },

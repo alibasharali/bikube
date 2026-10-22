@@ -19,16 +19,16 @@ const ECHO_SAMPLES = 20
 const PROFILE = process.env.BENCH_PROFILE === 'firehose' ? 'firehose' : 'sustained'
 const flood = (i: number): string =>
   PROFILE === 'firehose'
-    ? `yes drovr-bench-${i} | cat -n`
-    : `while :; do yes drovr-bench-${i} | head -n 200; sleep 0.05; done`
+    ? `yes bikube-bench-${i} | cat -n`
+    : `while :; do yes bikube-bench-${i} | head -n 200; sleep 0.05; done`
 const BUDGET = { fps: 30, echoMs: 100, mainLagMs: 100 }
 // #16 D7: sustained keeps the full D8 budget; firehose asserts no dropped echoes, live sessions
 // and main lag, and reports fps and echo max as info.
 const FULL_BUDGET = PROFILE === 'sustained'
 
-type FlowPeak = { __drovrFlowPeak: { read(): number; reset(): void } }
+type FlowPeak = { __bikubeFlowPeak: { read(): number; reset(): void } }
 
-type DrovrWindow = Window & { drovr: import('../src/shared/api').DrovrApi }
+type BikubeWindow = Window & { bikube: import('../src/shared/api').BikubeApi }
 type XtermHost = HTMLElement & { __xterm: { input(data: string, wasUserInput?: boolean): void } }
 
 function percentile(sorted: number[], p: number): number {
@@ -64,18 +64,18 @@ function openShellReady(page: Page): Promise<boolean> {
 }
 
 test('AC13: 10 cards in one workspace stream output and the D8 budget holds', async () => {
-  const root = mkdtempSync(join(os.tmpdir(), 'drovr-bench-'))
+  const root = mkdtempSync(join(os.tmpdir(), 'bikube-bench-'))
   const { app, page } = await launchApp({
     args: process.env.BENCH_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? [],
     // Exposes main's peak unacknowledged reading on `globalThis` (#16 D7).
-    env: { ...(process.env as Record<string, string>), DROVR_BENCH: '1' }
+    env: { ...(process.env as Record<string, string>), BIKUBE_BENCH: '1' }
   })
   try {
     // Per-session byte counters (renderer side), from before the first card exists.
     await page.evaluate(() => {
       const w = window as unknown as { __bytes: Record<string, number> }
       w.__bytes = {}
-      ;(window as unknown as DrovrWindow).drovr.terminal.onData((id, data) => {
+      ;(window as unknown as BikubeWindow).bikube.terminal.onData((id, data) => {
         w.__bytes[id] = (w.__bytes[id] ?? 0) + data.length
       })
     })
@@ -162,7 +162,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
         last = now
       }, 10)
       // The peak backlog in main is measured over the same window (#16 D7).
-      ;(globalThis as unknown as FlowPeak).__drovrFlowPeak.reset()
+      ;(globalThis as unknown as FlowPeak).__bikubeFlowPeak.reset()
     })
 
     // Renderer fps (requestAnimationFrame) and input echo latency, over the same window.
@@ -189,7 +189,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
         const rendered: number[] = []
         let t0 = 0
         let armed = false
-        const off = (window as unknown as DrovrWindow).drovr.terminal.onData((_id, data) => {
+        const off = (window as unknown as BikubeWindow).bikube.terminal.onData((_id, data) => {
           if (!armed || !data.includes('Q')) return
           armed = false
           arrival.push(performance.now() - t0)
@@ -241,13 +241,13 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
       return g.__lag
     })
     const peakUnacked = await app.evaluate(() =>
-      (globalThis as unknown as FlowPeak).__drovrFlowPeak.read()
+      (globalThis as unknown as FlowPeak).__bikubeFlowPeak.read()
     )
 
     // Every session must still be live: back on the board, each card's status line (read from
     // its own screen, attached or not) shows its own marker.
     await back()
-    // Under firehose the status line mostly shows the cursor's partial line (`1234  drovr-be`),
+    // Under firehose the status line mostly shows the cursor's partial line (`1234  bikube-be`),
     // so it is sampled often rather than on the default backing-off intervals.
     const live = await Promise.all(
       Array.from({ length: TERMINALS }, (_, i) =>
@@ -256,7 +256,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
             timeout: 10_000,
             intervals: [100]
           })
-          .toContain(`drovr-bench-${i}`)
+          .toContain(`bikube-bench-${i}`)
           .then(
             () => true,
             () => false
@@ -279,7 +279,7 @@ test('AC13: 10 cards in one workspace stream output and the D8 budget holds', as
     const fullVerdict = (ok: boolean): string => (FULL_BUDGET ? verdict(ok) : 'info')
     const echoMax = rendered[rendered.length - 1]
     const md = [
-      '# Drovr D8 benchmark',
+      '# Bikube D8 benchmark',
       '',
       `${TERMINALS} cards in one workspace, each running \`${flood(0).replace('-0', '-N')}\` (profile: ${PROFILE}), card ${OPEN} open at full size, measured over ${(renderer.elapsed / 1000).toFixed(1)} s after a 2 s warm-up.`,
       '',

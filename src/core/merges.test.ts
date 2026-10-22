@@ -44,7 +44,7 @@ const expected = { cardBranch: 'card-1', branch: 'main' }
 
 describe('mergeCardBranch', () => {
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-merge-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-merge-'))
     const remote = join(dir, 'remote.git')
     repo = join(dir, 'repo')
     card = join(dir, 'card')

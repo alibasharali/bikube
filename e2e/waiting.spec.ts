@@ -19,7 +19,7 @@ let root: string
 let dataDir: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-waiting-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-waiting-'))
   dataDir = newDataDir()
   ;({ app, page } = await launchApp({ dataDir }))
 })
@@ -96,7 +96,7 @@ async function setActivity(title: string, activity: string, pillText: string): P
   await page.keyboard.type(`${delay}board activity . ${activity}`)
   await page.keyboard.press('Enter')
   await backToBoard(page)
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect(boardCard(title).getByTestId('card-activity')).toHaveText(pillText, {
     timeout: 15_000
   })
@@ -322,7 +322,7 @@ test('AC8: a recorded shortcut replaces the default, is saved, and Reset brings 
 
   const settings = page.getByTestId('settings-dialog')
   const field = settings.getByTestId('settings-shortcut-nextWaiting')
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
   await page.getByTestId('settings-open').click()
   await settings.getByTestId('settings-section-shortcuts').click()
@@ -429,7 +429,7 @@ test('Waiting for you set while the window is away stays until the window is foc
   await page.evaluate(() => (document.hasFocus = () => false))
   await page.keyboard.type('board activity . waiting')
   await page.keyboard.press('Enter')
-  // The first `board` of a run starts Drovr's executable as Node from a cold disk cache.
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect(mark('Alpha', 'a1')).toHaveAttribute('data-activity', 'waiting', {
     timeout: 15_000
   })

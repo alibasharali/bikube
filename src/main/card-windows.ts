@@ -19,7 +19,7 @@ export function appWindow(): BrowserWindow | undefined {
 
 /**
  * Lets the main window's page open its card windows (#53 D2, D3): `about:blank` named
- * `drovr-card:<card id>`, one per card, with `cardWindowOptions`; every other open stays denied,
+ * `bikube-card:<card id>`, one per card, with `cardWindowOptions`; every other open stays denied,
  * as it is for every other web contents (card windows included). Main keeps them by card id and
  * closes them all when the main window closes, its page navigates (a reload) or its renderer is
  * gone: the page that draws them must not be outlived.

@@ -1,4 +1,4 @@
-# Drovr
+# Bikube
 
 What this product is and why, kept true as it evolves. Planned work lives on the factory board as items; this file holds the direction. When an item changes it (something added, cut or rethought), update this file in the same PR.
 
@@ -32,4 +32,4 @@ Shipping: GitHub releases. A release workflow on a macOS runner builds an unsign
 
 Ideas considered and left out, with why, so they are not proposed again.
 
-- Broadcast input to every pane of a card (iTerm2, Terminator, Kitty): low value for Drovr, and keys sent to several agents at once are more likely a mistake than a wish. Pane zoom (#48) covers the cramped-panes need.
+- Broadcast input to every pane of a card (iTerm2, Terminator, Kitty): low value for Bikube, and keys sent to several agents at once are more likely a mistake than a wish. Pane zoom (#48) covers the cramped-panes need.

@@ -13,7 +13,7 @@ export interface OpenRequest {
 
 /**
  * The card id of an allowed card window: only the main window's `about:blank` named
- * `drovr-card:<card id>`, the id passing `isCardId`; null denies it (D3).
+ * `bikube-card:<card id>`, the id passing `isCardId`; null denies it (D3).
  */
 export function cardWindowOpen({ url, frameName, fromMainWindow }: OpenRequest): string | null {
   if (!fromMainWindow || url !== 'about:blank' || !frameName.startsWith(CARD_WINDOW_PREFIX)) {
@@ -40,7 +40,7 @@ export interface CardWindowOptions {
 /**
  * 900×640, placed by the OS, with the main window's background; the menu bar hidden off macOS
  * as in the main window, the standard title bar on macOS; isolated, sandboxed and with no preload,
- * so no `window.drovr` in it (D3).
+ * so no `window.bikube` in it (D3).
  */
 export function cardWindowOptions(platform: string, backgroundColor: string): CardWindowOptions {
   return {

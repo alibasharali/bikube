@@ -1,5 +1,5 @@
 /**
- * Startup commands (#5 D2, D5): what Drovr types into a card's login shell right after it
+ * Startup commands (#5 D2, D5): what Bikube types into a card's login shell right after it
  * starts. Plain TS: no Electron or Node imports.
  */
 import { AGENT_PRESETS, type AgentKind } from './agent-presets'
@@ -69,8 +69,8 @@ export function checkCardStartup(startup: StartupCommand): Result<StartupCommand
 /**
  * The line to type into a freshly started shell, without the trailing Enter (`\r`, #5 D3),
  * or null when nothing is typed (Shell, or Claude Code with an agent session id that is not a
- * UUID, since the id is typed unquoted). Claude Code gets Drovr's hooks with
- * `--settings "$DROVR_CLAUDE_SETTINGS"` (#31 D14), a variable every card's shell has. An agent preset types its plain command until the card
+ * UUID, since the id is typed unquoted). Claude Code gets Bikube's hooks with
+ * `--settings "$BIKUBE_CLAUDE_SETTINGS"` (#31 D14), a variable every card's shell has. An agent preset types its plain command until the card
  * has started it, then `<resume> || <plain>` (#21 D2). Writing a first-start line is what the
  * caller then records (`firstStart`).
  */
@@ -81,10 +81,10 @@ export function startLine(card: StartupState): string | null {
     case 'claude': {
       const id = card.agentSessionId
       if (!UUID.test(id)) return null
-      const claude = `claude --settings "$DROVR_CLAUDE_SETTINGS"`
+      const claude = `claude --settings "$BIKUBE_CLAUDE_SETTINGS"`
       // Started once its hooks reported a conversation (`board session`): resume it, or start that
       // id fresh when it is gone. Before that, start the id fresh, or resume it when a conversation
-      // exists that the hooks couldn't report (no Drovr to reach, an older card).
+      // exists that the hooks couldn't report (no Bikube to reach, an older card).
       return card.claudeStarted
         ? `${claude} --resume ${id} || ${claude} --session-id ${id}`
         : `${claude} --session-id ${id} || ${claude} --resume ${id}`
@@ -124,5 +124,5 @@ export function firstStart(card: StartupState): FirstStart | null {
  * trailing Enter: the setup, then `board setup . ok` when it succeeded, else `board setup . failed`.
  */
 export function setupLine(setup: string): string {
-  return `${setup} && "$DROVR_BIN/board" setup . ok || "$DROVR_BIN/board" setup . failed`
+  return `${setup} && "$BIKUBE_BIN/board" setup . ok || "$BIKUBE_BIN/board" setup . failed`
 }

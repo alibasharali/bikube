@@ -21,11 +21,11 @@ function setStatus(next: SyncStatus): void {
  */
 export async function loadSyncStatus(): Promise<void> {
   let changed = false
-  window.drovr.sync.onStatus((next) => {
+  window.bikube.sync.onStatus((next) => {
     changed = true
     setStatus(next)
   })
-  const loaded = await window.drovr.sync.status()
+  const loaded = await window.bikube.sync.status()
   if (!changed) setStatus(loaded)
 }
 
@@ -53,7 +53,7 @@ let ready = false
  * `listenForSyncBoards` applies the latest early one and every later one.
  */
 export function receiveSyncBoards(): void {
-  window.drovr.sync.onBoard((workspaces) => {
+  window.bikube.sync.onBoard((workspaces) => {
     if (ready) applyBoard(workspaces)
     else early = workspaces
   })

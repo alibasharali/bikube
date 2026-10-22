@@ -1,6 +1,6 @@
 <!-- software-factory:readme -->
 
-# Drovr
+# Bikube
 
 A kanban board for macOS and Linux where every card is a live terminal, for running many coding agents side by side.
 
@@ -18,24 +18,24 @@ A kanban board for macOS and Linux where every card is a live terminal, for runn
   - `board status <card> <text>` shows a short status line on a running card; `""` clears it.
   - `board activity <card> working|waiting|question|none` shows a Working, Waiting for you or Needs your answer pill on a running card; `none` clears it. Claude Code cards set it, and their status line, by themselves.
 
-  `<card>` is a card's title or id in the same workspace, or `.` for the card you are in. `board` works only inside a Drovr card: Drovr puts it on the card's PATH, so there is nothing to install. If a shell profile reorders PATH (macOS `path_helper` in a login shell), `"$DROVR_BIN/board"` calls it whatever PATH says. `board help` prints the usage.
+  `<card>` is a card's title or id in the same workspace, or `.` for the card you are in. `board` works only inside a Bikube card: Bikube puts it on the card's PATH, so there is nothing to install. If a shell profile reorders PATH (macOS `path_helper` in a login shell), `"$BIKUBE_BIN/board"` calls it whatever PATH says. `board help` prints the usage.
 
 ## Links
 
-- [Releases](https://github.com/alibasharali/drovr/releases)
+- [Releases](https://github.com/alibasharali/bikube/releases)
 
 ## Install
 
-Download the files from the [latest release](https://github.com/alibasharali/drovr/releases).
+Download the files from the [latest release](https://github.com/alibasharali/bikube/releases).
 
-- **macOS (Apple silicon):** `drovr-<version>.dmg`. Drag Drovr to Applications. It isn't signed with an Apple Developer ID, so macOS blocks the first launch: allow it under System Settings, Privacy & Security, Open Anyway.
+- **macOS (Apple silicon):** `bikube-<version>.dmg`. Drag Bikube to Applications. It isn't signed with an Apple Developer ID, so macOS blocks the first launch: allow it under System Settings, Privacy & Security, Open Anyway.
 - **Linux (x64):** a .deb or an AppImage.
-  - `drovr-<version>-amd64.deb` (Debian, Ubuntu): `sudo apt install ./drovr-<version>-amd64.deb`. It installs Drovr in the app menu and the `drovr` command, and sets up Chromium's sandbox (an AppArmor profile where user namespaces are restricted). On Ubuntu 23.10 and later, the .deb is the way to run Drovr sandboxed.
-  - `drovr-<version>-x86_64.AppImage` (any distribution): `chmod +x` it and run it. Where unprivileged user namespaces are restricted (Ubuntu 23.10 and later), the AppImage's launcher starts Drovr without Chromium's sandbox; use the .deb there to keep it. The AppImage needs FUSE 2: `sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
+  - `bikube-<version>-amd64.deb` (Debian, Ubuntu): `sudo apt install ./bikube-<version>-amd64.deb`. It installs Bikube in the app menu and the `bikube` command, and sets up Chromium's sandbox (an AppArmor profile where user namespaces are restricted). On Ubuntu 23.10 and later, the .deb is the way to run Bikube sandboxed.
+  - `bikube-<version>-x86_64.AppImage` (any distribution): `chmod +x` it and run it. Where unprivileged user namespaces are restricted (Ubuntu 23.10 and later), the AppImage's launcher starts Bikube without Chromium's sandbox; use the .deb there to keep it. The AppImage needs FUSE 2: `sudo apt install libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later).
 
 ### Updates
 
-Drovr checks the latest release at launch and every few hours (Settings, About, Check for Updates, or Drovr › Check for Updates… on macOS). When there is a newer one, **Update Available** shows above Settings: on macOS and with the AppImage, Drovr downloads it, checks it against the checksum GitHub publishes, and **Install and Relaunch** replaces the app and opens it again (running terminals are stopped first; it asks). **Later** installs it the next time you quit Drovr; **Skip** ignores that version. On macOS Drovr replaces the inside of its own `Drovr.app`, so it updates in Applications on a standard (non-admin) account too; an AppImage needs a folder you can write. The .deb, and a copy Drovr can't replace, link to the release to download it instead.
+Bikube checks the latest release at launch and every few hours (Settings, About, Check for Updates, or Bikube › Check for Updates… on macOS). When there is a newer one, **Update Available** shows above Settings: on macOS and with the AppImage, Bikube downloads it, checks it against the checksum GitHub publishes, and **Install and Relaunch** replaces the app and opens it again (running terminals are stopped first; it asks). **Later** installs it the next time you quit Bikube; **Skip** ignores that version. On macOS Bikube replaces the inside of its own `Bikube.app`, so it updates in Applications on a standard (non-admin) account too; an AppImage needs a folder you can write. The .deb, and a copy Bikube can't replace, link to the release to download it instead.
 
 ## Running it locally
 
@@ -51,10 +51,10 @@ Read `AGENTS.md` and `docs/agents/workflow.md` before starting.
 
 ## Third-party notices
 
-Drovr bundles terminal colour themes from iTerm2-Color-Schemes and the Symbols Nerd Font. Their licences are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES), which also ships inside the app.
+Bikube bundles terminal colour themes from iTerm2-Color-Schemes and the Symbols Nerd Font. Their licences are in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES), which also ships inside the app.
 
 ## Built with Software Factory
 
-Drovr is created and managed by Software Factory.
+Bikube is created and managed by Software Factory.
 
 > Software Factory is a personal control plane for software projects: it scaffolds or imports each repo, tracks work on a per-project board, and has Claude Code sessions take each item from spec to pull request, while the developer approves specs and decides what ships.

@@ -2,7 +2,7 @@
 let home = ''
 
 export async function loadHomeDir(): Promise<void> {
-  home = await window.drovr.app.home()
+  home = await window.bikube.app.home()
 }
 
 export function homeDir(): string {

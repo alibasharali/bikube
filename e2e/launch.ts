@@ -9,13 +9,13 @@ let zdotdir: string | undefined
 
 /** One empty folder for every launch's `ZDOTDIR`, kept for the whole run. */
 function emptyZdotdir(): string {
-  zdotdir ??= mkdtempSync(join(tmpdir(), 'drovr-zdotdir-'))
+  zdotdir ??= mkdtempSync(join(tmpdir(), 'bikube-zdotdir-'))
   return zdotdir
 }
 
 /** A fresh, empty data directory for one test's saved board (#8 D11); see `removeDataDirs`. */
 export function newDataDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'drovr-data-'))
+  const dir = mkdtempSync(join(tmpdir(), 'bikube-data-'))
   dataDirs.push(dir)
   return dir
 }
@@ -33,7 +33,7 @@ export interface LaunchOptions {
   /** Extra Electron arguments after `--no-sandbox` (and the dev build's `.` before it). */
   args?: string[]
   /**
-   * A packaged app's executable (e.g. `dist/linux-unpacked/drovr`) to launch instead of the dev
+   * A packaged app's executable (e.g. `dist/linux-unpacked/bikube`) to launch instead of the dev
    * build; it loads its own bundled app, so no `.` is passed.
    */
   executablePath?: string
@@ -49,16 +49,16 @@ export interface Launched {
 
 /**
  * How long one launch may take to bring its window and the app's root (#23 D2): two attempts fit
- * in the 60 s test timeout. `DROVR_E2E_WINDOW_TIMEOUT_MS` overrides it (a number above 0).
+ * in the 60 s test timeout. `BIKUBE_E2E_WINDOW_TIMEOUT_MS` overrides it (a number above 0).
  */
 const WINDOW_TIMEOUT_MS = ((): number => {
-  const ms = Number(process.env['DROVR_E2E_WINDOW_TIMEOUT_MS'])
+  const ms = Number(process.env['BIKUBE_E2E_WINDOW_TIMEOUT_MS'])
   return Number.isFinite(ms) && ms > 0 ? ms : 25_000
 })()
 
 /**
  * Launches the built app (or the packaged executable given as `executablePath`) with its own data
- * directory (`DROVR_USER_DATA_DIR`, #8 D11), so no test shares or touches a real board, and
+ * directory (`BIKUBE_USER_DATA_DIR`, #8 D11), so no test shares or touches a real board, and
  * waits for its window. `--no-sandbox`: CI and containers have no setuid chrome-sandbox.
  * A launch that brings no window is logged with its stderr, killed and tried once more (#23 D2).
  */
@@ -92,14 +92,14 @@ async function launchOnce(options: LaunchOptions, dataDir: string): Promise<Laun
     args: [...(options.executablePath ? [] : ['.']), '--no-sandbox', ...(options.args ?? [])],
     env: {
       ...base,
-      DROVR_USER_DATA_DIR: dataDir,
+      BIKUBE_USER_DATA_DIR: dataDir,
       // zsh reads its user files from here: an empty folder, so a developer's ~/.zshrc (prompts,
       // fastfetch…) never slows or fills the test terminals. bash and sh ignore it.
       ZDOTDIR: emptyZdotdir(),
       // On macOS the window stays hidden so a run doesn't take over the screen;
-      // DROVR_E2E_SHOW=1 shows it again. Linux runs under xvfb, so nothing changes there.
+      // BIKUBE_E2E_SHOW=1 shows it again. Linux runs under xvfb, so nothing changes there.
       ...(process.platform === 'darwin' &&
-        base['DROVR_E2E_SHOW'] !== '1' && { DROVR_E2E_HIDDEN: '1' })
+        base['BIKUBE_E2E_SHOW'] !== '1' && { BIKUBE_E2E_HIDDEN: '1' })
     },
     timeout: WINDOW_TIMEOUT_MS
   })

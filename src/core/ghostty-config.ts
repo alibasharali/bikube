@@ -195,7 +195,7 @@ export async function readGhosttyTheme(env: GhosttyEnv): Promise<GhosttyTheme> {
   }
 }
 
-/** Looks `name` up as Ghostty does: a path, the user's themes, Ghostty's own, then Drovr's copy. */
+/** Looks `name` up as Ghostty does: a path, the user's themes, Ghostty's own, then Bikube's copy. */
 async function findTheme(name: string, env: GhosttyEnv, xdg: string): Promise<Colours | null> {
   const dirs = [join(xdg, 'ghostty', 'themes')]
   if (env.platform === 'darwin')
@@ -211,7 +211,7 @@ async function findTheme(name: string, env: GhosttyEnv, xdg: string): Promise<Co
     const text = await env.readFile(path)
     if (text !== null) return parseGhosttyFile(text).colours
   }
-  // The theme files Drovr bundles are Ghostty's, so a theme Ghostty ships is found without it.
+  // The theme files Bikube bundles are Ghostty's, so a theme Ghostty ships is found without it.
   const bundled = ghosttyTheme(name)
   return bundled ? { ...bundled } : null
 }

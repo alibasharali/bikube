@@ -29,7 +29,7 @@ let dir: string
 const SEPARATOR = '── Previous output ·'
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-kept-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-kept-'))
   dir = join(root, 'alpha')
   mkdirSync(dir)
   ;({ app, page, dataDir } = await launchApp())
@@ -60,7 +60,7 @@ function card(title: string): Locator {
 
 /** The saved id of card `title`. */
 function cardId(title: string): string {
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   const cards = saved.state.workspaces.flatMap(
     (w: { cards: { id: string; title: string }[] }) => w.cards
   )
@@ -364,7 +364,7 @@ test('AC2, AC10: a running card at quit shows its output after a restart; none o
   // A Sync folder, so the sync file holds the board (#13).
   const folder = join(root, 'sync')
   mkdirSync(folder)
-  const syncFile = join(folder, 'drovr-board.json')
+  const syncFile = join(folder, 'bikube-board.json')
   const settings = page.getByTestId('settings-dialog')
   await page.getByTestId('settings-open').click()
   await settings.getByTestId('settings-section-sync').click()
@@ -393,7 +393,7 @@ test('AC2, AC10: a running card at quit shows its output after a restart; none o
   expect(lastIndex(lines, 'kept-46-quit')).toBeLessThan(lastIndex(lines, SEPARATOR))
 
   // AC10: the board's files hold none of the kept output.
-  for (const file of [join(dataDir, 'drovr-state.json'), syncFile]) {
+  for (const file of [join(dataDir, 'bikube-state.json'), syncFile]) {
     const text = readFileSync(file, 'utf8')
     expect(text).toContain('"api"')
     expect(text).not.toContain('kept-46-quit')
@@ -443,7 +443,7 @@ test('AC7: turning Keep output off deletes every save, saves nothing more, and i
   await page.keyboard.press('Escape')
   await expect(settings).toHaveCount(0)
   await expect.poll(keptFiles).toEqual([])
-  const settingsFile = join(dataDir, 'drovr-settings.json')
+  const settingsFile = join(dataDir, 'bikube-settings.json')
   const keptSetting = (): unknown =>
     existsSync(settingsFile)
       ? JSON.parse(readFileSync(settingsFile, 'utf8')).settings.keepOutput

@@ -24,7 +24,7 @@ let dataDir: string
 let root: string
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-find-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-find-'))
   ;({ app, page, dataDir } = await launchApp())
   await createWorkspace()
   await newCard('one')

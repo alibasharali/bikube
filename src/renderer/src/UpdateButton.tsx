@@ -9,7 +9,7 @@ type Available = Extract<UpdateState, { kind: 'available' }>
 
 /**
  * The sidebar's "Update Available" button and its popup: the version, size and date, Skip, Later
- * and Install and Relaunch (or Download where Drovr can't replace itself), and the release notes.
+ * and Install and Relaunch (or Download where Bikube can't replace itself), and the release notes.
  * The button shows while a version that isn't skipped or put off is available; the popup also
  * opens from the app menu's Check for Updates… (or Settings), showing the check's outcome.
  */
@@ -62,12 +62,12 @@ function UpdateButton({ collapsed }: { collapsed: boolean }): React.JSX.Element 
     if (!available) return
     const ready = available.install !== 'manual' && !available.error && available.progress === 1
     if (!ready) {
-      window.drovr.update.install()
+      window.bikube.update.install()
       return
     }
-    const running = await window.drovr.update.running()
+    const running = await window.bikube.update.running()
     if (running === 0) {
-      window.drovr.update.install()
+      window.bikube.update.install()
       return
     }
     setOpen(false)
@@ -103,7 +103,7 @@ function UpdateButton({ collapsed }: { collapsed: boolean }): React.JSX.Element 
             <AvailableBody
               update={available}
               onSkip={() => {
-                window.drovr.update.skip()
+                window.bikube.update.skip()
                 setOpen(false)
               }}
               onLater={() => {
@@ -125,7 +125,7 @@ function UpdateButton({ collapsed }: { collapsed: boolean }): React.JSX.Element 
           confirmTestId="update-confirm"
           onConfirm={() => {
             setConfirm(null)
-            window.drovr.update.install()
+            window.bikube.update.install()
           }}
           onCancel={() => setConfirm(null)}
         />
@@ -196,13 +196,14 @@ function AvailableBody({
           <p className="update-note" data-testid="update-waiting">
             The download for {release.version} isn’t ready yet.{' '}
             {update.rechecking
-              ? 'Drovr checks again in a few minutes.'
+              ? 'Bikube checks again in a few minutes.'
               : 'Check for updates again later.'}
           </p>
         )}
         {!waiting && install === 'manual' && error === undefined && (
           <p className="update-note">
-            This copy of Drovr can’t replace itself: download the new version from the release page.
+            This copy of Bikube can’t replace itself: download the new version from the release
+            page.
           </p>
         )}
         <div className="update-actions">
@@ -224,13 +225,13 @@ function AvailableBody({
             {label}
           </button>
         </div>
-        {ready && !skipped && <p className="update-note">Or it installs when you quit Drovr.</p>}
+        {ready && !skipped && <p className="update-note">Or it installs when you quit Bikube.</p>}
       </div>
       <button
         type="button"
         className="update-notes"
         data-testid="update-notes"
-        onClick={() => window.drovr.update.openPage()}
+        onClick={() => window.bikube.update.openPage()}
       >
         <FileText {...SMALL_ICON} />
         <span>View Release Notes</span>
@@ -252,10 +253,10 @@ function StatusBody({
     state.kind === 'checking' || state.kind === 'idle'
       ? ['Checking for Updates…', null]
       : state.kind === 'up-to-date'
-        ? ['Drovr is up to date', `Version ${current} is the latest.`]
+        ? ['Bikube is up to date', `Version ${current} is the latest.`]
         : state.kind === 'error'
           ? ['Couldn’t check for updates', state.message]
-          : ['Updates are off', 'This build of Drovr doesn’t update itself.']
+          : ['Updates are off', 'This build of Bikube doesn’t update itself.']
   return (
     <div className="update-popup-body" data-testid="update-status">
       <h2 className="update-popup-title">{title}</h2>

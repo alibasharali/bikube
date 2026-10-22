@@ -467,7 +467,7 @@ describe('recordPress (#31 D8, AC7)', () => {
         'linux',
         'Ctrl+Alt+Shift+D'
       )
-    ).toEqual(refused('Already used by Show or hide Drovr'))
+    ).toEqual(refused('Already used by Show or hide Bikube'))
     expect(
       recordPress(
         press('D', { ctrlKey: true, altKey: true, shiftKey: true }),
@@ -801,7 +801,7 @@ describe('resetRefusal (#31 D8)', () => {
   it('refuses a default the global shortcut holds now (#51 D5)', () => {
     const keymap = { ...defaultKeymap('linux'), splitRight: 'Ctrl+Alt+R' }
     expect(resetRefusal('splitRight', keymap, 'linux', 'Ctrl+Shift+D')).toBe(
-      'Already used by Show or hide Drovr'
+      'Already used by Show or hide Bikube'
     )
     expect(resetRefusal('splitRight', keymap, 'linux', 'Ctrl+Alt+Shift+D')).toBeNull()
   })

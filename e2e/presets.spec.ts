@@ -49,7 +49,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-presets-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-presets-'))
   const fake = fakeAgentsHome(root)
   home = fake.home
   agentLog = fake.agentLog
@@ -358,7 +358,7 @@ test('AC7: a started preset card resumes after a restart and is saved with start
 
   await restart()
 
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   const cx = saved.state.workspaces[0].cards.find((c: { title: string }) => c.title === 'cx')
   expect(cx.startup).toEqual({ kind: 'codex' })
   expect(cx.startedAgents).toEqual(['codex'])
@@ -398,7 +398,7 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
               ...card0,
               id: 'k-custom',
               title: 'custom',
-              startup: { kind: 'custom', command: 'echo drovr-old' },
+              startup: { kind: 'custom', command: 'echo bikube-old' },
               claudeStarted: false
             }
           ],
@@ -408,7 +408,7 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
       ]
     }
   }
-  writeFileSync(join(dataDir, 'drovr-state.json'), JSON.stringify(old))
+  writeFileSync(join(dataDir, 'bikube-state.json'), JSON.stringify(old))
   await launch()
 
   for (const title of ['sh', 'agent', 'custom']) {

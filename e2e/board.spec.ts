@@ -21,7 +21,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-e2e-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-e2e-'))
   ;({ app, page } = await launchApp())
 })
 
@@ -324,9 +324,9 @@ test('#32 AC5: a running card is unaffected when its workspace is dragged; cards
   await page.getByTestId('new-card-input').fill('api')
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, 'api')
-  await page.keyboard.type('printf drovr-marker; sleep 30')
+  await page.keyboard.type('printf bikube-marker; sleep 30')
   await page.keyboard.press('Enter')
-  await expect.poll(bufferText).toContain('drovr-marker\n')
+  await expect.poll(bufferText).toContain('bikube-marker\n')
   await backToBoard(page)
 
   // A card dragged over the sidebar shows no line and drops nothing (D4).
@@ -354,11 +354,11 @@ test('#32 AC5: a running card is unaffected when its workspace is dragged; cards
   // Mod+1, now beta's: it comes back to its card (a click would show its board, #31 D19).
   await page.keyboard.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+1`)
   await expectCardOpen(page, 'api')
-  await expect.poll(bufferText).toContain('drovr-marker\n')
+  await expect.poll(bufferText).toContain('bikube-marker\n')
   await backToBoard(page)
   await expect(page.getByTestId('board-title')).toHaveText('beta')
   await expect(boardCard(page, 'api').getByTestId('card-status-label')).toHaveText('Running')
-  await expect(boardCard(page, 'api').getByTestId('card-status-line')).toHaveText('drovr-marker')
+  await expect(boardCard(page, 'api').getByTestId('card-status-line')).toHaveText('bikube-marker')
 })
 
 test('#32 AC6: Alt+Up and Alt+Down move the focused workspace row and keep its focus', async () => {

@@ -1,5 +1,5 @@
 /**
- * The Claude settings file Drovr gives every Claude Code card (#31 D14, D15, D16): hooks that set
+ * The Claude settings file Bikube gives every Claude Code card (#31 D14, D15, D16): hooks that set
  * the calling card's activity with `board activity`, and a session start hook that tells Claude
  * to keep a one-line `board status`. The same text ships as `resources/bin/claude-settings.json`
  * and `resources/bin/claude-instruction.txt` (the local instruction; a test keeps them equal) and
@@ -8,7 +8,7 @@
  */
 import type { Activity } from './activity'
 
-/** The settings file's name in Drovr's bin directory and in an SSH session's directory. */
+/** The settings file's name in Bikube's bin directory and in an SSH session's directory. */
 export const CLAUDE_SETTINGS_FILE = 'claude-settings.json'
 
 /** The instruction's file, beside the settings file: kept apart so it needs no JSON escaping. */
@@ -20,8 +20,8 @@ export const CLAUDE_INSTRUCTION_FILE = 'claude-instruction.txt'
  * `; or true`, redirections) can break it, and a failure needs no handling.
  */
 export const CLAUDE_INSTRUCTION =
-  'You are running inside a Drovr card, a kanban board card that shows your status. ' +
-  `At the end of every turn, run exactly: "$DROVR_BIN/board" status . '<one line>' — one short ` +
+  'You are running inside a Bikube card, a kanban board card that shows your status. ' +
+  `At the end of every turn, run exactly: "$BIKUBE_BIN/board" status . '<one line>' — one short ` +
   'line, at most 80 characters, saying what you did or what you are waiting for, for example: ' +
   'Tests green, PR ready for review. Run that command alone, as written: add nothing before or ' +
   "after it (no redirection, no || true, no ; or true). Do it silently: don't mention it to the " +
@@ -31,15 +31,15 @@ export const CLAUDE_INSTRUCTION =
 export const LOCAL_CLAUDE_INSTRUCTION =
   `${CLAUDE_INSTRUCTION} ` +
   'When the user asks you to read this board or add cards to it (for example from their task ' +
-  `tracker), use "$DROVR_BIN/board" list --json and "$DROVR_BIN/board" create <column> <title>; ` +
-  `"$DROVR_BIN/board" help lists every command.`
+  `tracker), use "$BIKUBE_BIN/board" list --json and "$BIKUBE_BIN/board" create <column> <title>; ` +
+  `"$BIKUBE_BIN/board" help lists every command.`
 
 /** Every hook: a silent `board` call that never fails (D15). */
 const TIMEOUT = 5
 
 /** Sets the calling card's activity, output discarded, exit 0 whatever happens. */
 const activity = (value: Activity | '$a'): string =>
-  `"$DROVR_BIN/board" activity . ${value} >/dev/null 2>&1; exit 0`
+  `"$BIKUBE_BIN/board" activity . ${value} >/dev/null 2>&1; exit 0`
 
 /**
  * `PreToolUse` fires for every tool: `question` for `AskUserQuestion` (Claude asking the user),
@@ -50,15 +50,15 @@ const activity = (value: Activity | '$a'): string =>
  */
 const PRE_TOOL_USE =
   `a=working; case $(cat) in *'"tool_name":"AskUserQuestion"'*|*'"tool_name": "AskUserQuestion"'*) ` +
-  `a=question;; esac; "$DROVR_BIN/board" activity . $a </dev/null >/dev/null 2>&1 & exit 0`
+  `a=question;; esac; "$BIKUBE_BIN/board" activity . $a </dev/null >/dev/null 2>&1 & exit 0`
 
 /**
- * Reports the session in the hook's input to Drovr (`board session`), which the card resumes from
+ * Reports the session in the hook's input to Bikube (`board session`), which the card resumes from
  * then on. The id is cut out of the JSON with parameter expansion: no backslash, no tool.
  */
 const REPORT_SESSION =
   'i=${s#*\'"session_id":"\'}; [ "$i" = "$s" ] && i=${s#*\'"session_id": "\'}; i=${i%%\'"\'*}; ' +
-  '"$DROVR_BIN/board" session . "$i" >/dev/null 2>&1'
+  '"$BIKUBE_BIN/board" session . "$i" >/dev/null 2>&1'
 
 /**
  * Reports the conversation's usage (#50 D6): cuts `transcript_path` out of the hook's input (in `s`)
@@ -69,24 +69,24 @@ const REPORT_SESSION =
  */
 const reportUsage = (missing = ''): string =>
   't=${s#*\'"transcript_path":"\'}; [ "$t" = "$s" ] && t=${s#*\'"transcript_path": "\'}; ' +
-  `[ "$t" = "$s" ] || { t=\${t%%'"'*}; ${missing}"$DROVR_BIN/board" usage . "$t" </dev/null >/dev/null 2>&1 & }`
+  `[ "$t" = "$s" ] || { t=\${t%%'"'*}; ${missing}"$BIKUBE_BIN/board" usage . "$t" </dev/null >/dev/null 2>&1 & }`
 
 /**
  * Reports the usage (every source: startup, resume, clear, compact; #50 D6) and prints the instruction,
- * which Claude adds to its context, unless the card was started with `DROVR_CLAUDE_STATUS=0` (the
+ * which Claude adds to its context, unless the card was started with `BIKUBE_CLAUDE_STATUS=0` (the
  * Claude Code status updates setting off). A `/resume` reports the
  * resumed session, so the card resumes it next time.
  */
 const SESSION_START =
   `s=$(cat); ${reportUsage('[ -e "$t" ] || t=/dev/null; ')}; case $s in *'"source":"resume"'*|*'"source": "resume"'*) ${REPORT_SESSION};; esac; ` +
-  `[ "$DROVR_CLAUDE_STATUS" = 0 ] || cat "$DROVR_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
+  `[ "$BIKUBE_CLAUDE_STATUS" = 0 ] || cat "$BIKUBE_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
   'exit 0'
 
 /** Claude's turn ended: the usage so far is reported, and the card waits for the user. */
 const STOP = `s=$(cat); ${reportUsage()}; ${activity('waiting')}`
 
 /** A message sent: the card has a conversation to resume (reported), and Claude is working. */
-const USER_PROMPT_SUBMIT = `s=$(cat); ${REPORT_SESSION}; "$DROVR_BIN/board" activity . working >/dev/null 2>&1; exit 0`
+const USER_PROMPT_SUBMIT = `s=$(cat); ${REPORT_SESSION}; "$BIKUBE_BIN/board" activity . working >/dev/null 2>&1; exit 0`
 
 const group = (command: string, matcher?: string): object => ({
   ...(matcher === undefined ? {} : { matcher }),

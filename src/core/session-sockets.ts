@@ -1,7 +1,7 @@
 /**
  * A `board` socket per SSH session (#25 D2, D3): main listens on `s-<16 hex>.sock` in the
  * private `board` directory before the session starts, and `ssh -R` forwards
- * `/tmp/drovr-<32 hex>.sock` on the host to it. Each socket serves only its own card: any other
+ * `/tmp/bikube-<32 hex>.sock` on the host to it. Each socket serves only its own card: any other
  * card id is answered `board: invalid request` and never reaches the window. Plain Node, no
  * Electron: main injects the handler that relays requests to the window.
  */
@@ -75,7 +75,7 @@ export class SessionSockets {
   /** Listens on a new session socket for `cardId`; never rejects (D7). */
   async open(cardId: string): Promise<SessionSocket> {
     const localPath = join(this.dir, `s-${this.randomHex(8)}.sock`)
-    const remoteSocket = `/tmp/drovr-${this.randomHex(16)}.sock`
+    const remoteSocket = `/tmp/bikube-${this.randomHex(16)}.sock`
     const scoped = (request: BoardRequest): Promise<BoardReply> =>
       request.cardId === cardId
         ? this.handler(request)

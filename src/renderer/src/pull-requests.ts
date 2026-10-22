@@ -5,11 +5,11 @@ import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 /**
  * Each shown worktree card's pull request, as the user's `gh` sees it (#38 D7, D9), kept outside
  * any card component (the board remounts cards on moves and workspace switches), by the card's
- * worktree folder. A card's PR is read when it is first shown, every 60 s while a Drovr window is
+ * worktree folder. A card's PR is read when it is first shown, every 60 s while a Bikube window is
  * focused, when one gets the focus (a card's own window counts, #53 D10), right after Open pull
  * request succeeds and when its live branch changes; one read at a time per card, a read's result
  * kept only while the branch it was read for is still the card's live branch. Never read while no
- * Drovr window is focused.
+ * Bikube window is focused.
  */
 
 /** How often a shown card's PR is read while the window is focused (D9). */
@@ -42,7 +42,7 @@ function read(dir: string): void {
     return
   }
   reading.add(dir)
-  void window.drovr.git
+  void window.bikube.git
     .pullRequest(dir)
     .catch(() => null)
     .then((result) => {

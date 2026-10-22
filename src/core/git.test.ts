@@ -57,7 +57,7 @@ const commit = (cwd: string, file: string, text: string, message: string): void 
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'drovr-git-'))
+  dir = mkdtempSync(join(tmpdir(), 'bikube-git-'))
   remote = join(dir, 'remote.git')
   repo = join(dir, 'repo')
   const seed = join(dir, 'seed')
@@ -320,7 +320,7 @@ describe('fetchAll', () => {
 
   it("gives git's message and the credential hint when the remote wants a password", async () => {
     const server = createServer((_request, response) => {
-      response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="drovr"' })
+      response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="bikube"' })
       response.end()
     })
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))

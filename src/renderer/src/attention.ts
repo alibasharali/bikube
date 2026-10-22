@@ -73,7 +73,7 @@ function setWaiting(next: readonly string[]): void {
 }
 
 function updateBadge(): void {
-  window.drovr.app.setBadge(settingsStore.get().notifications ? waiting.length : 0)
+  window.bikube.app.setBadge(settingsStore.get().notifications ? waiting.length : 0)
 }
 
 function cardOf(cardId: string): { workspaceId: string; workspace: string; title: string } | null {
@@ -120,14 +120,14 @@ function notify(cardId: string, activity: Activity): void {
     notification.onclick = () => {
       // In its own window: that window comes forward, the main window unchanged (#53 D7).
       if (focusCardWindow(cardId)) return
-      window.drovr.app.focus()
+      window.bikube.app.focus()
       openRequest?.(card.workspaceId, cardId)
     }
   } catch {
     // Notifications unavailable: the badge and the card's pill still show it.
   }
   if (settings.notificationSound) playTone(660, 0.18)
-  window.drovr.app.requestAttention()
+  window.bikube.app.requestAttention()
 }
 
 /** Card or shell `id`'s title and workspace, the Default shell (never stored) included. */
@@ -160,7 +160,7 @@ function notifyLongCommand(cardId: string, paneId: string, command: ShellCommand
     at,
     viewing,
     terminal.workspace,
-    window.drovr.longCommandMs
+    window.bikube.longCommandMs
   )
   if (!notice) return
   try {
@@ -171,7 +171,7 @@ function notifyLongCommand(cardId: string, paneId: string, command: ShellCommand
         cardPanes().focus(cardId, paneId)
         return
       }
-      window.drovr.app.focus()
+      window.bikube.app.focus()
       // As a click on it would: started when stopped, in its workspace; then the pane, if still there.
       startCard(terminal.workspaceId, cardId)
       openRequest?.(terminal.workspaceId, cardId)
@@ -181,7 +181,7 @@ function notifyLongCommand(cardId: string, paneId: string, command: ShellCommand
     // Notifications unavailable.
   }
   if (settings.notificationSound) playTone(660, 0.18)
-  window.drovr.app.requestAttention()
+  window.bikube.app.requestAttention()
 }
 
 /**
@@ -211,7 +211,7 @@ function notifyTriggerEnded(shellId: string): void {
   try {
     const notification = new Notification(shell.title, { body: notice.body, silent: true })
     notification.onclick = () => {
-      window.drovr.app.focus()
+      window.bikube.app.focus()
       workspaceStore.selectWorkspace(workspace.id)
       settingsStore.update({ sidePanelOpen: true, sidePanelTab: 'shells' })
       showTriggerFailure(shellId)
@@ -220,7 +220,7 @@ function notifyTriggerEnded(shellId: string): void {
     // Notifications unavailable: the trigger's row still shows it.
   }
   if (settings.notificationSound) playTone(660, 0.18)
-  window.drovr.app.requestAttention()
+  window.bikube.app.requestAttention()
 }
 
 /** Watches every card's activity; called once, before the first render. */

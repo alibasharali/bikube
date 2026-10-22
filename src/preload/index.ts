@@ -6,9 +6,9 @@ import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import type { SyncStatus } from '../core/sync-status'
 import type { UpdateState } from '../core/updates'
 import type { Workspace } from '../core/workspace-store'
-import { IPC, type DrovrApi, type TerminalExit } from '../shared/api'
+import { IPC, type BikubeApi, type TerminalExit } from '../shared/api'
 
-const api: DrovrApi = {
+const api: BikubeApi = {
   platform: process.platform,
   // Main passes a shortened threshold only in the development build (#45 D7).
   longCommandMs: parseLongCommandMs(process.argv) ?? LONG_COMMAND_MS,
@@ -169,7 +169,7 @@ const api: DrovrApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('drovr', api)
+contextBridge.exposeInMainWorld('bikube', api)
 
 /** The part of the Navigation API used below; TypeScript's DOM lib doesn't have it yet. */
 declare const navigation: {

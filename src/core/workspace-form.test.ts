@@ -107,9 +107,9 @@ describe('SSH drafts (#12 D4)', () => {
     d = applyDirectory(d, '~')
     expect(d.name).toBe('me@devbox')
     expect(applyHost(d, 'other').name).toBe('other')
-    d = applyDirectory(d, '/tmp/drovr-remote')
-    expect(d.name).toBe('drovr-remote')
-    expect(applyHost(d, 'third').name).toBe('drovr-remote')
+    d = applyDirectory(d, '/tmp/bikube-remote')
+    expect(d.name).toBe('bikube-remote')
+    expect(applyHost(d, 'third').name).toBe('bikube-remote')
   })
 
   it('keeps a typed name when the host changes', () => {

@@ -54,7 +54,7 @@ const squeeze = (text: string): string => text.replace(/\s+/g, '')
 
 /**
  * What a command printed, from the screen at its exit: the rows after the last one ending the
- * echo of `typed` (the line Drovr typed, found across wrapped rows with whitespace ignored), or
+ * echo of `typed` (the line Bikube typed, found across wrapped rows with whitespace ignored), or
  * the whole screen when it scrolled away; at or above the cursor row, at most `max`. Rows lose
  * escapes and prompt glyphs and are right-trimmed (indentation kept); `skip`ped and blank rows at
  * the end and blank rows at the start go, and runs of blank rows inside become one.

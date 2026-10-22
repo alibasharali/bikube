@@ -9,14 +9,14 @@ const saved: WorkspaceState = {
     {
       id: 'w-saved',
       name: 'alpha',
-      directory: '/tmp/drovr-alpha',
+      directory: '/tmp/bikube-alpha',
       columns: [{ id: 'c-saved', name: 'Todo' }],
       cards: [
         {
           id: 'k-saved',
           columnId: 'c-saved',
           title: 'Terminal 1',
-          directory: '/tmp/drovr-alpha',
+          directory: '/tmp/bikube-alpha',
           startup: { kind: 'shell' },
           agentSessionId: '6f1c1b1e-2f0e-4a59-9a43-0d6c4b0f1a11',
           claudeStarted: false,
@@ -52,7 +52,7 @@ describe('createWorkspaceStore (#8 D5, D6, D8)', () => {
     const store = createWorkspaceStore(saved, () => {})
     const column = store.addColumn('w-saved', 'Doing')
     const card = store.createCard('w-saved', 'c-saved', '')
-    const workspace = store.createWorkspace({ name: 'beta', directory: '/tmp/drovr-beta' })
+    const workspace = store.createWorkspace({ name: 'beta', directory: '/tmp/bikube-beta' })
     expect(column.ok && column.value.id).toMatch(UUID)
     expect(card.ok && card.value.id).toMatch(UUID)
     expect(card.ok && card.value.title).toBe('Terminal 2')

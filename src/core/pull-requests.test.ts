@@ -90,7 +90,7 @@ const commit = (cwd: string, file: string, text: string, message: string): void 
 
 describe('pushForPullRequest', () => {
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'drovr-pr-'))
+    dir = mkdtempSync(join(tmpdir(), 'bikube-pr-'))
     remote = join(dir, 'remote.git')
     repo = join(dir, 'repo')
     const seed = join(dir, 'seed')

@@ -29,9 +29,9 @@ let env: Record<string, string>
 let claudeLog: string
 let shellLog: string
 
-/** A login shell that appends a line to $DROVR_SHELL_LOG on every start, then runs bash. */
+/** A login shell that appends a line to $BIKUBE_SHELL_LOG on every start, then runs bash. */
 const LOGGING_SHELL = `#!/bin/bash
-echo started >> "$DROVR_SHELL_LOG"
+echo started >> "$BIKUBE_SHELL_LOG"
 exec /bin/bash "$@"
 `
 
@@ -42,14 +42,14 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-persist-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-persist-'))
   const fake = fakeClaudeHome(root)
   claudeLog = fake.log
   shellLog = join(root, 'shells.log')
   const shell = join(root, 'logging-shell')
   writeFileSync(shell, LOGGING_SHELL)
   chmodSync(shell, 0o755)
-  env = { ...fake.env, SHELL: shell, DROVR_SHELL_LOG: shellLog }
+  env = { ...fake.env, SHELL: shell, BIKUBE_SHELL_LOG: shellLog }
   dataDir = newDataDir()
 })
 
@@ -280,7 +280,7 @@ test('#59 AC3: a workspace logo survives a restart and is in the state file', as
   await expect(badges().nth(0).locator('svg')).toBeVisible()
   await expect(badges().nth(1)).not.toHaveAttribute('data-logo')
   await expect(badges().nth(1)).toHaveText('B')
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
   const [alpha, beta] = saved.state.workspaces
   expect(alpha.logo).toBe('rocket')
   expect(beta).not.toHaveProperty('logo')
@@ -472,13 +472,13 @@ for (const [name, contents] of [
   ['another version', '{"version": 2, "state": {}}']
 ] as const) {
   test(`AC7: an unreadable file (${name}) is moved aside and the app starts empty`, async () => {
-    writeFileSync(join(dataDir, 'drovr-state.json'), contents)
+    writeFileSync(join(dataDir, 'bikube-state.json'), contents)
 
     await launch()
 
     await expect(page.getByTestId('empty-state')).toBeVisible()
     await expect(page.getByTestId('workspace-item')).toHaveCount(0)
-    const corrupt = readdirSync(dataDir).filter((f) => /^drovr-state\.corrupt-.*\.json$/.test(f))
+    const corrupt = readdirSync(dataDir).filter((f) => /^bikube-state\.corrupt-.*\.json$/.test(f))
     expect(corrupt).toHaveLength(1)
     expect(readFileSync(join(dataDir, corrupt[0]), 'utf8')).toBe(contents)
 
@@ -486,7 +486,7 @@ for (const [name, contents] of [
     await expect
       .poll(() => {
         try {
-          const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+          const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
           return saved.version === 1
             ? saved.state.workspaces.map((w: { name: string }) => w.name)
             : []
@@ -538,7 +538,7 @@ const electronBinary = createRequire(__filename)('electron') as string
 function launchSecond(timeoutMs: number): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const child = spawn(electronBinary, ['.', '--no-sandbox'], {
-      env: { ...env, DROVR_USER_DATA_DIR: dataDir },
+      env: { ...env, BIKUBE_USER_DATA_DIR: dataDir },
       stdio: 'ignore'
     })
     const timer = setTimeout(() => {
@@ -558,7 +558,7 @@ function launchSecond(timeoutMs: number): Promise<number | null> {
 
 const savedWorkspaceNames = (): string[] => {
   try {
-    const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8'))
+    const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
     return saved.state.workspaces.map((w: { name: string }) => w.name)
   } catch {
     return []

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { SessionManager } from './session-manager'
 import { shellIntegrationStart } from './shell-integration'
 
-// #45 AC4: Drovr's zsh, bash and fish integration scripts in real shells, started as Drovr starts
+// #45 AC4: Bikube's zsh, bash and fish integration scripts in real shells, started as Bikube starts
 // them (`shellIntegrationStart`, `SessionManager.spawn`), with a home folder whose login files
 // set a variable, a prompt showing the last status, and a hook printing the status it sees.
 // A shell that isn't installed is skipped, except in CI, which installs all three.
@@ -34,7 +34,7 @@ function describeShell(name: string, body: (path: string) => void): void {
     })
     return
   }
-  describe.skipIf(path === null)(`${name} with Drovr's integration`, { timeout: 30_000 }, () =>
+  describe.skipIf(path === null)(`${name} with Bikube's integration`, { timeout: 30_000 }, () =>
     body(path ?? name)
   )
 }
@@ -47,7 +47,7 @@ afterEach(async () => {
 })
 
 function folder(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'drovr-shell-integration-'))
+  const dir = mkdtempSync(join(tmpdir(), 'bikube-shell-integration-'))
   folders.push(dir)
   return dir
 }
@@ -69,7 +69,7 @@ interface Shell {
   until(what: string, test: (output: string) => boolean): Promise<void>
 }
 
-/** Starts `shell` as Drovr does, in `home`, with `env` as the environment Drovr starts from. */
+/** Starts `shell` as Bikube does, in `home`, with `env` as the environment Bikube starts from. */
 function start(shell: string, home: string, env: Record<string, string> = {}): Shell {
   const base: Record<string, string> = { HOME: home, SHELL: shell, ...env }
   const integration = shellIntegrationStart(shell, { enabled: true, scriptsDir, env: base })
@@ -163,7 +163,7 @@ async function checkScripts(sh: Shell, prompt: (status: number) => string): Prom
 
 /**
  * The environment of a shell started from `sh` (`<nested> -c env`), checked to hold none of
- * Drovr's injection variables, and a `ZDOTDIR` and `XDG_DATA_DIRS` without Drovr's folder.
+ * Bikube's injection variables, and a `ZDOTDIR` and `XDG_DATA_DIRS` without Bikube's folder.
  */
 async function nestedEnv(sh: Shell, nested: string): Promise<Record<string, string>> {
   sh.run(`${nested} -c 'echo nested-"start"; env; echo nested-"end"'`)
@@ -176,7 +176,7 @@ async function nestedEnv(sh: Shell, nested: string): Promise<Record<string, stri
     const eq = line.indexOf('=')
     if (eq > 0) env[line.slice(0, eq)] = line.slice(eq + 1)
   }
-  expect(Object.keys(env).filter((key) => key.startsWith('DROVR_'))).toEqual([])
+  expect(Object.keys(env).filter((key) => key.startsWith('BIKUBE_'))).toEqual([])
   expect(env['ZDOTDIR'] ?? '').not.toContain(scriptsDir)
   expect(env['XDG_DATA_DIRS'] ?? '').not.toContain(scriptsDir)
   return env
@@ -371,7 +371,7 @@ describeShell('bash', (bash) => {
       await checkSubshell(sh)
     })
 
-    it('sourced at the prompt after Drovr loaded, keeping a DEBUG trap of the user', async () => {
+    it('sourced at the prompt after Bikube loaded, keeping a DEBUG trap of the user', async () => {
       const sh = start(
         bash,
         profile(['trap \'[ "$BASH_COMMAND" = "echo traced" ] && echo "user-trap-ran"\' DEBUG'])
@@ -391,7 +391,7 @@ describeShell('zsh', (zsh) => {
   /**
    * The user's `.zshenv` in `dir`, starting with `unsetopt GLOBAL_RCS`: zsh then skips the
    * system's /etc/zsh/zprofile, zshrc, zlogin and zlogout (Ubuntu's zshrc runs compinit, which
-   * asks about insecure fpath folders on CI's runner, and isn't nounset-safe). Drovr's own
+   * asks about insecure fpath folders on CI's runner, and isn't nounset-safe). Bikube's own
    * `.zshenv` sources this one, so it runs before zsh would read any of them.
    */
   function zshenv(dir: string, lines: string[] = []): void {
@@ -481,7 +481,7 @@ describeShell('zsh', (zsh) => {
 
   /**
    * After a themed first prompt and two commands, the user's `zle-line-init` (defined by a
-   * precmd hook after Drovr deferred its marks) ran at all three prompts and is still the widget.
+   * precmd hook after Bikube deferred its marks) ran at all three prompts and is still the widget.
    */
   async function checkLineInit(sh: Shell, counts: string, expected: string): Promise<void> {
     await sh.until('the first prompt', (o) => visible(o).includes('header'))
@@ -494,7 +494,7 @@ describeShell('zsh', (zsh) => {
     const out = visible(sh.output())
     expect(out).toContain(`\n${expected}\n`)
     expect(out).toMatch(/\nzle -N zle-line-init myinit\n/)
-    expect(out).not.toContain('__drovr')
+    expect(out).not.toContain('__bikube')
   }
 
   it('keeps a zle-line-init a later precmd hook defines', async () => {
@@ -505,7 +505,7 @@ describeShell('zsh', (zsh) => {
         'theme() { PS1="T%# "; print "\\nheader"; }',
         'typeset -gi inits=0',
         'myinit() { (( inits++ )) }',
-        // Defines the widget once, at the first prompt, after Drovr's hook (lazy plugins).
+        // Defines the widget once, at the first prompt, after Bikube's hook (lazy plugins).
         'lazy() { zle -N zle-line-init myinit; precmd_functions=(${precmd_functions:#lazy}); }',
         'precmd_functions+=(theme lazy)'
       ].join('\n') + '\n'
@@ -533,7 +533,7 @@ describeShell('zsh', (zsh) => {
     )
     const sh = start(zsh, home)
     await checkLineInit(sh, 'inits=$inits bases=$bases', 'inits=3 bases=3')
-    // Drovr's widget, wrapped, still marked the first prompt after the header.
+    // Bikube's widget, wrapped, still marked the first prompt after the header.
     const out = sh.output()
     expect(out.indexOf(OSC('133;A'))).toBeGreaterThan(out.indexOf('header'))
     expect(out.indexOf(OSC('133;B'))).toBeGreaterThan(out.indexOf(OSC('133;A')))

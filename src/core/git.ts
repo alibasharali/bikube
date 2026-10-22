@@ -36,7 +36,7 @@ const OUTPUT_MAX = 16 * 1024 * 1024
  * The `GitRunner` main uses (D12): `git` started with `spawn` (no shell), stdin closed, and off
  * Windows `detached`, i.e. in a session of its own (`setsid`) with no controlling terminal, so ssh
  * can't open `/dev/tty` to ask for a password or passphrase even when `GIT_SSH` keeps it out of
- * batch mode and Drovr was started from a terminal. (`execFile` drops `detached`.) At `timeoutMs`
+ * batch mode and Bikube was started from a terminal. (`execFile` drops `detached`.) At `timeoutMs`
  * the command's whole process group (git, ssh, a credential helper) gets SIGTERM; on Windows,
  * where `detached` would open a console, git alone.
  */

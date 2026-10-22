@@ -9,8 +9,8 @@ export function useUpdate(onShow: () => void): { state: UpdateState; current: st
   })
   useEffect(() => {
     let live = true
-    const offState = window.drovr.update.onState((state) => setUpdate((u) => ({ ...u, state })))
-    void window.drovr.update.state().then((u) => {
+    const offState = window.bikube.update.onState((state) => setUpdate((u) => ({ ...u, state })))
+    void window.bikube.update.state().then((u) => {
       if (live) setUpdate(u)
     })
     return () => {
@@ -18,6 +18,6 @@ export function useUpdate(onShow: () => void): { state: UpdateState; current: st
       offState()
     }
   }, [])
-  useEffect(() => window.drovr.update.onShow(onShow), [onShow])
+  useEffect(() => window.bikube.update.onShow(onShow), [onShow])
   return update
 }

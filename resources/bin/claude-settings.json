@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; [ -e \"$t\" ] || t=/dev/null; \"$DROVR_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; case $s in *'\"source\":\"resume\"'*|*'\"source\": \"resume\"'*) i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$DROVR_BIN/board\" session . \"$i\" >/dev/null 2>&1;; esac; [ \"$DROVR_CLAUDE_STATUS\" = 0 ] || cat \"$DROVR_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
+            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; [ -e \"$t\" ] || t=/dev/null; \"$BIKUBE_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; case $s in *'\"source\":\"resume\"'*|*'\"source\": \"resume\"'*) i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$BIKUBE_BIN/board\" session . \"$i\" >/dev/null 2>&1;; esac; [ \"$BIKUBE_CLAUDE_STATUS\" = 0 ] || cat \"$BIKUBE_BIN/claude-instruction.txt\" 2>/dev/null; exit 0",
             "timeout": 5
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "s=$(cat); i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$DROVR_BIN/board\" session . \"$i\" >/dev/null 2>&1; \"$DROVR_BIN/board\" activity . working >/dev/null 2>&1; exit 0",
+            "command": "s=$(cat); i=${s#*'\"session_id\":\"'}; [ \"$i\" = \"$s\" ] && i=${s#*'\"session_id\": \"'}; i=${i%%'\"'*}; \"$BIKUBE_BIN/board\" session . \"$i\" >/dev/null 2>&1; \"$BIKUBE_BIN/board\" activity . working >/dev/null 2>&1; exit 0",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "a=working; case $(cat) in *'\"tool_name\":\"AskUserQuestion\"'*|*'\"tool_name\": \"AskUserQuestion\"'*) a=question;; esac; \"$DROVR_BIN/board\" activity . $a </dev/null >/dev/null 2>&1 & exit 0",
+            "command": "a=working; case $(cat) in *'\"tool_name\":\"AskUserQuestion\"'*|*'\"tool_name\": \"AskUserQuestion\"'*) a=question;; esac; \"$BIKUBE_BIN/board\" activity . $a </dev/null >/dev/null 2>&1 & exit 0",
             "timeout": 5
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$DROVR_BIN/board\" activity . question >/dev/null 2>&1; exit 0",
+            "command": "\"$BIKUBE_BIN/board\" activity . question >/dev/null 2>&1; exit 0",
             "timeout": 5
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; \"$DROVR_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; \"$DROVR_BIN/board\" activity . waiting >/dev/null 2>&1; exit 0",
+            "command": "s=$(cat); t=${s#*'\"transcript_path\":\"'}; [ \"$t\" = \"$s\" ] && t=${s#*'\"transcript_path\": \"'}; [ \"$t\" = \"$s\" ] || { t=${t%%'\"'*}; \"$BIKUBE_BIN/board\" usage . \"$t\" </dev/null >/dev/null 2>&1 & }; \"$BIKUBE_BIN/board\" activity . waiting >/dev/null 2>&1; exit 0",
             "timeout": 5
           }
         ]

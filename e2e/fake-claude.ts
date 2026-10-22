@@ -17,12 +17,12 @@ export const SETTINGS_ARGS = `--settings ${LOCAL_CLAUDE_SETTINGS}`
  * A regular expression's source for what an SSH card's `claude` receives before its session flags:
  * the copy in the session's private directory (#31 D14).
  */
-export const REMOTE_SETTINGS_ARGS = String.raw`--settings /\S*/drovr\.[A-Za-z0-9]{8}/claude-settings\.json`
+export const REMOTE_SETTINGS_ARGS = String.raw`--settings /\S*/bikube\.[A-Za-z0-9]{8}/claude-settings\.json`
 
 const sessionIdLine = (id: string): string =>
-  `claude --settings "$DROVR_CLAUDE_SETTINGS" --session-id ${id}`
+  `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${id}`
 const resumeIdLine = (id: string): string =>
-  `claude --settings "$DROVR_CLAUDE_SETTINGS" --resume ${id}`
+  `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${id}`
 
 /**
  * The line a Claude Code card types until it has a conversation: the session id fresh, resumed
@@ -34,12 +34,12 @@ export const claudeFirstLine = (id: string): string => `${sessionIdLine(id)} || 
 export const claudeResumeLine = (id: string): string =>
   `${resumeIdLine(id)} || ${sessionIdLine(id)}`
 
-// The fake `claude` of #5's smoke tests: it logs its arguments to $DROVR_CLAUDE_LOG, prints
+// The fake `claude` of #5's smoke tests: it logs its arguments to $BIKUBE_CLAUDE_LOG, prints
 // them, and waits on stdin. With FAKE_CLAUDE_RESUME_FAILS=1 a `--resume` run fails at once.
-// A line on stdin is a message sent: like Drovr's real hook, it reports its session with
+// A line on stdin is a message sent: like Bikube's real hook, it reports its session with
 // `board session`, so the card resumes it next time.
 const FAKE_CLAUDE = `#!/bin/bash
-echo "$*" >> "$DROVR_CLAUDE_LOG"
+echo "$*" >> "$BIKUBE_CLAUDE_LOG"
 echo "fake-claude $*"
 case " $* " in *" --resume "*) [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ] && exit 1 ;; esac
 id=
@@ -48,7 +48,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 read -r _
-[ -n "$id" ] && "$DROVR_BIN/board" session . "$id" >/dev/null 2>&1
+[ -n "$id" ] && "$BIKUBE_BIN/board" session . "$id" >/dev/null 2>&1
 exit 0
 `
 
@@ -69,11 +69,11 @@ export function fakeClaudeHome(root: string): FakeClaudeHome {
   writeFileSync(join(home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(home, 'bin', 'claude'), 0o755)
   writeFileSync(join(home, '.bash_profile'), 'export PATH="$HOME/bin:$PATH"\n')
-  // And for `/bin/sh -l`, which Drovr's checks use for a shell it doesn't know (a test's wrapper).
+  // And for `/bin/sh -l`, which Bikube's checks use for a shell it doesn't know (a test's wrapper).
   writeFileSync(join(home, '.profile'), 'export PATH="$HOME/bin:$PATH"\n')
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
-  return { home, log, env: { ...env, SHELL: '/bin/bash', HOME: home, DROVR_CLAUDE_LOG: log } }
+  return { home, log, env: { ...env, SHELL: '/bin/bash', HOME: home, BIKUBE_CLAUDE_LOG: log } }
 }
 
 /** The fake claude's log, one line per run. */

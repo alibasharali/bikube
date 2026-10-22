@@ -92,7 +92,7 @@ export function registerWorktrees(): void {
     async (event, repo: unknown, path: unknown, force: unknown) => {
       guard(event, IPC.worktreeRemove)
       if (!inside(path) || !(await isDirectoryPath(repo))) {
-        return { ok: false, reason: 'not a Drovr worktree' }
+        return { ok: false, reason: 'not a Bikube worktree' }
       }
       return removeWorktree(repo as string, path, force === true, run, fs)
     }

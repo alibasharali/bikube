@@ -20,7 +20,7 @@ export const ghosttyStore = {
   },
   /** Reads the Ghostty config again; a read already running is reused. */
   reload(): Promise<void> {
-    reading ??= window.drovr.settings
+    reading ??= window.bikube.settings
       .ghosttyTheme()
       .then((theme) => {
         current = theme

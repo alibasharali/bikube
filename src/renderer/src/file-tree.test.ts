@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FolderStatus } from '../../core/git-status'
 import { refreshTree } from './file-tree'
 
-// The Files tab's refresh (#55 D12, AC9) with `window.drovr.files` faked.
+// The Files tab's refresh (#55 D12, AC9) with `window.bikube.files` faked.
 
 /** A status read that ends when the test says so. */
 function controlledStatus(): { reads: (() => void)[]; status: () => Promise<FolderStatus> } {
@@ -39,7 +39,9 @@ describe('refreshTree', () => {
       }
     }
     vi.stubGlobal('window', {
-      drovr: { files: { status: tracked, list: async () => ({ ok: false, reason: 'unreadable' }) } }
+      bikube: {
+        files: { status: tracked, list: async () => ({ ok: false, reason: 'unreadable' }) }
+      }
     })
     const folder = `/folder-${n++}`
     const first = refreshTree(folder)

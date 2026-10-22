@@ -165,7 +165,7 @@ export interface DialogApi {
   pickDirectory(): Promise<string | null>
 }
 
-/** The saved board, stored by main in `userData/drovr-state.json` (#8 D5, D6). */
+/** The saved board, stored by main in `userData/bikube-state.json` (#8 D5, D6). */
 export interface StateApi {
   /** Main's latest state: the last valid save, else the file's contents, else an empty board. */
   load(): Promise<WorkspaceState>
@@ -191,7 +191,7 @@ export interface ScrollbackApi {
   quitSaved(): void
 }
 
-/** App-wide settings, stored by main in `userData/drovr-settings.json` (#10 D6). */
+/** App-wide settings, stored by main in `userData/bikube-settings.json` (#10 D6). */
 export interface SettingsApi {
   /** Main's latest settings: the last valid save, else the file's (invalid fields defaulted), else the defaults. */
   load(): Promise<Settings>
@@ -227,7 +227,7 @@ export type SyncFolderResult = { ok: true } | { ok: false; reason: 'not found' }
 
 /**
  * The sync folder (#13 D13, D14), owned by main: its status, setting it, and the boards main hands
- * the renderer to apply. The folder itself is kept in `drovr-settings.json`, never through
+ * the renderer to apply. The folder itself is kept in `bikube-settings.json`, never through
  * `settings:save` (D10).
  */
 export interface SyncApi {
@@ -409,8 +409,8 @@ export interface UpdateApi {
   /** Skips the available version: no download, no install at quit, no button until a newer one. */
   skip(): void
   /**
-   * Installs the downloaded update: Drovr quits, the app is swapped and opened again. Opens the
-   * release page instead where Drovr can't replace itself (or the download failed); starts the
+   * Installs the downloaded update: Bikube quits, the app is swapped and opened again. Opens the
+   * release page instead where Bikube can't replace itself (or the download failed); starts the
    * download of a skipped version.
    */
   install(): void
@@ -420,12 +420,12 @@ export interface UpdateApi {
   running(): Promise<number>
 }
 
-/** The typed surface the preload script exposes to the renderer as `window.drovr`. Grows with each feature. */
-export interface DrovrApi {
+/** The typed surface the preload script exposes to the renderer as `window.bikube`. Grows with each feature. */
+export interface BikubeApi {
   platform: NodeJS.Platform
   /**
    * How long a command must run for its notification, in ms (#45 D7): `LONG_COMMAND_MS`, or a
-   * shorter one only the development build takes from `DROVR_LONG_COMMAND_MS`, for the tests.
+   * shorter one only the development build takes from `BIKUBE_LONG_COMMAND_MS`, for the tests.
    */
   longCommandMs: number
   /** This machine's host name (`os.hostname()`), for OSC 7's host (#45 D8); empty if unknown. */

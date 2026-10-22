@@ -25,7 +25,7 @@ const apps: ElectronApplication[] = []
 let root: string
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-setup-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-setup-'))
 })
 
 test.afterEach(async () => {
@@ -45,11 +45,11 @@ interface Instance {
   page: Page
 }
 
-/** Launches an instance on `dataDir` (reuse it to restart) with its own home (`DROVR_HOME_DIR`). */
+/** Launches an instance on `dataDir` (reuse it to restart) with its own home (`BIKUBE_HOME_DIR`). */
 async function launch(dataDir: string, home = makeDir('home')): Promise<Instance> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
-  env['DROVR_HOME_DIR'] = home
+  env['BIKUBE_HOME_DIR'] = home
   const launched = await launchApp({ dataDir, env })
   apps.push(launched.app)
   return launched
@@ -108,7 +108,7 @@ test('AC1: Worktree setup is saved, shown on reopen and after a restart; SSH sho
   await editWorkspace(page, 0)
   await expect(setupField(page)).toHaveValue('npm ci')
   await page.getByTestId('workspace-cancel').click()
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')) as {
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')) as {
     state: { workspaces: { worktreeSetup: string }[] }
   }
   expect(saved.state.workspaces[0]!.worktreeSetup).toBe('npm ci')
@@ -270,7 +270,7 @@ const flatText = async (page: Page): Promise<string> =>
 
 /** The cards' pending setups in the saved state file, by title. */
 function savedSetups(dataDir: string): Record<string, string | undefined> {
-  const saved = JSON.parse(readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')) as {
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')) as {
     state: { workspaces: { cards: { title: string; setup?: string }[] }[] }
   }
   return Object.fromEntries(saved.state.workspaces[0]!.cards.map((c) => [c.title, c.setup]))

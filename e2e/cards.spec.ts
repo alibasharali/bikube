@@ -27,7 +27,7 @@ function makeDir(name: string): string {
 }
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-cards-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-cards-'))
   ;({ app, page } = await launchApp())
 })
 
@@ -220,13 +220,13 @@ test('AC3: Back and Ctrl+Shift+B return to the board; Esc goes to the terminal',
 test('AC4: the board shows the status and last output line', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
-  await run("printf 'drovr-marker'; sleep 30")
-  await expect.poll(async () => (await bufferLines()).includes('drovr-marker')).toBe(true)
+  await run("printf 'bikube-marker'; sleep 30")
+  await expect.poll(async () => (await bufferLines()).includes('bikube-marker')).toBe(true)
   await back()
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running', {
     timeout: 1000
   })
-  await expect(card('api').getByTestId('card-status-line')).toHaveText('drovr-marker', {
+  await expect(card('api').getByTestId('card-status-line')).toHaveText('bikube-marker', {
     timeout: 1000
   })
 })
@@ -236,7 +236,7 @@ test('AC5: the terminal and its process outlive the view and workspace switches'
   await createWorkspace(makeDir('beta'), 'beta')
   await selectWorkspace('alpha')
   await newCard('Backlog', 'api')
-  await run('export DROVR_X=42; echo before-switch')
+  await run('export BIKUBE_X=42; echo before-switch')
   await expect.poll(bufferLines).toContain('before-switch')
   // Output keeps streaming into a card nobody is looking at (D10).
   await run('sleep 1; echo streamed-later')
@@ -251,7 +251,7 @@ test('AC5: the terminal and its process outlive the view and workspace switches'
   expect(lines).toContain('before-switch')
   await expect.poll(bufferLines).toContain('streamed-later')
   await expect.poll(terminalFocused).toBe(true)
-  await run('echo $DROVR_X')
+  await run('echo $BIKUBE_X')
   await expect.poll(bufferLines).toContain('42')
 })
 

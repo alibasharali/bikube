@@ -36,7 +36,7 @@ async function customFamily(page: Page): Promise<Locator> {
 
 /** Creates workspace `alpha` in a fresh directory and its card `api`, left open at full size. */
 async function alphaWithApi(page: Page): Promise<void> {
-  const dir = join(mkdtempSync(join(tmpdir(), 'drovr-settings-')), 'alpha')
+  const dir = join(mkdtempSync(join(tmpdir(), 'bikube-settings-')), 'alpha')
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
@@ -165,12 +165,14 @@ const terminalBackground = (page: Page): Promise<string> =>
 const followNativeTheme = (page: Page): Promise<void> => page.emulateMedia({ colorScheme: null })
 
 const readSettingsFile = (dataDir: string): string =>
-  readFileSync(join(dataDir, 'drovr-settings.json'), 'utf8')
+  readFileSync(join(dataDir, 'bikube-settings.json'), 'utf8')
 
 /** Polls the settings file until it holds `expected` (it is written within 200 ms). */
 async function expectSettingsFile(dataDir: string, expected: string): Promise<void> {
   await expect
-    .poll(() => (existsSync(join(dataDir, 'drovr-settings.json')) ? readSettingsFile(dataDir) : ''))
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
     .toBe(expected)
 }
 
@@ -193,7 +195,7 @@ test('AC1: with no settings file and a dark OS appearance the board looks as bef
   await expect.poll(() => terminalBackground(page)).toBe('rgb(20, 21, 26)')
   // Give a stray write the save interval (200 ms) and more to land before checking.
   await page.waitForTimeout(500)
-  expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
+  expect(existsSync(join(dataDir, 'bikube-settings.json'))).toBe(false)
 })
 
 test('AC1: opening Settings, leaving the family field and closing writes no settings file', async () => {
@@ -207,7 +209,7 @@ test('AC1: opening Settings, leaving the family field and closing writes no sett
   await expect(dialog(page)).toHaveCount(0)
   // Give a stray write the save interval (200 ms) and more to land before checking.
   await page.waitForTimeout(500)
-  expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
+  expect(existsSync(join(dataDir, 'bikube-settings.json'))).toBe(false)
 })
 
 test('the light palette applies under a light OS appearance with theme System', async () => {
@@ -233,8 +235,8 @@ test('the window background matches the resolved theme from the start', async ()
 test('a saved Light theme gives a light window and board from the start', async () => {
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -253,8 +255,8 @@ test('a saved Light theme gives a light window and board from the start', async 
 test('a saved Dark theme gives a dark window and board from the start, whatever the OS appearance', async () => {
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -526,7 +528,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
 
   await page.keyboard.press(SHORTCUT)
@@ -536,7 +538,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
 })
 
@@ -552,7 +554,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveCount(0)
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
   for (const text of ['40', '7', '12.5', 'abc']) {
     await size.fill(text)
@@ -568,7 +570,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
 
   // Closing drops the invalid size; reopening shows the last valid one.
@@ -583,7 +585,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
 })
 
@@ -606,9 +608,9 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   await app.close()
   const expected =
-    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   expect(readSettingsFile(dataDir)).toBe(expected)
-  const statePath = join(dataDir, 'drovr-state.json')
+  const statePath = join(dataDir, 'bikube-state.json')
   const stateBefore = JSON.parse(readFileSync(statePath, 'utf8')) as { version: number }
   expect(stateBefore.version).toBe(1)
 
@@ -650,8 +652,8 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 test('AC8: invalid fields take their defaults, the rest is kept, and the next change rewrites the file', async () => {
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
-    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -665,7 +667,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Drovr Dark","terminalThemeLight":"Drovr Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
   )
   // The app works: a workspace and a running card.
   await page.keyboard.press('Escape')
@@ -675,7 +677,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
 
 test('AC8: a settings file that is not JSON gives all defaults', async () => {
   const dataDir = newDataDir()
-  writeFileSync(join(dataDir, 'drovr-settings.json'), 'not json')
+  writeFileSync(join(dataDir, 'bikube-settings.json'), 'not json')
   const launched = await launchApp({ dataDir })
   app = launched.app
   const { page } = launched
@@ -699,7 +701,7 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
   test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
+    join(dataDir, 'bikube-settings.json'),
     JSON.stringify({
       version: 1,
       settings: {
@@ -809,7 +811,7 @@ test('#31 AC7: refused presses keep the old shortcut and recording; Escape stops
   await expect(shortcutError(page, 'splitRight')).toHaveCount(0)
   await expect(shortcutReset(page, 'splitRight')).toBeDisabled()
   await page.waitForTimeout(500)
-  expect(existsSync(join(dataDir, 'drovr-settings.json'))).toBe(false)
+  expect(existsSync(join(dataDir, 'bikube-settings.json'))).toBe(false)
 })
 
 test('the Font family list offers installed fonts; a pick applies at once and is saved', async () => {
@@ -830,7 +832,9 @@ test('the Font family list offers installed fonts; a pick applies at once and is
   await expect(dialog(page).getByLabel('Custom font family')).toHaveCount(0)
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe(`"${font}", monospace`)
   await expect
-    .poll(() => (existsSync(join(dataDir, 'drovr-settings.json')) ? readSettingsFile(dataDir) : ''))
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
     .toContain(`"fontFamily":"\\"${font}\\", monospace"`)
 
   // Closing keeps the pick; reopening shows it selected.
@@ -844,7 +848,7 @@ test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then z
   const launched = await launchApp({ dataDir })
   app = launched.app
   const { page } = launched
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
   const chip = page.getByTestId('pane-zoom')
   const defaultText = process.platform === 'darwin' ? 'Shift+Cmd+Enter' : 'Ctrl+Shift+Enter'
@@ -886,7 +890,7 @@ test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then z
 
 test('#60 AC6: Copy command output shows its default, can be recorded to a key that then copies, and Reset', async () => {
   const dataDir = newDataDir()
-  const file = join(dataDir, 'drovr-settings.json')
+  const file = join(dataDir, 'bikube-settings.json')
   // sh sends no marks of its own: the command's marks are printed.
   writeFileSync(file, JSON.stringify({ version: 1, settings: { shell: '/bin/sh' } }))
   const launched = await launchApp({ dataDir })

@@ -20,7 +20,7 @@ const darwin = process.platform === 'darwin'
 const OPEN_SHELL = darwin ? 'Meta+T' : 'Control+Shift+T'
 
 test.beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-shells-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-shells-'))
   dir = join(root, 'alpha')
   mkdirSync(dir)
   ;({ app, page, dataDir } = await launchApp())
@@ -132,7 +132,7 @@ test('a named shell types its command each time it starts; restart, close, edit 
   await page.getByTestId('shell-command').fill('echo web')
   await page.getByTestId('shell-submit').click()
   await expect(shell('Web')).toContainText('echo web')
-  const saved = (): string => readFileSync(join(dataDir, 'drovr-state.json'), 'utf8')
+  const saved = (): string => readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')
   await expect.poll(saved).toContain('"name":"Web","command":"echo web"')
 
   // Delete asks while it runs, then it's gone.

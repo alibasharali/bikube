@@ -24,13 +24,13 @@ import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // Sync between machines (#13). Every instance has its own data directory and its own home
-// (`DROVR_HOME_DIR`, D15); a test's instances share one temp sync folder.
+// (`BIKUBE_HOME_DIR`, D15); a test's instances share one temp sync folder.
 
 const apps: ElectronApplication[] = []
 let root: string
 
 test.beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'drovr-sync-'))
+  root = mkdtempSync(join(tmpdir(), 'bikube-sync-'))
 })
 
 test.afterEach(async () => {
@@ -65,7 +65,7 @@ async function launch(
 ): Promise<Instance> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(base)) if (value !== undefined) env[key] = value
-  env['DROVR_HOME_DIR'] = home
+  env['BIKUBE_HOME_DIR'] = home
   const launched = await launchApp({ dataDir, env })
   apps.push(launched.app)
   return { ...launched, home }
@@ -136,7 +136,7 @@ interface SyncFile {
   }
 }
 
-const syncFilePath = (folder: string): string => join(folder, 'drovr-board.json')
+const syncFilePath = (folder: string): string => join(folder, 'bikube-board.json')
 
 function readSyncFile(folder: string): SyncFile | null {
   const path = syncFilePath(folder)
@@ -203,7 +203,7 @@ test("AC3: turning sync on joins the folder's board with this machine's, keeping
   await expect.poll(() => workspaceNames(a.page), { timeout: 5000 }).toEqual(['api', 'web'])
   // The joined board is B's saved board too.
   await quit(b)
-  const saved = JSON.parse(readFileSync(join(b.dataDir, 'drovr-state.json'), 'utf8')) as {
+  const saved = JSON.parse(readFileSync(join(b.dataDir, 'bikube-state.json'), 'utf8')) as {
     state: { workspaces: { name: string; directory: string }[]; activeId: string }
   }
   expect(saved.state.workspaces.map((w) => [w.name, w.directory])).toEqual([
@@ -294,7 +294,9 @@ test('AC12: the sync folder is kept per machine across a restart, never in the s
   await expect(settings(a.page).getByTestId('settings-sync-folder')).toHaveValue(folder)
   await expect(settings(a.page).getByTestId('settings-sync-status')).toHaveText(SYNCED)
 
-  const settingsFile = JSON.parse(readFileSync(join(a.dataDir, 'drovr-settings.json'), 'utf8')) as {
+  const settingsFile = JSON.parse(
+    readFileSync(join(a.dataDir, 'bikube-settings.json'), 'utf8')
+  ) as {
     settings: Record<string, unknown>
   }
   expect(settingsFile.settings.syncFolder).toBe(folder)
@@ -308,7 +310,7 @@ test('AC12: the sync folder is kept per machine across a restart, never in the s
 test('AC12: a settings file from #10 without syncFolder loads with sync off and keeps theme and font', async () => {
   const dataDir = newDataDir()
   writeFileSync(
-    join(dataDir, 'drovr-settings.json'),
+    join(dataDir, 'bikube-settings.json'),
     '{"version":1,"settings":{"theme":"dark","fontSize":16,"fontFamily":"Courier New"}}'
   )
   const a = await launch(makeDir('ha'), dataDir)
@@ -542,7 +544,7 @@ test('AC5: a workspace created on A reaches B live under its own home; SSH uncha
 })
 
 test("AC6: B starts A's local Claude Code card with --session-id and its SSH one with --resume", async () => {
-  const remote = '/tmp/drovr-remote'
+  const remote = '/tmp/bikube-remote'
   mkdirSync(remote, { recursive: true })
   const folder = makeDir('F')
   const fakeA = fakeSshHome(makeDir('a'))
@@ -629,7 +631,7 @@ const typed = async (page: Page, line: string): Promise<boolean> =>
   (await bufferLines(page)).some((l) => l.endsWith(line))
 
 test("#21 AC9: B starts A's local Codex card fresh and resumes its SSH one", async () => {
-  const remote = '/tmp/drovr-remote'
+  const remote = '/tmp/bikube-remote'
   mkdirSync(remote, { recursive: true })
   const folder = makeDir('F')
   const fakeA = fakeSshHome(makeDir('a'))
@@ -766,7 +768,7 @@ test('AC13: one change is written once and never echoed between the machines', a
   await a.page.waitForTimeout(1000)
   const writes = new Set<string>()
   const watcher = watch(folder, (_, name) => {
-    if (name !== 'drovr-board.json') return
+    if (name !== 'bikube-board.json') return
     const savedAt = readSyncFile(folder)?.savedAt
     if (savedAt) writes.add(savedAt)
   })

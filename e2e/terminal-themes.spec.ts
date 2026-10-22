@@ -21,7 +21,7 @@ const dialog = (page: Page): Locator => page.getByTestId('settings-dialog')
 
 /** Creates a workspace in a fresh directory and its card `title`, left open at full size. */
 async function workspaceWithCard(page: Page, title: string): Promise<void> {
-  const dir = join(mkdtempSync(join(tmpdir(), 'drovr-themes-')), 'alpha')
+  const dir = join(mkdtempSync(join(tmpdir(), 'bikube-themes-')), 'alpha')
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
@@ -66,7 +66,7 @@ function openTerminal(page: Page): Promise<{ background: string; red: string; li
 }
 
 const savedSettings = (dataDir: string): Record<string, unknown> => {
-  const path = join(dataDir, 'drovr-settings.json')
+  const path = join(dataDir, 'bikube-settings.json')
   return existsSync(path)
     ? (JSON.parse(readFileSync(path, 'utf8')) as { settings: Record<string, unknown> }).settings
     : {}
@@ -90,7 +90,9 @@ test('the dark theme picker: search, preview, pick with Enter; Cancel and Escape
     'true'
   )
   await dialog(page).getByTestId('theme-cancel').click()
-  await expect(dialog(page).getByTestId('settings-terminal-theme-dark')).toContainText('Drovr Dark')
+  await expect(dialog(page).getByTestId('settings-terminal-theme-dark')).toContainText(
+    'Bikube Dark'
+  )
 
   // Escape in the picker closes only the picker.
   await dialog(page).getByTestId('settings-terminal-theme-dark').click()
@@ -122,11 +124,11 @@ test('the dark theme picker: search, preview, pick with Enter; Cancel and Escape
 
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#1e1e2e')
   await expect.poll(() => savedSettings(dataDir).terminalThemeDark).toBe('Catppuccin Mocha')
-  expect(savedSettings(dataDir).terminalThemeLight).toBe('Drovr Light')
+  expect(savedSettings(dataDir).terminalThemeLight).toBe('Bikube Light')
 })
 
 test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is kept across a restart", async () => {
-  const home = mkdtempSync(join(tmpdir(), 'drovr-ghostty-home-'))
+  const home = mkdtempSync(join(tmpdir(), 'bikube-ghostty-home-'))
   const config = join(home, '.config')
   mkdirSync(join(config, 'ghostty'), { recursive: true })
   writeFileSync(
@@ -303,13 +305,13 @@ test('copy on select puts a selection on the clipboard', async () => {
     .toContain('copy-me-please')
 })
 
-test('Claude Code status updates: new cards get DROVR_CLAUDE_STATUS 1, or 0 once turned off', async () => {
+test('Claude Code status updates: new cards get BIKUBE_CLAUDE_STATUS 1, or 0 once turned off', async () => {
   const launched = await launchApp()
   app = launched.app
   const { page, dataDir } = launched
   await workspaceWithCard(page, 'on')
   await page.getByTestId('card-view').getByTestId('terminal').click()
-  await page.keyboard.type('echo "status=$DROVR_CLAUDE_STATUS"')
+  await page.keyboard.type('echo "status=$BIKUBE_CLAUDE_STATUS"')
   await page.keyboard.press('Enter')
   await expect.poll(async () => (await openTerminal(page)).lines).toContain('status=1')
 
@@ -321,7 +323,7 @@ test('Claude Code status updates: new cards get DROVR_CLAUDE_STATUS 1, or 0 once
   await backToBoard(page)
   await newCard(page, 'off')
   await page.getByTestId('card-view').getByTestId('terminal').click()
-  await page.keyboard.type('echo "status=$DROVR_CLAUDE_STATUS"')
+  await page.keyboard.type('echo "status=$BIKUBE_CLAUDE_STATUS"')
   await page.keyboard.press('Enter')
   await expect.poll(async () => (await openTerminal(page)).lines).toContain('status=0')
 })

@@ -23,7 +23,7 @@ function DeleteWorktreeCardDialog({
   const [dirty, setDirty] = useState<boolean | null>(null)
   useEffect(() => {
     let live = true
-    void window.drovr.worktree.dirty(card.worktree.path).then((d) => {
+    void window.bikube.worktree.dirty(card.worktree.path).then((d) => {
       if (!live) return
       setDirty(d)
       setChecking(false)

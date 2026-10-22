@@ -75,7 +75,7 @@ const DEFAULT_FONT_LABEL =
   {
     darwin: 'Default (Menlo)',
     win32: 'Default (Consolas)'
-  }[window.drovr?.platform as string] ?? 'Default (monospace)'
+  }[window.bikube?.platform as string] ?? 'Default (monospace)'
 
 export const SHELL_NOT_ABSOLUTE = 'Enter an absolute path, e.g. /opt/homebrew/bin/fish'
 
@@ -207,7 +207,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           {section === 'agents' && <AgentsSection />}
           {section === 'shortcuts' && (
             <ShortcutsSection
-              keymap={resolveKeymap(settings.shortcuts, window.drovr.platform)}
+              keymap={resolveKeymap(settings.shortcuts, window.bikube.platform)}
               globalShortcut={settings.globalShortcut}
               openWaitingOnShow={settings.openWaitingOnShow}
             />
@@ -498,7 +498,7 @@ function AboutSection({ onCheck }: { onCheck: () => void }): React.JSX.Element {
   const [version, setVersion] = useState('')
   useEffect(() => {
     let live = true
-    void window.drovr.update.state().then(({ current }) => {
+    void window.bikube.update.state().then(({ current }) => {
       if (live) setVersion(current)
     })
     return () => {
@@ -516,13 +516,13 @@ function AboutSection({ onCheck }: { onCheck: () => void }): React.JSX.Element {
           data-testid="settings-check-updates"
           onClick={() => {
             onCheck()
-            window.drovr.update.check()
+            window.bikube.update.check()
           }}
         >
           Check for Updates
         </button>
         <p className="field-hint">
-          Drovr checks GitHub for a new version at launch and every few hours.
+          Bikube checks GitHub for a new version at launch and every few hours.
         </p>
       </div>
     </div>
@@ -668,7 +668,7 @@ function TerminalBehaviourRows(): React.JSX.Element {
         checked={settings.copyOnSelect}
         onChange={(copyOnSelect) => settingsStore.update({ copyOnSelect })}
       />
-      {window.drovr.platform === 'darwin' && (
+      {window.bikube.platform === 'darwin' && (
         <SwitchRow
           label="Option as Meta"
           hint="Option+B, Option+F and Alt shortcuts reach the shell instead of typing ∫ or ƒ."
@@ -804,7 +804,7 @@ function ShellField(): React.JSX.Element {
   const [invalid, setInvalid] = useState(false)
   useEffect(() => {
     let live = true
-    void window.drovr.settings.shells().then((c) => live && setChoices(c))
+    void window.bikube.settings.shells().then((c) => live && setChoices(c))
     return () => {
       live = false
     }
@@ -906,7 +906,7 @@ function useResolvedTheme(): ResolvedTheme {
 }
 
 /**
- * The Terminal section: where the colours come from, Drovr's built-in themes (one for the dark
+ * The Terminal section: where the colours come from, Bikube's built-in themes (one for the dark
  * app theme, one for the light, each picked in the theme picker) or the user's Ghostty config
  * (with what was read and Reload), then a preview of the terminal in the colours and font in
  * effect now.
@@ -1075,7 +1075,7 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
       setNotFound(false)
       return
     }
-    answer(window.drovr.sync.setFolder(next))
+    answer(window.bikube.sync.setFolder(next))
   }
 
   const statusText = syncStatusText(status)
@@ -1108,7 +1108,7 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
             type="button"
             className="btn"
             data-testid="settings-sync-choose"
-            onClick={() => answer(window.drovr.sync.pickFolder())}
+            onClick={() => answer(window.bikube.sync.pickFolder())}
           >
             Choose…
           </button>
@@ -1123,7 +1123,7 @@ function SyncFolderField({ id, errorId }: { id: string; errorId: string }): Reac
                 setText('')
                 setNotFound(false)
                 ++request.current
-                void window.drovr.sync.setFolder(null)
+                void window.bikube.sync.setFolder(null)
               }}
             >
               Turn off
@@ -1183,7 +1183,7 @@ function ShortcutsSection({
   globalShortcut?: string
   openWaitingOnShow: boolean
 }): React.JSX.Element {
-  const platform = window.drovr.platform
+  const platform = window.bikube.platform
   const defaults = defaultKeymap(platform)
   const id = useId()
   const [recording, setRecording] = useState<Recording | null>(null)
@@ -1194,7 +1194,7 @@ function ShortcutsSection({
   const shown = useRef(true)
 
   const readRegistration = (): void => {
-    void window.drovr.globalShortcut.state().then((state) => {
+    void window.bikube.globalShortcut.state().then((state) => {
       if (shown.current) setRegistration(state)
     })
   }
@@ -1217,11 +1217,11 @@ function ShortcutsSection({
   const anyRecording = recording !== null
   useEffect(() => {
     if (!anyRecording) return
-    window.drovr.globalShortcut.suspend(true)
+    window.bikube.globalShortcut.suspend(true)
     window.addEventListener('blur', stop)
     return () => {
       window.removeEventListener('blur', stop)
-      window.drovr.globalShortcut.suspend(false)
+      window.bikube.globalShortcut.suspend(false)
       readRegistration()
     }
   }, [anyRecording])
@@ -1293,7 +1293,7 @@ function ShortcutsSection({
         <legend>Global</legend>
         <div className="shortcut-row">
           <span id={`${id}-global`} className="shortcut-label">
-            Show or hide Drovr (from any app)
+            Show or hide Bikube (from any app)
           </span>
           <button
             {...fieldProps('global')}
@@ -1314,7 +1314,7 @@ function ShortcutsSection({
             type="button"
             className="btn btn-small shortcut-reset"
             data-testid="settings-shortcut-clear-global"
-            aria-label="Clear Show or hide Drovr"
+            aria-label="Clear Show or hide Bikube"
             disabled={globalShortcut === undefined}
             onClick={() => {
               if (globalRecording) stop()
@@ -1356,7 +1356,7 @@ function ShortcutsSection({
       </fieldset>
       {/* Named Shortcuts for assistive tech, as before the Global group (#31). */}
       <fieldset className="field shortcuts" data-testid="settings-shortcuts" aria-label="Shortcuts">
-        <legend>In Drovr</legend>
+        <legend>In Bikube</legend>
         {SHORTCUT_ACTIONS.map((action) => (
           <div key={action} className="shortcut-row">
             <span id={`${id}-${action}`} className="shortcut-label">

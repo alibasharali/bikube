@@ -489,14 +489,15 @@ function TriggerFailure({
   const [copied, setCopied] = useState(false)
   const output = useRef<HTMLPreElement>(null)
   const heading = failureHeading(status)
-  useTriggerFailureRequest(
-    shellId,
-    useCallback(() => setOpen(true), [])
-  )
+  // Each opening starts with Copy, not Copied.
+  const show = useCallback(() => {
+    setCopied(false)
+    setOpen(true)
+  }, [])
+  useTriggerFailureRequest(shellId, show)
   // The error is usually at the end.
   useEffect(() => {
     if (open && output.current) output.current.scrollTop = output.current.scrollHeight
-    if (!open) setCopied(false)
   }, [open])
   return (
     <div className="trigger-failure" data-testid="trigger-failure">
@@ -505,7 +506,7 @@ function TriggerFailure({
         className="trigger-failure-toggle"
         data-testid="trigger-failure-toggle"
         title="Show output"
-        onClick={() => setOpen(true)}
+        onClick={show}
       >
         <span className="trigger-failure-line" data-testid="trigger-failure-line">
           {status.line || heading}

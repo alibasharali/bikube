@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Apple's icon grid: an 824 px tile with transparent margins, so the Dock sizes it like other apps. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#17140F"/>
+  <g transform="translate(172 172) scale(3.4)">
+    <polygon points="100,20 169.28,60 100,100 30.72,60" fill="#FFD36E" stroke="#17140F" stroke-width="3" stroke-linejoin="round"/>
+    <polygon points="30.72,60 100,100 100,180 30.72,140" fill="#F5B82E" stroke="#17140F" stroke-width="3" stroke-linejoin="round"/>
+    <polygon points="100,100 169.28,60 169.28,140 100,180" fill="#C98A0F" stroke="#17140F" stroke-width="3" stroke-linejoin="round"/>
+    <polygon points="30.72,80 100,120 100,136 30.72,96" fill="#17140F"/>
+    <polygon points="30.72,110 100,150 100,166 30.72,126" fill="#17140F"/>
+    <polygon points="100,120 169.28,80 169.28,96 100,136" fill="#17140F"/>
+    <polygon points="100,150 169.28,110 169.28,126 100,166" fill="#17140F"/>
+    <g transform="matrix(0.6928,-0.4,0.6928,0.4,30.72,60)">
+      <polyline points="32,34 52,50 32,66" fill="none" stroke="#17140F" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="58" y1="68" x2="78" y2="68" stroke="#17140F" stroke-width="10" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

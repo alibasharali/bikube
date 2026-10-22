@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "format": "prettier --write .",
+    "icons": "electron scripts/render-icons.mjs",
     "lint": "eslint --cache --max-warnings 0 .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

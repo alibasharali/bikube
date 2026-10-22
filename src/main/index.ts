@@ -50,6 +50,9 @@ const hiddenForTests = !app.isPackaged && process.env['DROVR_E2E_HIDDEN'] === '1
  */
 const longCommandMs = app.isPackaged ? undefined : process.env['DROVR_LONG_COMMAND_MS']
 
+/** The app icon for the development build, which has no bundle of its own (Linux reads it per window). */
+const devIcon = join(app.getAppPath(), 'build', 'icon.png')
+
 function createWindow(settings: MainSettings): void {
   const mainWindow = new BrowserWindow({
     width: 1100,
@@ -58,6 +61,7 @@ function createWindow(settings: MainSettings): void {
     title: 'Drovr',
     // The resolved theme's background (#10 D2), so a light launch doesn't flash dark.
     backgroundColor: settings.backgroundColor(),
+    ...(!app.isPackaged && process.platform === 'linux' && { icon: devIcon }),
     // Off macOS the default menu bar stays hidden until Alt is pressed; its accelerators still
     // work (#14 D9). macOS keeps its app menu.
     autoHideMenuBar: process.platform !== 'darwin',
@@ -232,6 +236,8 @@ function startApp(): void {
     registerGlobalShortcut(settings, () => createWindow(settings))
     installAppMenu(() => updates.check())
     if (hiddenForTests) app.dock?.hide()
+    // Packaged apps carry the icon in their bundle; the development build shows Electron's otherwise.
+    else if (!app.isPackaged) app.dock?.setIcon(devIcon)
     createWindow(settings)
     updates.start()
     app.on('activate', () => {

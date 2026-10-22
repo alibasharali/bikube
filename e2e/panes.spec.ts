@@ -20,7 +20,7 @@ import { plainCards } from './plain-cards'
 // the card's directory; extra panes close from their own button or when their shell exits.
 
 /** The spec's workspace directory: `pwd` in a pane prints it. */
-const ALPHA = '/tmp/bikube-alpha'
+const ALPHA = '/tmp/bk-alpha'
 
 let app: ElectronApplication
 let page: Page
@@ -127,7 +127,7 @@ async function box(
   return b
 }
 
-/** Workspace `alpha` in /tmp/bikube-alpha with card `api` open, its shell ready. */
+/** Workspace `alpha` in /tmp/bk-alpha with card `api` open, its shell ready. */
 async function openApi(): Promise<void> {
   await createWorkspace(ALPHA, 'alpha')
   await newCard('In Progress', 'api')

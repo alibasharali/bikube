@@ -2,10 +2,10 @@ import { appendFileSync, chmodSync, existsSync, readFileSync, writeFileSync } fr
 import { join } from 'node:path'
 import { fakeClaudeHome, type FakeClaudeHome } from './fake-claude'
 
-// The fake `codex`, `gemini` and `opencode` of #21's smoke tests: each appends `<name> <args>` as
-// one line to the shared $BIKUBE_AGENT_LOG, prints `fake-<name> <args>`, and waits on stdin. With
-// FAKE_AGENT_RESUME_FAILS=1 a resume run (`codex resume …`, `gemini --resume …`,
-// `opencode --continue`) exits 1 at once.
+// The fake `codex`, `gemini` and `opencode` of #21's smoke tests and #65's `pi`: each appends
+// `<name> <args>` as one line to the shared $BIKUBE_AGENT_LOG, prints `fake-<name> <args>`, and
+// waits on stdin. With FAKE_AGENT_RESUME_FAILS=1 a resume run (`codex resume …`,
+// `gemini --resume …`, `opencode --continue`, `pi --continue`) exits 1 at once.
 function fakeAgent(name: string, resumeTest: string): string {
   return `#!/bin/bash
 echo "${name}\${*:+ $*}" >> "$BIKUBE_AGENT_LOG"
@@ -19,7 +19,8 @@ exit 0
 const FAKE_AGENTS: Record<string, string> = {
   codex: fakeAgent('codex', '[ "$1" = "resume" ]'),
   gemini: fakeAgent('gemini', '[ "$1" = "--resume" ]'),
-  opencode: fakeAgent('opencode', '[ "$1" = "--continue" ]')
+  opencode: fakeAgent('opencode', '[ "$1" = "--continue" ]'),
+  pi: fakeAgent('pi', '[ "$1" = "--continue" ]')
 }
 
 export interface FakeAgentsHome extends FakeClaudeHome {
@@ -28,7 +29,7 @@ export interface FakeAgentsHome extends FakeClaudeHome {
 }
 
 /**
- * Puts the fake `codex`, `gemini` and `opencode` in `<home>/bin` (on the login PATH of a home made
+ * Puts the fake `codex`, `gemini`, `opencode` and `pi` in `<home>/bin` (on the login PATH of a home made
  * by `fakeClaudeHome` or `fakeSshHome`), logging to `agentLog`. The .bash_profile exports the log
  * too, so a fake remote's cleared environment (#12's fake `ssh`) finds it.
  */

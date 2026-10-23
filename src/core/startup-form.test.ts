@@ -55,6 +55,7 @@ describe('agent presets in the field (#21 D4, D5)', () => {
       'Codex',
       'Gemini CLI',
       'OpenCode',
+      'Pi',
       'Custom…'
     ])
     for (const { choice } of STARTUP_CHOICES) expect(parseChoice(choice)).toBe(choice)
@@ -73,6 +74,7 @@ describe('agent presets in the field (#21 D4, D5)', () => {
     expect(presetHint('opencode')).toBe(
       "Resumes the latest OpenCode session in the card's directory."
     )
+    expect(presetHint('pi')).toBe("Resumes the latest Pi session in the card's directory.")
     for (const choice of ['shell', 'claude', 'custom'] as const)
       expect(presetHint(choice)).toBeNull()
   })

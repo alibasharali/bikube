@@ -22,13 +22,19 @@ export const AGENT_PRESETS = {
     plain: 'gemini',
     resume: 'gemini --resume latest'
   },
-  opencode: { label: 'OpenCode', tag: 'OpenCode', plain: 'opencode', resume: 'opencode --continue' }
+  opencode: {
+    label: 'OpenCode',
+    tag: 'OpenCode',
+    plain: 'opencode',
+    resume: 'opencode --continue'
+  },
+  pi: { label: 'Pi', tag: 'Pi', plain: 'pi', resume: 'pi --continue' }
 } as const satisfies Record<string, AgentPreset>
 
 export type AgentKind = keyof typeof AGENT_PRESETS
 
 /** The preset kinds in select order (#21 D5). */
-export const AGENT_KINDS: readonly AgentKind[] = ['codex', 'gemini', 'opencode']
+export const AGENT_KINDS: readonly AgentKind[] = ['codex', 'gemini', 'opencode', 'pi']
 
 export function isAgentKind(value: unknown): value is AgentKind {
   return typeof value === 'string' && (AGENT_KINDS as readonly string[]).includes(value)

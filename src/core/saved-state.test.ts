@@ -262,6 +262,8 @@ describe('agent presets in the saved state (#21 D6)', () => {
     ok(s.markAgentStarted(w.id, cx.id, 'codex'))
     ok(s.createCard(w.id, w.columns[0].id, 'gm', { kind: 'gemini' }))
     ok(s.createCard(w.id, w.columns[0].id, 'oc', { kind: 'opencode' }))
+    const pi = ok(s.createCard(w.id, w.columns[0].id, 'pi', { kind: 'pi' }))
+    ok(s.markAgentStarted(w.id, pi.id, 'pi'))
     return s.getState()
   }
 
@@ -280,9 +282,11 @@ describe('agent presets in the saved state (#21 D6)', () => {
     expect(presets.cards.map((c: { startup: unknown }) => c.startup)).toEqual([
       { kind: 'codex' },
       { kind: 'gemini' },
-      { kind: 'opencode' }
+      { kind: 'opencode' },
+      { kind: 'pi' }
     ])
     expect(presets.cards[0].startedAgents).toEqual(['codex'])
+    expect(presets.cards[3].startedAgents).toEqual(['pi'])
     expect(JSON.parse(text).state.workspaces[0].cards[0].startedAgents).toEqual([])
     expect(parseSavedState(text)).toEqual({ ok: true, value: state })
   })
@@ -305,6 +309,8 @@ describe('agent presets in the saved state (#21 D6)', () => {
       presetFileWith((s) => (s.workspaces[2].cards[0].startedAgents = ['codex', 'codex']))
     )
     expectRejected(presetFileWith((s) => (s.workspaces[2].cards[0].startup = { kind: 'amp' })))
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[3].startup = { kind: 'pie' })))
+    expectRejected(presetFileWith((s) => (s.workspaces[2].cards[3].startedAgents = ['pie'])))
   })
 })
 

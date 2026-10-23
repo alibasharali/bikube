@@ -39,7 +39,8 @@ describe('parseInstalled', () => {
       claude: 'claude',
       codex: 'codex',
       gemini: 'gemini',
-      opencode: 'opencode'
+      opencode: 'opencode',
+      pi: 'pi'
     })
   })
 })

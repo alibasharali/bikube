@@ -213,6 +213,25 @@ describe('reading the sync file (#13 D3, D5, D6)', () => {
     expect(parsed.workspaces.map((w) => w.cards[0].startedAgents)).toEqual([[], ['opencode']])
   })
 
+  it("reads a Pi card and an SSH card's started Pi (#65 AC8)", () => {
+    const text = fileWith((f) => {
+      const board = f.board as {
+        workspaces: { cards: { startup: unknown; startedAgents: string[] }[] }[]
+      }
+      board.workspaces[0].cards[0].startup = { kind: 'pi' }
+      board.workspaces[1].cards[0].startup = { kind: 'pi' }
+      board.workspaces[1].cards[0].startedAgents = ['pi']
+    })
+    const parsed = parseSyncFile(text, HOME)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.workspaces.map((w) => w.cards[0].startup)).toEqual([
+      { kind: 'pi' },
+      { kind: 'pi' }
+    ])
+    expect(parsed.workspaces.map((w) => w.cards[0].startedAgents)).toEqual([[], ['pi']])
+  })
+
   it('reads a file without startedAgents as empty (#21 D7)', () => {
     const text = fileWith((f) => {
       const board = f.board as { workspaces: { cards: Record<string, unknown>[] }[] }
@@ -245,6 +264,13 @@ describe('reading the sync file (#13 D3, D5, D6)', () => {
       fileWith((f) => {
         const board = f.board as { workspaces: { id: string }[] }
         board.workspaces[1].id = board.workspaces[0].id
+      })
+    ],
+    [
+      'a card with startup kind pie',
+      fileWith((f) => {
+        const board = f.board as { workspaces: { cards: { startup: unknown }[] }[] }
+        board.workspaces[0].cards[0].startup = { kind: 'pie' }
       })
     ],
     [

@@ -8,10 +8,10 @@ import { backToBoard, belowSeparator, expectCardOpen, expectStatusOnBoard } from
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// Agent resume presets (#21): Codex, Gemini CLI and OpenCode in every startup command select, the
-// plain command on a card's first start and `<resume> || <plain>` after, kept across a restart.
-// Electron runs with SHELL=/bin/bash and HOME set to a temp directory whose .bash_profile puts
-// fake `claude`, `codex`, `gemini` and `opencode` first on PATH (spec: AC intro).
+// Agent resume presets (#21, Pi #65): Codex, Gemini CLI, OpenCode and Pi in every startup command
+// select, the plain command on a card's first start and `<resume> || <plain>` after, kept across a
+// restart. Electron runs with SHELL=/bin/bash and HOME set to a temp directory whose .bash_profile
+// puts fake `claude`, `codex`, `gemini`, `opencode` and `pi` first on PATH (spec: AC intro).
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -22,7 +22,7 @@ let claudeLog: string
 let env: Record<string, string>
 let dataDir: string
 
-type Choice = 'Claude Code' | 'Codex' | 'Gemini CLI' | 'OpenCode' | 'Custom…'
+type Choice = 'Claude Code' | 'Codex' | 'Gemini CLI' | 'OpenCode' | 'Pi' | 'Custom…'
 
 const PRESETS = [
   { title: 'cx', label: 'Codex', tag: 'Codex', plain: 'codex', resume: 'codex resume --last' },
@@ -39,7 +39,8 @@ const PRESETS = [
     tag: 'OpenCode',
     plain: 'opencode',
     resume: 'opencode --continue'
-  }
+  },
+  { title: 'pi card', label: 'Pi', tag: 'Pi', plain: 'pi', resume: 'pi --continue' }
 ] as const
 
 function makeDir(name: string): string {
@@ -199,7 +200,7 @@ async function editWorkspace(index: number): Promise<void> {
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
 }
 
-/** Creates `cx`, `gm` and `oc` with the three presets in a new workspace `alpha` (AC1). */
+/** Creates `cx`, `gm`, `oc` and `pi card` with the four presets in a new workspace `alpha` (AC1). */
 async function presetCards(dir: string): Promise<void> {
   await createWorkspace(dir, 'alpha')
   for (const { title, label, plain } of PRESETS) {
@@ -219,6 +220,7 @@ test('AC1: the select lists the presets; their cards show tags and run the plain
     'Codex',
     'Gemini CLI',
     'OpenCode',
+    'Pi',
     'Custom…'
   ])
   await page.getByTestId('new-card-input').press('Escape')
@@ -233,7 +235,7 @@ test('AC1: the select lists the presets; their cards show tags and run the plain
     await expect(card(title).getByTestId('card-tag')).toHaveText(tag)
     await expect(card(title).getByTestId('card-tag')).toHaveAttribute('title', label)
   }
-  expect(logLines()).toEqual(['codex', 'gemini', 'opencode'])
+  expect(logLines()).toEqual(['codex', 'gemini', 'opencode', 'pi'])
   expect(claudeLogLines(claudeLog)).toEqual([])
 })
 
@@ -263,6 +265,13 @@ test('AC2/AC3: reopening a stopped preset card resumes, starting fresh when noth
   expect(lines.at(-1)).toBe('fake-codex')
   await back()
   await expect(card('cx').getByTestId('card-status-label')).toHaveText('Running')
+
+  // #65 AC2: Pi the same way.
+  await openCard('pi card')
+  await expect.poll(() => logLines().slice(-2)).toEqual(['pi --continue', 'pi'])
+  await expect.poll(bufferLines).toContain('fake-pi')
+  await back()
+  await expect(card('pi card').getByTestId('card-status-label')).toHaveText('Running')
 })
 
 test('AC4: switching a card away from a preset and back keeps it started', async () => {
@@ -423,7 +432,7 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
 })
 
 test('an agent whose CLI the login shell lacks is disabled in the selects, except for SSH', async () => {
-  // Only the fake `claude` on the login PATH: Codex, Gemini CLI and OpenCode aren't installed.
+  // Only the fake `claude` on the login PATH: Codex, Gemini CLI, OpenCode and Pi aren't installed.
   const claudeOnly = fakeClaudeHome(join(root, 'claude-only'))
   ;({ app, page } = await launchApp({ dataDir, env: claudeOnly.env }))
   await createWorkspace(makeDir('alpha'), 'alpha')
@@ -440,6 +449,7 @@ test('an agent whose CLI the login shell lacks is disabled in the selects, excep
     'Codex (not installed) [disabled]',
     'Gemini CLI (not installed) [disabled]',
     'OpenCode (not installed) [disabled]',
+    'Pi (not installed) [disabled]',
     'Custom…'
   ]
   await column('Backlog').getByTestId('new-card').click()
@@ -455,5 +465,44 @@ test('an agent whose CLI the login shell lacks is disabled in the selects, excep
   await page.getByTestId('workspace-location-ssh').check()
   await expect
     .poll(() => options(page.getByTestId('workspace-startup')))
-    .toEqual(['Claude Code', 'Codex', 'Gemini CLI', 'OpenCode', 'Custom…'])
+    .toEqual(['Claude Code', 'Codex', 'Gemini CLI', 'OpenCode', 'Pi', 'Custom…'])
+})
+
+test('#65 AC3: Pi shows its hint and, as the workspace default, presets new cards only', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('sh')
+  await back()
+
+  await editWorkspace(0)
+  await page.getByTestId('workspace-startup').selectOption({ label: 'Pi' })
+  await expect(page.getByTestId('workspace-startup-hint')).toHaveText(
+    "Resumes the latest Pi session in the card's directory."
+  )
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+  await column('Backlog').getByTestId('new-card').click()
+  await expect(selected(page.getByTestId('new-card-startup'))).toHaveText('Pi')
+  await page.getByTestId('new-card-input').press('Escape')
+  await expect(card('sh').getByTestId('card-tag')).toHaveText('Custom')
+})
+
+test('#65 AC4: a started Pi card continues after a restart and is saved with startedAgents', async () => {
+  await launch()
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('pi card', 'Pi')
+  await expect.poll(logLines).toEqual(['pi'])
+  await back()
+
+  await restart()
+
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+  const pi = saved.state.workspaces[0].cards.find((c: { title: string }) => c.title === 'pi card')
+  expect(pi.startup).toEqual({ kind: 'pi' })
+  expect(pi.startedAgents).toEqual(['pi'])
+  await expect(card('pi card').getByTestId('card-status-label')).toHaveText('Stopped')
+  await openCard('pi card')
+  await expect.poll(() => typed('pi --continue || pi')).toBe(true)
+  await expect.poll(logLines).toEqual(['pi', 'pi --continue'])
 })

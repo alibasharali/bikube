@@ -326,7 +326,7 @@ export interface GitApi {
 
 export interface AgentsApi {
   /**
-   * The agents whose CLI the user's login shell finds (`claude`, `codex`, `gemini`, `opencode`),
+   * The agents whose CLI the user's login shell finds (`claude`, `codex`, `gemini`, `opencode`, `pi`),
    * so the startup selects can show the others disabled; null when the check failed.
    */
   installed(): Promise<AgentChoice[] | null>

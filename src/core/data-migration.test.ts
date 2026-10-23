@@ -17,7 +17,8 @@ import {
   migrateDataDir,
   moveOrRefuse,
   oldDataDir,
-  rewritePaths
+  rewritePaths,
+  runsOldApp
 } from './data-migration'
 
 const git = (args: string[], cwd: string): string =>
@@ -44,8 +45,8 @@ afterEach(() => {
 })
 
 const migrate = (
-  isAlive: (pid: number) => boolean = () => false
-): ReturnType<typeof migrateDataDir> => migrateDataDir({ from, to, home, git, isAlive })
+  isOldApp: (host: string, pid: number) => boolean = () => false
+): ReturnType<typeof migrateDataDir> => migrateDataDir({ from, to, home, git, isOldApp })
 
 const writeJson = (path: string, value: unknown): void =>
   writeFileSync(path, JSON.stringify(value, null, 2))
@@ -88,7 +89,7 @@ describe('migrateDataDir', () => {
   it('leaves the folder while the old app still runs, and moves it after a crash', () => {
     mkdirSync(from)
     symlinkSync('my-host.local-4242', join(from, 'SingletonLock'))
-    expect(migrate((pid) => pid === 4242)).toBe('in use')
+    expect(migrate((host, pid) => host === 'my-host.local' && pid === 4242)).toBe('in use')
     expect(existsSync(from)).toBe(true)
     expect(existsSync(to)).toBe(false)
     expect(migrate(() => false)).toBe('moved')
@@ -199,7 +200,7 @@ describe('moveOrRefuse', () => {
     symlinkSync('my-host.local-4242', join(from, 'SingletonLock'))
     let running = true
     const run = (): ReturnType<typeof moveOrRefuse> =>
-      moveOrRefuse({ from, to, home, git, isAlive: () => running })
+      moveOrRefuse({ from, to, home, git, isOldApp: () => running })
 
     const refused = run()
     expect(refused.start).toBe(false)
@@ -220,7 +221,7 @@ describe('moveOrRefuse', () => {
       to: join(dir, 'not-a-folder', 'bikube'),
       home,
       git,
-      isAlive: () => false
+      isOldApp: () => false
     }
     writeFileSync(join(dir, 'not-a-folder'), '')
     const refused = moveOrRefuse(blocked)
@@ -228,10 +229,32 @@ describe('moveOrRefuse', () => {
     expect(refused.start === false && refused.message).toContain('couldn’t move')
     expect(existsSync(from)).toBe(true)
 
-    expect(moveOrRefuse({ from, to, home, git, isAlive: () => false })).toEqual({ start: true })
+    expect(moveOrRefuse({ from, to, home, git, isOldApp: () => false })).toEqual({ start: true })
   })
 
   it('starts when there is nothing to move', () => {
-    expect(moveOrRefuse({ from, to, home, git, isAlive: () => true })).toEqual({ start: true })
+    expect(moveOrRefuse({ from, to, home, git, isOldApp: () => true })).toEqual({ start: true })
+  })
+})
+
+describe('runsOldApp', () => {
+  it('is Drovr, packaged or the development build, on this machine', () => {
+    expect(runsOldApp('mac', 'mac', '/Applications/Drovr.app/Contents/MacOS/Drovr')).toBe(true)
+    expect(runsOldApp('box', 'box', 'drovr')).toBe(true)
+    expect(
+      runsOldApp('mac', 'mac', '/x/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron')
+    ).toBe(true)
+  })
+
+  it('is not a pid reused by another process, a dead pid or another machine’s lock', () => {
+    expect(runsOldApp('mac', 'mac', '/usr/sbin/cfprefsd')).toBe(false)
+    expect(runsOldApp('mac', 'mac', '')).toBe(false)
+    expect(runsOldApp('other', 'mac', 'Drovr')).toBe(false)
+  })
+
+  it('lets a stale lock whose pid now runs something else be moved', () => {
+    mkdirSync(from)
+    symlinkSync('mac-4242', join(from, 'SingletonLock'))
+    expect(migrate((host) => runsOldApp(host, 'mac', '/usr/sbin/cfprefsd'))).toBe('moved')
   })
 })

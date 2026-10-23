@@ -26,8 +26,8 @@ export interface DataMigration {
   home: string
   /** Runs `git <args>` in `cwd`; throws on failure. */
   git: (args: string[], cwd: string) => void
-  /** Whether a process with this pid runs (the old app still holding its folder). */
-  isAlive: (pid: number) => boolean
+  /** Whether the old app runs as `pid` on `host`, as the folder's `SingletonLock` names them. */
+  isOldApp: (host: string, pid: number) => boolean
 }
 
 export type MigrationResult = 'moved' | 'nothing' | 'in use'
@@ -43,7 +43,7 @@ export function oldDataDir(newDir: string): string | null {
 /** Moves `from` to `to` when only `from` exists and no running app holds it. */
 export function migrateDataDir(m: DataMigration): MigrationResult {
   if (existsSync(m.to) || !existsSync(m.from)) return 'nothing'
-  if (lockedByLiveApp(m.from, m.isAlive)) return 'in use'
+  if (lockedByOldApp(m.from, m.isOldApp)) return 'in use'
   renameSync(m.from, m.to)
 
   for (const name of readdirSync(m.to)) {
@@ -66,15 +66,27 @@ export function migrateDataDir(m: DataMigration): MigrationResult {
 }
 
 /** Chromium's `SingletonLock` is a symlink to `<host>-<pid>`; a crashed app leaves a stale one. */
-function lockedByLiveApp(dir: string, isAlive: (pid: number) => boolean): boolean {
+function lockedByOldApp(dir: string, isOldApp: (host: string, pid: number) => boolean): boolean {
   let target: string
   try {
     target = readlinkSync(join(dir, 'SingletonLock'))
   } catch {
     return false
   }
-  const pid = Number(target.slice(target.lastIndexOf('-') + 1))
-  return Number.isInteger(pid) && pid > 0 && isAlive(pid)
+  const at = target.lastIndexOf('-')
+  const pid = Number(target.slice(at + 1))
+  return Number.isInteger(pid) && pid > 0 && isOldApp(target.slice(0, at), pid)
+}
+
+/**
+ * Whether a lock's `host` and `pid` are a running Drovr: this machine, and the pid's command
+ * (`ps -o comm=`, `''` for none) Drovr's or Electron's. A pid reused by another process after a
+ * crash doesn't count, or the stale lock would block every launch.
+ */
+export function runsOldApp(host: string, hostName: string, command: string): boolean {
+  if (host !== hostName) return false
+  const name = command.slice(command.lastIndexOf('/') + 1).toLowerCase()
+  return name === OLD_NAME || name === 'electron'
 }
 
 /** The bundled terminal themes renamed with the app, as saved settings name them. */

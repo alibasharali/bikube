@@ -1,7 +1,7 @@
 import { app, dialog } from 'electron'
 import { execFileSync } from 'node:child_process'
-import { homedir } from 'node:os'
-import { moveOrRefuse, oldDataDir } from '../core/data-migration'
+import { homedir, hostname } from 'node:os'
+import { moveOrRefuse, oldDataDir, runsOldApp } from '../core/data-migration'
 
 /**
  * Moves Drovr's data folder to Bikube's at the first launch after the rename. Runs before the
@@ -20,18 +20,23 @@ export function moveOldData(): boolean {
     git: (args, cwd) => {
       execFileSync('git', args, { cwd, stdio: 'ignore', timeout: 10_000 })
     },
-    isAlive: (pid) => {
-      try {
-        process.kill(pid, 0)
-        return true
-      } catch (err) {
-        // EPERM: it runs, as another user.
-        return (err as NodeJS.ErrnoException).code === 'EPERM'
-      }
-    }
+    isOldApp: (host, pid) => runsOldApp(host, hostname(), commandOf(pid))
   })
   if (outcome.start) return true
   // Shown before ready on purpose: nothing may create the new folder first.
   dialog.showErrorBox('Bikube can’t start yet', outcome.message)
   return false
+}
+
+/** The command running as `pid` (`ps -o comm=`), `''` when none runs. */
+function commandOf(pid: number): string {
+  try {
+    return execFileSync('ps', ['-p', String(pid), '-o', 'comm='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5_000
+    }).trim()
+  } catch {
+    return ''
+  }
 }

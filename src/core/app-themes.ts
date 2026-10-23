@@ -382,8 +382,8 @@ const NORD: AppTheme = {
     card: '#434c5e',
     'card-hover': '#4c566a',
     chip: '#4c566a',
-    border: '#4c566a',
-    'border-strong': '#616e88',
+    border: '#434c5e', // nord2
+    'border-strong': '#4c566a', // nord3
     text: '#eceff4', // nord6
     'text-muted': '#d8dee9', // nord4
     accent: '#88c0d0', // nord8
@@ -415,8 +415,8 @@ const NORD: AppTheme = {
     card: '#eceff4',
     'card-hover': '#eceff4',
     chip: '#d8dee9',
-    border: '#d8dee9',
-    'border-strong': '#c2cad8',
+    border: '#e5e9f0', // nord5
+    'border-strong': '#d8dee9', // nord4
     text: '#2e3440', // nord0
     'text-muted': '#4c566a', // nord3
     accent: '#4d6e96', // nord10, darker for D5

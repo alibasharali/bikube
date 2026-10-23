@@ -22,10 +22,16 @@ function declarations(block: string): Record<string, string> {
 }
 
 /** The app stylesheet's dark `:root` block and the light one under `prefers-color-scheme`. */
+/** The app stylesheet without its comments, which may hold braces and colons. */
+function stylesheet(): string {
+  return readFileSync(new URL('../renderer/src/assets/main.css', import.meta.url), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    ''
+  )
+}
+
 function stylesheetBlocks(): { dark: Record<string, string>; light: Record<string, string> } {
-  const css = readFileSync(new URL('../renderer/src/assets/main.css', import.meta.url), 'utf8')
-    // Comments may hold braces and colons.
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+  const css = stylesheet()
   const dark = /^:root\s*\{([^}]*)\}/m.exec(css)
   const light = /@media \(prefers-color-scheme: light\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)
   if (!dark || !light) throw new Error('main.css has no dark or light :root block')
@@ -61,6 +67,25 @@ describe('the app themes table (#64 D2, D3, AC1)', () => {
       )
       expect(appThemeTokens('default', version)).toEqual(expected)
     }
+  })
+
+  it('leaves the agent and running colours to the tokens, so a theme reaches them', () => {
+    const css = stylesheet()
+    const kinds = ['claude', 'codex', 'gemini', 'opencode', 'custom']
+    for (const kind of kinds) {
+      const rule = new RegExp(
+        `\\[data-kind='${kind}'\\]\\s*\\{\\s*--kind:\\s*var\\(--kind-${kind}\\);\\s*\\}`,
+        'g'
+      )
+      expect(css.match(rule), kind).toHaveLength(1)
+    }
+    // No other `--kind:` declaration than those five.
+    expect(css.match(/--kind:/g)).toHaveLength(kinds.length)
+    // The running green only as the dark block's token: nowhere outside the two :root blocks.
+    const outside = css
+      .replace(/^:root\s*\{[^}]*\}/m, '')
+      .replace(/@media \(prefers-color-scheme: light\)\s*\{\s*:root\s*\{[^}]*\}\s*\}/, '')
+    expect(outside).not.toMatch(/#3fb950/i)
   })
 
   it('gives Bikube dark its #17140F background and #F5B82E accent, Default light #1a7f37 running', () => {

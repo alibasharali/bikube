@@ -2,7 +2,7 @@
 item: 64
 type: feature
 title: App Themes
-status: draft
+status: approved
 branch: claude/64-app-themes
 ---
 

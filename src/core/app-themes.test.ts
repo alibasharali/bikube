@@ -21,7 +21,6 @@ function declarations(block: string): Record<string, string> {
   return out
 }
 
-/** The app stylesheet's dark `:root` block and the light one under `prefers-color-scheme`. */
 /** The app stylesheet without its comments, which may hold braces and colons. */
 function stylesheet(): string {
   return readFileSync(new URL('../renderer/src/assets/main.css', import.meta.url), 'utf8').replace(
@@ -30,6 +29,7 @@ function stylesheet(): string {
   )
 }
 
+/** The app stylesheet's dark `:root` block and the light one under `prefers-color-scheme`. */
 function stylesheetBlocks(): { dark: Record<string, string>; light: Record<string, string> } {
   const css = stylesheet()
   const dark = /^:root\s*\{([^}]*)\}/m.exec(css)

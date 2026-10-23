@@ -292,7 +292,7 @@ const CATPPUCCIN: AppTheme = {
     accent: '#8839ef', // mauve
     'accent-text': '#eff1f5',
     'accent-soft': 'rgba(136, 57, 239, 0.1)',
-    'danger-text': '#ffffff', // white for D5
+    'danger-text': '#eff1f5', // base
     backdrop: 'rgba(76, 79, 105, 0.35)',
     'pill-working-bg': 'rgba(30, 102, 245, 0.12)',
     'pill-working-text': '#0a55ea', // blue, darker for D5
@@ -394,7 +394,7 @@ const NORD: AppTheme = {
     accent: '#88c0d0', // nord8
     'accent-text': '#2e3440',
     'accent-soft': 'rgba(136, 192, 208, 0.16)',
-    'danger-text': '#15181e', // nord0, darker for D5
+    'danger-text': '#2e3440', // nord0
     backdrop: 'rgba(0, 0, 0, 0.5)',
     'pill-working-bg': 'rgba(136, 192, 208, 0.14)',
     'pill-working-text': '#b6d8e2', // nord8, lighter for D5
@@ -429,7 +429,7 @@ const NORD: AppTheme = {
     accent: '#4d6e96', // nord10, darker for D5
     'accent-text': '#eceff4',
     'accent-soft': 'rgba(94, 129, 172, 0.12)',
-    'danger-text': '#ffffff', // white for D5
+    'danger-text': '#eceff4', // nord6
     backdrop: 'rgba(46, 52, 64, 0.35)',
     'pill-working-bg': 'rgba(94, 129, 172, 0.14)',
     'pill-working-text': '#476489', // nord10, darker for D5
@@ -465,7 +465,7 @@ const GRUVBOX: AppTheme = {
     accent: '#fe8019', // orange
     'accent-text': '#282828',
     'accent-soft': 'rgba(254, 128, 25, 0.16)',
-    'danger-text': '#17191a', // bg0_h, darker for D5
+    'danger-text': '#1d2021', // bg0_h
     backdrop: 'rgba(0, 0, 0, 0.55)',
     'pill-working-bg': 'rgba(131, 165, 152, 0.12)',
     'pill-working-text': '#9eb8ae', // blue, lighter for D5
@@ -495,7 +495,7 @@ const GRUVBOX: AppTheme = {
     accent: '#af3a03', // faded orange
     'accent-text': '#fbf1c7',
     'accent-soft': 'rgba(175, 58, 3, 0.1)',
-    'danger-text': '#ffffff', // white for D5
+    'danger-text': '#fbf1c7', // bg0
     backdrop: 'rgba(40, 40, 40, 0.35)',
     'pill-working-bg': 'rgba(7, 102, 120, 0.12)',
     'pill-working-text': '#076678', // faded blue

@@ -1149,6 +1149,8 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
   const tabs = dialog(page).getByRole('tab')
   for (let i = 0; i < (await tabs.count()); i++) {
     expect(await tabs.nth(i).getAttribute('title')).toBe(await tabs.nth(i).textContent())
+    const label = await tabs.nth(i).locator('.settings-tab-label').boundingBox()
+    expect(label!.width).toBeLessThanOrEqual(1)
   }
 
   // Every other section stacks too, with nothing scrolling sideways.
@@ -1177,4 +1179,6 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
   await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1000)
   await dialog(page).getByTestId('settings-section-appearance').click()
   for (const { label, layout } of await rowLayouts(page)) expect(layout, label).toBe('beside')
+  const wideLabel = await tabs.first().locator('.settings-tab-label').boundingBox()
+  expect(wideLabel!.width).toBeGreaterThan(20)
 })

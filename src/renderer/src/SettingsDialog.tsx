@@ -186,6 +186,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
               aria-selected={section === key}
               aria-controls={panelId}
               tabIndex={section === key ? 0 : -1}
+              title={label}
               onClick={() => setSection(key)}
             >
               <Icon {...ICON} />

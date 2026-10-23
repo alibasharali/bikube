@@ -2584,7 +2584,7 @@ button.dev-server-chip:focus-visible {
 
 /*
  * A narrow dialog (#64 D8): the sections as an icon rail (each tab keeps its name for screen
- * readers, and the panel's title names the shown one), and every row its label above a control
+ * readers and as its tooltip, and the panel's title names the shown one), and every row its label above a control
  * that takes the full width, so no control is squeezed beside a label.
  */
 @container (max-width: 559.98px) {
@@ -2599,7 +2599,7 @@ button.dev-server-chip:focus-visible {
   .settings-tab {
     position: relative;
     justify-content: center;
-    padding: 8px;
+    padding: var(--space-2);
   }
 
   /* As .visually-hidden. */

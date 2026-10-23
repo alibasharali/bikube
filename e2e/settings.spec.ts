@@ -1145,8 +1145,13 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
   expect(theme!.width).toBeGreaterThanOrEqual(200)
   expect(await scrollsSideways(page)).toBe(false)
 
-  // Every other section stacks too, with nothing scrolling sideways.
+  // The sections are an icon rail, each tab's name its tooltip.
   const tabs = dialog(page).getByRole('tab')
+  for (let i = 0; i < (await tabs.count()); i++) {
+    expect(await tabs.nth(i).getAttribute('title')).toBe(await tabs.nth(i).textContent())
+  }
+
+  // Every other section stacks too, with nothing scrolling sideways.
   for (let i = 1; i < (await tabs.count()); i++) {
     await tabs.nth(i).click()
     const name = await tabs.nth(i).getAttribute('data-section')

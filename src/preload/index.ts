@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { parseAppThemeArg } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import { LONG_COMMAND_MS, parseLongCommandMs } from '../core/long-commands'
 import { parseHostName } from '../core/shell-marks'
+import { hasTestHooks } from '../core/test-hooks'
 import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import type { SyncStatus } from '../core/sync-status'
 import type { UpdateState } from '../core/updates'
@@ -13,6 +15,8 @@ const api: BikubeApi = {
   // Main passes a shortened threshold only in the development build (#45 D7).
   longCommandMs: parseLongCommandMs(process.argv) ?? LONG_COMMAND_MS,
   hostName: parseHostName(process.argv),
+  appTheme: parseAppThemeArg(process.argv),
+  testHooks: hasTestHooks(process.argv),
   clipboard: {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
     write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text),

@@ -10,6 +10,7 @@ import {
   splitRight,
   zoomPane
 } from './card-view'
+import { bodyBackground, setAppTheme } from './app-theme'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -938,4 +939,81 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   await expect(dialog(page)).toHaveCount(0)
   await page.keyboard.press(darwin ? 'Meta+Shift+A' : 'Control+Shift+A')
   await expect.poll(() => clipboardWrites(app!)).toEqual(['copied', 'copied'])
+})
+
+const accent = (page: Page): Promise<string> =>
+  page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  )
+
+test('#64 AC3: with no app theme the board keeps Default, dark and light', async () => {
+  const dataDir = newDataDir()
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+  )
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  await followNativeTheme(page)
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(20, 21, 26)')
+  expect(await accent(page)).toBe('#6d8dfa')
+
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByRole('radio', { name: 'Light' }).check()
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(246, 247, 249)')
+  expect(await accent(page)).toBe('#3d63dd')
+})
+
+test('#64 AC5: a saved Bikube theme is the window background and the first paint', async () => {
+  const dataDir = newDataDir()
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","appTheme":"bikube","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+  )
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  const background = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]!.getBackgroundColor()
+  )
+  expect(background.toLowerCase()).toBe('#17140f')
+  // The theme was in place before the page's first paint, so no paint showed Default.
+  const timing = await page.evaluate(() => ({
+    applied: performance.getEntriesByName('bikube:app-theme')[0]?.startTime ?? null,
+    painted: performance.getEntriesByName('first-paint')[0]?.startTime ?? null
+  }))
+  expect(timing.applied).not.toBeNull()
+  expect(timing.painted).not.toBeNull()
+  expect(timing.applied!).toBeLessThanOrEqual(timing.painted!)
+  await followNativeTheme(page)
+  expect(await bodyBackground(page)).toBe('rgb(23, 20, 15)')
+})
+
+test('#64 AC7: changing the app theme leaves the running terminal theme and pane background', async () => {
+  const dataDir = newDataDir()
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Dracula","useGhosttyTheme":false}}'
+  )
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  await followNativeTheme(page)
+  await alphaWithApi(page)
+  const terminalTheme = (): Promise<string> =>
+    page.evaluate(() => {
+      const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+        (HTMLElement & { __xterm?: { options: { theme: unknown } } }) | null
+      return JSON.stringify(host?.__xterm?.options.theme ?? null)
+    })
+  await expect.poll(() => openLook(page)).toMatchObject({ background: '#282a36' })
+  const before = { theme: await terminalTheme(), pane: await terminalBackground(page) }
+  expect(before.pane).toBe('rgb(40, 42, 54)')
+
+  await setAppTheme(page, 'gruvbox')
+  // Gruvbox light's bg0.
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(251, 241, 199)')
+  expect({ theme: await terminalTheme(), pane: await terminalBackground(page) }).toEqual(before)
+  await expectStatusOnBoard(page, 'api', 'Running')
 })

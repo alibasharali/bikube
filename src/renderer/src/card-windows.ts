@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import { cardWindowName } from '../../core/card-window-name'
 import { findShellCard } from '../../core/workspace-shells'
+import { APP_THEME_ATTR, themeDocument } from './app-theme'
 import { startCard } from './card-actions'
 import CardWindow from './CardWindow'
 import { workspaceStore } from './store'
@@ -14,6 +15,8 @@ interface OpenWindow {
   workspaceId: string
   view: Window
   root: Root | null
+  /** Stops its document following the App theme (#64 D7). */
+  unthemed: () => void
 }
 
 /** The card windows by card id, runtime only (D9). */
@@ -69,6 +72,7 @@ export function closeCardWindow(cardId: string): void {
   if (!open) return
   windows.delete(cardId)
   removeCardWindow(cardId)
+  open.unthemed()
   changed()
   // After the current task's React work: this may run from the view's own effects (Back, a stop).
   queueMicrotask(() => {
@@ -113,7 +117,8 @@ export function openCardWindow(workspaceId: string, cardId: string): void {
   if (!cardExists(workspaceId, cardId)) return
   const view = window.open('about:blank', cardWindowName(cardId))
   if (!view) return
-  const open: OpenWindow = { workspaceId, view, root: null }
+  // The App theme before its stylesheets, so it never shows another (#64 D7).
+  const open: OpenWindow = { workspaceId, view, root: null, unthemed: themeDocument(view.document) }
   windows.set(cardId, open)
   // Its focus counts as the app's: notifications, long commands, refreshes (D10).
   addCardWindow(cardId, view)
@@ -155,7 +160,9 @@ export function openCardWindow(workspaceId: string, cardId: string): void {
 function copyStylesheets(view: Window): Promise<unknown> {
   const head = view.document.head
   const loads: Promise<void>[] = []
-  for (const node of document.head.querySelectorAll('style, link[rel="stylesheet"]')) {
+  // The App theme's own style is kept by `themeDocument`, live.
+  const selector = `style:not([${APP_THEME_ATTR}]), link[rel="stylesheet"]`
+  for (const node of document.head.querySelectorAll(selector)) {
     if (node instanceof HTMLLinkElement) {
       const link = view.document.createElement('link')
       link.rel = 'stylesheet'

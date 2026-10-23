@@ -1,3 +1,4 @@
+import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
@@ -430,6 +431,13 @@ export interface BikubeApi {
   longCommandMs: number
   /** This machine's host name (`os.hostname()`), for OSC 7's host (#45 D8); empty if unknown. */
   hostName: string
+  /**
+   * The App theme when the window was created (#64 D7), so the page applies it before its first
+   * paint; the settings hold the current one.
+   */
+  appTheme: AppThemeId
+  /** Whether the page exposes the smoke tests' hooks: the development build only. */
+  testHooks: boolean
   terminal: TerminalApi
   clipboard: ClipboardApi
   link: LinkApi

@@ -4,7 +4,10 @@ import {
   APP_THEME_IDS,
   APP_THEME_TOKENS,
   APP_THEMES,
+  appThemeArg,
+  appThemeStylesheet,
   appThemeTokens,
+  parseAppThemeArg,
   windowBackground,
   type AppThemeTokens
 } from './app-themes'
@@ -156,5 +159,29 @@ describe('windowBackground (#64 D7, AC5)', () => {
     expect(windowBackground('default', 'dark')).toBe('#14151a')
     expect(windowBackground('default', 'light')).toBe('#f6f7f9')
     expect(windowBackground('catppuccin', 'light')).toBe('#eff1f5')
+  })
+})
+
+describe('appThemeStylesheet (#64 D7)', () => {
+  it("sets the dark version on :root and the light one under a light colour scheme, over main.css's :root", () => {
+    const css = appThemeStylesheet('nord')
+    const [dark, light] = css.split('@media (prefers-color-scheme: light)')
+    expect(dark).toMatch(/^:root:root \{/)
+    expect(declarations(dark)).toEqual(appThemeTokens('nord', 'dark'))
+    expect(light).toMatch(/^ \{ :root:root \{/)
+    expect(declarations(light)).toEqual(appThemeTokens('nord', 'light'))
+  })
+})
+
+describe('the app theme launch argument (#64 D7)', () => {
+  it('round-trips every theme id', () => {
+    for (const id of APP_THEME_IDS) {
+      expect(parseAppThemeArg(['electron', appThemeArg(id)])).toBe(id)
+    }
+  })
+
+  it('reads Default with none or an unknown one', () => {
+    expect(parseAppThemeArg(['electron'])).toBe('default')
+    expect(parseAppThemeArg([appThemeArg('nord').replace('nord', 'solarized')])).toBe('default')
   })
 })

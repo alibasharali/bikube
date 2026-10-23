@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setAppTheme } from './app-theme'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
@@ -995,4 +996,49 @@ test('D4: a file or link dropped on the card window opens nothing', async () => 
   expect(window.url()).toBe('about:blank')
   await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
   await expect(window.getByTestId('terminal')).toBeVisible()
+})
+
+test('#64 AC6: an app theme picked in the main window recolours a card window at once, its terminal untouched', async () => {
+  await newCard('Agent A')
+  await backToBoard(page)
+  const window = await openInWindow('Agent A')
+  const look = (on: Page): Promise<{ bar: string; theme: string; pane: string }> =>
+    on.evaluate(() => {
+      const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+        (HTMLElement & { __xterm?: { options: { theme: unknown } } }) | null
+      const pane = host?.querySelector('.xterm-scrollable-element')
+      return {
+        bar: getComputedStyle(document.querySelector('.card-window-bar')!).backgroundColor,
+        theme: JSON.stringify(host?.__xterm?.options.theme ?? null),
+        pane: pane ? getComputedStyle(pane).backgroundColor : ''
+      }
+    })
+  // Default light's surface (xvfb's appearance is light).
+  await expect.poll(async () => (await look(window)).bar).toBe('rgb(255, 255, 255)')
+  const before = await look(window)
+
+  await setAppTheme(page, 'nord')
+  // Nord light's surface, nord5.
+  await expect.poll(async () => (await look(window)).bar).toBe('rgb(229, 233, 240)')
+  const after = await look(window)
+  expect({ theme: after.theme, pane: after.pane }).toEqual({
+    theme: before.theme,
+    pane: before.pane
+  })
+  await run(window, 'echo still-$((60+4))')
+  await expect.poll(() => bufferLines(window)).toContain('still-64')
+
+  // A card window opened now is created with Nord's background.
+  await newCard('Agent B')
+  await backToBoard(page)
+  const second = await openInWindow('Agent B')
+  const [dark, created] = await app.evaluate(({ BrowserWindow, nativeTheme }) => [
+    nativeTheme.shouldUseDarkColors,
+    BrowserWindow.getAllWindows()
+      .filter((w) => w.getTitle().startsWith('Agent B'))
+      .map((w) => w.getBackgroundColor().toLowerCase())
+  ])
+  // Nord's nord0 dark, nord6 light.
+  expect(created).toEqual([dark ? '#2e3440' : '#eceff4'])
+  await expect.poll(async () => (await look(second)).bar).toBe('rgb(229, 233, 240)')
 })

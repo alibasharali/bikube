@@ -11,7 +11,7 @@ import {
 import { access, readFile, realpath } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { homedir } from 'node:os'
-import { windowBackground } from '../core/app-themes'
+import { windowBackground, type AppThemeId } from '../core/app-themes'
 import { readGhosttyTheme } from '../core/ghostty-config'
 import { SessionManager } from '../core/session-manager'
 import { SettingsFile } from '../core/settings-file'
@@ -27,6 +27,8 @@ export interface MainSettings {
    * doesn't flash another colour.
    */
   backgroundColor(): string
+  /** The App theme setting (#64 D1), which the window's page applies before its first paint. */
+  appTheme(): AppThemeId
   flush(): void
   /** The Shell setting: an absolute path, or '' for the login shell. */
   shell(): string
@@ -139,6 +141,7 @@ export function registerSettings(): MainSettings {
       return { editor, editorCommand, shell }
     },
     applyTheme: () => applyTheme(file.load()),
+    appTheme: () => file.load().appTheme,
     backgroundColor: () =>
       windowBackground(file.load().appTheme, nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
     flush: () => file.flush(),

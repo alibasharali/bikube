@@ -535,3 +535,28 @@ export function windowBackground(id: AppThemeId, version: ResolvedTheme): string
 export function appThemeDeclarations(tokens: AppThemeTokens): string {
   return APP_THEME_TOKENS.map((token) => `--${token}: ${tokens[token]};`).join(' ')
 }
+
+/**
+ * The rule the renderer puts in each window's document (D7): `id`'s dark version on `:root`, its
+ * light version under a light colour scheme, so the Theme setting (System / Dark / Light, through
+ * the native theme) keeps picking the version. `:root:root` outranks the app stylesheet's `:root`
+ * wherever the rule sits in the document.
+ */
+export function appThemeStylesheet(id: AppThemeId): string {
+  const theme = appTheme(id)
+  return (
+    `:root:root { ${appThemeDeclarations(theme.dark)} }\n` +
+    `@media (prefers-color-scheme: light) { :root:root { ${appThemeDeclarations(theme.light)} } }`
+  )
+}
+
+const ARG = '--bikube-app-theme='
+
+/** The argument main gives the window's renderer with the picked theme, read before first paint. */
+export const appThemeArg = (id: AppThemeId): string => `${ARG}${id}`
+
+/** The theme in `argv`; Default with none or an unknown one. */
+export function parseAppThemeArg(argv: readonly string[]): AppThemeId {
+  const value = argv.find((a) => a.startsWith(ARG))?.slice(ARG.length)
+  return isAppThemeId(value) ? value : DEFAULT_APP_THEME
+}

@@ -32,6 +32,20 @@
   --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.45);
   --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.55);
+  /* A running terminal's dot and a trigger's done mark (#64 D3). */
+  --running: #3fb950;
+  /* A switch's knob. */
+  --switch-knob: #ffffff;
+  /*
+   * Each startup command's colour, set as `--kind` per [data-kind]: the agent's own brand colour
+   * where it has one (Claude's orange, OpenAI's green, Google's blue), a darker shade on the light
+   * theme. Shell cards have none.
+   */
+  --kind-claude: #d97757;
+  --kind-codex: #10a37f;
+  --kind-gemini: #4e8cf7;
+  --kind-opencode: #a78bfa;
+  --kind-custom: #94a3b8;
   color-scheme: dark;
 
   /* The D17 scales (#31): spacing, radius and type, the same in both themes. */
@@ -89,6 +103,13 @@
     --shadow-card-hover: 0 2px 4px rgba(16, 24, 40, 0.08), 0 4px 12px rgba(16, 24, 40, 0.1);
     --shadow-menu: 0 8px 24px rgba(16, 24, 40, 0.14);
     --shadow-dialog: 0 16px 48px rgba(16, 24, 40, 0.18);
+    --running: #1a7f37;
+    --switch-knob: #ffffff;
+    --kind-claude: #c15f3c;
+    --kind-codex: #0b7a5f;
+    --kind-gemini: #1a65d6;
+    --kind-opencode: #7c3aed;
+    --kind-custom: #5b6678;
     color-scheme: light;
   }
 }
@@ -538,8 +559,8 @@ button {
   height: 7px;
   margin: 0 3.5px;
   border-radius: 50%;
-  background: #3fb950;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
+  background: var(--running);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 22%, transparent);
 }
 
 .status-icon-working {
@@ -2286,42 +2307,21 @@ button.dev-server-chip:focus-visible {
   color: var(--text-muted);
 }
 
-/*
- * Each startup command's colour: the agent's own brand colour where it has one (Claude's orange,
- * OpenAI's green, Google's blue), a darker shade on the light theme. Shell cards have none.
- */
+/* Each startup command's colour (the `--kind-*` tokens on :root). Shell cards have none. */
 [data-kind='claude'] {
-  --kind: #d97757;
+  --kind: var(--kind-claude);
 }
 [data-kind='codex'] {
-  --kind: #10a37f;
+  --kind: var(--kind-codex);
 }
 [data-kind='gemini'] {
-  --kind: #4e8cf7;
+  --kind: var(--kind-gemini);
 }
 [data-kind='opencode'] {
-  --kind: #a78bfa;
+  --kind: var(--kind-opencode);
 }
 [data-kind='custom'] {
-  --kind: #94a3b8;
-}
-
-@media (prefers-color-scheme: light) {
-  [data-kind='claude'] {
-    --kind: #c15f3c;
-  }
-  [data-kind='codex'] {
-    --kind: #0b7a5f;
-  }
-  [data-kind='gemini'] {
-    --kind: #1a65d6;
-  }
-  [data-kind='opencode'] {
-    --kind: #7c3aed;
-  }
-  [data-kind='custom'] {
-    --kind: #5b6678;
-  }
+  --kind: var(--kind-custom);
 }
 
 .card-tag[data-kind] {
@@ -3004,7 +3004,7 @@ button.dev-server-chip:focus-visible {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--switch-knob);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   transition: transform var(--transition);
 }
@@ -3375,8 +3375,8 @@ button.dev-server-chip:focus-visible {
 }
 
 .shell-row[data-running='true'] .shell-dot {
-  background: #3fb950;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #3fb950 22%, transparent);
+  background: var(--running);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 22%, transparent);
 }
 
 .shell-name {
@@ -3420,7 +3420,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .trigger-status[data-status='done'] {
-  color: #3fb950;
+  color: var(--running);
 }
 
 .trigger-status[data-status='failed'] {

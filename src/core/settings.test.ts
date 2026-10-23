@@ -718,3 +718,33 @@ describe('the Open the next waiting card preference (#51 D9, AC8)', () => {
     expect(validateSettings({ ...base, openWaitingOnShow: 'no' }, 'linux')).toBeNull()
   })
 })
+
+describe('the App theme preference (#64 D10, AC2)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('reads Default when missing, and a known theme as itself', () => {
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.appTheme).toBe('default')
+    expect(parseSettingsFile(file({ ...base, appTheme: 'nord' }), 'linux').settings.appTheme).toBe(
+      'nord'
+    )
+  })
+
+  it('reads an unknown or invalid value as Default, and refuses it in a save', () => {
+    for (const value of ['solarized', 42]) {
+      const parsed = parseSettingsFile(file({ ...base, appTheme: value }), 'linux')
+      expect(parsed.settings.appTheme).toBe('default')
+      expect(parsed.replaced).toEqual(['appTheme'])
+      expect(validateSettings({ ...base, appTheme: value }, 'linux')).toBeNull()
+    }
+  })
+
+  it('writes no key for Default and the id for another theme', () => {
+    expect(
+      JSON.parse(serializeSettings({ ...base, appTheme: 'default' })).settings
+    ).not.toHaveProperty('appTheme')
+    const text = serializeSettings({ ...base, appTheme: 'gruvbox' })
+    expect(JSON.parse(text).settings.appTheme).toBe('gruvbox')
+    expect(parseSettingsFile(text, 'linux').settings.appTheme).toBe('gruvbox')
+  })
+})

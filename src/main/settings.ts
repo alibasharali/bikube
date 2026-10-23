@@ -11,17 +11,21 @@ import {
 import { access, readFile, realpath } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { homedir } from 'node:os'
+import { windowBackground } from '../core/app-themes'
 import { readGhosttyTheme } from '../core/ghostty-config'
 import { SessionManager } from '../core/session-manager'
 import { SettingsFile } from '../core/settings-file'
 import { shellCandidates } from '../core/shells'
-import { THEME_BACKGROUNDS, type Settings } from '../core/settings'
+import { type Settings } from '../core/settings'
 import { IPC, type ShellChoices } from '../shared/api'
 
 export interface MainSettings {
   /** Sets `nativeTheme.themeSource` from the loaded settings; call once the app is ready. */
   applyTheme(): void
-  /** The window background of the resolved theme (#10 D2), so a light launch doesn't flash dark. */
+  /**
+   * The window background of the app theme's resolved version (#10 D2, #64 D7), so a launch
+   * doesn't flash another colour.
+   */
   backgroundColor(): string
   flush(): void
   /** The Shell setting: an absolute path, or '' for the login shell. */
@@ -135,7 +139,8 @@ export function registerSettings(): MainSettings {
       return { editor, editorCommand, shell }
     },
     applyTheme: () => applyTheme(file.load()),
-    backgroundColor: () => THEME_BACKGROUNDS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'],
+    backgroundColor: () =>
+      windowBackground(file.load().appTheme, nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
     flush: () => file.flush(),
     syncFolder: () => file.syncFolder(),
     setSyncFolder: (folder) => file.setSyncFolder(folder)

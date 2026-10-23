@@ -1,0 +1,135 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import {
+  APP_THEME_IDS,
+  APP_THEME_TOKENS,
+  APP_THEMES,
+  appThemeTokens,
+  windowBackground,
+  type AppThemeTokens
+} from './app-themes'
+import { contrastRatio, composite } from './contrast'
+
+const VERSIONS = ['dark', 'light'] as const
+
+/** The custom properties of a `:root { … }` block, by name without the leading `--`. */
+function declarations(block: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const match of block.matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
+    out[match[1]] = match[2].trim().replace(/\s+/g, ' ')
+  }
+  return out
+}
+
+/** The app stylesheet's dark `:root` block and the light one under `prefers-color-scheme`. */
+function stylesheetBlocks(): { dark: Record<string, string>; light: Record<string, string> } {
+  const css = readFileSync(new URL('../renderer/src/assets/main.css', import.meta.url), 'utf8')
+    // Comments may hold braces and colons.
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+  const dark = /^:root\s*\{([^}]*)\}/m.exec(css)
+  const light = /@media \(prefers-color-scheme: light\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)
+  if (!dark || !light) throw new Error('main.css has no dark or light :root block')
+  return { dark: declarations(dark[1]), light: declarations(light[1]) }
+}
+
+describe('the app themes table (#64 D2, D3, AC1)', () => {
+  it('has the six themes of D2 in order, each version holding every token', () => {
+    expect(APP_THEMES.map((theme) => [theme.id, theme.name])).toEqual([
+      ['default', 'Default'],
+      ['bikube', 'Bikube'],
+      ['catppuccin', 'Catppuccin'],
+      ['rose-pine', 'Rosé Pine'],
+      ['nord', 'Nord'],
+      ['gruvbox', 'Gruvbox']
+    ])
+    expect(APP_THEMES.map((theme) => theme.id)).toEqual([...APP_THEME_IDS])
+    for (const theme of APP_THEMES) {
+      for (const version of VERSIONS) {
+        expect(Object.keys(theme[version]).sort(), `${theme.id} ${version}`).toEqual(
+          [...APP_THEME_TOKENS].sort()
+        )
+        for (const token of APP_THEME_TOKENS) expect(theme[version][token]).toMatch(/\S/)
+      }
+    }
+  })
+
+  it("keeps Default's tokens equal to the app stylesheet's dark and light blocks", () => {
+    const blocks = stylesheetBlocks()
+    for (const version of VERSIONS) {
+      const expected = Object.fromEntries(
+        APP_THEME_TOKENS.map((token) => [token, blocks[version][token]])
+      )
+      expect(appThemeTokens('default', version)).toEqual(expected)
+    }
+  })
+
+  it('gives Bikube dark its #17140F background and #F5B82E accent, Default light #1a7f37 running', () => {
+    expect(appThemeTokens('bikube', 'dark').bg.toLowerCase()).toBe('#17140f')
+    expect(appThemeTokens('bikube', 'dark').accent.toLowerCase()).toBe('#f5b82e')
+    expect(appThemeTokens('default', 'light').running).toBe('#1a7f37')
+    expect(appThemeTokens('default', 'dark').running).toBe('#3fb950')
+  })
+})
+
+describe('contrast in every version (#64 D5, AC1)', () => {
+  it('measures as WCAG does', () => {
+    expect(contrastRatio('#ffffff', '#000000')).toBeCloseTo(21, 5)
+    expect(contrastRatio('#ffffff', '#e5484d')).toBeCloseTo(3.91, 2)
+  })
+
+  /** Every ratio below its minimum, as `<what> <ratio>`. */
+  function failures(id: string, version: 'dark' | 'light', t: AppThemeTokens): string[] {
+    const out: string[] = []
+    const need = (what: string, fg: string, bg: string, min: number): void => {
+      const ratio = contrastRatio(fg, bg)
+      if (ratio < min) out.push(`${id} ${version}: ${what} ${ratio.toFixed(2)} < ${min}`)
+    }
+    const textBackgrounds = ['bg', 'column', 'card', 'surface', 'surface-raised'] as const
+    for (const text of ['text', 'text-muted'] as const) {
+      for (const bg of textBackgrounds) need(`${text} on ${bg}`, t[text], t[bg], 4.5)
+    }
+    for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)
+    need('accent-text on accent', t['accent-text'], t.accent, 4.5)
+    // D5's one named exception: Default dark's danger text, #ffffff on #e5484d, as it is today.
+    if (!(id === 'default' && version === 'dark')) {
+      need('danger-text on danger', t['danger-text'], t.danger, 4.5)
+    }
+    for (const pill of ['working', 'waiting', 'question'] as const) {
+      const bg = composite(t[`pill-${pill}-bg`], t.card)
+      need(`pill-${pill}-text on its pill`, t[`pill-${pill}-text`], bg, 4.5)
+    }
+    const marks = [
+      'running',
+      'kind-claude',
+      'kind-codex',
+      'kind-gemini',
+      'kind-opencode',
+      'kind-custom'
+    ] as const
+    for (const mark of marks) {
+      for (const bg of ['card', 'surface'] as const) need(`${mark} on ${bg}`, t[mark], t[bg], 3)
+    }
+    return out
+  }
+
+  it('holds every D5 ratio for all 12 versions but Default dark danger text', () => {
+    const all = APP_THEMES.flatMap((theme) =>
+      VERSIONS.flatMap((version) => failures(theme.id, version, theme[version]))
+    )
+    expect(all).toEqual([])
+  })
+
+  it("keeps the exception to Default dark's danger text alone", () => {
+    const t = appThemeTokens('default', 'dark')
+    expect([t['danger-text'], t.danger]).toEqual(['#ffffff', '#e5484d'])
+  })
+})
+
+describe('windowBackground (#64 D7, AC5)', () => {
+  it("is the picked theme's background for the resolved version", () => {
+    expect(windowBackground('bikube', 'dark').toLowerCase()).toBe('#17140f')
+    expect(windowBackground('default', 'dark')).toBe('#14151a')
+    expect(windowBackground('default', 'light')).toBe('#f6f7f9')
+    expect(windowBackground('catppuccin', 'light')).toBe('#eff1f5')
+  })
+})

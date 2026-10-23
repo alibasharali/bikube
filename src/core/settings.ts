@@ -17,6 +17,7 @@
  * becomes the default (D4), so the file and every reader see the actual family.
  */
 
+import { APP_THEME_IDS, type AppThemeId } from './app-themes'
 import { isGlobalShortcut } from './global-hotkey'
 import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides } from './keymap'
 import { BIKUBE_DARK, BIKUBE_LIGHT, isTerminalThemeName } from './terminal-themes'
@@ -117,6 +118,8 @@ export interface Preferences {
   confirmClose: boolean
   /** Bringing Bikube forward with the global shortcut opens the next waiting card (#51 D4). */
   openWaitingOnShow: boolean
+  /** The palette of the app's chrome (#64 D1); Theme picks its dark or light version. */
+  appTheme: AppThemeId
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -142,7 +145,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   editorCommand: '',
   keepOutput: true,
   confirmClose: true,
-  openWaitingOnShow: true
+  openWaitingOnShow: true,
+  appTheme: 'default'
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -185,7 +189,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     typeof v === 'string' && v.length <= MAX_EDITOR_COMMAND_LENGTH && !CONTROL_CHARS.test(v),
   keepOutput: isBoolean,
   confirmClose: isBoolean,
-  openWaitingOnShow: isBoolean
+  openWaitingOnShow: isBoolean,
+  appTheme: oneOf(APP_THEME_IDS)
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]
@@ -218,12 +223,6 @@ export function isShellSetting(value: unknown): value is string {
         /^(\/|[A-Za-z]:[\\/])/.test(value)))
   )
 }
-
-/** The window background of each resolved theme (D2), matching `--bg` in the CSS. */
-export const THEME_BACKGROUNDS: Readonly<Record<ResolvedTheme, string>> = Object.freeze({
-  dark: '#14151a',
-  light: '#f6f7f9'
-})
 
 export function isTheme(value: unknown): value is Theme {
   return typeof value === 'string' && (THEMES as readonly string[]).includes(value)

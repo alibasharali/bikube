@@ -10,7 +10,7 @@ import { startInstalledAgents } from './installed-agents'
 import { listenForBoardRequests } from './board-requests'
 import { loadGhosttyTheme } from './ghostty'
 import { loadHomeDir } from './home'
-import { loadSettingsStore, settingsStore, type SettingsStore } from './settings'
+import { loadSettingsStore } from './settings'
 import { loadSymbolsFont } from './symbols-font'
 import { loadWorkspaceStore } from './store'
 import { listenForSyncBoards, loadSyncStatus, receiveSyncBoards } from './sync'
@@ -33,11 +33,6 @@ void Promise.all([
   loadHomeDir()
 ]).then(() => {
   followAppTheme()
-  // The smoke tests change settings as Settings does (development build only).
-  if (window.bikube.testHooks) {
-    const hook: Pick<SettingsStore, 'update'> = { update: (change) => settingsStore.update(change) }
-    Object.assign(window, { __bikubeSettings: hook })
-  }
   listenForBoardRequests()
   listenForSyncBoards()
   startAttention()

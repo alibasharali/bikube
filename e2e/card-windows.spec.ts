@@ -2,7 +2,7 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { setAppTheme } from './app-theme'
+import { pickAppTheme } from './app-theme'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
@@ -1017,7 +1017,7 @@ test('#64 AC6: an app theme picked in the main window recolours a card window at
   await expect.poll(async () => (await look(window)).bar).toBe('rgb(255, 255, 255)')
   const before = await look(window)
 
-  await setAppTheme(page, 'nord')
+  await pickAppTheme(page, 'Nord')
   // Nord light's surface, nord5.
   await expect.poll(async () => (await look(window)).bar).toBe('rgb(229, 233, 240)')
   const after = await look(window)

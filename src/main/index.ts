@@ -7,7 +7,6 @@ import { killAtQuit, quitHold } from '../core/quit-hold'
 import { longCommandMsArg } from '../core/long-commands'
 import { hostNameArg } from '../core/shell-marks'
 import { KILL_GRACE_MS } from '../core/session-manager'
-import { TEST_HOOKS_ARG } from '../core/test-hooks'
 import { IPC } from '../shared/api'
 import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
 import { registerAttention } from './attention'
@@ -79,13 +78,11 @@ function createWindow(settings: MainSettings): void {
       sandbox: true,
       ...(hiddenForTests && { backgroundThrottling: false }),
       // This machine's host name, which the sandboxed renderer can't read (#45 D8).
-      // The App theme, applied before the page's first paint (#64 D7); the development build
-      // also asks for the smoke tests' hooks.
+      // The App theme, applied before the page's first paint (#64 D7).
       additionalArguments: [
         hostNameArg(hostname()),
         appThemeArg(settings.appTheme()),
-        ...(longCommandMs ? [longCommandMsArg(longCommandMs)] : []),
-        ...(app.isPackaged ? [] : [TEST_HOOKS_ARG])
+        ...(longCommandMs ? [longCommandMsArg(longCommandMs)] : [])
       ]
     }
   })

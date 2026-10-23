@@ -2699,6 +2699,183 @@ button.dev-server-chip:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/*
+ * The App theme picker (#64 D8): a wrapping grid of tiles, each a real radio covering its tile (for
+ * the keyboard and screen readers) over a mini board drawn with that theme's tokens, which the
+ * preview sets inline, so everything inside it reads the theme's colours. The frame around it
+ * stays in the page's own colours for the checked mark and the focus ring.
+ */
+.app-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(96px, 100%), 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.app-theme-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.app-theme-tile input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.app-theme-frame {
+  display: block;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition);
+}
+
+.app-theme-tile:hover .app-theme-frame {
+  border-color: var(--border-strong);
+}
+
+.app-theme-tile:has(input:checked) .app-theme-frame {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.app-theme-tile:has(input:focus-visible) .app-theme-frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-theme-name {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-theme-tile:hover .app-theme-name,
+.app-theme-tile:has(input:checked) .app-theme-name {
+  color: var(--text);
+}
+
+.app-theme-tile:has(input:checked) .app-theme-name {
+  font-weight: 600;
+}
+
+.app-theme-preview {
+  display: flex;
+  height: 56px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.atp-sidebar {
+  flex: 0 0 26%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 3px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.atp-row {
+  display: flex;
+  align-items: center;
+  height: 6px;
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+
+.atp-row-active {
+  background: var(--accent-soft);
+}
+
+.atp-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.atp-board {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+}
+
+.atp-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 3px;
+  border-radius: 4px;
+  background: var(--column);
+}
+
+.atp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.atp-title {
+  width: 70%;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.atp-pills {
+  display: flex;
+  gap: 2px;
+}
+
+/* A pill: its background over the card, its text as a bar in the text's colour. */
+.atp-pill {
+  flex: 1;
+  height: 7px;
+  padding: 2px 3px;
+  border-radius: 4px;
+}
+
+.atp-pill::after {
+  content: '';
+  display: block;
+  height: 3px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.atp-working {
+  background: var(--pill-working-bg);
+  color: var(--pill-working-text);
+}
+
+.atp-waiting {
+  background: var(--pill-waiting-bg);
+  color: var(--pill-waiting-text);
+}
+
+.atp-question {
+  background: var(--pill-question-bg);
+  color: var(--pill-question-text);
+}
+
 .settings-preview {
   display: flex;
   flex-direction: column;

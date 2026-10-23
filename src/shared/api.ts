@@ -436,8 +436,6 @@ export interface BikubeApi {
    * paint; the settings hold the current one.
    */
   appTheme: AppThemeId
-  /** Whether the page exposes the smoke tests' hooks: the development build only. */
-  testHooks: boolean
   terminal: TerminalApi
   clipboard: ClipboardApi
   link: LinkApi

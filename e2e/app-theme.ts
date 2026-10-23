@@ -1,20 +1,19 @@
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 /**
- * Picks app theme `id` (#64) as Settings does: through the renderer's settings store, which
- * applies it to every window and saves it. Uses the hook only the development build exposes.
+ * Picks app theme `name` (#64) in Settings' Appearance section, by its shortcut, a click on the
+ * tile and Escape, from the board or an open card.
  */
-export async function setAppTheme(page: Page, id: string): Promise<void> {
-  const ok = await page.evaluate(
-    (theme) =>
-      (
-        window as unknown as {
-          __bikubeSettings?: { update(change: { appTheme: string }): boolean }
-        }
-      ).__bikubeSettings?.update({ appTheme: theme }) ?? false,
-    id
-  )
-  if (!ok) throw new Error(`app theme ${id} not applied`)
+export async function pickAppTheme(page: Page, name: string): Promise<void> {
+  const settings = page.getByTestId('settings-dialog')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  const tile = settings
+    .getByRole('radiogroup', { name: 'App theme' })
+    .getByRole('radio', { name, exact: true })
+  await tile.check()
+  await expect(tile).toBeChecked()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
 }
 
 /** The body's computed background in `page`. */

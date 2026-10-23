@@ -10,7 +10,7 @@ import {
   splitRight,
   zoomPane
 } from './card-view'
-import { bodyBackground, setAppTheme } from './app-theme'
+import { bodyBackground, pickAppTheme } from './app-theme'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -1011,9 +1011,78 @@ test('#64 AC7: changing the app theme leaves the running terminal theme and pane
   const before = { theme: await terminalTheme(), pane: await terminalBackground(page) }
   expect(before.pane).toBe('rgb(40, 42, 54)')
 
-  await setAppTheme(page, 'gruvbox')
+  await pickAppTheme(page, 'Gruvbox')
   // Gruvbox light's bg0.
   await expect.poll(() => bodyBackground(page)).toBe('rgb(251, 241, 199)')
   expect({ theme: await terminalTheme(), pane: await terminalBackground(page) }).toEqual(before)
   await expectStatusOnBoard(page, 'api', 'Running')
+})
+
+/** The background of app theme `id`'s preview in the App theme picker. */
+const previewBackground = (page: Page, id: string): Promise<string> =>
+  dialog(page)
+    .getByTestId(`app-theme-${id}`)
+    .locator('.app-theme-preview')
+    .evaluate((el) => getComputedStyle(el).backgroundColor)
+
+test('#64 AC4: clicking the Catppuccin tile applies Mocha at once and saves it; Light shows Latte', async () => {
+  const dataDir = newDataDir()
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  await followNativeTheme(page)
+  await page.keyboard.press(SHORTCUT)
+  await dialog(page).getByRole('radio', { name: 'Dark' }).check()
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(20, 21, 26)')
+  // The previews show the dark versions: Mocha's base.
+  await expect.poll(() => previewBackground(page, 'catppuccin')).toBe('rgb(30, 30, 46)')
+
+  await dialog(page).getByTestId('app-theme-catppuccin').click()
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(30, 30, 46)')
+  await expect(dialog(page).getByRole('radio', { name: 'Catppuccin' })).toBeChecked()
+  await expect
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
+    .toContain('"appTheme":"catppuccin"')
+
+  await dialog(page).getByRole('radio', { name: 'Light' }).check()
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(239, 241, 245)')
+  // Latte's base and Gruvbox light's bg0.
+  await expect.poll(() => previewBackground(page, 'catppuccin')).toBe('rgb(239, 241, 245)')
+  expect(await previewBackground(page, 'gruvbox')).toBe('rgb(251, 241, 199)')
+  await expect(dialog(page).getByRole('radio', { name: 'Catppuccin' })).toBeChecked()
+})
+
+test('#64 AC8: the App theme tiles are one radio group; Tab enters it and Right picks the next', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await page.keyboard.press(SHORTCUT)
+  const group = dialog(page).getByRole('radiogroup', { name: 'App theme' })
+  await expect(group).toBeVisible()
+  await expect(group.getByRole('radio')).toHaveCount(6)
+  const names = await group
+    .getByRole('radio')
+    .evaluateAll((radios) => radios.map((r) => (r as HTMLInputElement).labels?.[0]?.textContent))
+  expect(names).toEqual(['Default', 'Bikube', 'Catppuccin', 'Rosé Pine', 'Nord', 'Gruvbox'])
+  for (const name of names) {
+    await expect(group.getByRole('radio', { name: name!, exact: true })).toHaveCount(1)
+  }
+  await expect(group.getByRole('radio', { name: 'Default', exact: true })).toBeChecked()
+
+  // Settings opens on the Theme row's checked radio; Tab moves into the App theme group.
+  await expect(dialog(page).getByRole('radio', { name: 'System' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(group.getByRole('radio', { name: 'Default', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowRight')
+  const bikube = group.getByRole('radio', { name: 'Bikube', exact: true })
+  await expect(bikube).toBeChecked()
+  await expect(bikube).toBeFocused()
+  // Bikube light's background (Playwright pins a light colour scheme).
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(250, 245, 234)')
+  // Tab leaves the group for the next control.
+  await page.keyboard.press('Tab')
+  await expect(bikube).not.toBeFocused()
+  expect(await page.evaluate(() => document.activeElement?.getAttribute('type'))).not.toBe('radio')
 })

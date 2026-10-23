@@ -23,4 +23,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - done: ALL PASS (AC10's packaged part left to CI's test:packaged; smoke: 2 known root failures + moves.spec AC9 load flake passing on rerun)
-- UX review: running
+- UX review: 3 must-fix (danger as text on surfaces in palette themes; muted text on --chip; Settings at 320-480 px squeezes the App theme grid, pre-existing for the Theme row): asked round 3

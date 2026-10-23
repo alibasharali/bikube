@@ -135,7 +135,7 @@ function CommandPalette({
   // The open view's actions follow its panes and whether it runs (D6).
   const runState = useCardRunState(open?.cardId ?? '')
   const layout = usePaneLayout(open?.cardId ?? '')
-  const { theme } = useSettings()
+  const { theme, appTheme } = useSettings()
   const [query, setQuery] = useState('')
   const listId = useId()
   const ids = terminalIds(state)
@@ -151,6 +151,7 @@ function CommandPalette({
           status: rowStatus,
           view: openView(open, runState, layout),
           theme,
+          appTheme,
           keymap: currentKeymap(),
           platform: window.bikube?.platform ?? '',
           waiting
@@ -159,7 +160,7 @@ function CommandPalette({
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, open, runState, layout, theme, query, statusKey, waiting]
+    [state, open, runState, layout, theme, appTheme, query, statusKey, waiting]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,

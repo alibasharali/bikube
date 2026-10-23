@@ -61,6 +61,7 @@ function input(state: WorkspaceState, extra: Partial<PaletteInput> = {}): Palett
     status: stopped,
     view: null,
     theme: 'system',
+    appTheme: 'default',
     keymap: defaultKeymap('linux'),
     platform: 'linux',
     waiting: [],
@@ -196,6 +197,11 @@ describe('paletteItems actions (#40 D6)', () => {
     'Open Settings',
     'Theme: Dark',
     'Theme: Light',
+    'App theme: Bikube',
+    'App theme: Catppuccin',
+    'App theme: Rosé Pine',
+    'App theme: Nord',
+    'App theme: Gruvbox',
     'Switch to workspace Beta'
   ]
 
@@ -334,8 +340,37 @@ describe('paletteItems actions (#40 D6)', () => {
       'New workspace',
       'Open Settings',
       'Theme: System',
-      'Theme: Light'
+      'Theme: Light',
+      'App theme: Bikube',
+      'App theme: Catppuccin',
+      'App theme: Rosé Pine',
+      'App theme: Nord',
+      'App theme: Gruvbox'
     ])
+  })
+
+  it('offers every app theme but the current one beside the Theme rows (#64 D9)', () => {
+    const items = paletteItems(input(state, { appTheme: 'default' }))
+    expect(filterPalette(items, 'app theme').actions.map((r) => r.label)).toEqual([
+      'App theme: Bikube',
+      'App theme: Catppuccin',
+      'App theme: Rosé Pine',
+      'App theme: Nord',
+      'App theme: Gruvbox'
+    ])
+    const shown = labels(input(state, { appTheme: 'nord' }))
+    expect(
+      shown.slice(shown.indexOf('Theme: Light') + 1, shown.indexOf('Theme: Light') + 6)
+    ).toEqual([
+      'App theme: Default',
+      'App theme: Bikube',
+      'App theme: Catppuccin',
+      'App theme: Rosé Pine',
+      'App theme: Gruvbox'
+    ])
+    const nord = items.actions.find((r) => r.label === 'App theme: Nord')!
+    expect(nord.action).toEqual({ id: 'appTheme', appTheme: 'nord' })
+    expect(nord.shortcut).toBeUndefined()
   })
 
   it('carries what each row does', () => {

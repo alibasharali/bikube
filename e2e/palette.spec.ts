@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { bodyBackground } from './app-theme'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
@@ -207,6 +208,34 @@ test('D1: the palette opens from the empty state, offering New workspace and Ope
   await expect(section('cards')).toHaveCount(0)
 })
 
+test('#64 AC9: the App theme rows list every theme but Default; Enter on Nord applies and saves it', async () => {
+  // The page shows the light versions (Playwright pins prefers-color-scheme: light): Default's bg.
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(246, 247, 249)')
+  await openPalette()
+  await page.keyboard.type('app theme')
+  expect(await titles(section('actions'))).toEqual([
+    'App theme: Bikube',
+    'App theme: Catppuccin',
+    'App theme: Rosé Pine',
+    'App theme: Nord',
+    'App theme: Gruvbox'
+  ])
+  await page.keyboard.type(' nord')
+  expect(await titles(section('actions'))).toEqual(['App theme: Nord'])
+  await page.keyboard.press('Enter')
+  await expect(palette()).toHaveCount(0)
+  // Nord's light version: nord6.
+  await expect.poll(() => bodyBackground(page)).toBe('rgb(236, 239, 244)')
+  const file = join(dataDir, 'bikube-settings.json')
+  await expect
+    .poll(() => (existsSync(file) ? readFileSync(file, 'utf8') : ''))
+    .toContain('"appTheme":"nord"')
+  await openPalette()
+  await page.keyboard.type('app theme')
+  expect(await titles(section('actions'))).toContain('App theme: Default')
+  expect(await titles(section('actions'))).not.toContain('App theme: Nord')
+})
+
 test('D8: while the palette is open, Mod+digit and other shortcuts do nothing', async () => {
   await createWorkspace('Alpha')
   await createWorkspace('Beta')
@@ -286,6 +315,11 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'Open Settings',
     'Theme: Dark',
     'Theme: Light',
+    'App theme: Bikube',
+    'App theme: Catppuccin',
+    'App theme: Rosé Pine',
+    'App theme: Nord',
+    'App theme: Gruvbox',
     'Switch to workspace Beta'
   ])
 })

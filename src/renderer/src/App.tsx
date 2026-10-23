@@ -298,6 +298,7 @@ function App(): React.JSX.Element {
       else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
       else if (action.id === 'settings') setSettingsOpen(true)
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
+      else if (action.id === 'appTheme') settingsStore.update({ appTheme: action.appTheme })
       else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
     }
   })

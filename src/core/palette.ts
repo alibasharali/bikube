@@ -4,6 +4,7 @@
  * imports: the renderer runs it.
  */
 import { ACTIVITY_LABELS, type Activity } from './activity'
+import { APP_THEMES, type AppThemeId } from './app-themes'
 import { SHORTCUT_LABELS, type Keymap } from './keymap'
 import type { Theme } from './settings'
 import { MAX_PANES } from './split-tree'
@@ -107,6 +108,7 @@ export type PaletteAction =
   | { id: 'newWorkspace' }
   | { id: 'settings' }
   | { id: 'theme'; theme: Theme }
+  | { id: 'appTheme'; appTheme: AppThemeId }
   | { id: 'switchWorkspace'; workspaceId: string }
 
 /** An action row (D6): its label and, when it has one, its shortcut as D7 text. */
@@ -150,6 +152,8 @@ export interface PaletteInput {
   /** The card or shell open at full size, or null on the board. */
   view: OpenView | null
   theme: Theme
+  /** The current app theme (#64 D9). */
+  appTheme: AppThemeId
   keymap: Keymap
   platform: string
   /** The waiting cards' and shells' ids, oldest first (#41 D2). */
@@ -207,7 +211,7 @@ function shellRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
 
 type KeymapAction = Exclude<
   PaletteAction['id'],
-  'moveCard' | 'newCard' | 'newWorkspace' | 'theme' | 'switchWorkspace'
+  'moveCard' | 'newCard' | 'newWorkspace' | 'theme' | 'appTheme' | 'switchWorkspace'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -267,6 +271,15 @@ function actionRows(input: PaletteInput): ActionRow[] {
       kind: 'action',
       action: { id: 'theme', theme },
       label: `Theme: ${THEME_LABELS[theme]}`
+    })
+  }
+  // Every app theme but the current one, beside the Theme rows (#64 D9).
+  for (const { id, name } of APP_THEMES) {
+    if (id === input.appTheme) continue
+    rows.push({
+      kind: 'action',
+      action: { id: 'appTheme', appTheme: id },
+      label: `App theme: ${name}`
     })
   }
   const mod = input.platform === 'darwin' ? 'Cmd' : 'Ctrl'

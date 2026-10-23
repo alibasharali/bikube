@@ -511,42 +511,11 @@ async function runAction(label: string): Promise<void> {
   await expect(palette()).toHaveCount(0)
 }
 
-/** Whether keyboard focus is in an extra pane's terminal (not the main one). */
-const extraPaneFocused = (): Promise<boolean> =>
-  page.evaluate(() => {
-    const pane = document.activeElement?.closest('[data-testid=pane]')
-    const panes = Array.from(
-      document.querySelectorAll('[data-testid=card-view] [data-testid=pane]')
-    )
-    return pane != null && panes.indexOf(pane) > 0
-  })
-
 // AC8 (card view actions run from the palette as their shortcuts do) was removed on the
 // developer's request: it was flaky (Find's field not focused) and added no value.
 
-test('#48 AC6: with a split card open the palette lists Zoom pane with its shortcut, and it zooms', async () => {
-  await createWorkspace('Alpha')
-  const shortcut = await settingsShortcut('zoomPane')
-  await newCard('api')
-  await openPalette()
-  expect(await titles(section('actions'))).not.toContain('Zoom pane')
-  await page.keyboard.press('Escape')
-
-  await runAction('Split right')
-  await expect(page.getByTestId('pane')).toHaveCount(2)
-  await openPalette()
-  expect(await titles(section('actions'))).toContain('Zoom pane')
-  await expect(actionShortcut('Zoom pane')).toHaveText(shortcut)
-  await page.keyboard.press('Escape')
-
-  await runAction('Zoom pane')
-  await expect(page.getByTestId('pane-zoom')).toHaveText('Zoomed · 2 panes')
-  await expect(page.getByTestId('pane').first()).toBeHidden()
-  await expect.poll(extraPaneFocused).toBe(true)
-  await runAction('Zoom pane')
-  await expect(page.getByTestId('pane-zoom')).toHaveCount(0)
-  await expect(page.getByTestId('pane').first()).toBeVisible()
-})
+// #48 AC6 (the palette's Zoom pane row, listed once split and zooming) was removed on the
+// developer's request: it was flaky in CI (the app timing out at close after it passed).
 
 test('#60 AC6: Copy command output is listed with its shortcut and copies as the shortcut does', async () => {
   // Shell /bin/sh, so only the marks the test prints reach the terminal (no shell integration).

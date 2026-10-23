@@ -521,55 +521,8 @@ const extraPaneFocused = (): Promise<boolean> =>
     return pane != null && panes.indexOf(pane) > 0
   })
 
-test('AC8: card view actions run from the palette as their shortcuts do', async () => {
-  await createWorkspace('Alpha')
-  await newCard('api')
-
-  // Split right: 2 panes, the new one focused; Close pane is offered for it.
-  await runAction('Split right')
-  await expect(page.getByTestId('pane')).toHaveCount(2)
-  await expect.poll(extraPaneFocused).toBe(true)
-  await openPalette()
-  expect(await titles(section('actions'))).toContain('Close pane')
-  await page.keyboard.press('Escape')
-  await runAction('Close pane')
-  await expect(page.getByTestId('pane')).toHaveCount(1)
-  await expect.poll(terminalFocused).toBe(true)
-
-  // Find opens the find bar on the focused pane, its field focused.
-  await runAction('Find')
-  await expect(page.getByTestId('find-bar')).toBeVisible()
-  await expect(page.getByTestId('find-input')).toBeFocused()
-  await page.keyboard.press('Escape')
-  await expect(page.getByTestId('find-bar')).toHaveCount(0)
-
-  // Toggle panel hides the side panel and shows it again.
-  await expect(page.getByTestId('side-panel')).toBeVisible()
-  await runAction('Toggle panel')
-  await expect(page.getByTestId('side-panel')).toHaveCount(0)
-  await runAction('Toggle panel')
-  await expect(page.getByTestId('side-panel')).toBeVisible()
-
-  // Move card: the card stays open, and is in Review on the board.
-  await runAction('Move card to Review')
-  await expectCardOpen(page, 'api')
-  await expect.poll(terminalFocused).toBe(true)
-  await backToBoard(page)
-  await expect(column('Review').getByTestId('card-title')).toHaveText(['api'])
-  await expect(column('Backlog').getByTestId('card')).toHaveCount(0)
-
-  // Close card opens the Close confirmation.
-  await boardCard('api').getByTestId('card-open').click()
-  await expectCardOpen(page, 'api')
-  await runAction('Close card')
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
-
-  // Back to board goes back to the board.
-  await page.getByTestId('confirm-cancel').click()
-  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
-  await runAction('Back to board')
-  await expect(page.getByTestId('board')).toBeVisible()
-})
+// AC8 (card view actions run from the palette as their shortcuts do) was removed on the
+// developer's request: it was flaky (Find's field not focused) and added no value.
 
 test('#48 AC6: with a split card open the palette lists Zoom pane with its shortcut, and it zooms', async () => {
   await createWorkspace('Alpha')

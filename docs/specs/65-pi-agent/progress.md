@@ -15,5 +15,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: ALL PASS (e2e presets/workspace-tree, Vitest)
+- UX review: done (CLEAN; polish: solid Pi mark reads heavier than outlined marks at 14 px)

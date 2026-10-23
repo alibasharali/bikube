@@ -2,7 +2,7 @@
 item: 65
 type: feature
 title: PI agent
-status: draft
+status: approved
 branch: claude/65-pi-agent
 ---
 

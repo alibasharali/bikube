@@ -8,8 +8,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 |---|---|---|---|---|
 | S1 | done | 1801036..05ebe51 | CLEAN (2 fix rounds: kind/running stylesheet test; Nord borders palette-only, border-strong = border) | src/core/app-themes.ts: APP_THEME_IDS, AppThemeId, DEFAULT_APP_THEME, isAppThemeId, APP_THEME_TOKENS, AppThemeTokens, APP_THEMES, appTheme(id), appThemeTokens(id, version), windowBackground(id, version), appThemeDeclarations(tokens); src/core/contrast.ts; Settings.appTheme; new tokens running, switch-knob, kind-*; [data-kind] reads --kind-* from :root |
 | S2 | done | 4ca51d2..de4aa2e | CLEAN | settingsStore.update({ appTheme }) applies live in every window and saves; <style data-app-theme> per document (:root:root, light under prefers-color-scheme); themeDocument(doc) for card windows; launch arg via appThemeArg/parseAppThemeArg; e2e helpers e2e/app-theme.ts setAppTheme(page,id) (test hook window.__bikubeSettings.update, --bikube-test-hooks), bodyBackground(page) |
-| S3 | review | 0915377..c86f6bd | | AppThemePicker.tsx; tiles data-testid app-theme-<id>, .app-theme-preview; e2e/app-theme.ts pickAppTheme(page,name), bodyBackground(page); test hook removed |
-| S4 | todo | | | |
+| S3 | done | 0915377..c86f6bd | CLEAN | AppThemePicker.tsx; tiles data-testid app-theme-<id>, .app-theme-preview; e2e/app-theme.ts pickAppTheme(page,name), bodyBackground(page); test hook removed |
+| S4 | running | | | |
 
 ## Rulings
 

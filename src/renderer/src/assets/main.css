@@ -45,6 +45,7 @@
   --kind-codex: #10a37f;
   --kind-gemini: #4e8cf7;
   --kind-opencode: #a78bfa;
+  --kind-pi: #eab65d;
   --kind-custom: #94a3b8;
   color-scheme: dark;
 
@@ -109,6 +110,7 @@
     --kind-codex: #0b7a5f;
     --kind-gemini: #1a65d6;
     --kind-opencode: #7c3aed;
+    --kind-pi: #a16207;
     --kind-custom: #5b6678;
     color-scheme: light;
   }
@@ -2319,6 +2321,9 @@ button.dev-server-chip:focus-visible {
 }
 [data-kind='opencode'] {
   --kind: var(--kind-opencode);
+}
+[data-kind='pi'] {
+  --kind: var(--kind-pi);
 }
 [data-kind='custom'] {
   --kind: var(--kind-custom);

@@ -74,7 +74,7 @@ describe('the app themes table (#64 D2, D3, AC1)', () => {
 
   it('leaves the agent and running colours to the tokens, so a theme reaches them', () => {
     const css = stylesheet()
-    const kinds = ['claude', 'codex', 'gemini', 'opencode', 'custom']
+    const kinds = ['claude', 'codex', 'gemini', 'opencode', 'pi', 'custom']
     for (const kind of kinds) {
       const rule = new RegExp(
         `\\[data-kind='${kind}'\\]\\s*\\{\\s*--kind:\\s*var\\(--kind-${kind}\\);\\s*\\}`,
@@ -82,13 +82,34 @@ describe('the app themes table (#64 D2, D3, AC1)', () => {
       )
       expect(css.match(rule), kind).toHaveLength(1)
     }
-    // No other `--kind:` declaration than those five.
+    // No other `--kind:` declaration than those six.
     expect(css.match(/--kind:/g)).toHaveLength(kinds.length)
     // The running green only as the dark block's token: nowhere outside the two :root blocks.
     const outside = css
       .replace(/^:root\s*\{[^}]*\}/m, '')
       .replace(/@media \(prefers-color-scheme: light\)\s*\{\s*:root\s*\{[^}]*\}\s*\}/, '')
     expect(outside).not.toMatch(/#3fb950/i)
+  })
+
+  it("gives Pi's kind a colour of its own in every version (#65 D4)", () => {
+    const others = [
+      'kind-claude',
+      'kind-codex',
+      'kind-gemini',
+      'kind-opencode',
+      'kind-custom'
+    ] as const
+    for (const theme of APP_THEMES) {
+      for (const version of VERSIONS) {
+        const t = theme[version]
+        expect(t['kind-pi'], `${theme.id} ${version}`).toMatch(/^#[0-9a-f]{6}$/i)
+        for (const other of others) {
+          expect(t['kind-pi'].toLowerCase(), `${theme.id} ${version} ${other}`).not.toBe(
+            t[other].toLowerCase()
+          )
+        }
+      }
+    }
   })
 
   it('gives Bikube dark its #17140F background and #F5B82E accent, Default light #1a7f37 running', () => {
@@ -144,6 +165,7 @@ describe('contrast in every version (#64 D5, AC1)', () => {
       'kind-codex',
       'kind-gemini',
       'kind-opencode',
+      'kind-pi',
       'kind-custom'
     ] as const
     for (const mark of marks) {

@@ -63,6 +63,7 @@ export const APP_THEME_TOKENS = [
   'kind-codex',
   'kind-gemini',
   'kind-opencode',
+  'kind-pi',
   'kind-custom'
 ] as const
 export type AppThemeToken = (typeof APP_THEME_TOKENS)[number]
@@ -84,6 +85,7 @@ const DARK_MARKS = {
   'kind-codex': '#10a37f',
   'kind-gemini': '#4e8cf7',
   'kind-opencode': '#a78bfa',
+  'kind-pi': '#eab65d',
   'kind-custom': '#94a3b8'
 } as const
 
@@ -95,6 +97,7 @@ const LIGHT_MARKS = {
   'kind-codex': '#0b7a5f',
   'kind-gemini': '#1a65d6',
   'kind-opencode': '#7c3aed',
+  'kind-pi': '#a16207',
   'kind-custom': '#5b6678'
 } as const
 

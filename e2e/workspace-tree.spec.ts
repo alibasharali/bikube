@@ -155,7 +155,7 @@ test('shows each terminal’s status: running, working, question; waiting while 
 })
 
 test('shows what each terminal runs: its agent’s logo and colour, a shell neutral', async () => {
-  // The fake `claude`, `codex`, `gemini` and `opencode` on the login PATH.
+  // The fake `claude`, `codex`, `gemini`, `opencode` and `pi` on the login PATH.
   const root = mkdtempSync(join(tmpdir(), 'bikube-workspace-tree-agents-'))
   dirs.push(root)
   const fake = fakeAgentsHome(root)
@@ -166,7 +166,8 @@ test('shows what each terminal runs: its agent’s logo and colour, a shell neut
     ['Claude card', 'Claude Code', 'claude'],
     ['Codex card', 'Codex', 'codex'],
     ['Gemini card', 'Gemini CLI', 'gemini'],
-    ['OpenCode card', 'OpenCode', 'opencode']
+    ['OpenCode card', 'OpenCode', 'opencode'],
+    ['pi card', 'Pi', 'pi']
   ] as const
   for (const [title, label] of agents) {
     await page.getByTestId('column').first().getByTestId('new-card').click()

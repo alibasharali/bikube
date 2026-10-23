@@ -2626,6 +2626,15 @@ button.dev-server-chip:focus-visible {
     padding-top: 0;
   }
 
+  /* Segments a little tighter, wrapping rather than overflowing in the narrowest dialog. */
+  .segmented {
+    flex-wrap: wrap;
+  }
+
+  .segmented .radio {
+    padding: 6px var(--space-2);
+  }
+
   /* Shortcuts: the action's name above its field and Reset. */
   .shortcut-row {
     grid-template-columns: minmax(0, 1fr) auto;

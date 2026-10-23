@@ -29,3 +29,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 - done: ALL PASS (AC10's packaged part left to CI's test:packaged; smoke: 2 known root failures + moves.spec AC9 load flake passing on rerun)
 - UX review: 3 must-fix (danger as text on surfaces in palette themes; muted text on --chip; Settings at 320-480 px squeezes the App theme grid, pre-existing for the Theme row): asked round 3; answered; fix round 1 8f8494b, review HUMAN (icon-only Settings tabs at narrow widths; Rosé Pine dark muted #aba8bf off-palette) + auto-fix padding 8px → var(--space-2): asked round 4
+- UX fix round 2: tab tooltips + spacing token; re-review: contrast and 400–1000 px pass, 320 px Theme control overflowed → segments tighter and wrapping in the narrow dialog, AC8b checks 320 px. Done.

@@ -1161,6 +1161,17 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
     expect(await scrollsSideways(page), name!).toBe(false)
   }
 
+  // At 320 px nothing scrolls sideways either, every Theme choice whole.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(320, 700))
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(320)
+  await dialog(page).getByTestId('settings-section-appearance').click()
+  expect(await scrollsSideways(page)).toBe(false)
+  const segments = await dialog(page)
+    .getByRole('group', { name: 'Theme', exact: true })
+    .locator('.radio')
+    .evaluateAll((labels) => labels.map((l) => l.scrollWidth <= l.clientWidth))
+  expect(segments).toEqual([true, true, true])
+
   // At 1000 px the label sits beside its control, as before.
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 700))
   await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1000)

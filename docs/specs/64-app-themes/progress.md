@@ -21,6 +21,8 @@ Decisions the developer made during implementation, with the date. A ruling that
 - 2026-10-23 (round 3 Q1): D5 extended: danger as text 4.5:1 on bg, card, surface and raised surface; failing themes get a nearby red (D4); Default dark a named exception (spec 38a5b50).
 - 2026-10-23 (round 3 Q2): D5 extended: muted text 4.5:1 on --chip; failing themes adjust muted or chip within their palette.
 - 2026-10-23 (round 3 Q3): D8 extended, AC8b added: every Settings row stacks its label above its control in a narrow dialog.
+- 2026-10-23 (round 4 Q1): narrow Settings keeps the icon-only section column; each tab gets its name as a tooltip (D8, AC8b).
+- 2026-10-23 (round 4 Q2): Rosé Pine dark's muted text stays `#aba8bf`, a D5-forced adjustment noted in D2.
 - 2026-10-23: full smoke run found AC5 flaky (theme applied after first paint, a real flash); fixed in 157d7d3..0726c66 by inserting the style from the preload.
 
 ## Verification

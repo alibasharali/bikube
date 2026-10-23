@@ -21,7 +21,7 @@ A developer who runs the Pi coding agent (pi.dev, `pi`, github.com/badlogic/pi-m
   | `pi` | `Pi` | `Pi` | `pi` | `pi --continue` |
 
   `pi --continue` continues Pi's most recent session for the current directory, and starts a new one when there is none, so #21 D2's `<resume> || <plain>` line (`pi --continue || pi`) is typed unchanged; the `|| pi` only runs if `pi --continue` itself fails. Everything that derives from the table (installed-agents check, saved-state and sync validation, the startup selects and their same-directory hint `Resumes the latest Pi session in the card's directory.`, `startedAgents`) gets Pi with no code of its own. *Why:* round 1 Q1, Q2.
-- **D2 – Order:** every startup command select lists `Shell`, `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, `Pi`, `Custom…` (`AGENT_KINDS` ends in `pi`). *Why:* round 1 Q3.
+- **D2 – Order:** every startup command select lists `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, `Pi`, `Custom…` (`AGENT_KINDS` ends in `pi`). *Why:* round 1 Q3.
 - **D3 – Logo:** Pi cards and shells show Pi's own pixel mark (pi-mono's `pi-logo.ts`, MIT) in the sidebar tree and the Shells tab, drawn as one SVG path in the card's `--kind` colour like the other agents' marks. The mark is a 4×4 grid of square pixels (rows top to bottom, `X` filled):
 
   ```
@@ -41,7 +41,7 @@ A developer who runs the Pi coding agent (pi.dev, `pi`, github.com/badlogic/pi-m
 
 Workspace `alpha` has an existing working directory, default columns and default startup `Shell`, unless stated otherwise. The e2e fake agents (`e2e/fake-agents.ts`) gain a fake `pi` on the login PATH that appends `pi <args>` to the shared agent log, prints `fake-pi <args>` and waits on stdin; with `FAKE_AGENT_RESUME_FAILS=1` a resume run (`pi --continue`) exits 1 at once.
 
-- **AC1 – Select and tag:** Given `alpha`'s board with the fake agents, when the user clicks `+ New card`, then the select lists `Shell`, `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, `Pi`, `Custom…` in that order; creating card `pi card` with `Pi` shows tag `Pi` (tooltip `Pi`) on the board, and the agent log gains exactly the line `pi`.
+- **AC1 – Select and tag:** Given `alpha`'s board with the fake agents, when the user clicks `+ New card`, then the select lists `Claude Code`, `Codex`, `Gemini CLI`, `OpenCode`, `Pi`, `Custom…` in that order; creating card `pi card` with `Pi` shows tag `Pi` (tooltip `Pi`) on the board, and the agent log gains exactly the line `pi`.
 - **AC2 – Resume:** Given `pi card` started once and stopped (Close), when it is opened again, then the agent log's next line is `pi --continue`; with `FAKE_AGENT_RESUME_FAILS=1` it is `pi --continue` followed by `pi`, and the card shows `fake-pi`.
 - **AC3 – Hint and default:** Given the workspace edit dialog, when `Pi` is chosen as the startup command, then the field shows `Resumes the latest Pi session in the card's directory.`; saved, a new card's select is preset to `Pi`, and existing cards keep theirs.
 - **AC4 – Saved:** Given a started `pi card`, when the app restarts and the card is opened, then the log's line is `pi --continue`, and `bikube-state.json` holds the card with `startup` kind `pi` and `startedAgents` `["pi"]`; a state file whose card has `startedAgents: ["pi"]` loads it.

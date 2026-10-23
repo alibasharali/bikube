@@ -22,5 +22,5 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: ALL PASS (AC10's packaged part left to CI's test:packaged; smoke: 2 known root failures + moves.spec AC9 load flake passing on rerun)
+- UX review: running

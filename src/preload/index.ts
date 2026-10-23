@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { parseAppThemeArg } from '../core/app-themes'
+import {
+  APP_THEME_ATTR,
+  APP_THEME_MARK,
+  appThemeStylesheet,
+  parseAppThemeArg,
+  type AppThemeId
+} from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import { LONG_COMMAND_MS, parseLongCommandMs } from '../core/long-commands'
 import { parseHostName } from '../core/shell-marks'
@@ -9,12 +15,43 @@ import type { UpdateState } from '../core/updates'
 import type { Workspace } from '../core/workspace-store'
 import { IPC, type BikubeApi, type TerminalExit } from '../shared/api'
 
+const launchAppTheme = parseAppThemeArg(process.argv)
+
+/**
+ * Puts the launch App theme's `<style data-app-theme>` in the page's head as soon as the parser
+ * creates it (#64 D7). The preload runs before any of the page's scripts, and a mutation
+ * observer's callback runs at the end of the parser task that inserted the head, before anything
+ * can paint; the page's module bundle may only run after a first paint. The renderer's
+ * `app-theme.ts` then takes this element over.
+ */
+function insertLaunchAppTheme(id: AppThemeId): void {
+  const insert = (): boolean => {
+    const head = document.head
+    if (!head) return false
+    if (!head.querySelector(`style[${APP_THEME_ATTR}]`)) {
+      const style = document.createElement('style')
+      style.setAttribute(APP_THEME_ATTR, id)
+      style.textContent = appThemeStylesheet(id)
+      head.appendChild(style)
+      performance.mark(APP_THEME_MARK)
+    }
+    return true
+  }
+  if (insert()) return
+  const observer = new MutationObserver(() => {
+    if (insert()) observer.disconnect()
+  })
+  observer.observe(document, { childList: true, subtree: true })
+}
+
+insertLaunchAppTheme(launchAppTheme)
+
 const api: BikubeApi = {
   platform: process.platform,
   // Main passes a shortened threshold only in the development build (#45 D7).
   longCommandMs: parseLongCommandMs(process.argv) ?? LONG_COMMAND_MS,
   hostName: parseHostName(process.argv),
-  appTheme: parseAppThemeArg(process.argv),
+  appTheme: launchAppTheme,
   clipboard: {
     read: () => ipcRenderer.invoke(IPC.clipboardRead),
     write: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text),

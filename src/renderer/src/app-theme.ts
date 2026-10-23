@@ -1,4 +1,4 @@
-import { appThemeStylesheet, type AppThemeId } from '../../core/app-themes'
+import { APP_THEME_ATTR, appThemeStylesheet, type AppThemeId } from '../../core/app-themes'
 import { settingsStore } from './settings'
 
 /**
@@ -9,12 +9,13 @@ import { settingsStore } from './settings'
  */
 
 /** The attribute marking the theme's style element, which `copyStylesheets` leaves to this module. */
-export const APP_THEME_ATTR = 'data-app-theme'
+export { APP_THEME_ATTR }
 
 const documents = new Set<Document>([document])
 let applied: AppThemeId | undefined
 
 function writeTo(doc: Document, id: AppThemeId): void {
+  // In the main page the preload already put the launch theme's element in (D7): reused here.
   let style = doc.head.querySelector<HTMLStyleElement>(`style[${APP_THEME_ATTR}]`)
   if (!style) {
     style = doc.createElement('style')
@@ -28,16 +29,13 @@ function writeTo(doc: Document, id: AppThemeId): void {
 /** Applies theme `id` to every themed document, unless it is the one they already show. */
 function apply(id: AppThemeId): void {
   if (id === applied) return
-  const first = applied === undefined
   applied = id
   for (const doc of documents) writeTo(doc, id)
-  // The tests compare it with the first paint (AC5).
-  if (first) performance.mark('bikube:app-theme')
 }
 
 /**
- * Applies the theme main created the window with, synchronously, before the page first paints
- * (D7); call first thing at startup.
+ * Applies the theme main created the window with; call first thing at startup. The preload has
+ * normally put it in before the first paint already (D7), so this only adopts its element.
  */
 export function applyLaunchAppTheme(): void {
   apply(window.bikube.appTheme)

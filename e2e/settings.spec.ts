@@ -986,6 +986,14 @@ test('#64 AC5: a saved Bikube theme is the window background and the first paint
   expect(timing.applied).not.toBeNull()
   expect(timing.painted).not.toBeNull()
   expect(timing.applied!).toBeLessThanOrEqual(timing.painted!)
+  // The renderer took over the preload's style element rather than adding a second one.
+  expect(
+    await page.evaluate(() =>
+      [...document.querySelectorAll('style[data-app-theme]')].map((s) =>
+        s.getAttribute('data-app-theme')
+      )
+    )
+  ).toEqual(['bikube'])
   await followNativeTheme(page)
   expect(await bodyBackground(page)).toBe('rgb(23, 20, 15)')
 })

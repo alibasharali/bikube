@@ -550,6 +550,12 @@ export function appThemeStylesheet(id: AppThemeId): string {
   )
 }
 
+/** The attribute marking each document's one style element holding `appThemeStylesheet`. */
+export const APP_THEME_ATTR = 'data-app-theme'
+
+/** The performance mark the preload sets once the launch theme is in the main page (AC5). */
+export const APP_THEME_MARK = 'bikube:app-theme'
+
 const ARG = '--bikube-app-theme='
 
 /** The argument main gives the window's renderer with the picked theme, read before first paint. */

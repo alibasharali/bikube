@@ -172,3 +172,31 @@ function moveClaudeProjects(projects: string, from: string, to: string): void {
     }
   }
 }
+
+/** What the app does after the move: start, or tell the user why it can't yet. */
+export type MoveOutcome = { start: true } | { start: false; message: string }
+
+/**
+ * Runs the move and decides whether the app may start. Starting with the old folder left behind
+ * would create an empty new one, and the move would never run again, so the app refuses until the
+ * old app has quit or the folder could be moved. A failure after the move only loses that step.
+ */
+export function moveOrRefuse(m: DataMigration): MoveOutcome {
+  try {
+    if (migrateDataDir(m) === 'in use') {
+      return {
+        start: false,
+        message: `Drovr is still running. Quit Drovr, then open Bikube again: it moves Drovr’s board and settings (${m.from}) on its first launch.`
+      }
+    }
+  } catch (err) {
+    if (!existsSync(m.to)) {
+      return {
+        start: false,
+        message: `Bikube couldn’t move Drovr’s data from ${m.from} to ${m.to}: ${String(err)}`
+      }
+    }
+    console.error(`${m.from} moved to ${m.to}, but not every step finished: ${String(err)}`)
+  }
+  return { start: true }
+}

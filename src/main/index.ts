@@ -107,14 +107,17 @@ const userDataDir =
   (app.isPackaged ? undefined : join(app.getPath('appData'), 'bikube-dev'))
 if (userDataDir) app.setPath('userData', userDataDir)
 // Drovr's data, once, before anything reads or locks the folder.
-moveOldData()
+const dataReady = moveOldData()
 
 // A Wayland desktop with the portal can grant the global shortcut (#51 D8); set before ready.
 enableGlobalShortcutsPortal()
 
 // One instance per data directory (#8 D12): a second launch hands over to the running one and
 // exits before it loads or saves anything.
-if (!app.requestSingleInstanceLock()) {
+if (!dataReady) {
+  // Exits before ready, so the new data folder is never created without Drovr's in it.
+  app.exit(1)
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   startApp()

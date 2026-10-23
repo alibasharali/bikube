@@ -12,7 +12,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { claudeProjectName, migrateDataDir, oldDataDir, rewritePaths } from './data-migration'
+import {
+  claudeProjectName,
+  migrateDataDir,
+  moveOrRefuse,
+  oldDataDir,
+  rewritePaths
+} from './data-migration'
 
 const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -183,5 +189,49 @@ describe('migrateDataDir', () => {
     expect(existsSync(join(projects, old))).toBe(false)
     expect(existsSync(join(projects, other))).toBe(true)
     expect(existsSync(join(projects, taken))).toBe(true)
+  })
+})
+
+describe('moveOrRefuse', () => {
+  it('refuses to start while Drovr runs, creating nothing, then moves once it has quit', () => {
+    mkdirSync(from)
+    writeFileSync(join(from, 'drovr-state.json'), '{}')
+    symlinkSync('my-host.local-4242', join(from, 'SingletonLock'))
+    let running = true
+    const run = (): ReturnType<typeof moveOrRefuse> =>
+      moveOrRefuse({ from, to, home, git, isAlive: () => running })
+
+    const refused = run()
+    expect(refused.start).toBe(false)
+    expect(refused.start === false && refused.message).toContain('Quit Drovr')
+    expect(existsSync(to)).toBe(false)
+
+    running = false
+    expect(run()).toEqual({ start: true })
+    expect(existsSync(join(to, 'bikube-state.json'))).toBe(true)
+    expect(existsSync(from)).toBe(false)
+  })
+
+  it('refuses to start when the folder can’t be moved, and starts once it has been', () => {
+    mkdirSync(from)
+    // A file where the new folder's parent should be makes the rename fail.
+    const blocked = {
+      from,
+      to: join(dir, 'not-a-folder', 'bikube'),
+      home,
+      git,
+      isAlive: () => false
+    }
+    writeFileSync(join(dir, 'not-a-folder'), '')
+    const refused = moveOrRefuse(blocked)
+    expect(refused.start).toBe(false)
+    expect(refused.start === false && refused.message).toContain('couldn’t move')
+    expect(existsSync(from)).toBe(true)
+
+    expect(moveOrRefuse({ from, to, home, git, isAlive: () => false })).toEqual({ start: true })
+  })
+
+  it('starts when there is nothing to move', () => {
+    expect(moveOrRefuse({ from, to, home, git, isAlive: () => true })).toEqual({ start: true })
   })
 })

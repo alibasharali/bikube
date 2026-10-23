@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
+| S1 | blocked: Default fails D5 (asked round 2) | | | |
 | S2 | todo | | | |
 | S3 | todo | | | |
 | S4 | todo | | | |

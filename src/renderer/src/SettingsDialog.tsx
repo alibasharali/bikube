@@ -189,7 +189,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
               onClick={() => setSection(key)}
             >
               <Icon {...ICON} />
-              {label}
+              <span className="settings-tab-label">{label}</span>
             </button>
           ))}
         </div>

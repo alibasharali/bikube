@@ -2480,6 +2480,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .modal-settings {
+  container-type: inline-size; /* the narrow layout below follows the dialog's own width */
   display: flex;
   flex-direction: column;
   width: min(760px, calc(100vw - 32px));
@@ -2579,6 +2580,61 @@ button.dev-server-chip:focus-visible {
   align-items: stretch;
   gap: var(--space-1);
   min-width: 0;
+}
+
+/*
+ * A narrow dialog (#64 D8): the sections as an icon rail (each tab keeps its name for screen
+ * readers, and the panel's title names the shown one), and every row its label above a control
+ * that takes the full width, so no control is squeezed beside a label.
+ */
+@container (max-width: 559.98px) {
+  .settings {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    padding: var(--space-2);
+  }
+
+  .settings-tab {
+    position: relative;
+    justify-content: center;
+    padding: 8px;
+  }
+
+  /* As .visually-hidden. */
+  .settings-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .settings-panel {
+    padding: var(--space-4);
+  }
+
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .settings-label {
+    padding-top: 0;
+  }
+
+  /* Shortcuts: the action's name above its field and Reset. */
+  .shortcut-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .shortcut-label,
+  .shortcut-error {
+    grid-column: 1 / -1;
+  }
 }
 
 .settings-input {

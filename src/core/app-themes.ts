@@ -207,7 +207,8 @@ const BIKUBE: AppTheme = {
     'pill-question-text': '#f79a5e',
     ...DARK_SHADOWS,
     'switch-knob': '#fff8eb',
-    ...DARK_MARKS
+    ...DARK_MARKS,
+    danger: '#e7575b' // lighter for D5's danger as text
   },
   light: {
     bg: '#faf5ea',
@@ -257,7 +258,7 @@ const CATPPUCCIN: AppTheme = {
     border: '#45475a',
     'border-strong': '#585b70', // surface2
     text: '#cdd6f4',
-    'text-muted': '#a6adc8', // subtext0
+    'text-muted': '#bac2de', // subtext1, for D5 on the chip
     accent: '#cba6f7', // mauve
     'accent-text': '#11111b', // crust
     'accent-soft': 'rgba(203, 166, 247, 0.16)',
@@ -271,7 +272,8 @@ const CATPPUCCIN: AppTheme = {
     'pill-question-text': '#fab387', // peach
     ...DARK_SHADOWS,
     'switch-knob': '#cdd6f4',
-    ...DARK_MARKS
+    ...DARK_MARKS,
+    danger: '#f38ba8' // red, for D5's danger as text
   },
   light: {
     bg: '#eff1f5', // base
@@ -282,7 +284,7 @@ const CATPPUCCIN: AppTheme = {
     column: '#e6e9ef',
     card: '#eff1f5',
     'card-hover': '#eff1f5',
-    chip: '#ccd0da', // surface0
+    chip: '#dce0e8', // crust, for D5's muted text on it
     border: '#ccd0da',
     'border-strong': '#bcc0cc', // surface1
     text: '#4c4f69',
@@ -300,7 +302,8 @@ const CATPPUCCIN: AppTheme = {
     'pill-question-text': '#ac4001', // peach, darker for D5
     ...lightShadows('76, 79, 105'),
     'switch-knob': '#eff1f5',
-    ...LIGHT_MARKS
+    ...LIGHT_MARKS,
+    danger: '#c62d33' // darker for D5's danger as text
   }
 }
 
@@ -321,7 +324,7 @@ const ROSE_PINE: AppTheme = {
     border: '#403d52',
     'border-strong': '#524f67', // highlight high
     text: '#e0def4',
-    'text-muted': '#908caa', // subtle
+    'text-muted': '#aba8bf', // subtle, lighter for D5 on the chip
     accent: '#c4a7e7', // iris
     'accent-text': '#191724',
     'accent-soft': 'rgba(196, 167, 231, 0.16)',
@@ -335,7 +338,8 @@ const ROSE_PINE: AppTheme = {
     'pill-question-text': '#f6c177', // gold
     ...DARK_SHADOWS,
     'switch-knob': '#e0def4',
-    ...DARK_MARKS
+    ...DARK_MARKS,
+    danger: '#eb6f92' // love, for D5's danger as text
   },
   light: {
     bg: '#faf4ed', // base
@@ -350,7 +354,7 @@ const ROSE_PINE: AppTheme = {
     border: '#dfdad9',
     'border-strong': '#cecacd', // highlight high
     text: '#575279',
-    'text-muted': '#6a6683', // subtle, darker for D5
+    'text-muted': '#605d77', // subtle, darker for D5 (on the chip too)
     accent: '#286983', // pine
     'accent-text': '#faf4ed',
     'accent-soft': 'rgba(40, 105, 131, 0.1)',
@@ -401,7 +405,8 @@ const NORD: AppTheme = {
     ...DARK_SHADOWS,
     'switch-knob': '#eceff4',
     ...DARK_MARKS,
-    // Lighter for D5 on nord2's cards.
+    // Lighter for D5 on nord2's cards (danger as text).
+    danger: '#f3a8aa',
     'kind-claude': '#dc8163',
     'kind-codex': '#11af88',
     'kind-gemini': '#6299f8'
@@ -434,7 +439,8 @@ const NORD: AppTheme = {
     'pill-question-text': '#9a4c33', // nord12, darker for D5
     ...lightShadows('46, 52, 64'),
     'switch-knob': '#eceff4',
-    ...LIGHT_MARKS
+    ...LIGHT_MARKS,
+    danger: '#c62d33' // darker for D5's danger as text
   }
 }
 
@@ -455,7 +461,7 @@ const GRUVBOX: AppTheme = {
     border: '#504945',
     'border-strong': '#665c54', // bg3
     text: '#ebdbb2', // fg1
-    'text-muted': '#bdae93', // fg3
+    'text-muted': '#d5c4a1', // fg2, for D5 on the chip
     accent: '#fe8019', // orange
     'accent-text': '#282828',
     'accent-soft': 'rgba(254, 128, 25, 0.16)',
@@ -469,7 +475,8 @@ const GRUVBOX: AppTheme = {
     'pill-question-text': '#fabd2f', // yellow
     ...DARK_SHADOWS,
     'switch-knob': '#fbf1c7',
-    ...DARK_MARKS
+    ...DARK_MARKS,
+    danger: '#ed8387' // lighter for D5's danger as text
   },
   light: {
     bg: '#fbf1c7', // bg0
@@ -498,7 +505,8 @@ const GRUVBOX: AppTheme = {
     'pill-question-text': '#895a0f', // faded yellow, darker for D5
     ...lightShadows('40, 40, 40'),
     'switch-knob': '#f9f5d7',
-    ...LIGHT_MARKS
+    ...LIGHT_MARKS,
+    danger: '#9d0006' // faded red, for D5's danger as text
   }
 }
 

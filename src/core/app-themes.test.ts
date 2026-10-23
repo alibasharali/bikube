@@ -100,6 +100,9 @@ describe('the app themes table (#64 D2, D3, AC1)', () => {
 })
 
 describe('contrast in every version (#64 D5, AC1)', () => {
+  /** The surfaces Default dark's danger fails as text on today (D5's named exception). */
+  const DEFAULT_DARK_DANGER_AS_TEXT: readonly string[] = ['card', 'surface', 'surface-raised']
+
   it('measures as WCAG does', () => {
     expect(contrastRatio('#ffffff', '#000000')).toBeCloseTo(21, 5)
     expect(contrastRatio('#ffffff', '#e5484d')).toBeCloseTo(3.91, 2)
@@ -116,11 +119,20 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     for (const text of ['text', 'text-muted'] as const) {
       for (const bg of textBackgrounds) need(`${text} on ${bg}`, t[text], t[bg], 4.5)
     }
+    need('text-muted on chip', t['text-muted'], t.chip, 4.5)
     for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)
     need('accent-text on accent', t['accent-text'], t.accent, 4.5)
     // D5's one named exception: Default dark's danger text, #ffffff on #e5484d, as it is today.
     if (!(id === 'default' && version === 'dark')) {
       need('danger-text on danger', t['danger-text'], t.danger, 4.5)
+    }
+    // Danger as text (error lines) on the surfaces; D5's other named exception is Default dark's,
+    // as it is today, on exactly the surfaces it fails.
+    for (const bg of ['bg', 'card', 'surface', 'surface-raised'] as const) {
+      if (id === 'default' && version === 'dark' && DEFAULT_DARK_DANGER_AS_TEXT.includes(bg)) {
+        continue
+      }
+      need(`danger on ${bg}`, t.danger, t[bg], 4.5)
     }
     for (const pill of ['working', 'waiting', 'question'] as const) {
       const bg = composite(t[`pill-${pill}-bg`], t.card)
@@ -140,16 +152,21 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     return out
   }
 
-  it('holds every D5 ratio for all 12 versions but Default dark danger text', () => {
+  it('holds every D5 ratio for all 12 versions but Default dark danger text and danger as text', () => {
     const all = APP_THEMES.flatMap((theme) =>
       VERSIONS.flatMap((version) => failures(theme.id, version, theme[version]))
     )
     expect(all).toEqual([])
   })
 
-  it("keeps the exception to Default dark's danger text alone", () => {
+  it("keeps the exceptions to Default dark's danger text and danger as text alone", () => {
     const t = appThemeTokens('default', 'dark')
     expect([t['danger-text'], t.danger]).toEqual(['#ffffff', '#e5484d'])
+    // Exactly the surfaces it fails on today, so the exception can't cover a passing one.
+    const failing = (['bg', 'card', 'surface', 'surface-raised'] as const).filter(
+      (bg) => contrastRatio(t.danger, t[bg]) < 4.5
+    )
+    expect(failing).toEqual([...DEFAULT_DARK_DANGER_AS_TEXT])
   })
 })
 

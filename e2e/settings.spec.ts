@@ -1094,3 +1094,71 @@ test('#64 AC8: the App theme tiles are one radio group; Tab enters it and Right 
   await expect(bikube).not.toBeFocused()
   expect(await page.evaluate(() => document.activeElement?.getAttribute('type'))).not.toBe('radio')
 })
+
+/**
+ * Each Settings row in the shown section, as where its label sits from its control: `above`,
+ * `beside` or `overlapping`, with the row's label text.
+ */
+function rowLayouts(page: Page): Promise<{ label: string; layout: string }[]> {
+  return dialog(page).evaluate((root) =>
+    [...root.querySelectorAll('[role=tabpanel] .settings-row')].flatMap((row) => {
+      const label = row.querySelector(':scope > .settings-label')
+      const control = [...row.children].find((child) => child !== label)
+      if (!label || !control) return []
+      const l = label.getBoundingClientRect()
+      const c = control.getBoundingClientRect()
+      const layout =
+        l.bottom <= c.top + 1
+          ? 'above'
+          : l.right <= c.left + 1 && l.top < c.bottom
+            ? 'beside'
+            : 'overlapping'
+      return [{ label: label.textContent ?? '', layout }]
+    })
+  )
+}
+
+/** Whether the dialog or its section panel scrolls sideways. */
+const scrollsSideways = (page: Page): Promise<boolean> =>
+  dialog(page).evaluate((root) =>
+    [root, root.querySelector('[role=tabpanel]')!].some((el) => el.scrollWidth > el.clientWidth)
+  )
+
+test('#64 AC8b: in a 400 px window each Settings row stacks its label above a full-width control', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(400, 700))
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(400)
+  await page.keyboard.press(SHORTCUT)
+  await expect(dialog(page)).toBeVisible()
+
+  const layouts = await rowLayouts(page)
+  expect(layouts.length).toBeGreaterThan(3)
+  for (const { label, layout } of layouts) expect(layout, label).toBe('above')
+  const grid = await dialog(page).getByRole('radiogroup', { name: 'App theme' }).boundingBox()
+  expect(grid!.width).toBeGreaterThanOrEqual(200)
+  const theme = await dialog(page)
+    .getByRole('group', { name: 'Theme', exact: true })
+    .locator('.segmented')
+    .boundingBox()
+  expect(theme!.width).toBeGreaterThanOrEqual(200)
+  expect(await scrollsSideways(page)).toBe(false)
+
+  // Every other section stacks too, with nothing scrolling sideways.
+  const tabs = dialog(page).getByRole('tab')
+  for (let i = 1; i < (await tabs.count()); i++) {
+    await tabs.nth(i).click()
+    const name = await tabs.nth(i).getAttribute('data-section')
+    for (const { label, layout } of await rowLayouts(page)) {
+      expect(layout, `${name}: ${label}`).toBe('above')
+    }
+    expect(await scrollsSideways(page), name!).toBe(false)
+  }
+
+  // At 1000 px the label sits beside its control, as before.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 700))
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1000)
+  await dialog(page).getByTestId('settings-section-appearance').click()
+  for (const { label, layout } of await rowLayouts(page)) expect(layout, label).toBe('beside')
+})

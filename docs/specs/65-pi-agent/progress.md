@@ -7,7 +7,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `146f262..3b73dad` | CLEAN | `AgentKind` includes `'pi'`; AgentLogo `PATHS` is Partial, no pi entry yet |
-| S2 | todo | | | |
+| S2 | done | `2048b14..e01c177` | CLEAN | — |
 
 ## Rulings
 

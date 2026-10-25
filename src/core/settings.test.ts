@@ -748,3 +748,34 @@ describe('the App theme preference (#64 D10, AC2)', () => {
     expect(parseSettingsFile(text, 'linux').settings.appTheme).toBe('gruvbox')
   })
 })
+
+describe('the App font preference (#66 D7, AC8)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is the system UI font by default, and writes no key for it', () => {
+    expect(DEFAULT_SETTINGS.appFontFamily).toBe('')
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.appFontFamily).toBe('')
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('appFontFamily')
+  })
+
+  it('writes a family and reads it back', () => {
+    const appFontFamily = '"Inter", system-ui, sans-serif'
+    const text = serializeSettings({ ...base, appFontFamily })
+    expect(JSON.parse(text).settings.appFontFamily).toBe(appFontFamily)
+    expect(parseSettingsFile(text, 'linux').settings.appFontFamily).toBe(appFontFamily)
+    expect(
+      validateSettings({ ...base, appFontFamily: 'Courier New' }, 'linux')?.appFontFamily
+    ).toBe('Courier New')
+  })
+
+  it('refuses a family that is untrimmed, too long, holds control chars or is no string', () => {
+    for (const value of [' Inter', 'x'.repeat(201), 'In\nter', 3]) {
+      expect(validateSettings({ ...base, appFontFamily: value }, 'linux')).toBeNull()
+      const parsed = parseSettingsFile(file({ ...base, appFontFamily: value }), 'linux')
+      expect(parsed.settings.appFontFamily).toBe('')
+      expect(parsed.replaced).toEqual(['appFontFamily'])
+    }
+    expect(validateSettings({ ...base, appFontFamily: 'x'.repeat(200) }, 'linux')).not.toBeNull()
+  })
+})

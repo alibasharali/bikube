@@ -52,11 +52,12 @@ import {
 import { ANSI_COLOUR_NAMES, terminalPalette, withSymbols } from '../../core/terminal-appearance'
 import { terminalTheme } from '../../core/terminal-themes'
 import type { ShellChoices } from '../../shared/api'
+import { APP_FONT_CHOICES, UI_FONT_STACK, appFontChoiceOf, appFontOf } from '../../core/app-fonts'
 import { FONT_CHOICES, familyOf, fontChoiceOf } from '../../core/font-choices'
 import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import { ghosttyStore, useGhosttyTheme } from './ghostty'
-import { installedFonts } from './installed-fonts'
+import { installedAppFonts, installedFonts } from './installed-fonts'
 import { ICON, SMALL_ICON } from './icons'
 import Modal from './Modal'
 import ShortcutKeys from './ShortcutKeys'
@@ -107,12 +108,14 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
   const id = useId()
   const [section, setSection] = useState<Section>('appearance')
   const [family, setFamily] = useState(() => fontFamilyField(settingsStore.get().fontFamily))
+  const [appFont, setAppFont] = useState(() => settingsStore.get().appFontFamily)
   const [picking, setPicking] = useState<ResolvedTheme | null>(null)
   const tabs = useRef<HTMLDivElement>(null)
 
   // Closing any way (Done, Escape, a click outside) applies a family typed but not yet applied.
   const close = (): void => {
     settingsStore.update({ fontFamily: family })
+    settingsStore.update({ appFontFamily: appFont.trim() })
     onClose()
   }
 
@@ -202,7 +205,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           data-testid={`settings-panel-${section}`}
         >
           <h3 className="settings-panel-title">{current.label}</h3>
-          {section === 'appearance' && <AppearanceSection />}
+          {section === 'appearance' && (
+            <AppearanceSection appFont={appFont} setAppFont={setAppFont} />
+          )}
           {section === 'terminal' && (
             <TerminalColoursField onPick={setPicking} family={family} setFamily={setFamily} />
           )}
@@ -234,8 +239,17 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
   )
 }
 
-/** Appearance: the Theme (which version shows) and the App theme (#64). */
-function AppearanceSection(): React.JSX.Element {
+/**
+ * Appearance: the Theme (which version shows), the App theme (#64) and the App font (#66 D7). The
+ * App font's custom draft lives in the dialog, so closing from another section still applies it.
+ */
+function AppearanceSection({
+  appFont,
+  setAppFont
+}: {
+  appFont: string
+  setAppFont: (family: string) => void
+}): React.JSX.Element {
   const settings = useSettings()
   const id = useId()
   return (
@@ -266,7 +280,95 @@ function AppearanceSection(): React.JSX.Element {
         value={settings.appTheme}
         onPick={(appTheme) => settingsStore.update({ appTheme })}
       />
+      <AppFontRow draft={appFont} setDraft={setAppFont} />
     </>
+  )
+}
+
+/**
+ * The App font row (#66 D7): the system UI font, an installed UI font from the list (the saved one
+ * marked when it isn't installed here), or Custom… with a family applied on blur or Enter, trimmed,
+ * empty meaning the system font. A listed font falls back to the system stack for missing glyphs.
+ */
+function AppFontRow({
+  draft,
+  setDraft
+}: {
+  draft: string
+  setDraft: (family: string) => void
+}): React.JSX.Element {
+  const settings = useSettings()
+  const id = useId()
+  const installed = installedAppFonts()
+  const choice = appFontChoiceOf(settings.appFontFamily)
+  // Shown for a custom family, and kept while editing even when it becomes the default.
+  const [showCustom, setShowCustom] = useState(() => choice.kind === 'custom')
+  const fonts = APP_FONT_CHOICES.filter(
+    (name) => installed.has(name) || (choice.kind === 'font' && choice.name === name)
+  )
+  const value = showCustom ? CUSTOM_FONT : choice.kind === 'font' ? choice.name : ''
+  const pick = (picked: string): void => {
+    if (picked === CUSTOM_FONT) {
+      setShowCustom(true)
+      return
+    }
+    setShowCustom(false)
+    const next = picked === '' ? '' : appFontOf(picked)
+    settingsStore.update({ appFontFamily: next })
+    setDraft(next)
+  }
+  const applyDraft = (): void => {
+    const next = draft.trim()
+    if (settingsStore.update({ appFontFamily: next })) setDraft(next)
+  }
+  const selectId = `${id}-app-font`
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={selectId}>
+        App font
+      </label>
+      <div className="settings-control">
+        <select
+          id={selectId}
+          className="settings-input"
+          data-testid="settings-app-font"
+          value={value}
+          onChange={(e) => pick(e.target.value)}
+        >
+          <option value="">System (default)</option>
+          {fonts.map((name) => (
+            <option key={name} value={name} style={{ fontFamily: appFontOf(name) }}>
+              {installed.has(name) ? name : `${name} (not installed)`}
+            </option>
+          ))}
+          <option value={CUSTOM_FONT}>Custom…</option>
+        </select>
+        {showCustom && (
+          <input
+            className="settings-input"
+            data-testid="settings-app-font-custom"
+            aria-label="Custom app font"
+            value={draft}
+            maxLength={MAX_FONT_FAMILY_LENGTH}
+            placeholder={UI_FONT_STACK}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={applyDraft}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              applyDraft()
+            }}
+          />
+        )}
+        <p className="field-hint">
+          {showCustom
+            ? 'Any CSS font family, e.g. "Inter", sans-serif. Empty is the system font.'
+            : 'The font of the board, menus and dialogs. Terminals and code keep theirs.'}
+        </p>
+      </div>
+    </div>
   )
 }
 

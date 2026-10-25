@@ -909,7 +909,7 @@ test('#66 AC6: Appearance has no terminal font rows; Terminal has them above the
     'settings-letter-spacing'
   ]
   for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toHaveCount(0)
-  expect(await sectionLabels(page)).toEqual(['Theme', 'App theme'])
+  expect(await sectionLabels(page)).toEqual(['Theme', 'App theme', 'App font'])
 
   await dialog(page).getByTestId('settings-section-terminal').click()
   for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toBeVisible()
@@ -964,6 +964,116 @@ test('#66 AC7: the Terminal preview follows font size, weight, line height, lett
   await list.selectOption(installed[0]!)
   await expect.poll(async () => (await previewFont(page)).family).not.toBe(before.family)
   expect((await previewFont(page)).family).toContain(installed[0]!)
+})
+
+/** The computed font-family of each of `selectors` in `on` ('' for one not there). */
+function uiFonts(on: Page, selectors: string[]): Promise<string[]> {
+  return on.evaluate(
+    (list) =>
+      list.map((selector) => {
+        const el = document.querySelector(selector)
+        return el ? getComputedStyle(el).fontFamily : ''
+      }),
+    selectors
+  )
+}
+
+/** The open card's terminal font family, as xterm draws it, in `on`. */
+const terminalFont = (on: Page): Promise<string> =>
+  on.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { options: { fontFamily?: string } } }) | null
+    return host?.__xterm?.options.fontFamily ?? ''
+  })
+
+const MAIN_CHROME = [
+  '[data-testid=sidebar]',
+  '[data-testid=column]',
+  '[data-testid=settings-dialog]'
+]
+
+test('#66 AC8: a custom App font sets the chrome in the main page and a card window, not terminals, and is kept', async () => {
+  const dataDir = newDataDir()
+  let launched = await launchApp({ dataDir })
+  app = launched.app
+  let page = launched.page
+  await alphaWithApi(page)
+  const terminalBefore = await terminalFont(page)
+  await backToBoard(page)
+  const systemFont = (await uiFonts(page, ['[data-testid=sidebar]']))[0]!
+  expect(systemFont).toContain('system-ui')
+
+  const opened = app.waitForEvent('window')
+  await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-open-window').click()
+  const cardWindow = await opened
+  await expect(cardWindow.getByTestId('card-view')).toHaveAttribute('aria-label', 'api')
+
+  await page.keyboard.press(SHORTCUT)
+  const choice = dialog(page).getByLabel('App font', { exact: true })
+  await expect(choice.locator('option').first()).toHaveText('System (default)')
+  await expect(choice.locator('option').last()).toHaveText('Custom…')
+  await choice.selectOption({ label: 'Custom…' })
+  const custom = dialog(page).getByLabel('Custom app font')
+  await custom.fill('  Courier New ')
+  await custom.press('Enter')
+
+  for (const font of await uiFonts(page, MAIN_CHROME)) expect(font).toMatch(/^"Courier New"/)
+  await expect
+    .poll(async () => (await uiFonts(cardWindow, ['body', '.card-window-bar']))[1])
+    .toMatch(/^"Courier New"/)
+  expect((await uiFonts(cardWindow, ['body']))[0]).toMatch(/^"Courier New"/)
+  // The monospace stack and the terminals keep their own fonts.
+  expect(await terminalFont(cardWindow)).toBe(terminalBefore)
+  await expect
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
+    .toContain('"appFontFamily":"Courier New"')
+  await page.keyboard.press('Escape')
+  await expect(dialog(page)).toHaveCount(0)
+
+  await app.close()
+  launched = await launchApp({ dataDir })
+  app = launched.app
+  page = launched.page
+  await expect
+    .poll(async () => (await uiFonts(page, ['[data-testid=sidebar]']))[0])
+    .toMatch(/^"Courier New"/)
+  await page.keyboard.press(SHORTCUT)
+  await expect(dialog(page).getByLabel('Custom app font')).toHaveValue('Courier New')
+  for (const font of await uiFonts(page, MAIN_CHROME)) expect(font).toMatch(/^"Courier New"/)
+
+  await dialog(page)
+    .getByLabel('App font', { exact: true })
+    .selectOption({ label: 'System (default)' })
+  await expect(dialog(page).getByLabel('Custom app font')).toHaveCount(0)
+  for (const font of await uiFonts(page, MAIN_CHROME)) expect(font).toBe(systemFont)
+  await expect.poll(() => readSettingsFile(dataDir)).not.toContain('appFontFamily')
+})
+
+test('#66 D7: the App font list offers installed UI fonts; a pick applies at once and is saved', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await page.keyboard.press(SHORTCUT)
+  const list = dialog(page).getByLabel('App font', { exact: true })
+  const names = await list.locator('option').allTextContents()
+  const installed = names.slice(1, -1)
+  test.skip(installed.length === 0, 'no listed UI font installed here')
+
+  const font = installed[0]!
+  await list.selectOption(font)
+  await expect(dialog(page).getByLabel('Custom app font')).toHaveCount(0)
+  await expect
+    .poll(async () => (await uiFonts(page, ['[data-testid=sidebar]']))[0])
+    // Chromium quotes a family only when it isn't a plain identifier (`Inter`, `"Open Sans"`).
+    .toMatch(new RegExp(`^"?${font}"?, system-ui`))
+  await expect
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
+    .toContain(`"appFontFamily":"\\"${font}\\", system-ui`)
 })
 
 test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then zooms, and Reset', async () => {

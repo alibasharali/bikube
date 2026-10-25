@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import { cardWindowName } from '../../core/card-window-name'
 import { findShellCard } from '../../core/workspace-shells'
+import { fontDocument } from './app-font'
 import { APP_THEME_ATTR, themeDocument } from './app-theme'
 import { startCard } from './card-actions'
 import CardWindow from './CardWindow'
@@ -15,7 +16,7 @@ interface OpenWindow {
   workspaceId: string
   view: Window
   root: Root | null
-  /** Stops its document following the App theme (#64 D7). */
+  /** Stops its document following the App theme (#64 D7) and the App font (#66 D7). */
   unthemed: () => void
 }
 
@@ -117,8 +118,14 @@ export function openCardWindow(workspaceId: string, cardId: string): void {
   if (!cardExists(workspaceId, cardId)) return
   const view = window.open('about:blank', cardWindowName(cardId))
   if (!view) return
-  // The App theme before its stylesheets, so it never shows another (#64 D7).
-  const open: OpenWindow = { workspaceId, view, root: null, unthemed: themeDocument(view.document) }
+  // The App theme before its stylesheets, so it never shows another (#64 D7); the App font too.
+  const unthemeApp = themeDocument(view.document)
+  const unfont = fontDocument(view.document)
+  const unthemed = (): void => {
+    unthemeApp()
+    unfont()
+  }
+  const open: OpenWindow = { workspaceId, view, root: null, unthemed }
   windows.set(cardId, open)
   // Its focus counts as the app's: notifications, long commands, refreshes (D10).
   addCardWindow(cardId, view)

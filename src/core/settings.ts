@@ -120,6 +120,12 @@ export interface Preferences {
   openWaitingOnShow: boolean
   /** The palette of the app's chrome (#64 D1); Theme picks its dark or light version. */
   appTheme: AppThemeId
+  /**
+   * The chrome's UI font (#66 D7), a CSS family list: '' for the system UI stack (`--font-ui`), a
+   * listed font as `"<name>", <that stack>`, or a custom family as typed (trimmed, at most 200
+   * characters, no control characters). Terminals and the monospace stack keep their own.
+   */
+  appFontFamily: string
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -146,7 +152,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   keepOutput: true,
   confirmClose: true,
   openWaitingOnShow: true,
-  appTheme: 'default'
+  appTheme: 'default',
+  appFontFamily: ''
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -190,7 +197,12 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   keepOutput: isBoolean,
   confirmClose: isBoolean,
   openWaitingOnShow: isBoolean,
-  appTheme: oneOf(APP_THEME_IDS)
+  appTheme: oneOf(APP_THEME_IDS),
+  appFontFamily: (v): v is string =>
+    typeof v === 'string' &&
+    v === v.trim() &&
+    v.length <= MAX_FONT_FAMILY_LENGTH &&
+    !CONTROL_CHARS.test(v)
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

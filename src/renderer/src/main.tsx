@@ -3,6 +3,7 @@ import './assets/main.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { followAppFont } from './app-font'
 import { applyLaunchAppTheme, followAppTheme } from './app-theme'
 import { startAttention } from './attention'
 import { startAutoMoves } from './auto-move'
@@ -33,6 +34,7 @@ void Promise.all([
   loadHomeDir()
 ]).then(() => {
   followAppTheme()
+  followAppFont()
   listenForBoardRequests()
   listenForSyncBoards()
   startAttention()

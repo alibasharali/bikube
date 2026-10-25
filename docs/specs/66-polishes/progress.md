@@ -15,5 +15,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done (ALL PASS; AC9 maximized half not checkable under xvfb)
+- UX review: running

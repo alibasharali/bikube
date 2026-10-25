@@ -5,9 +5,9 @@ import {
   DEFAULT_WINDOW_SIZE,
   MIN_WINDOW_SIZE,
   WINDOW_FILE_NAME,
-  WINDOW_SAVE_DELAY_MS,
   parseWindowState,
   serializeWindowState,
+  trackWindowState,
   windowPlacement,
   type WindowPlacement,
   type WindowState
@@ -48,46 +48,9 @@ function write(state: WindowState): void {
   }
 }
 
-/**
- * Maximizes or makes full screen a window saved that way (#66 D8); call just before showing it,
- * since either shows a hidden window.
- */
-export function restoreWindowMode(window: BrowserWindow, placement: WindowPlacement): void {
-  if (placement.maximized) window.maximize()
-  if (placement.fullScreen) window.setFullScreen(true)
-}
+export { restoreWindowMode } from '../core/window-state'
 
-/**
- * Keeps the window's state in the file: when it closes, and 500 ms after a move, resize or change
- * of mode, so a crash or SIGKILL keeps the last one (#66 D8).
- */
+/** Keeps the window's state in the file (#66 D8): see `trackWindowState`. */
 export function keepWindowState(window: BrowserWindow): void {
-  const current = (): WindowState => ({
-    bounds: window.getNormalBounds(),
-    maximized: window.isMaximized(),
-    fullScreen: window.isFullScreen()
-  })
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const later = (): void => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      timer = null
-      if (!window.isDestroyed()) write(current())
-    }, WINDOW_SAVE_DELAY_MS)
-  }
-  for (const event of [
-    'move',
-    'resize',
-    'maximize',
-    'unmaximize',
-    'enter-full-screen',
-    'leave-full-screen'
-  ] as const) {
-    window.on(event as 'move', later)
-  }
-  window.on('close', () => {
-    if (timer) clearTimeout(timer)
-    timer = null
-    write(current())
-  })
+  trackWindowState(window, write)
 }

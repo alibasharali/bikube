@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_WINDOW_SIZE,
   MIN_WINDOW_SIZE,
+  WINDOW_SAVE_DELAY_MS,
   parseWindowState,
+  restoreWindowMode,
   serializeWindowState,
+  trackWindowState,
   windowPlacement,
+  type ModalWindow,
   type WindowState
 } from './window-state'
 
@@ -127,5 +131,131 @@ describe('window placement at launch (#66 D8)', () => {
 
   it('falls back to the default with no display', () => {
     expect(windowPlacement(state(), []).bounds).toBeNull()
+  })
+})
+
+/** A window with no window manager: its mode is whatever the test sets. */
+class FakeWindow implements ModalWindow {
+  normal = { x: 60, y: 40, width: 900, height: 650 }
+  maximized = false
+  fullScreen = false
+  minimized = false
+  destroyed = false
+  calls: string[] = []
+  private listeners = new Map<string, Array<() => void>>()
+  getNormalBounds = (): WindowState['bounds'] => ({ ...this.normal })
+  isMaximized = (): boolean => this.maximized
+  isFullScreen = (): boolean => this.fullScreen
+  isMinimized = (): boolean => this.minimized
+  isDestroyed = (): boolean => this.destroyed
+  maximize = (): void => {
+    this.calls.push('maximize')
+    this.maximized = true
+  }
+  setFullScreen = (flag: boolean): void => {
+    this.calls.push(`setFullScreen(${String(flag)})`)
+    this.fullScreen = flag
+  }
+  on(event: string, listener: () => void): void {
+    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener])
+  }
+  emit(event: string): void {
+    for (const listener of this.listeners.get(event) ?? []) listener()
+  }
+}
+
+const placement = (over: Partial<WindowState> = {}): WindowState => state(over)
+
+describe('restoring the window mode (#66 AC9)', () => {
+  it('maximizes a window saved maximized', () => {
+    const window = new FakeWindow()
+    restoreWindowMode(window, placement({ maximized: true }))
+    expect(window.calls).toEqual(['maximize'])
+  })
+
+  it('makes full screen a window saved full screen', () => {
+    const window = new FakeWindow()
+    restoreWindowMode(window, placement({ fullScreen: true }))
+    expect(window.calls).toEqual(['setFullScreen(true)'])
+  })
+
+  it('leaves a normal window as it is', () => {
+    const window = new FakeWindow()
+    restoreWindowMode(window, placement())
+    expect(window.calls).toEqual([])
+  })
+})
+
+describe('tracking the window state (#66 AC9)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('saves a maximized window as maximized with its normal bounds at close', () => {
+    const window = new FakeWindow()
+    const saves: WindowState[] = []
+    trackWindowState(window, (saved) => saves.push(saved))
+    window.maximized = true
+    window.emit('maximize')
+    window.emit('close')
+    expect(saves).toEqual([state({ maximized: true })])
+    vi.advanceTimersByTime(WINDOW_SAVE_DELAY_MS)
+    expect(saves).toHaveLength(1)
+  })
+
+  it('saves a full-screen window as full screen 500 ms after the change', () => {
+    const window = new FakeWindow()
+    const saves: WindowState[] = []
+    trackWindowState(window, (saved) => saves.push(saved))
+    window.fullScreen = true
+    window.emit('enter-full-screen')
+    vi.advanceTimersByTime(WINDOW_SAVE_DELAY_MS - 1)
+    expect(saves).toEqual([])
+    vi.advanceTimersByTime(1)
+    expect(saves).toEqual([state({ fullScreen: true })])
+  })
+
+  it('keeps a window minimized from maximized saved as maximized', () => {
+    const window = new FakeWindow()
+    const saves: WindowState[] = []
+    trackWindowState(window, (saved) => saves.push(saved))
+    window.maximized = true
+    window.emit('maximize')
+    // Minimized, the platform may report it as not maximized.
+    window.minimized = true
+    window.maximized = false
+    window.emit('minimize')
+    vi.advanceTimersByTime(WINDOW_SAVE_DELAY_MS)
+    expect(saves.at(-1)).toEqual(state({ maximized: true }))
+    window.emit('close')
+    expect(saves.at(-1)).toEqual(state({ maximized: true }))
+  })
+
+  it('saves the mode seen once the window is restored from minimized', () => {
+    const window = new FakeWindow()
+    const saves: WindowState[] = []
+    trackWindowState(window, (saved) => saves.push(saved))
+    window.maximized = true
+    window.emit('maximize')
+    window.minimized = true
+    window.maximized = false
+    window.emit('minimize')
+    window.minimized = false
+    window.emit('restore')
+    window.emit('close')
+    expect(saves.at(-1)).toEqual(state())
+  })
+
+  it('writes nothing for a window destroyed before its delay ends', () => {
+    const window = new FakeWindow()
+    const saves: WindowState[] = []
+    trackWindowState(window, (saved) => saves.push(saved))
+    window.emit('move')
+    window.destroyed = true
+    vi.advanceTimersByTime(WINDOW_SAVE_DELAY_MS)
+    expect(saves).toEqual([])
   })
 })

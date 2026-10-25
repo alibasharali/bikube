@@ -173,6 +173,12 @@ test('#66 AC4: a new shell is removed when it stops, its name reused, and never 
   await expect(treeTerminal('Terminal 1')).toHaveCount(0)
   await expect(shell('Terminal 2')).toBeVisible()
   await expect(treeTerminal('Terminal 2')).toBeVisible()
+  // A temporary shell has nothing to edit (#66 D2): its menu has Close but no Edit.
+  await shell('Terminal 2').getByTestId('shell-menu').click()
+  await expect(page.getByTestId('shell-menu-close')).toBeVisible()
+  await expect(page.getByTestId('shell-menu-edit')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('shell-menu-close')).toHaveCount(0)
   await page.keyboard.press(OPEN_SHELL)
   await expectCardOpen(page, 'Terminal 1')
   await expect.poll(() => running('Terminal 1')).toBe('true')
@@ -214,7 +220,8 @@ test('#66 AC4: with a Sync folder on, the folder never names a new shell', async
   const boardPath = join(folder, 'bikube-board.json')
   await expect.poll(() => readFileSync(boardPath, 'utf8')).toContain('"Later"')
   expect(readFileSync(boardPath, 'utf8')).not.toContain('Terminal ')
-  // The board this machine reads back from the folder keeps its own new shell.
+  // Writing the folder left this machine's new shell in place (keeping it when a board is read
+  // from the folder is sync-apply's Vitest test).
   await expect(shell('Terminal 1')).toBeVisible()
 })
 

@@ -158,12 +158,16 @@ function ShellRow({
   const startsHidden = trigger && !running
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
   const status = trigger ? triggerStatus(runState, listening) : null
+  // A temporary shell (#66 D2) has no command or settings to edit and never moves to a worktree.
+  const temporary = named?.temporary === true
   const where = shellWorktreeCard(workspace, named)
   // Worktree cards a named shell can run in (local workspaces only).
   const worktreeCards =
-    named && workspace.host === undefined ? workspace.cards.filter((c) => c.worktree) : []
+    named && !temporary && workspace.host === undefined
+      ? workspace.cards.filter((c) => c.worktree)
+      : []
   // A named shell of a local workspace can move to a worktree: its button gets a dropdown.
-  const movable = named !== null && workspace.host === undefined
+  const movable = named !== null && !temporary && workspace.host === undefined
   const start = (): void =>
     startsHidden ? startInBackground(workspace.id, shell.id) : startCard(workspace.id, shell.id)
 
@@ -399,16 +403,18 @@ function ShellRow({
               )}
               {!isDefault && (
                 <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="menu-item"
-                    data-testid="shell-menu-edit"
-                    onClick={run(onEdit)}
-                  >
-                    <Pencil {...MENU_ICON} />
-                    Edit…
-                  </button>
+                  {!temporary && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item"
+                      data-testid="shell-menu-edit"
+                      onClick={run(onEdit)}
+                    >
+                      <Pencil {...MENU_ICON} />
+                      Edit…
+                    </button>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

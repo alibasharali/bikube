@@ -101,3 +101,69 @@ export function windowPlacement(state: WindowState | null, workAreas: Rect[]): W
   if (!visible) return fallback
   return { bounds, maximized: state.maximized, fullScreen: state.fullScreen }
 }
+
+/** The part of Electron's `BrowserWindow` the mode restore and tracking use. */
+export interface ModalWindow {
+  getNormalBounds(): Rect
+  isMaximized(): boolean
+  isFullScreen(): boolean
+  isMinimized(): boolean
+  isDestroyed(): boolean
+  maximize(): void
+  setFullScreen(flag: boolean): void
+  on(event: 'close' | 'move' | 'resize' | (string & {}), listener: () => void): unknown
+}
+
+/**
+ * Maximizes or makes full screen a window saved that way (#66 D8); call just before showing it,
+ * since either shows a hidden window.
+ */
+export function restoreWindowMode(
+  window: Pick<ModalWindow, 'maximize' | 'setFullScreen'>,
+  placement: Pick<WindowPlacement, 'maximized' | 'fullScreen'>
+): void {
+  if (placement.maximized) window.maximize()
+  if (placement.fullScreen) window.setFullScreen(true)
+}
+
+const TRACKED_EVENTS = [
+  'move',
+  'resize',
+  'maximize',
+  'unmaximize',
+  'enter-full-screen',
+  'leave-full-screen',
+  'minimize',
+  'restore'
+] as const
+
+/**
+ * Hands `save` the window's state when it closes, and 500 ms after a move, resize or change of
+ * mode, so a crash or SIGKILL keeps the last one (#66 D8). A minimized window may read as neither
+ * maximized nor full screen, so while it is minimized the mode last seen before is saved.
+ */
+export function trackWindowState(window: ModalWindow, save: (state: WindowState) => void): void {
+  let mode = { maximized: window.isMaximized(), fullScreen: window.isFullScreen() }
+  const current = (): WindowState => {
+    if (!window.isMinimized()) {
+      mode = { maximized: window.isMaximized(), fullScreen: window.isFullScreen() }
+    }
+    return { bounds: window.getNormalBounds(), ...mode }
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const later = (): void => {
+    // Read the mode now: by the time the delay ends the window may have been minimized.
+    current()
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      timer = null
+      if (!window.isDestroyed()) save(current())
+    }, WINDOW_SAVE_DELAY_MS)
+  }
+  for (const event of TRACKED_EVENTS) window.on(event, later)
+  window.on('close', () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    save(current())
+  })
+}

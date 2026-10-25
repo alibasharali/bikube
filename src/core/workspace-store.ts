@@ -679,7 +679,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       id: shellId,
       ...checked.value,
       ...(runIn !== undefined && { runIn }),
-      // An edit never keeps a temporary shell (#66, out of scope).
+      // An edit keeps a temporary shell temporary (#66 D2; the UI offers no edit for one).
       ...(current?.temporary && { temporary: true })
     }
     this.replace({ ...ws, shells: ws.shells.map((s) => (s.id === shellId ? shell : s)) })

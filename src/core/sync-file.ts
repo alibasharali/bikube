@@ -85,13 +85,16 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup),
       // Shells sync like cards: their definitions travel, their processes stay on each machine.
-      shells: w.shells.map((sh) => ({
-        id: sh.id,
-        name: sh.name,
-        command: sh.command,
-        autostart: sh.autostart,
-        type: sh.type
-      })),
+      // A temporary shell (#66 D2) is this machine's and this run's only.
+      shells: w.shells
+        .filter((sh) => !sh.temporary)
+        .map((sh) => ({
+          id: sh.id,
+          name: sh.name,
+          command: sh.command,
+          autostart: sh.autostart,
+          type: sh.type
+        })),
       // Like the shells, the setup's definition travels (#39 D1); a card's pending one doesn't (D8).
       worktreeSetup: w.worktreeSetup,
       // The rules are the workspace's settings and travel with it (#42 D7); the moves they make

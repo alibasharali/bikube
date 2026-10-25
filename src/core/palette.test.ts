@@ -192,7 +192,7 @@ describe('paletteItems actions (#40 D6)', () => {
   const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
   const APP_ROWS = [
     'New card',
-    'Open Default shell',
+    'New shell',
     'New workspace',
     'Open Settings',
     'Theme: Dark',
@@ -403,7 +403,7 @@ describe('paletteItems actions (#40 D6)', () => {
     expect(shortcut('Toggle panel')).toBe('Alt+Cmd+B')
     expect(shortcut('Find')).toBe('Cmd+F')
     expect(shortcut('Open Settings')).toBe('Cmd+,')
-    expect(shortcut('Open Default shell')).toBe('Cmd+T')
+    expect(shortcut('New shell')).toBe('Cmd+T')
     expect(shortcut('Move card to Review')).toBeUndefined()
     expect(shortcut('New card')).toBeUndefined()
     expect(shortcut('Theme: Dark')).toBeUndefined()
@@ -434,12 +434,13 @@ describe('paletteItems Next waiting card (#41 D7)', () => {
     focusedPaneHasScreen: true
   }
 
-  it('lists the row after Open Default shell with its shortcut while a card waits', () => {
+  it('lists the row after New shell with its shortcut while a card waits', () => {
     const i = input(state, { waiting: ['c2'] })
     const shown = labels(i)
-    expect(
-      shown.slice(shown.indexOf('Open Default shell'), shown.indexOf('New workspace'))
-    ).toEqual(['Open Default shell', 'Next waiting card'])
+    expect(shown.slice(shown.indexOf('New shell'), shown.indexOf('New workspace'))).toEqual([
+      'New shell',
+      'Next waiting card'
+    ])
     expect(paletteItems(i).actions.find((r) => r.label === 'Next waiting card')).toEqual({
       kind: 'action',
       action: { id: 'nextWaiting' },
@@ -459,7 +460,7 @@ describe('paletteItems Next waiting card (#41 D7)', () => {
     expect(labels(input(state, { waiting: ['c1', 'c2'], view }))).toContain('Next waiting card')
   })
 
-  it('is listed without an active workspace, where Open Default shell would be', () => {
+  it('is listed without an active workspace, where New shell would be', () => {
     const none: WorkspaceState = { workspaces: [alpha, beta], activeId: null }
     const shown = labels(input(none, { waiting: ['c2'] }))
     expect(shown.slice(0, 2)).toEqual(['Next waiting card', 'New workspace'])

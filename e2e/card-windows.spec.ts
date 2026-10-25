@@ -719,7 +719,7 @@ test('AC4: a palette pick and Next waiting card focus its window, changing nothi
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 })
 
-test("AC9: a shell's menu opens it in its own window; its strip button and shortcut focus it", async () => {
+test("AC9: a shell's menu opens it in its own window; its strip button and menu focus it", async () => {
   await showShells(page)
   const shell = page.locator('[data-testid=shell][data-shell-name="Default"]')
   const opened = app.waitForEvent('window')
@@ -732,17 +732,22 @@ test("AC9: a shell's menu opens it in its own window; its strip button and short
   await expectCleanLine(window)
   const focusCalls = await spyOnFocus(`Default shell · ${WORKSPACE}`)
 
-  await page.keyboard.press(darwin ? 'Meta+T' : 'Control+Shift+T')
-  await expect.poll(focusCalls).toBe(1)
   await shell.getByTestId('shell-open').click()
-  await expect.poll(focusCalls).toBe(2)
+  await expect.poll(focusCalls).toBe(1)
   await shell.getByTestId('shell-menu').click()
   await page.getByTestId('shell-menu-open-window').click()
-  await expect.poll(focusCalls).toBe(3)
+  await expect.poll(focusCalls).toBe(2)
   await page.waitForTimeout(300)
   expect(app.windows()).toHaveLength(2)
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
+  // The New shell shortcut, the Default shell running in its window, opens a new shell here
+  // (#66 D1) and leaves that window alone.
+  await page.keyboard.press(darwin ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
+  await page.waitForTimeout(300)
+  expect(await focusCalls()).toBe(2)
+  expect(app.windows()).toHaveLength(2)
 
   await window.close()
   await expect(shell.getByTestId('shell-in-window')).toHaveCount(0)

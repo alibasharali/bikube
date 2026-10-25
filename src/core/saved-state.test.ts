@@ -540,3 +540,17 @@ describe('automatic move rules in the saved state (#42 D2, D7, AC10)', () => {
     expectRejected(fileWith((s) => (s.workspaces[0].autoMove = { stopped: null })))
   })
 })
+
+describe('temporary shells are never saved (#66 D2, AC4)', () => {
+  it('drops them from a state to save and from a file that names one', () => {
+    const s = new InMemoryWorkspaceStore()
+    const w = ok(s.createWorkspace({ name: 'alpha', directory: '/tmp/bikube-alpha' }))
+    const named = ok(s.createShell(w.id, { name: 'Dev', command: '', autostart: false }))
+    ok(s.createTemporaryShell(w.id))
+    const checked = validateWorkspaceState(s.getState())
+    expect(checked.ok && checked.value.workspaces[0]!.shells).toEqual([named])
+    const file = JSON.stringify({ version: 1, state: s.getState() })
+    const parsed = parseSavedState(file)
+    expect(parsed.ok && parsed.value.workspaces[0]!.shells).toEqual([named])
+  })
+})

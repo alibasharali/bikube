@@ -99,12 +99,123 @@ test('the Default shell opens a plain shell in the workspace folder, also by its
   await page.keyboard.press('Enter')
   await expect.poll(lines).toContain(`in=${dir}`)
   await backToBoard(page)
-  // Running: the board's own cards are untouched, and the shortcut brings it back.
+  // Running: the board's own cards are untouched, and a click brings it back (the shortcut now
+  // opens a new shell, #66 D1).
   await expect(page.getByTestId('card')).toHaveCount(0)
   await expect.poll(() => running('Default')).toBe('true')
-  await page.keyboard.press(OPEN_SHELL)
+  await shell('Default').getByTestId('shell-open').click()
   await expectCardOpen(page, 'Default')
   await expect.poll(lines).toContain(`in=${dir}`)
+})
+
+// New shell (#66): the Default shell first, then temporary `Terminal N` shells.
+
+/** The sidebar tree's terminals under the workspace, by title. */
+const treeTerminal = (title: string): Locator =>
+  page
+    .getByTestId('workspace-terminal')
+    .filter({ has: page.getByTestId('workspace-terminal-title').getByText(title, { exact: true }) })
+
+async function typeInOpen(text: string): Promise<void> {
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.type(text)
+  await page.keyboard.press('Enter')
+}
+
+test('#66 AC1: New shell opens the Default shell while it is not running', async () => {
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Default')
+  await expect.poll(() => running('Default')).toBe('true')
+  await expect(shell('Terminal 1')).toHaveCount(0)
+  await expect(page.getByTestId('shell')).toHaveCount(1)
+})
+
+test('#66 AC2, AC3: with the Default shell running, New shell opens Terminal 1, then Terminal 2', async () => {
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Default')
+  await expect.poll(() => running('Default')).toBe('true')
+  // AC2: the Default shell running and open.
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(() => running('Terminal 1')).toBe('true')
+  await expect(shell('Terminal 1')).toBeVisible()
+  await expect(treeTerminal('Terminal 1')).toBeVisible()
+  await typeInOpen('echo "t1=$PWD"')
+  await expect.poll(lines).toContain(`t1=${dir}`)
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 2')
+  await expect.poll(() => running('Terminal 2')).toBe('true')
+  // AC3: from the board, a new shell again, not the Default shell.
+  await backToBoard(page)
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 3')
+  await expect(page.getByTestId('shell')).toHaveCount(4)
+  // The palette's row reads New shell and does the same (AC5).
+  await page.keyboard.press(darwin ? 'Meta+K' : 'Control+Shift+P')
+  await page.getByTestId('palette-input').fill('New shell')
+  await page.keyboard.press('Enter')
+  await expectCardOpen(page, 'Terminal 4')
+})
+
+test('#66 AC4: a new shell is removed when it stops, its name reused, and never saved', async () => {
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Default')
+  await expect.poll(() => running('Default')).toBe('true')
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 2')
+  await expect.poll(() => running('Terminal 2')).toBe('true')
+  await shell('Terminal 1').getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Terminal 1')
+  await typeInOpen('exit')
+  await expect(shell('Terminal 1')).toHaveCount(0)
+  await expect(treeTerminal('Terminal 1')).toHaveCount(0)
+  await expect(shell('Terminal 2')).toBeVisible()
+  await expect(treeTerminal('Terminal 2')).toBeVisible()
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(() => running('Terminal 1')).toBe('true')
+  // Closed from its menu, it goes too.
+  await shellMenu('Terminal 2', 'close')
+  await expect(shell('Terminal 2')).toHaveCount(0)
+
+  // A named shell added after them is saved; they never are.
+  await newShell('Later', '')
+  const statePath = join(dataDir, 'bikube-state.json')
+  await expect.poll(() => readFileSync(statePath, 'utf8')).toContain('"Later"')
+  expect(readFileSync(statePath, 'utf8')).not.toContain('Terminal ')
+  await app!.close()
+  ;({ app, page } = await launchApp({ dataDir }))
+  await showShells(page)
+  await expect(shell('Later')).toBeVisible()
+  await expect(page.getByTestId('shell')).toHaveCount(2)
+  await expect(shell('Terminal 1')).toHaveCount(0)
+})
+
+test('#66 AC4: with a Sync folder on, the folder never names a new shell', async () => {
+  const folder = join(root, 'sync')
+  mkdirSync(folder)
+  await page.getByTestId('settings-open').click()
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-sync').click()
+  await settings.getByTestId('settings-sync-folder').fill(folder)
+  await settings.getByTestId('settings-sync-folder').press('Enter')
+  await settings.getByTestId('settings-done').click()
+  await expect(settings).toHaveCount(0)
+  await expect(page.getByTestId('sync-status')).toHaveText(/^Synced \d\d:\d\d$/)
+  await page.keyboard.press(OPEN_SHELL)
+  await expect.poll(() => running('Default')).toBe('true')
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(() => running('Terminal 1')).toBe('true')
+  await backToBoard(page)
+  await newShell('Later', '')
+  const boardPath = join(folder, 'bikube-board.json')
+  await expect.poll(() => readFileSync(boardPath, 'utf8')).toContain('"Later"')
+  expect(readFileSync(boardPath, 'utf8')).not.toContain('Terminal ')
+  // The board this machine reads back from the folder keeps its own new shell.
+  await expect(shell('Terminal 1')).toBeVisible()
 })
 
 test('a named shell types its command each time it starts; restart, close, edit and delete', async () => {

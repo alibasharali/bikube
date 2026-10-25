@@ -262,7 +262,7 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   closePane: 'Close pane',
   closeCard: 'Close card',
   settings: 'Open Settings',
-  openShell: 'Open Default shell',
+  openShell: 'New shell',
   togglePanel: 'Toggle panel',
   find: 'Find',
   palette: 'Command palette',

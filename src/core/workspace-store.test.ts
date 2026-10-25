@@ -1393,3 +1393,39 @@ describe('setShellRunIn', () => {
     expect(s.setShellRunIn(w.id, 'nope', null)).toMatchObject({ ok: false })
   })
 })
+
+describe('temporary shells (#66 D2, D3)', () => {
+  it('adds a plain shell named Terminal N, N the lowest free, marked temporary', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const one = ok(s.createTemporaryShell(w.id))
+    expect(one).toEqual({
+      id: one.id,
+      name: 'Terminal 1',
+      command: '',
+      autostart: false,
+      type: 'shell',
+      temporary: true
+    })
+    const two = ok(s.createTemporaryShell(w.id))
+    expect(two.name).toBe('Terminal 2')
+    ok(s.deleteShell(w.id, one.id))
+    expect(ok(s.createTemporaryShell(w.id)).name).toBe('Terminal 1')
+    // A named shell holding the name counts too.
+    ok(s.createShell(w.id, { name: 'Terminal 3', command: '', autostart: false }))
+    expect(ok(s.createTemporaryShell(w.id)).name).toBe('Terminal 4')
+    expect(s.createTemporaryShell('nope')).toMatchObject({ ok: false })
+  })
+
+  it('stays temporary when edited', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const t = ok(s.createTemporaryShell(w.id))
+    expect(
+      ok(s.updateShell(w.id, t.id, { name: 'X', command: '', autostart: false })).temporary
+    ).toBe(true)
+    // A named shell is never temporary.
+    const named = ok(s.createShell(w.id, { name: 'Dev', command: '', autostart: false }))
+    expect(named.temporary).toBeUndefined()
+  })
+})

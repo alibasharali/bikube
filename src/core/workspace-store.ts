@@ -136,6 +136,11 @@ export interface WorkspaceShell {
    * synced (a worktree is a folder on this machine). Absent for the workspace's folder.
    */
   runIn?: string
+  /**
+   * Added by the New shell shortcut (#66 D2): a plain shell removed from the workspace as soon as
+   * it stops, never saved or synced. Runtime only; absent for every other shell.
+   */
+  temporary?: true
 }
 
 export type ShellType = 'shell' | 'trigger'
@@ -152,6 +157,17 @@ export interface ShellInput {
 }
 
 export const MAX_SHELL_NAME_LENGTH = 100
+
+/**
+ * A new temporary shell's name (#66 D3): `Terminal N`, N the lowest positive integer no shell of
+ * the workspace is called by.
+ */
+export function temporaryShellName(shells: readonly WorkspaceShell[]): string {
+  const taken = new Set(shells.map((s) => s.name))
+  let n = 1
+  while (taken.has(`Terminal ${n}`)) n++
+  return `Terminal ${n}`
+}
 
 /** The id of a workspace's Default shell: a plain shell in its folder, never stored. */
 export const defaultShellId = (workspaceId: string): string => `default-shell:${workspaceId}`
@@ -258,6 +274,11 @@ export interface WorkspaceStore {
   setCardStartup(workspaceId: string, cardId: string, startup: StartupCommand): Result<Card>
   /** Adds a shell at the end of the workspace's shells; name required, command one line or ''. */
   createShell(workspaceId: string, input: ShellInput): Result<WorkspaceShell>
+  /**
+   * Adds a temporary plain shell (#66 D2) named by `temporaryShellName` at the end of the
+   * workspace's shells.
+   */
+  createTemporaryShell(workspaceId: string): Result<WorkspaceShell>
   updateShell(workspaceId: string, shellId: string, input: ShellInput): Result<WorkspaceShell>
   /**
    * Where the shell runs from its next start: a worktree card of the workspace, or null for the
@@ -629,6 +650,21 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return { ok: true, value: shell }
   }
 
+  createTemporaryShell(workspaceId: string): Result<WorkspaceShell> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    const shell: WorkspaceShell = {
+      id: this.generateId(),
+      name: temporaryShellName(ws.shells),
+      command: '',
+      autostart: false,
+      type: 'shell',
+      temporary: true
+    }
+    this.replace({ ...ws, shells: [...ws.shells, shell] })
+    return { ok: true, value: shell }
+  }
+
   updateShell(workspaceId: string, shellId: string, input: ShellInput): Result<WorkspaceShell> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
@@ -637,11 +673,14 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     }
     const checked = checkShell(input)
     if (!checked.ok) return checked
-    const runIn = ws.shells.find((s) => s.id === shellId)?.runIn
+    const current = ws.shells.find((s) => s.id === shellId)
+    const runIn = current?.runIn
     const shell: WorkspaceShell = {
       id: shellId,
       ...checked.value,
-      ...(runIn !== undefined && { runIn })
+      ...(runIn !== undefined && { runIn }),
+      // An edit never keeps a temporary shell (#66, out of scope).
+      ...(current?.temporary && { temporary: true })
     }
     this.replace({ ...ws, shells: ws.shells.map((s) => (s.id === shellId ? shell : s)) })
     return { ok: true, value: shell }

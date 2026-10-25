@@ -759,6 +759,24 @@ test('#31 AC8: a bad shortcut falls back to its default; the rest of the file is
   )
 })
 
+test('#66 AC5: Settings lists the New shell shortcut under its new label, with its keys', async () => {
+  const launched = await launchApp({ dataDir: newDataDir() })
+  app = launched.app
+  const { page } = launched
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  const row = dialog(page)
+    .locator('.shortcut-row')
+    .filter({ has: page.getByTestId('settings-shortcut-openShell') })
+  await expect(row.locator('.shortcut-label')).toHaveText('New shell')
+  await expect(shortcutField(page, 'openShell')).toHaveText(
+    process.platform === 'darwin' ? 'Cmd+T' : 'Ctrl+Shift+T'
+  )
+  await expect(dialog(page).getByRole('group', { name: 'Shortcuts' })).not.toContainText(
+    'Open Default shell'
+  )
+})
+
 test('#31 D8: Reset is refused while another action holds the default; the value stays', async () => {
   const dataDir = newDataDir()
   const launched = await launchApp({ dataDir })

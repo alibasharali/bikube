@@ -16,9 +16,10 @@ import {
 import { nextWaitingCard } from '../../core/waiting'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { startInBackground } from './background-shells'
+import { newShell } from './temporary-shells'
 import { removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
-import { defaultShellId, type Workspace } from '../../core/workspace-store'
+import type { Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import {
   focusCardWindow,
@@ -158,11 +159,13 @@ function App(): React.JSX.Element {
     [activeId, setViews]
   )
 
-  // The Default shell's shortcut opens the active workspace's, starting it when stopped.
-  const openDefaultShell = useRef(() => {})
+  // New shell (#66 D1): the active workspace's Default shell, starting it when stopped; while it
+  // runs, a new temporary shell (D2), opened started.
+  const openNewShell = useRef(() => {})
   useEffect(() => {
-    openDefaultShell.current = () => {
-      if (activeId) onOpenCard(defaultShellId(activeId))
+    openNewShell.current = () => {
+      const shellId = activeId ? newShell(activeId) : null
+      if (shellId) onOpenCard(shellId)
     }
   })
 
@@ -268,7 +271,8 @@ function App(): React.JSX.Element {
       event.preventDefault()
       event.stopPropagation()
       if (action === 'settings') setSettingsOpen(true)
-      else openDefaultShell.current()
+      // A held shortcut's auto-repeat adds no more shells (#31 D7).
+      else if (!event.repeat) openNewShell.current()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -293,7 +297,7 @@ function App(): React.JSX.Element {
         if (!activeId) return
         closeCard()
         requestNewCard(activeId)
-      } else if (action.id === 'openShell') openDefaultShell.current()
+      } else if (action.id === 'openShell') openNewShell.current()
       else if (action.id === 'nextWaiting') openNextWaiting.current()
       else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
       else if (action.id === 'settings') setSettingsOpen(true)

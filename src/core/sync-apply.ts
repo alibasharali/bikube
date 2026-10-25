@@ -9,8 +9,8 @@ import type { Card, Workspace } from './workspace-store'
 /**
  * The board this machine takes from `incoming` (D7): the file's workspaces, columns, cards and
  * order, with this machine's `claudeStarted`, `startedAgents` (#21 D7) and pending setup (#39 D8) for local cards it
- * already has, else false and empty (D6), where each shell runs (`runIn`, never in the file), and
- * every card running here (`isRunning`) kept (D8): a
+ * already has, else false and empty (D6), where each shell runs (`runIn`, never in the file), its
+ * temporary shells (#66 D2, never in the file either), and every card running here (`isRunning`) kept (D8): a
  * running card the file lacks goes to the bottom of its column, or of its workspace's first column
  * when that column is gone; a workspace the file lacks that has a running card stays as this
  * machine has it, after the file's workspaces. A running card the file has takes the file's values.
@@ -46,12 +46,14 @@ export function applySyncBoard(
       const runIn = localRunIn.get(s.id)
       return runIn === undefined ? s : { ...s, runIn }
     })
+    // This machine's temporary shells (#66 D2) are never in the file: they stay, after its shells.
+    const mine = localById.get(w.id)
+    for (const s of mine?.shells ?? []) if (s.temporary) shells.push(s)
     const cards = w.cards.map((c) =>
       c.host === undefined
         ? { ...c, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
         : c
     )
-    const mine = localById.get(w.id)
     const first = w.columns[0]
     if (mine && first) {
       for (const c of kept(mine)) {

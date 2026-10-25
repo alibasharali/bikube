@@ -141,6 +141,8 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
   if (!Array.isArray(raw)) return 'bad shells'
   const shells: WorkspaceShell[] = []
   for (const s of raw) {
+    // A temporary shell (#66 D2) is runtime only: never saved, and never read back.
+    if (isObject(s) && s.temporary === true) continue
     if (!isObject(s) || !isId(s.id) || typeof s.name !== 'string') return 'bad shell'
     const command = typeof s.command === 'string' ? s.command : ''
     const checked = checkShell({

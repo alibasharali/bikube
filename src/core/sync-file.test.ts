@@ -436,3 +436,15 @@ describe('automatic move rules in the sync file (#42 D7, AC11)', () => {
     expect(parseSyncFile(fileWith({ waiting: 5 }), HOME).ok).toBe(false)
   })
 })
+
+describe('temporary shells never reach the sync file (#66 D2, AC4)', () => {
+  it('leaves them out of the board it writes', () => {
+    const named = { id: 's1', name: 'Dev', command: '', autostart: false, type: 'shell' as const }
+    const temp = { ...named, id: 's2', name: 'Terminal 1', temporary: true as const }
+    const board = toSyncBoard(
+      { workspaces: [workspace('w', 'alpha', { shells: [named, temp] })], activeId: 'w' },
+      HOME
+    )
+    expect(board.workspaces[0]!.shells).toEqual([named])
+  })
+})

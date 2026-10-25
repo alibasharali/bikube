@@ -184,3 +184,15 @@ describe("keeping where this machine's shells run", () => {
     ])
   })
 })
+
+describe("keeping this machine's temporary shells (#66 D2)", () => {
+  it('keeps each workspace’s temporary shells after the file’s shells', () => {
+    const shell = { id: 's1', name: 'Dev', command: '', autostart: false, type: 'shell' as const }
+    const temp = { ...shell, id: 't1', name: 'Terminal 1', temporary: true as const }
+    const local = [workspace('a', { shells: [shell, temp] }), workspace('b')]
+    const incoming = [workspace('a', { shells: [{ ...shell, name: 'Dev server' }] })]
+    const applied = applySyncBoard(incoming, local, none)
+    expect(applied.map((w) => w.id)).toEqual(['a'])
+    expect(applied[0]!.shells).toEqual([{ ...shell, name: 'Dev server' }, temp])
+  })
+})

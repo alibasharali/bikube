@@ -310,7 +310,7 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
   expect(await titles(section('actions'))).toEqual([
     'Toggle panel',
     'New card',
-    'Open Default shell',
+    'New shell',
     'New workspace',
     'Open Settings',
     'Theme: Dark',

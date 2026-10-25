@@ -115,13 +115,13 @@ describe('window placement at launch (#66 D8)', () => {
   })
 
   it('raises a size below the minimum to it', () => {
-    expect(MIN_WINDOW_SIZE).toEqual({ width: 400, height: 300 })
+    expect(MIN_WINDOW_SIZE).toEqual({ width: 320, height: 240 })
     const small = state({ bounds: { x: 10, y: 20, width: 200, height: 100 } })
     expect(windowPlacement(small, [SCREEN]).bounds).toEqual({
       x: 10,
       y: 20,
-      width: 400,
-      height: 300
+      width: 320,
+      height: 240
     })
   })
 

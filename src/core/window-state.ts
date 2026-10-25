@@ -9,7 +9,7 @@ export const WINDOW_FILE_NAME = 'bikube-window.json'
 export const DEFAULT_WINDOW_SIZE = { width: 1100, height: 720 } as const
 
 /** The main window's minimum size; saved sizes below it are raised to it. */
-export const MIN_WINDOW_SIZE = { width: 400, height: 300 } as const
+export const MIN_WINDOW_SIZE = { width: 320, height: 240 } as const
 
 /** How much of the saved window must lie within one display's work area for it to be used. */
 const MIN_VISIBLE = { width: 100, height: 50 } as const

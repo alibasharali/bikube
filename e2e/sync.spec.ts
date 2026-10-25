@@ -321,6 +321,7 @@ test('AC12: a settings file from #10 without syncFolder loads with sync off and 
   await expect(settings(a.page).getByTestId('settings-sync-off')).toHaveCount(0)
   await settingsSection(a.page, 'appearance')
   await expect(settings(a.page).getByTestId('settings-theme-dark')).toBeChecked()
+  await settingsSection(a.page, 'terminal')
   await expect(settings(a.page).getByTestId('settings-font-size')).toHaveValue('16')
   await expect(settings(a.page).getByTestId('settings-font-family')).toHaveValue('Courier New')
 })

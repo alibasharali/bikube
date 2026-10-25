@@ -202,8 +202,10 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
           data-testid={`settings-panel-${section}`}
         >
           <h3 className="settings-panel-title">{current.label}</h3>
-          {section === 'appearance' && <AppearanceSection family={family} setFamily={setFamily} />}
-          {section === 'terminal' && <TerminalColoursField onPick={setPicking} />}
+          {section === 'appearance' && <AppearanceSection />}
+          {section === 'terminal' && (
+            <TerminalColoursField onPick={setPicking} family={family} setFamily={setFamily} />
+          )}
           {section === 'shell' && <ShellField />}
           {section === 'editor' && <EditorField />}
           {section === 'agents' && <AgentsSection />}
@@ -232,13 +234,49 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
   )
 }
 
+/** Appearance: the Theme (which version shows) and the App theme (#64). */
+function AppearanceSection(): React.JSX.Element {
+  const settings = useSettings()
+  const id = useId()
+  return (
+    <>
+      <fieldset className="settings-row">
+        <legend className="settings-label">Theme</legend>
+        <div className="segmented">
+          {THEMES.map((theme) => {
+            const Icon = THEME_ICONS[theme]
+            return (
+              <label key={theme} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-theme`}
+                  value={theme}
+                  data-testid={`settings-theme-${theme}`}
+                  checked={settings.theme === theme}
+                  onChange={() => settingsStore.update({ theme })}
+                />
+                <Icon {...SMALL_ICON} />
+                {THEME_LABELS[theme]}
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+      <AppThemePicker
+        value={settings.appTheme}
+        onPick={(appTheme) => settingsStore.update({ appTheme })}
+      />
+    </>
+  )
+}
+
 /**
- * Appearance: the Theme (which version shows), the App theme (#64), and the terminals' font size
- * (typed, or stepped with the buttons and the arrow keys) and family (applied on blur or Enter,
- * empty means the default). The family's draft lives in the dialog, so closing from another
- * section still applies it.
+ * The terminals' font rows in the Terminal section (#66 D5): size (typed, or stepped with the
+ * buttons and the arrow keys), family (a listed font, or Custom applied on blur or Enter, empty
+ * meaning the default), weight, line height and letter spacing. The family's draft lives in the
+ * dialog, so closing from another section still applies it.
  */
-function AppearanceSection({
+function TerminalFontRows({
   family,
   setFamily
 }: {
@@ -292,32 +330,6 @@ function AppearanceSection({
   const familyId = `${id}-family`
   return (
     <>
-      <fieldset className="settings-row">
-        <legend className="settings-label">Theme</legend>
-        <div className="segmented">
-          {THEMES.map((theme) => {
-            const Icon = THEME_ICONS[theme]
-            return (
-              <label key={theme} className="radio">
-                <input
-                  type="radio"
-                  name={`${id}-theme`}
-                  value={theme}
-                  data-testid={`settings-theme-${theme}`}
-                  checked={settings.theme === theme}
-                  onChange={() => settingsStore.update({ theme })}
-                />
-                <Icon {...SMALL_ICON} />
-                {THEME_LABELS[theme]}
-              </label>
-            )
-          })}
-        </div>
-      </fieldset>
-      <AppThemePicker
-        value={settings.appTheme}
-        onPick={(appTheme) => settingsStore.update({ appTheme })}
-      />
       <div className="settings-row">
         <label className="settings-label" htmlFor={sizeId}>
           Font size
@@ -915,13 +927,17 @@ function useResolvedTheme(): ResolvedTheme {
 /**
  * The Terminal section: where the colours come from, Bikube's built-in themes (one for the dark
  * app theme, one for the light, each picked in the theme picker) or the user's Ghostty config
- * (with what was read and Reload), then a preview of the terminal in the colours and font in
- * effect now.
+ * (with what was read and Reload), then the font rows (#66 D5) and a preview of the terminal in
+ * the colours and font in effect now, redrawn as either changes (D6).
  */
 function TerminalColoursField({
-  onPick
+  onPick,
+  family,
+  setFamily
 }: {
   onPick: (appearance: ResolvedTheme) => void
+  family: string
+  setFamily: (family: string) => void
 }): React.JSX.Element {
   const settings = useSettings()
   const ghostty = useGhosttyTheme()
@@ -1034,12 +1050,16 @@ function TerminalColoursField({
           </div>
         </div>
       )}
+      <TerminalFontRows family={family} setFamily={setFamily} />
       <div className="settings-preview">
         <span className="settings-label">Preview</span>
         <TerminalPreview
           palette={palette}
           fontFamily={withSymbols(settings.fontFamily)}
           fontSize={settings.fontSize}
+          fontWeight={settings.fontWeight}
+          lineHeight={settings.lineHeight}
+          letterSpacing={settings.letterSpacing}
         />
       </div>
       <TerminalBehaviourRows />

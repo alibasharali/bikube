@@ -29,6 +29,11 @@ const SHORTCUT = process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma'
 
 const dialog = (page: Page): Locator => page.getByTestId('settings-dialog')
 
+/** Settings → Terminal, where the terminal font rows are (#66 D5). */
+async function showTerminal(page: Page): Promise<void> {
+  await dialog(page).getByTestId('settings-section-terminal').click()
+}
+
 /** Settings → Font family set to Custom…: its text field, where any family is typed. */
 async function customFamily(page: Page): Promise<Locator> {
   await dialog(page).getByLabel('Font family').selectOption({ label: 'Custom…' })
@@ -204,6 +209,7 @@ test('AC1: opening Settings, leaving the family field and closing writes no sett
   app = launched.app
   const { page, dataDir } = launched
   await page.getByTestId('settings-open').click()
+  await showTerminal(page)
   await dialog(page).getByLabel('Font family').focus()
   await dialog(page).getByLabel('Font size').focus()
   await dialog(page).getByRole('button', { name: 'Done' }).click()
@@ -286,6 +292,7 @@ test('AC2: Settings opens from the sidebar, expanded or collapsed, and closes ea
   await expect(dialog(page).getByRole('radio', { name: 'System' })).toBeChecked()
   await expect(dialog(page).getByRole('radio', { name: 'Dark' })).not.toBeChecked()
   await expect(dialog(page).getByRole('radio', { name: 'Light' })).not.toBeChecked()
+  await showTerminal(page)
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('13')
   // The default family: the list's first entry, no custom field.
   await expect(dialog(page).getByLabel('Font family')).toHaveValue('')
@@ -444,6 +451,7 @@ test('AC5: font size 18 applies at once, refits the open terminal and resizes it
   const before = (await openLook(page)).cols
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   const size = dialog(page).getByLabel('Font size')
   await size.fill('18')
   await expect.poll(async () => (await openLook(page)).fontSize).toBe(18)
@@ -469,6 +477,7 @@ test('AC5: font size 18 applies at once, refits the open terminal and resizes it
   await expect.poll(async () => (await bufferLines(page)).includes(`cols-${after}`)).toBe(true)
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('18')
 })
 
@@ -493,6 +502,7 @@ test('AC6: the trimmed family applies to every terminal; clearing it restores th
   await openCard(page, 'api')
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   const family = await customFamily(page)
   await family.fill('  Courier New, monospace  ')
   await family.press('Enter')
@@ -502,6 +512,7 @@ test('AC6: the trimmed family applies to every terminal; clearing it restores th
   expect((await openLook(page)).fontFamily).toBe('Courier New, monospace')
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   await family.fill('')
   await family.press('Enter')
   await expect(family).toHaveValue('')
@@ -521,6 +532,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await alphaWithApi(page)
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   const family = await customFamily(page)
   await expect(family).toHaveAttribute('maxlength', '200')
   await family.fill('Courier New')
@@ -533,6 +545,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   )
 
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   await family.fill('Courier New, monospace')
   await page.mouse.click(5, 5)
   await expect(dialog(page)).toHaveCount(0)
@@ -548,6 +561,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   app = launched.app
   const { page, dataDir } = launched
   await page.getByTestId('settings-open').click()
+  await showTerminal(page)
   const size = dialog(page).getByLabel('Font size')
   const family = dialog(page).getByLabel('Custom font family')
 
@@ -577,6 +591,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   // Closing drops the invalid size; reopening shows the last valid one.
   await dialog(page).getByRole('button', { name: 'Done' }).click()
   await page.getByTestId('settings-open').click()
+  await showTerminal(page)
   await expect(size).toHaveValue('18')
   await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveCount(0)
 
@@ -600,6 +615,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   await page.keyboard.press(SHORTCUT)
   await dialog(page).getByRole('radio', { name: 'Light' }).check()
+  await showTerminal(page)
   await dialog(page).getByLabel('Font size').fill('16')
   const family = await customFamily(page)
   await family.fill('Courier New, monospace')
@@ -628,6 +644,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'Light' })).toBeChecked()
+  await showTerminal(page)
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('16')
   await expect(dialog(page).getByLabel('Custom font family')).toHaveValue('Courier New, monospace')
   expect(readSettingsFile(dataDir)).toBe(expected)
@@ -662,9 +679,11 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
 
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'System' })).toBeChecked()
+  await showTerminal(page)
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('13')
   await expect(dialog(page).getByLabel('Custom font family')).toHaveValue('Courier New')
 
+  await dialog(page).getByTestId('settings-section-appearance').click()
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expectSettingsFile(
     dataDir,
@@ -685,6 +704,7 @@ test('AC8: a settings file that is not JSON gives all defaults', async () => {
 
   await page.getByTestId('settings-open').click()
   await expect(dialog(page).getByRole('radio', { name: 'System' })).toBeChecked()
+  await showTerminal(page)
   await expect(dialog(page).getByLabel('Font size')).toHaveValue('13')
   await expect(dialog(page).getByLabel('Font family')).toHaveValue('')
 })
@@ -821,6 +841,7 @@ test('the Font family list offers installed fonts; a pick applies at once and is
   const { page, dataDir } = launched
   await alphaWithApi(page)
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   const list = dialog(page).getByLabel('Font family')
   const names = await list.locator('option').allTextContents()
   expect(names[0]).toMatch(/^Default/)
@@ -841,7 +862,108 @@ test('the Font family list offers installed fonts; a pick applies at once and is
   // Closing keeps the pick; reopening shows it selected.
   await page.keyboard.press('Escape')
   await page.keyboard.press(SHORTCUT)
+  await showTerminal(page)
   await expect(list).toHaveValue(font)
+})
+
+/** The labels of the open section's rows, in order, with the Preview's among them. */
+function sectionLabels(page: Page): Promise<string[]> {
+  return dialog(page).evaluate((root) =>
+    [
+      ...root.querySelectorAll(
+        '[role=tabpanel] :is(.settings-row, .settings-preview) > .settings-label'
+      )
+    ].map((label) => label.textContent ?? '')
+  )
+}
+
+/** The Terminal section's preview: its computed font. */
+function previewFont(
+  page: Page
+): Promise<{ size: string; weight: string; lineHeight: string; spacing: string; family: string }> {
+  return dialog(page)
+    .getByTestId('theme-preview')
+    .evaluate((el) => {
+      const style = getComputedStyle(el)
+      return {
+        size: style.fontSize,
+        weight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        spacing: style.letterSpacing,
+        family: style.fontFamily
+      }
+    })
+}
+
+test('#66 AC6: Appearance has no terminal font rows; Terminal has them above the Preview, saving as before', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page, dataDir } = launched
+  await page.getByTestId('settings-open').click()
+  await expect(dialog(page).getByTestId('settings-panel-appearance')).toBeVisible()
+  const fontIds = [
+    'settings-font-size',
+    'settings-font-choice',
+    'settings-font-weight',
+    'settings-line-height',
+    'settings-letter-spacing'
+  ]
+  for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toHaveCount(0)
+  expect(await sectionLabels(page)).toEqual(['Theme', 'App theme'])
+
+  await dialog(page).getByTestId('settings-section-terminal').click()
+  for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toBeVisible()
+  const labels = await sectionLabels(page)
+  const preview = labels.indexOf('Preview')
+  for (const label of [
+    'Font size',
+    'Font family',
+    'Font weight',
+    'Line height',
+    'Letter spacing'
+  ]) {
+    expect(labels.indexOf(label), label).toBeGreaterThanOrEqual(0)
+    expect(labels.indexOf(label), label).toBeLessThan(preview)
+  }
+
+  await dialog(page).getByTestId('settings-font-weight').selectOption({ label: 'Medium' })
+  await expect
+    .poll(() =>
+      existsSync(join(dataDir, 'bikube-settings.json')) ? readSettingsFile(dataDir) : ''
+    )
+    .toContain('"fontWeight":500')
+})
+
+test('#66 AC7: the Terminal preview follows font size, weight, line height, letter spacing and family', async () => {
+  const launched = await launchApp()
+  app = launched.app
+  const { page } = launched
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-terminal').click()
+  const before = await previewFont(page)
+
+  await dialog(page).getByTestId('settings-font-size').fill('18')
+  await dialog(page).getByTestId('settings-font-weight').selectOption({ label: 'Semibold' })
+  await dialog(page).getByTestId('settings-line-height').selectOption('1.5')
+  await dialog(page).getByTestId('settings-letter-spacing').selectOption('2')
+  await expect
+    .poll(() => previewFont(page))
+    .toMatchObject({ size: '18px', weight: '600', lineHeight: '27px', spacing: '2px' })
+  // Bold runs stay heavier than the rest.
+  const bold = await dialog(page)
+    .getByTestId('theme-preview')
+    .locator('span')
+    .first()
+    .evaluate((el) => getComputedStyle(el).fontWeight)
+  expect(Number(bold)).toBeGreaterThan(600)
+
+  const list = dialog(page).getByTestId('settings-font-choice')
+  const names = await list.locator('option').allTextContents()
+  const installed = names.slice(1, -1).filter((name) => !name.endsWith('(not installed)'))
+  test.skip(installed.length === 0, 'no listed font installed here')
+  await list.selectOption(installed[0]!)
+  await expect.poll(async () => (await previewFont(page)).family).not.toBe(before.family)
+  expect((await previewFont(page)).family).toContain(installed[0]!)
 })
 
 test('#48 AC6: Zoom pane shows its default, can be recorded to a key that then zooms, and Reset', async () => {
@@ -1134,7 +1256,8 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
   await expect(dialog(page)).toBeVisible()
 
   const layouts = await rowLayouts(page)
-  expect(layouts.length).toBeGreaterThan(3)
+  // Theme and App theme: the terminal font rows are in Terminal since #66, checked below.
+  expect(layouts.length).toBeGreaterThanOrEqual(2)
   for (const { label, layout } of layouts) expect(layout, label).toBe('above')
   const grid = await dialog(page).getByRole('radiogroup', { name: 'App theme' }).boundingBox()
   expect(grid!.width).toBeGreaterThanOrEqual(200)

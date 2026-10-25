@@ -432,6 +432,7 @@ test('AC11: font size reaches every pane, each refitted to its own columns', asy
 
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
   const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-terminal').click()
   await settings.getByLabel('Font size').fill('18')
   // A dialog owns the keyboard: the split shortcuts do nothing while it is open (D4).
   await page.keyboard.press(SPLIT_RIGHT)

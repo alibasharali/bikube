@@ -794,7 +794,7 @@ test('AC13: Settings lists Open in new window, recorded, refused, saved and rese
   await reset.click()
   await expect(field).toHaveText(defaultText)
   await expect.poll(saved).not.toContain('openInWindow')
-  await settings.getByTestId('settings-section-appearance').click()
+  await settings.getByTestId('settings-section-terminal').click()
   await settings.getByLabel('Font size').fill('18')
   await expect.poll(fontSize).toBe(18)
   await page.keyboard.press('Escape')

@@ -251,9 +251,9 @@ test('terminal settings reach the open terminal at once and are saved only when 
   })
 
   await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-terminal').click()
   await dialog(page).getByTestId('settings-line-height').selectOption('1.2')
   await dialog(page).getByTestId('settings-font-weight').selectOption({ label: 'Medium' })
-  await dialog(page).getByTestId('settings-section-terminal').click()
   await dialog(page).getByTestId('settings-cursor-bar').check()
   await dialog(page).getByTestId('settings-cursor-blink').check()
   await dialog(page).getByTestId('settings-scrollback').selectOption('50000')

@@ -27,6 +27,12 @@ import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
 import { registerUpdates } from './updates'
 import { registerWorktrees } from './worktrees'
+import {
+  keepWindowState,
+  placementOptions,
+  restoreWindowMode,
+  savedPlacement
+} from './window-state'
 
 /**
  * The longest one quit hold waits for the shells to exit (#18 D2) and the sync folder's flush
@@ -55,9 +61,10 @@ const longCommandMs = app.isPackaged ? undefined : process.env['BIKUBE_LONG_COMM
 const devIcon = join(app.getAppPath(), 'build', 'icon.png')
 
 function createWindow(settings: MainSettings): void {
+  // The size and place it was left at (#66 D8), else 1100×720, centred.
+  const placement = savedPlacement()
   const mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
+    ...placementOptions(placement),
     show: false,
     title: 'Bikube',
     // The resolved theme's background (#10 D2), so a light launch doesn't flash dark.
@@ -89,9 +96,12 @@ function createWindow(settings: MainSettings): void {
 
   // Its page opens its cards' own windows, and they close with it (#53 D3).
   allowCardWindows(mainWindow, () => settings.backgroundColor(), hiddenForTests)
+  keepWindowState(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
-    if (!hiddenForTests) mainWindow.show()
+    if (hiddenForTests) return
+    restoreWindowMode(mainWindow, placement)
+    mainWindow.show()
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']

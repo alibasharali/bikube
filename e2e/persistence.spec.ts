@@ -578,3 +578,115 @@ test('AC10: a second instance on the same data directory exits; the first keeps 
   await createWorkspace(makeDir('beta'), 'beta')
   await expect.poll(savedWorkspaceNames).toEqual(['alpha', 'beta'])
 })
+
+/** The main window's bounds, maximized and full-screen state, read from main. */
+const mainWindowState = (): Promise<{
+  bounds: { x: number; y: number; width: number; height: number }
+  normal: { x: number; y: number; width: number; height: number }
+  maximized: boolean
+}> =>
+  app!.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]!
+    return {
+      bounds: window.getBounds(),
+      normal: window.getNormalBounds(),
+      maximized: window.isMaximized()
+    }
+  })
+
+const savedWindow = (): unknown => {
+  try {
+    return JSON.parse(readFileSync(join(dataDir, 'bikube-window.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+test('#66 AC9: the main window opens at the size and place it was left at', async () => {
+  await launch()
+  await app!.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]!.setBounds({ x: 60, y: 40, width: 900, height: 650 })
+  )
+  await expect
+    .poll(async () => (await mainWindowState()).bounds)
+    .toEqual({ x: 60, y: 40, width: 900, height: 650 })
+  // Saved after a resize (debounced), before any quit.
+  await expect.poll(savedWindow).toEqual({
+    version: 1,
+    bounds: { x: 60, y: 40, width: 900, height: 650 },
+    maximized: false,
+    fullScreen: false
+  })
+
+  await restart()
+
+  expect((await mainWindowState()).bounds).toEqual({ x: 60, y: 40, width: 900, height: 650 })
+  await expect(page.getByTestId('workspace-add')).toBeVisible()
+})
+
+test('#66 AC9: a window maximized at quit opens maximized, its normal size kept', async () => {
+  writeFileSync(
+    join(dataDir, 'bikube-window.json'),
+    JSON.stringify({
+      version: 1,
+      bounds: { x: 60, y: 40, width: 900, height: 650 },
+      maximized: true,
+      fullScreen: false
+    })
+  )
+
+  await launch()
+
+  expect((await mainWindowState()).normal).toEqual({ x: 60, y: 40, width: 900, height: 650 })
+  if (process.platform === 'darwin' && process.env['BIKUBE_E2E_SHOW'] !== '1') {
+    // On macOS the tests' window is never shown, and maximizing would show it.
+    test.info().annotations.push({ type: 'note', description: 'hidden window: not maximized' })
+    return
+  }
+  if (!(await mainWindowState()).maximized) {
+    // xvfb has no window manager, which maximizes nothing: then only the normal size is checked.
+    await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.maximize())
+    await page.waitForTimeout(1_000)
+    const canMaximize = (await mainWindowState()).maximized
+    expect(canMaximize, 'the display maximizes, but the launch did not').toBe(false)
+    test.info().annotations.push({ type: 'note', description: 'no window manager to maximize' })
+    return
+  }
+  // Where a window manager maximizes, the state is saved as maximized again at quit.
+  await app!.close()
+  app = undefined
+  expect(savedWindow()).toEqual({
+    version: 1,
+    bounds: { x: 60, y: 40, width: 900, height: 650 },
+    maximized: true,
+    fullScreen: false
+  })
+})
+
+for (const [name, contents] of [
+  [
+    'bounds outside every display',
+    JSON.stringify({
+      version: 1,
+      bounds: { x: 50_000, y: 50_000, width: 900, height: 650 },
+      maximized: false,
+      fullScreen: false
+    })
+  ],
+  ['invalid JSON', '{"version": 1, "bounds": ']
+] as const) {
+  test(`#66 AC10: a window file with ${name} opens at 1100×720, centred`, async () => {
+    writeFileSync(join(dataDir, 'bikube-window.json'), contents)
+
+    await launch()
+
+    const { bounds } = await mainWindowState()
+    const area = await app!.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea)
+    expect({ width: bounds.width, height: bounds.height }).toEqual({ width: 1100, height: 720 })
+    // Centred, to a pixel of rounding.
+    expect(Math.abs(bounds.x - (area.x + (area.width - 1100) / 2))).toBeLessThanOrEqual(1)
+    expect(Math.abs(bounds.y - (area.y + (area.height - 720) / 2))).toBeLessThanOrEqual(1)
+    await createWorkspace(makeDir('alpha'), 'alpha')
+    await expect(page.getByTestId('board-title')).toHaveText('alpha')
+  })
+}

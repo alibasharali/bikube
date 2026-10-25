@@ -13,6 +13,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Rulings
 
+- 2026-10-25 S1/S2 (orchestrator, chore without a gate): D8's window minimum lowered from 400×300 to 320×240 (023e067) because #64's UX test and the UX standard size the window to 320 px. Not a developer ruling; listed in the PR's Trade-offs.
+
 ## Verification
 
 - done (ALL PASS; AC9 maximized half not checkable under xvfb)

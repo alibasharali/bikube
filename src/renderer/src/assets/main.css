@@ -1787,6 +1787,7 @@ button.dev-server-chip:focus-visible {
 .card-status,
 .card-status-line {
   display: block;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

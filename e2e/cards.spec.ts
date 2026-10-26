@@ -231,6 +231,21 @@ test('AC4: the board shows the status and last output line', async () => {
   })
 })
 
+test('a long last output line stays inside its card, cut with an ellipsis', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await run("printf 'long-%.0s' $(seq 40); sleep 30")
+  await expect.poll(async () => (await bufferLines()).join('').includes('long-long-')).toBe(true)
+  await back()
+  const line = card('api').getByTestId('card-status-line')
+  await expect(line).toContainText('long-long-')
+  const [lineBox, cardBox] = [await line.boundingBox(), await card('api').boundingBox()]
+  expect(lineBox!.x + lineBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width)
+  const list = column('Backlog').getByTestId('card').first().locator('..')
+  expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await line.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+})
+
 test('AC5: the terminal and its process outlive the view and workspace switches', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   await createWorkspace(makeDir('beta'), 'beta')

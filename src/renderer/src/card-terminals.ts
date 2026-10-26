@@ -31,6 +31,7 @@ import { FIND_HIGHLIGHT_LIMIT, isValidRegex, type FindResults } from '../../core
 import { terminalAppearance, type TerminalAppearance } from '../../core/terminal-appearance'
 import {
   CLAUDE_CODE_PROBE_OSC,
+  isClaudeCodeProgram,
   isShiftEnter,
   SHIFT_ENTER,
   shiftEnterIsNewLine,
@@ -200,6 +201,12 @@ export class XtermScreen implements CardScreen {
   private cell = ''
   /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
   private sawProbe = false
+  /** Claude Code was the foreground program when focus reporting was last turned on. */
+  private claudeForeground = false
+  /** Counts focus reporting's changes, so a foreground read that a later one passed is dropped. */
+  private focusChanges = 0
+  /** The program in this screen's session's foreground, from main; set where the screen is made. */
+  foregroundProgram: () => Promise<string | null> = async () => null
   /**
    * The shell integration marks of this start (#45 D1, D2): its commands, prompts and last
    * directory, gone with the screen. Rows are xterm markers, forgotten as they leave the scrollback.
@@ -278,7 +285,22 @@ export class XtermScreen implements CardScreen {
       return false
     })
     this.term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
-      if (params.flat().includes(1004)) this.sawProbe = false
+      if (params.flat().includes(1004)) {
+        this.sawProbe = false
+        this.claudeForeground = false
+        this.focusChanges++
+      }
+      return false
+    })
+    // The probe comes once: after Ctrl+Z and `fg`, only the foreground program tells.
+    this.term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => {
+      if (!params.flat().includes(1004)) return false
+      const change = ++this.focusChanges
+      void this.foregroundProgram()
+        .catch(() => null)
+        .then((program) => {
+          if (change === this.focusChanges) this.claudeForeground = isClaudeCodeProgram(program)
+        })
       return false
     })
     // Shell integration marks (#45 D1), watched the same way: never swallowed, never answered.
@@ -333,11 +355,16 @@ export class XtermScreen implements CardScreen {
   }
 
   /**
-   * Whether Claude Code runs in this pane now: a Claude Code card's main pane or one that saw its
-   * probe, with focus reporting on (#58), as Shift+Enter reads it.
+   * Whether Claude Code runs in this pane now: a Claude Code card's main pane, one that saw its
+   * probe or one with `claude` in the foreground, with focus reporting on (#58), as Shift+Enter
+   * reads it.
    */
   private claudeCodeRunning(): boolean {
-    return shiftEnterIsNewLine(this.claudeCode, this.term.modes.sendFocusMode, this.sawProbe)
+    return shiftEnterIsNewLine(
+      this.claudeCode,
+      this.term.modes.sendFocusMode,
+      this.sawProbe || this.claudeForeground
+    )
   }
 
   get cols(): number {
@@ -855,6 +882,11 @@ function created(screen: XtermScreen, cardId: string, paneId: string): XtermScre
   return screen
 }
 
+/** The program in a session's foreground, read by main; null for no session. */
+async function foregroundProgram(sessionId: string | undefined): Promise<string | null> {
+  return sessionId === undefined ? null : window.bikube.terminal.foreground(sessionId)
+}
+
 /** Whether `cardId` is a card (not a shell) on the board. */
 function isCard(cardId: string): boolean {
   return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
@@ -878,7 +910,11 @@ export function cardTerminals(): CardSessions<XtermScreen> {
   if (!registry) {
     registry = new CardSessions(
       window.bikube.terminal,
-      (cardId) => created(new XtermScreen(startsClaudeCode(cardId)), cardId, MAIN_PANE),
+      (cardId) => {
+        const screen = new XtermScreen(startsClaudeCode(cardId))
+        screen.foregroundProgram = () => foregroundProgram(registry?.sessionId(cardId))
+        return created(screen, cardId, MAIN_PANE)
+      },
       sessionRouter(),
       // Every start opens the card at full size: its view fits the new screen in this task's
       // render, so the shell spawns after it, at the size the user sees (#22 D1).
@@ -910,7 +946,11 @@ export function cardPanes(): CardPanes<XtermScreen> {
     paneRegistry = new CardPanes(
       window.bikube.terminal,
       sessionRouter(),
-      (cardId, paneId) => created(new XtermScreen(), cardId, paneId),
+      (cardId, paneId) => {
+        const screen = new XtermScreen()
+        screen.foregroundProgram = () => foregroundProgram(paneRegistry?.sessionId(cardId, paneId))
+        return created(screen, cardId, paneId)
+      },
       (cardId) => cardTerminals().runState(cardId)?.kind === 'running',
       // A new split starts where the focused pane's shell last said it was (#45 D8).
       (card, focused) => {

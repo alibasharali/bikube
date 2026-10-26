@@ -120,6 +120,11 @@ export class SessionManager {
     this.sessions.get(id)?.write(data)
   }
 
+  /** The name of the program in the session's foreground, as node-pty reads it. */
+  foreground(id: string): string | undefined {
+    return this.sessions.get(id)?.process
+  }
+
   resize(id: string, cols: number, rows: number): void {
     if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1) return
     this.sessions.get(id)?.resize(cols, rows)

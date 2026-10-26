@@ -66,6 +66,11 @@ export class CardPanes<S extends CardScreen> {
     return this.layouts.get(cardId) ?? SINGLE
   }
 
+  /** Extra pane `paneId`'s session in main; undefined until it starts or once it is gone. */
+  sessionId(cardId: string, paneId: string): string | undefined {
+    return this.panes.get(cardId)?.get(paneId)?.sessionId ?? undefined
+  }
+
   /** Extra pane `paneId`'s screen; undefined for the main pane or an unknown one. */
   screen(cardId: string, paneId: string): S | undefined {
     return this.panes.get(cardId)?.get(paneId)?.screen

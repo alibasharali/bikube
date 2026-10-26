@@ -85,6 +85,18 @@ describe('SessionManager', () => {
     expect(output.get(id)).toContain(homedir())
   })
 
+  it('reads the program in the foreground, and none for an unknown session', async () => {
+    const m = create()
+    const { output } = collect(m)
+    const { id } = m.spawn({ shell: '/bin/sh', cols: 80, rows: 24 })
+    const name = (): string => m.foreground(id)?.split('/').pop() ?? ''
+    await until(() => name() === 'sh', 'the shell in the foreground')
+    m.write(id, 'echo "re"ady; exec sleep 30\r')
+    await until(() => (output.get(id) ?? '').includes('ready'), 'the shell to run the line')
+    await until(() => name() === 'sleep', 'sleep in the foreground')
+    expect(m.foreground('nope')).toBeUndefined()
+  })
+
   it('starts in the given cwd', async () => {
     const m = create()
     const { output } = collect(m)

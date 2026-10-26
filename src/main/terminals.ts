@@ -99,7 +99,7 @@ export function registerTerminals(
   const fromMainFrame = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
   // Calls on an existing session must come from the window that spawned it.
-  const ownedBy = (event: IpcMainEvent, id: unknown): id is string =>
+  const ownedBy = (event: IpcMainEvent | IpcMainInvokeEvent, id: unknown): id is string =>
     fromMainFrame(event) && isSessionId(id) && owners.ownerOf(id) === event.sender
 
   // Hooked once per window, on its first spawn request: a window's shells end with its page.
@@ -202,6 +202,9 @@ export function registerTerminals(
       manager.resize(id, cols as number, rows as number)
     }
   })
+  ipcMain.handle(IPC.foreground, (event, id: unknown) =>
+    ownedBy(event, id) ? (manager.foreground(id) ?? null) : null
+  )
   ipcMain.on(IPC.kill, (event, id: unknown) => {
     if (ownedBy(event, id)) flow.kill(id)
   })

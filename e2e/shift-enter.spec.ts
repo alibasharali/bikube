@@ -1,5 +1,6 @@
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expectCardOpen, splitRight } from './card-view'
@@ -38,12 +39,23 @@ printf '\\033[?1004;1000l'
 echo probe-done
 `
 
+// Claude Code without its probe, as it turns focus reporting on again after Ctrl+Z and `fg`: only
+// the foreground program's name tells, so this runs under a copy of bash named `claude` (a symlink
+// takes its target's name; macOS kills a copied system binary until it is signed again, ad hoc).
+const NO_PROBE = `printf '\\033[?1004h'
+echo native-ready
+od -c
+printf '\\033[?1004l'
+echo native-done
+`
+
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'bikube-shift-enter-'))
   const fake = fakeClaudeHome(root)
   writeFileSync(join(fake.home, 'bin', 'claude'), FAKE_CLAUDE)
   chmodSync(join(fake.home, 'bin', 'claude'), 0o755)
   writeFileSync(join(root, 'probe.sh'), PROBE)
+  writeFileSync(join(root, 'no-probe.sh'), NO_PROBE)
   ;({ app, page } = await launchApp({ env: fake.env }))
 })
 
@@ -180,4 +192,42 @@ test("Shift+Enter is ESC CR in a workspace's shell while Claude Code runs there,
   const shell = await shiftEnterAtShell('shell-ready', String.raw`printf '\033[?1004h'; `)
   await expect.poll(shell).toMatch(/\\n/)
   expect(await shell()).not.toMatch(ESC_CR)
+})
+
+test("Shift+Enter is ESC CR in a workspace's shell while a program named claude has focus reporting on, without the probe", async () => {
+  await addWorkspace(true)
+  await showShells(page)
+  await page
+    .locator('[data-testid="shell"][data-shell-name="Default"]')
+    .getByTestId('shell-open')
+    .click()
+  await expectCardOpen(page, 'Default')
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await expect.poll(focusedText, { timeout: 15_000 }).toMatch(/\S/)
+  const claude = join(root, 'native', 'claude')
+  mkdirSync(join(root, 'native'))
+  copyFileSync('/bin/bash', claude)
+  if (process.platform === 'darwin') execFileSync('codesign', ['--force', '--sign', '-', claude])
+  await page.keyboard.type('native/claude no-probe.sh')
+  await page.keyboard.press('Enter')
+  const program = await after('native-ready')
+  await page.keyboard.press('Shift+Enter')
+  await page.keyboard.press('Control+D')
+  await expect.poll(program).toMatch(ESC_CR)
+
+  // The same script under the shell's own bash: focus reporting on, but not Claude Code.
+  await after('native-done')
+  await page.keyboard.type('bash no-probe.sh')
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(async () => (await focusedText()).split('\n').filter((l) => l === 'native-ready'))
+    .toHaveLength(2)
+  await page.keyboard.press('Shift+Enter')
+  await page.keyboard.press('Control+D')
+  const plain = async (): Promise<string> => {
+    const text = await focusedText()
+    return text.slice(text.lastIndexOf('\nnative-ready\n'))
+  }
+  await expect.poll(plain).toMatch(/\\n/)
+  expect(await plain()).not.toMatch(ESC_CR)
 })

@@ -5,7 +5,8 @@ import {
   isShiftEnter,
   macLineEditKey,
   SHIFT_ENTER,
-  shiftEnterIsNewLine
+  shiftEnterIsNewLine,
+  isClaudeCodeProgram
 } from './terminal-keys'
 
 const key = (over: Partial<KeyLike>): KeyLike => ({
@@ -90,5 +91,19 @@ describe('macLineEditKey', () => {
     expect(macLineEditKey(press('ArrowLeft', { metaKey: true, altKey: true }), 'darwin')).toBeNull()
     expect(macLineEditKey(press('Backspace', { ctrlKey: true }), 'darwin')).toBeNull()
     expect(macLineEditKey(press('Backspace', { metaKey: true }), 'linux')).toBeNull()
+  })
+})
+
+describe('isClaudeCodeProgram', () => {
+  it('is Claude Code by name or path', () => {
+    expect(isClaudeCodeProgram('claude')).toBe(true)
+    expect(isClaudeCodeProgram('/opt/homebrew/bin/claude')).toBe(true)
+  })
+
+  it('is nothing else, nor an unknown program', () => {
+    expect(isClaudeCodeProgram('zsh')).toBe(false)
+    expect(isClaudeCodeProgram('claude-code-router')).toBe(false)
+    expect(isClaudeCodeProgram('/usr/bin/node')).toBe(false)
+    expect(isClaudeCodeProgram(null)).toBe(false)
   })
 })

@@ -321,6 +321,11 @@ export class CardSessions<S extends CardScreen> {
     return this.entries.get(cardId)?.state
   }
 
+  /** The card's running session in main; undefined before its spawn reply or once it stops. */
+  sessionId(cardId: string): string | undefined {
+    return this.entries.get(cardId)?.sessionId ?? undefined
+  }
+
   /** The card's screen; undefined for an unknown or Stopped card. */
   screen(cardId: string): S | undefined {
     return this.entries.get(cardId)?.screen ?? undefined

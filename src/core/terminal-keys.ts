@@ -22,6 +22,15 @@ export function isShiftEnter(event: KeyLike): boolean {
 export const CLAUDE_CODE_PROBE_OSC = 7501
 
 /**
+ * Whether `program`, the name node-pty reads for a terminal's foreground process (a bare name on
+ * macOS, maybe a path on Linux), is Claude Code: it sends its probe only once, so a pane that
+ * turns focus reporting on again (after Ctrl+Z and `fg`) is told by this instead.
+ */
+export function isClaudeCodeProgram(program: string | null): boolean {
+  return program?.slice(program.lastIndexOf('/') + 1) === 'claude'
+}
+
+/**
  * Whether Shift+Enter sends ESC CR rather than xterm's plain CR: only while focus reporting is on
  * (Claude Code turns it on while it runs and off when it exits), in a Claude Code card's main pane
  * (#58 D2) or in any pane that saw Claude Code's probe (`sawProbe`, D1). Anywhere else ESC CR

@@ -180,6 +180,7 @@ const api: BikubeApi = {
     resize: (id, cols, rows) => ipcRenderer.send(IPC.resize, id, cols, rows),
     kill: (id) => ipcRenderer.send(IPC.kill, id),
     ack: (id, chars) => ipcRenderer.send(IPC.ack, id, chars),
+    foreground: (id) => ipcRenderer.invoke(IPC.foreground, id),
     onData: (listener) => {
       const handler = (_: unknown, id: string, data: string): void => listener(id, data)
       ipcRenderer.on(IPC.data, handler)

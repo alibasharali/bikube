@@ -24,10 +24,10 @@ export async function expectCardOpen(page: Page, title: string): Promise<void> {
   await expect(cardView(page)).toHaveAttribute('aria-label', title)
 }
 
-/** Goes back to the board with the Back shortcut. */
+/** Goes back to the board (or a grid view workspace's grid) with the Back shortcut. */
 export async function backToBoard(page: Page): Promise<void> {
   await page.keyboard.press(SHORTCUTS.back)
-  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(page.getByTestId('board').or(page.getByTestId('grid-view'))).toBeVisible()
 }
 
 /** Splits the focused pane of the open card to the right (the Split right shortcut). */

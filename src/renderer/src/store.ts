@@ -13,7 +13,9 @@ export function createWorkspaceStore(
   const store = new InMemoryWorkspaceStore({
     initialState,
     generateId: () => crypto.randomUUID(),
-    generateSessionId: () => crypto.randomUUID()
+    generateSessionId: () => crypto.randomUUID(),
+    // New cards are stamped, for the grid view's latest first.
+    now: () => Date.now()
   })
   store.subscribe(() => save(store.getState()))
   return store

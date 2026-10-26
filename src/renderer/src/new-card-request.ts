@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 /**
  * A request to open the New card form of a workspace's first column (#40 D9), made by the command
@@ -51,4 +51,17 @@ export function usePendingNewCardRequest(): NewCardRequest | null {
     listeners.add(listener)
     return () => listeners.delete(listener)
   }, pendingNewCardRequest)
+}
+
+/**
+ * The request id that opens the New card form of `workspaceId`'s board or grid, once per
+ * request: whichever shows takes the pending request, so one for another workspace (or one with
+ * no columns) is dropped and never opens a form later.
+ */
+export function useNewCardRequest(workspaceId: string, hasColumns: boolean): number | undefined {
+  const pending = usePendingNewCardRequest()
+  useEffect(() => {
+    if (pending) takeNewCardRequest(pending.id)
+  }, [pending])
+  return newCardRequestFor(pending, workspaceId, hasColumns)
 }

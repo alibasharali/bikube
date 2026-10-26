@@ -779,3 +779,30 @@ describe('the App font preference (#66 D7, AC8)', () => {
     expect(validateSettings({ ...base, appFontFamily: 'x'.repeat(200) }, 'linux')).not.toBeNull()
   })
 })
+
+describe('the default view and the view prompt preferences', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('default to Kanban and not chosen, writing no keys for them', () => {
+    const read = parseSettingsFile(file({ theme: 'dark' }), 'linux').settings
+    expect([read.defaultView, read.viewChosen]).toEqual(['kanban', false])
+    const written = JSON.parse(serializeSettings(base)).settings
+    expect(written).not.toHaveProperty('defaultView')
+    expect(written).not.toHaveProperty('viewChosen')
+  })
+
+  it('write Grid and a chosen view, and read them back', () => {
+    const text = serializeSettings({ ...base, defaultView: 'grid', viewChosen: true })
+    expect(JSON.parse(text).settings).toMatchObject({ defaultView: 'grid', viewChosen: true })
+    const read = parseSettingsFile(text, 'linux').settings
+    expect([read.defaultView, read.viewChosen]).toEqual(['grid', true])
+  })
+
+  it('refuse an unknown view', () => {
+    expect(validateSettings({ ...base, defaultView: 'list' }, 'linux')).toBeNull()
+    const parsed = parseSettingsFile(file({ ...base, defaultView: 'list' }), 'linux')
+    expect(parsed.settings.defaultView).toBe('kanban')
+    expect(parsed.replaced).toEqual(['defaultView'])
+  })
+})

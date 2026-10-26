@@ -20,6 +20,14 @@ export function startCard(workspaceId: string, cardId: string): void {
   cardTerminals().start(card, recordFirstStart(workspaceId, cardId))
 }
 
+/** Records that a board card was opened now, so the grid view shows it first; shells aren't. */
+export function markCardOpened(workspaceId: string, cardId: string): void {
+  const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  if (workspace?.cards.some((c) => c.id === cardId)) {
+    workspaceStore.markCardOpened(workspaceId, cardId, Date.now())
+  }
+}
+
 /** Records a first start of Claude Code or a preset on the card (#5 D5, #21 D3). */
 function recordFirstStart(workspaceId: string, cardId: string): (kind: FirstStart) => void {
   return (kind) => {

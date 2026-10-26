@@ -293,6 +293,11 @@ interface CardItemProps {
   columns: Column[]
   /** Where the drop line shows on this card while another card is dragged (#6 D5, D6). */
   drop?: 'before' | 'after'
+  /**
+   * Whether it moves between columns (dragged, Alt+arrows, its menu's Move to): on a Kanban board,
+   * not in the grid view, which shows no columns.
+   */
+  movable?: boolean
   onOpen: () => void
 }
 
@@ -305,7 +310,14 @@ interface CardItemProps {
  * confirmation (#31 D10). Its menu also opens it in its own window, or brings that window forward
  * (#53 D6); while it is there its status row has the `In window` chip (D7).
  */
-function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): React.JSX.Element {
+function CardItem({
+  workspaceId,
+  card,
+  columns,
+  drop,
+  movable = true,
+  onOpen
+}: CardItemProps): React.JSX.Element {
   const status = useCardStatus(card.id)
   const running = useCardRunState(card.id).kind === 'running'
   const usage = useCardUsage(card.id)
@@ -321,7 +333,7 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
   const titleRef = useRef<HTMLSpanElement>(null)
   const openRef = useRef<HTMLButtonElement>(null)
   const moveLabelId = useId()
-  const moveTargets = columns.filter((c) => c.id !== card.columnId)
+  const moveTargets = movable ? columns.filter((c) => c.id !== card.columnId) : []
   const pendingOpen = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cancelPendingOpen = (): void => {
@@ -435,11 +447,11 @@ function CardItem({ workspaceId, card, columns, drop, onOpen }: CardItemProps): 
           className="card-body card-open"
           data-testid="card-open"
           aria-label={`Open ${card.title}`}
-          draggable
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
+          draggable={movable}
+          onDragStart={movable ? onDragStart : undefined}
+          onDragEnd={movable ? onDragEnd : undefined}
           onClick={onClick}
-          onKeyDown={onKeyDown}
+          onKeyDown={movable ? onKeyDown : undefined}
         >
           <span className="card-head">
             <span className="card-title-row">

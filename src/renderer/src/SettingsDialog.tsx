@@ -65,6 +65,7 @@ import { settingsStore, useSettings } from './settings'
 import TerminalPreview from './TerminalPreview'
 import ThemePicker from './ThemePicker'
 import AppThemePicker from './AppThemePicker'
+import { VIEWS } from './workspace-views'
 import { useSyncStatus } from './sync'
 
 export const SYNC_FOLDER_ERROR = 'Folder not found'
@@ -281,6 +282,30 @@ function AppearanceSection({
         onPick={(appTheme) => settingsStore.update({ appTheme })}
       />
       <AppFontRow draft={appFont} setDraft={setAppFont} />
+      <fieldset className="settings-row">
+        <legend className="settings-label">Default view</legend>
+        <div className="settings-control">
+          <div className="segmented">
+            {VIEWS.map(([view, label, Icon]) => (
+              <label key={view} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-view`}
+                  value={view}
+                  data-testid={`settings-view-${view}`}
+                  checked={settings.defaultView === view}
+                  onChange={() => settingsStore.update({ defaultView: view, viewChosen: true })}
+                />
+                <Icon {...SMALL_ICON} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="field-hint">
+            New workspaces start in this view. Change a workspace&apos;s own in its Edit dialog.
+          </p>
+        </div>
+      </fieldset>
     </>
   )
 }

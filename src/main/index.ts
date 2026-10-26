@@ -5,6 +5,7 @@ import { appThemeArg } from '../core/app-themes'
 import { boundedWait } from '../core/bounded-wait'
 import { killAtQuit, quitHold } from '../core/quit-hold'
 import { longCommandMsArg } from '../core/long-commands'
+import { NO_VIEW_PROMPT_ARG } from '../core/view-prompt'
 import { hostNameArg } from '../core/shell-marks'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { IPC } from '../shared/api'
@@ -57,6 +58,12 @@ const hiddenForTests = !app.isPackaged && process.env['BIKUBE_E2E_HIDDEN'] === '
  */
 const longCommandMs = app.isPackaged ? undefined : process.env['BIKUBE_LONG_COMMAND_MS']
 
+/**
+ * Smoke tests launch with no workspace, so the first launch's view prompt would cover every one;
+ * `e2e/launch.ts` sets `BIKUBE_E2E_NO_VIEW_PROMPT=1` unless a test asks for it. Development build only.
+ */
+const noViewPrompt = !app.isPackaged && process.env['BIKUBE_E2E_NO_VIEW_PROMPT'] === '1'
+
 /** The app icon for the development build, which has no bundle of its own (Linux reads it per window). */
 const devIcon = join(app.getAppPath(), 'build', 'icon.png')
 
@@ -89,7 +96,8 @@ function createWindow(settings: MainSettings): void {
       additionalArguments: [
         hostNameArg(hostname()),
         appThemeArg(settings.appTheme()),
-        ...(longCommandMs ? [longCommandMsArg(longCommandMs)] : [])
+        ...(longCommandMs ? [longCommandMsArg(longCommandMs)] : []),
+        ...(noViewPrompt ? [NO_VIEW_PROMPT_ARG] : [])
       ]
     }
   })

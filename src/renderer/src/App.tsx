@@ -14,12 +14,13 @@ import {
   type ViewMemory
 } from '../../core/view-memory'
 import { nextWaitingCard } from '../../core/waiting'
+import { showViewPrompt } from '../../core/view-prompt'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { startInBackground } from './background-shells'
 import { newShell } from './temporary-shells'
-import { removeWorkspace, startCard } from './card-actions'
+import { markCardOpened, removeWorkspace, startCard } from './card-actions'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
-import type { Workspace } from '../../core/workspace-store'
+import { workspaceView, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import {
   focusCardWindow,
@@ -34,6 +35,7 @@ import CommandPalette from './CommandPalette'
 import ConfirmDialog from './ConfirmDialog'
 import WorkspaceDialog from './WorkspaceDialog'
 import Board from './Board'
+import GridView from './GridView'
 import EmptyState from './EmptyState'
 import SettingsDialog from './SettingsDialog'
 import { useHeldNumbers } from './held-numbers'
@@ -45,6 +47,7 @@ import TitleBar from './TitleBar'
 import { useWorkspaceState, workspaceStore } from './store'
 import { useSyncStatus } from './sync'
 import SidePanel from './SidePanel'
+import ViewPrompt from './ViewPrompt'
 
 /** Shows or hides the side panel, on the board and in every card at once (#55 D3, #57 D3). */
 function togglePanel(): void {
@@ -56,7 +59,13 @@ function App(): React.JSX.Element {
   const syncStatus = syncStatusText(useSyncStatus())
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
-  const { sidePanelOpen } = useSettings()
+  const { sidePanelOpen, viewChosen } = useSettings()
+  // The first launch asks which view new workspaces start in, before there is any.
+  const viewPrompt = showViewPrompt(
+    viewChosen,
+    workspaces.length,
+    window.bikube?.noViewPrompt ?? false
+  )
   // Whether a workspace is active, for the Toggle panel shortcut (#57 D4).
   const hasWorkspace = useRef(false)
   useEffect(() => {
@@ -116,6 +125,7 @@ function App(): React.JSX.Element {
     (cardId: string) => {
       if (!activeId || focusCardWindow(cardId)) return
       startCard(activeId, cardId)
+      markCardOpened(activeId, cardId)
       setViews((v) => rememberCard(v, activeId, cardId))
     },
     [activeId, setViews]
@@ -179,6 +189,7 @@ function App(): React.JSX.Element {
       if (workspaceId === activeId && cardId === openedId) return
       if (focusCardWindow(cardId)) return
       startCard(workspaceId, cardId)
+      markCardOpened(workspaceId, cardId)
       setViews((v) => rememberCard(v, workspaceId, cardId))
       if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
     },
@@ -304,6 +315,12 @@ function App(): React.JSX.Element {
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
       else if (action.id === 'appTheme') settingsStore.update({ appTheme: action.appTheme })
       else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
+      // The active workspace's view; its board shows in it, closing the card open there.
+      else if (action.id === 'workspaceView') {
+        if (!activeId) return
+        workspaceStore.updateWorkspace(activeId, { view: action.view })
+        closeCard()
+      }
     }
   })
   const pendingAction = useRef<PaletteAction | null>(null)
@@ -406,7 +423,11 @@ function App(): React.JSX.Element {
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2).
             <div className="board-layout">
-              <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+              {workspaceView(active) === 'grid' ? (
+                <GridView key={active.id} workspace={active} onOpenCard={onOpenCard} />
+              ) : (
+                <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+              )}
               {sidePanelOpen && (
                 <SidePanel
                   folder={active.directory}
@@ -439,6 +460,7 @@ function App(): React.JSX.Element {
         />
       )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {viewPrompt && <ViewPrompt />}
       {dialog?.kind === 'create' && (
         <WorkspaceDialog workspace={null} workspaces={workspaces} onClose={() => setDialog(null)} />
       )}

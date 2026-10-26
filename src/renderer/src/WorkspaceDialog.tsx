@@ -18,10 +18,14 @@ import { WORKSPACE_LOGOS, type WorkspaceLogoId } from '../../core/workspace-logo
 import {
   checkWorktreeSetup,
   defaultWorkspaceName,
-  type Workspace
+  workspaceView,
+  type Workspace,
+  type WorkspaceView
 } from '../../core/workspace-store'
 import { SMALL_ICON } from './icons'
 import Modal from './Modal'
+import { settingsStore } from './settings'
+import { VIEWS } from './workspace-views'
 import StartupField from './StartupField'
 import { workspaceStore } from './store'
 import { workspaceInitial } from './workspace-initial'
@@ -76,6 +80,10 @@ function WorkspaceDialog({
   const [setupError, setSetupError] = useState<string | undefined>(undefined)
   // The sidebar badge's icon (#59 D3); null is None, the name's initial.
   const [logo, setLogo] = useState<WorkspaceLogoId | null>(workspace?.logo ?? null)
+  // How it shows its cards; a new workspace starts in Settings' default view.
+  const [view, setView] = useState<WorkspaceView>(() =>
+    workspace ? workspaceView(workspace) : settingsStore.get().defaultView
+  )
   // The automatic move rules (#42 D6): edited here, stored only on Save.
   const [autoMove, setAutoMove] = useState<AutoMove>(workspace?.autoMove ?? {})
   // The board's columns as they are now, so a rename or delete while the dialog is open shows.
@@ -117,6 +125,7 @@ function WorkspaceDialog({
         defaultStartup: command.value,
         ...(checkedSetup && { worktreeSetup: checkedSetup.value }),
         logo,
+        view,
         // A rule whose column went while the dialog was open is off (#42 D2).
         ...(workspace && {
           autoMove:
@@ -314,6 +323,25 @@ function WorkspaceDialog({
                 </label>
               )
             })}
+          </div>
+        </fieldset>
+        <fieldset className="field radio-group">
+          <legend>View</legend>
+          <div className="segmented">
+            {VIEWS.map(([value, label, Icon]) => (
+              <label key={value} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-view`}
+                  value={value}
+                  data-testid={`workspace-view-${value}`}
+                  checked={view === value}
+                  onChange={() => setView(value)}
+                />
+                <Icon {...SMALL_ICON} />
+                {label}
+              </label>
+            ))}
           </div>
         </fieldset>
         <StartupField

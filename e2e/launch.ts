@@ -99,7 +99,10 @@ async function launchOnce(options: LaunchOptions, dataDir: string): Promise<Laun
       // On macOS the window stays hidden so a run doesn't take over the screen;
       // BIKUBE_E2E_SHOW=1 shows it again. Linux runs under xvfb, so nothing changes there.
       ...(process.platform === 'darwin' &&
-        base['BIKUBE_E2E_SHOW'] !== '1' && { BIKUBE_E2E_HIDDEN: '1' })
+        base['BIKUBE_E2E_SHOW'] !== '1' && { BIKUBE_E2E_HIDDEN: '1' }),
+      // Every launch starts with no workspace: the first launch's view prompt stays away unless a
+      // test about it sets BIKUBE_E2E_VIEW_PROMPT=1.
+      ...(base['BIKUBE_E2E_VIEW_PROMPT'] !== '1' && { BIKUBE_E2E_NO_VIEW_PROMPT: '1' })
     },
     timeout: WINDOW_TIMEOUT_MS
   })

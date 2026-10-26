@@ -388,7 +388,8 @@ test('AC9: the palette lists Next waiting card while a card waits, with its shor
   const actions = await paletteActions()
   expect(actions.slice(actions.indexOf('New shell'), actions.indexOf('New workspace'))).toEqual([
     'New shell',
-    'Next waiting card'
+    'Next waiting card',
+    'View: Grid'
   ])
   const nextRow = palette()
     .getByTestId('palette-row')

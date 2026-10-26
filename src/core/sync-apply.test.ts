@@ -196,3 +196,27 @@ describe("keeping this machine's temporary shells (#66 D2)", () => {
     expect(applied[0]!.shells).toEqual([{ ...shell, name: 'Dev server' }, temp])
   })
 })
+
+describe('keeping when this machine last opened each card', () => {
+  it('keeps the local open time of local and SSH cards it has; a new card has none', () => {
+    const local = workspace('api', {
+      cards: [
+        card('known', 'api-backlog', { createdAt: 1, lastOpenedAt: 50 }),
+        card('ssh', 'api-backlog', { host: 'devbox', lastOpenedAt: 60 })
+      ]
+    })
+    const incoming = workspace('api', {
+      cards: [
+        card('known', 'api-backlog', { createdAt: 1 }),
+        card('ssh', 'api-backlog', { host: 'devbox' }),
+        card('fresh', 'api-backlog', { createdAt: 70 })
+      ]
+    })
+    const [applied] = applySyncBoard([incoming], [local], none)
+    expect(applied!.cards.map((c) => [c.id, c.createdAt, c.lastOpenedAt])).toEqual([
+      ['known', 1, 50],
+      ['ssh', undefined, 60],
+      ['fresh', 70, undefined]
+    ])
+  })
+})

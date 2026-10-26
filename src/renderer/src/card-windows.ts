@@ -5,7 +5,7 @@ import { cardWindowName } from '../../core/card-window-name'
 import { findShellCard } from '../../core/workspace-shells'
 import { fontDocument } from './app-font'
 import { APP_THEME_ATTR, themeDocument } from './app-theme'
-import { startCard } from './card-actions'
+import { markCardOpened, startCard } from './card-actions'
 import CardWindow from './CardWindow'
 import { workspaceStore } from './store'
 import { loadSymbolsFont } from './symbols-font'
@@ -116,6 +116,7 @@ export function returnCardWindow(cardId: string): void {
 export function openCardWindow(workspaceId: string, cardId: string): void {
   if (focusCardWindow(cardId)) return
   if (!cardExists(workspaceId, cardId)) return
+  markCardOpened(workspaceId, cardId)
   const view = window.open('about:blank', cardWindowName(cardId))
   if (!view) return
   // The App theme before its stylesheets, so it never shows another (#64 D7); the App font too.

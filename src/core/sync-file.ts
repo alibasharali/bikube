@@ -80,7 +80,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         startup: startupCopy(c.startup),
         agentSessionId: c.agentSessionId,
         claudeStarted: c.host === undefined ? false : c.claudeStarted,
-        startedAgents: c.host === undefined ? [] : [...c.startedAgents]
+        startedAgents: c.host === undefined ? [] : [...c.startedAgents],
+        // When it was opened is this machine's: every open would write the file.
+        ...(c.createdAt !== undefined && { createdAt: c.createdAt })
       })),
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup),
@@ -99,7 +101,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
       worktreeSetup: w.worktreeSetup,
       // The rules are the workspace's settings and travel with it (#42 D7); the moves they make
       // are ordinary moves.
-      ...(w.autoMove !== undefined && { autoMove: autoMoveCopy(w.autoMove) })
+      ...(w.autoMove !== undefined && { autoMove: autoMoveCopy(w.autoMove) }),
+      // The view is the workspace's setting, as its logo is.
+      ...(w.view !== undefined && { view: w.view })
     }))
   }
 }
@@ -158,6 +162,7 @@ export function parseSyncFile(text: string, home: string): SyncFileResult {
       cards: w.cards.map((c) => {
         const read: Card = { ...c }
         delete read.setup
+        delete read.lastOpenedAt
         return c.host === undefined ? { ...read, claudeStarted: false, startedAgents: [] } : read
       })
     }))

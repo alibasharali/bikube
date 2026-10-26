@@ -90,6 +90,8 @@ test('AC4: the packaged app opens, makes a workspace and a card, and board statu
   app = launched.app
   const page = launched.page
 
+  // A packaged first launch asks for the default view; Kanban is picked.
+  await page.getByTestId('view-prompt-continue').click()
   await page.getByTestId('workspace-add').click()
 
   await plainCards(page)

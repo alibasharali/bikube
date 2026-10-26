@@ -499,6 +499,47 @@ describe('workspace logos in the saved state (#59 D2, D5, AC4)', () => {
   })
 })
 
+describe('workspace views and card open times in the saved state', () => {
+  it('writes view only for a Grid workspace and lastOpenedAt only on a card with one', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    const [alpha] = s.getState().workspaces
+    ok(s.updateWorkspace(alpha.id, { view: 'grid' }))
+    ok(s.markCardOpened(alpha.id, alpha.cards[0].id, 1_700_000_000_000))
+    s.replaceBoard(
+      s
+        .getState()
+        .workspaces.map((w, i) =>
+          i === 0
+            ? { ...w, cards: w.cards.map((c, j) => (j === 1 ? { ...c, createdAt: 5 } : c)) }
+            : w
+        )
+    )
+    const state = s.getState()
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces
+    expect(first.view).toBe('grid')
+    expect('view' in second).toBe(false)
+    expect(first.cards[0].lastOpenedAt).toBe(1_700_000_000_000)
+    expect(first.cards[1].createdAt).toBe(5)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('reads an unknown view as Kanban and drops a bad open time, loading the rest', () => {
+    const read = parseSavedState(
+      fileWith((s) => {
+        s.workspaces[0].view = 'timeline'
+        s.workspaces[0].cards[0].lastOpenedAt = 'yesterday'
+        s.workspaces[0].cards[0].createdAt = -1
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+
+  it('rejects a view that is not a string', () => {
+    expectRejected(fileWith((s) => (s.workspaces[0].view = 1)))
+  })
+})
+
 describe('automatic move rules in the saved state (#42 D2, D7, AC10)', () => {
   it('writes autoMove only on a workspace with a rule on, and reads it back', () => {
     const s = new InMemoryWorkspaceStore({ initialState: fullState() })

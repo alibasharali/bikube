@@ -21,6 +21,7 @@ import { APP_THEME_IDS, type AppThemeId } from './app-themes'
 import { isGlobalShortcut } from './global-hotkey'
 import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides } from './keymap'
 import { BIKUBE_DARK, BIKUBE_LIGHT, isTerminalThemeName } from './terminal-themes'
+import { WORKSPACE_VIEWS, type WorkspaceView } from './workspace-store'
 
 export const SETTINGS_FILE_NAME = 'bikube-settings.json'
 export const SETTINGS_VERSION = 1
@@ -126,6 +127,13 @@ export interface Preferences {
    * characters, no control characters). Terminals and the monospace stack keep their own.
    */
   appFontFamily: string
+  /** The view a new workspace starts in; each workspace can change its own. */
+  defaultView: WorkspaceView
+  /**
+   * The first launch's view prompt was answered: it asks only while this is off and there is no
+   * workspace yet, so a board from before it never asks.
+   */
+  viewChosen: boolean
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -153,7 +161,9 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   confirmClose: true,
   openWaitingOnShow: true,
   appTheme: 'default',
-  appFontFamily: ''
+  appFontFamily: '',
+  defaultView: 'kanban',
+  viewChosen: false
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -202,7 +212,9 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     typeof v === 'string' &&
     v === v.trim() &&
     v.length <= MAX_FONT_FAMILY_LENGTH &&
-    !CONTROL_CHARS.test(v)
+    !CONTROL_CHARS.test(v),
+  defaultView: oneOf(WORKSPACE_VIEWS),
+  viewChosen: isBoolean
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

@@ -10,7 +10,8 @@ import type { Card, Workspace } from './workspace-store'
  * The board this machine takes from `incoming` (D7): the file's workspaces, columns, cards and
  * order, with this machine's `claudeStarted`, `startedAgents` (#21 D7) and pending setup (#39 D8) for local cards it
  * already has, else false and empty (D6), where each shell runs (`runIn`, never in the file), its
- * temporary shells (#66 D2, never in the file either), and every card running here (`isRunning`) kept (D8): a
+ * temporary shells (#66 D2, never in the file either), when each card was last opened here
+ * (`lastOpenedAt`, never in the file), and every card running here (`isRunning`) kept (D8): a
  * running card the file lacks goes to the bottom of its column, or of its workspace's first column
  * when that column is gone; a workspace the file lacks that has a running card stays as this
  * machine has it, after the file's workspaces. A running card the file has takes the file's values.
@@ -21,8 +22,11 @@ export function applySyncBoard(
   isRunning: (cardId: string) => boolean
 ): Workspace[] {
   const localStarted = new Map<string, Pick<Card, 'claudeStarted' | 'startedAgents' | 'setup'>>()
+  // When each card was last opened is this machine's, local or SSH: the file never has it.
+  const localOpened = new Map<string, number>()
   for (const w of local)
-    for (const c of w.cards)
+    for (const c of w.cards) {
+      if (c.lastOpenedAt !== undefined) localOpened.set(c.id, c.lastOpenedAt)
       if (c.host === undefined)
         localStarted.set(c.id, {
           claudeStarted: c.claudeStarted,
@@ -30,6 +34,7 @@ export function applySyncBoard(
           // A pending setup is this machine's (#39 D8): the file never has it.
           ...(c.setup !== undefined && { setup: c.setup })
         })
+    }
   const incomingCards = new Set(incoming.flatMap((w) => w.cards.map((c) => c.id)))
   const incomingIds = new Set(incoming.map((w) => w.id))
   const localById = new Map(local.map((w) => [w.id, w]))
@@ -49,11 +54,13 @@ export function applySyncBoard(
     // This machine's temporary shells (#66 D2) are never in the file: they stay, after its shells.
     const mine = localById.get(w.id)
     for (const s of mine?.shells ?? []) if (s.temporary) shells.push(s)
-    const cards = w.cards.map((c) =>
-      c.host === undefined
-        ? { ...c, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
-        : c
-    )
+    const cards = w.cards.map((c) => {
+      const opened = localOpened.get(c.id)
+      const card = opened === undefined ? c : { ...c, lastOpenedAt: opened }
+      return c.host === undefined
+        ? { ...card, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
+        : card
+    })
     const first = w.columns[0]
     if (mine && first) {
       for (const c of kept(mine)) {

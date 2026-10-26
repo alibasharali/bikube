@@ -8,6 +8,7 @@ import {
 } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import { LONG_COMMAND_MS, parseLongCommandMs } from '../core/long-commands'
+import { NO_VIEW_PROMPT_ARG } from '../core/view-prompt'
 import { parseHostName } from '../core/shell-marks'
 import { NO_ANSWER, type BoardReply } from '../core/board-protocol'
 import type { SyncStatus } from '../core/sync-status'
@@ -50,6 +51,8 @@ const api: BikubeApi = {
   platform: process.platform,
   // Main passes a shortened threshold only in the development build (#45 D7).
   longCommandMs: parseLongCommandMs(process.argv) ?? LONG_COMMAND_MS,
+  // Main passes it only in the development build, for the smoke tests.
+  noViewPrompt: process.argv.includes(NO_VIEW_PROMPT_ARG),
   hostName: parseHostName(process.argv),
   appTheme: launchAppTheme,
   clipboard: {

@@ -311,6 +311,7 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'Toggle panel',
     'New card',
     'New shell',
+    'View: Grid',
     'New workspace',
     'Open Settings',
     'Theme: Dark',

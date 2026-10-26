@@ -13,8 +13,10 @@ import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
 import {
   cardsInColumn,
   defaultShellId,
+  workspaceView,
   type Workspace,
-  type WorkspaceState
+  type WorkspaceState,
+  type WorkspaceView
 } from './workspace-store'
 
 const PREFIX_SCORE = 4
@@ -110,6 +112,7 @@ export type PaletteAction =
   | { id: 'theme'; theme: Theme }
   | { id: 'appTheme'; appTheme: AppThemeId }
   | { id: 'switchWorkspace'; workspaceId: string }
+  | { id: 'workspaceView'; view: WorkspaceView }
 
 /** An action row (D6): its label and, when it has one, its shortcut as D7 text. */
 export interface ActionRow {
@@ -211,7 +214,13 @@ function shellRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
 
 type KeymapAction = Exclude<
   PaletteAction['id'],
-  'moveCard' | 'newCard' | 'newWorkspace' | 'theme' | 'appTheme' | 'switchWorkspace'
+  | 'moveCard'
+  | 'newCard'
+  | 'newWorkspace'
+  | 'theme'
+  | 'appTheme'
+  | 'switchWorkspace'
+  | 'workspaceView'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -238,7 +247,8 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)
-  if (!workspace || !card) return rows
+  // The grid view shows no columns, so it offers no moves between them.
+  if (!workspace || !card || workspaceView(workspace) === 'grid') return rows
   for (const column of workspace.columns) {
     if (column.id === card.columnId) continue
     rows.push({
@@ -262,6 +272,16 @@ function actionRows(input: PaletteInput): ActionRow[] {
   // Only when the Next waiting card shortcut would open something (#41 D7).
   if (nextWaitingCard(input.waiting, view?.cardId ?? null, state.workspaces)) {
     rows.push(keymapRow('nextWaiting', keymap))
+  }
+  // The other view for the active workspace, as its Edit dialog's View sets it.
+  const active = state.workspaces.find((w) => w.id === state.activeId)
+  if (active) {
+    const other: WorkspaceView = workspaceView(active) === 'grid' ? 'kanban' : 'grid'
+    rows.push({
+      kind: 'action',
+      action: { id: 'workspaceView', view: other },
+      label: other === 'grid' ? 'View: Grid' : 'View: Kanban'
+    })
   }
   rows.push({ kind: 'action', action: { id: 'newWorkspace' }, label: 'New workspace' })
   rows.push(keymapRow('settings', keymap))

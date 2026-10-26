@@ -403,6 +403,38 @@ describe('workspace logos in the sync file (#59 D6, AC6)', () => {
   })
 })
 
+describe('workspace views and card times in the sync file', () => {
+  it('writes the view and when a card was created, never when it was opened here', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          view: 'grid',
+          cards: [
+            card('a', 'w-backlog', { createdAt: 42, lastOpenedAt: 99 }),
+            card('b', 'w-backlog')
+          ]
+        }),
+        workspace('v', 'beta')
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.view).toBe('grid')
+    expect(board.workspaces[1]!).not.toHaveProperty('view')
+    expect(board.workspaces[0]!.cards[0]!.createdAt).toBe(42)
+    expect(board.workspaces[0]!.cards[0]!).not.toHaveProperty('lastOpenedAt')
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('createdAt')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    // A file that holds one anyway (another version) gives none.
+    file.board.workspaces[0].cards[0].lastOpenedAt = 7
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.view).toBe('grid')
+    expect(read.ok && read.workspaces[1]!).not.toHaveProperty('view')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.createdAt).toBe(42)
+    expect(read.ok && read.workspaces[0]!.cards[0]!).not.toHaveProperty('lastOpenedAt')
+  })
+})
+
 describe('automatic move rules in the sync file (#42 D7, AC11)', () => {
   it('writes autoMove, absent with every rule off, and reads it back on the other machine', () => {
     const rules = { waiting: 'w-running', stopped: 'w-backlog' }

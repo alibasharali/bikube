@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import {
   Terminal as XTerm,
   type IBuffer,
@@ -978,4 +978,27 @@ export function useRunningCount(cards: readonly { id: string }[]): number {
   return useSyncExternalStore(subscribe, () =>
     runningCount(cards, (id) => cardTerminals().runState(id))
   )
+}
+
+/** Which of `cards` have a running process, kept current as their processes start and exit. */
+export function useRunningIds(cards: readonly { id: string }[]): ReadonlySet<string> {
+  const ids = cards.map((c) => c.id).join('\n')
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const unsubscribes = ids
+        .split('\n')
+        .filter(Boolean)
+        .map((id) => cardTerminals().subscribe(id, listener))
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe())
+    },
+    [ids]
+  )
+  // A string snapshot, so a status change that starts or stops nothing re-renders nothing.
+  const running = useSyncExternalStore(subscribe, () =>
+    ids
+      .split('\n')
+      .filter((id) => id && cardTerminals().runState(id)?.kind === 'running')
+      .join('\n')
+  )
+  return useMemo(() => new Set(running.split('\n').filter(Boolean)), [running])
 }

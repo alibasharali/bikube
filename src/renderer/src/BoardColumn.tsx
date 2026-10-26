@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import { columnDeleteHint } from '../../core/card-deletes'
 import { dropIndex, hoverHalf, nearestCardHover, type CardHover } from '../../core/card-drops'
+import { COLUMN_CARD_LIMIT, shownCards, showAllLabel } from '../../core/column-limit'
 import { cardsInColumn, type Column, type Workspace } from '../../core/workspace-store'
+import { movedCard } from './card-actions'
 import CardItem from './CardItem'
 import { draggedCard, endCardDrag } from './card-drag'
 import ColumnMenu from './ColumnMenu'
 import InlineInput from './InlineInput'
 import NewCard from './NewCard'
 import { workspaceStore } from './store'
+
+/** The columns unfolded with Show all, by id, for the run of the app (kept across Back). */
+const expandedColumns = new Set<string>()
 
 interface BoardColumnProps {
   workspace: Workspace
@@ -33,6 +38,23 @@ function BoardColumn({
   const workspaceId = workspace.id
   const cards = cardsInColumn(workspace, column.id)
   const deletable = columnDeleteHint(workspace, column.id)
+  const [expanded, setExpandedState] = useState(() => expandedColumns.has(column.id))
+  const setExpanded = (next: boolean): void => {
+    if (next) expandedColumns.add(column.id)
+    else expandedColumns.delete(column.id)
+    setExpandedState(next)
+  }
+  // A card moved by keyboard or menu past the folded part unfolds the column, so it keeps focus.
+  const moved = movedCard()
+  if (
+    !expanded &&
+    moved &&
+    cards.findIndex((c) => c.id === moved) >= shownCards(cards, false).length
+  ) {
+    setExpanded(true)
+  }
+  const shown = shownCards(cards, expanded)
+  const toggleLabel = showAllLabel(cards.length, expanded)
 
   // A drag that ends anywhere (dropped, cancelled with Esc or outside) clears the line.
   useEffect(() => {
@@ -49,7 +71,8 @@ function BoardColumn({
   const dropTarget = (e: React.DragEvent): { cardId: string; index: number } | null => {
     const drag = draggedCard(workspaceId, e.dataTransfer)
     if (!drag) return null
-    const ids = cards.map((c) => c.id)
+    // The cards shown are the column's first, so a place among them is its place in the column.
+    const ids = shown.map((c) => c.id)
     const el = (e.target as Element).closest<HTMLElement>('[data-card-id]')
     const hovered = el?.dataset.cardId
     let over: CardHover | 'bottom' = 'bottom'
@@ -86,14 +109,16 @@ function BoardColumn({
     e.preventDefault()
     setDropAt(null)
     endCardDrag()
+    // Dropped after the last card shown, it would be folded away: the column unfolds.
+    if (target.index >= COLUMN_CARD_LIMIT) setExpanded(true)
     workspaceStore.moveCard(workspaceId, target.cardId, column.id, target.index)
   }
 
   // The line goes above the card at the drop position, counted without the dragged card,
   // or below the column's last card.
-  const others = dropAt ? cards.filter((c) => c.id !== dropAt.cardId) : cards
+  const others = dropAt ? shown.filter((c) => c.id !== dropAt.cardId) : shown
   const lineBefore = dropAt && others[dropAt.index]?.id
-  const lineAfter = dropAt && !lineBefore ? cards[cards.length - 1]?.id : undefined
+  const lineAfter = dropAt && !lineBefore ? shown[shown.length - 1]?.id : undefined
 
   return (
     <li
@@ -151,7 +176,7 @@ function BoardColumn({
         </p>
       ) : (
         <ul className="card-list">
-          {cards.map((card) => (
+          {shown.map((card) => (
             <CardItem
               key={card.id}
               workspaceId={workspaceId}
@@ -163,11 +188,26 @@ function BoardColumn({
           ))}
         </ul>
       )}
+      {toggleLabel && (
+        <button
+          type="button"
+          className="column-show-all"
+          data-testid="column-show-all"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {toggleLabel}
+        </button>
+      )}
       <NewCard
         workspaceId={workspaceId}
         columnId={column.id}
         defaultStartup={workspace.defaultStartup}
-        onCreated={onOpenCard}
+        onCreated={(cardId) => {
+          // A new card goes to the bottom: past the fold, the column unfolds to show it on Back.
+          if (cards.length >= COLUMN_CARD_LIMIT) setExpanded(true)
+          onOpenCard(cardId)
+        }}
         openRequest={openNewCard}
       />
     </li>

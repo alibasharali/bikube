@@ -175,6 +175,11 @@ export function moveCardToColumn(workspaceId: string, cardId: string, columnId: 
   return moved
 }
 
+/** The card just moved by keyboard or menu that hasn't taken focus back yet, or null. */
+export function movedCard(): string | null {
+  return focusAfterMove
+}
+
 /** True once for the card that was just moved by keyboard or menu, so it can refocus itself. */
 export function takeFocusAfterMove(cardId: string): boolean {
   if (focusAfterMove !== cardId) return false

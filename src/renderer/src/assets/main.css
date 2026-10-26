@@ -2010,6 +2010,29 @@ button.dev-server-chip:focus-visible {
     color var(--transition);
 }
 
+.column-show-all {
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.column-show-all:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.column-show-all:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .new-card:hover {
   background: var(--surface-hover);
   color: var(--text);
@@ -2462,6 +2485,12 @@ button.dev-server-chip:focus-visible {
    bottom right, tilted, cropped by the card's corner and fading out towards the text. */
 .card {
   isolation: isolate;
+}
+
+/* Isolated, each card is its own stack: the one with its menu open goes above the cards after it,
+   or they would cover the menu. */
+.card:has(.menu) {
+  z-index: 6;
 }
 
 .card-watermark {

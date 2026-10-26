@@ -513,3 +513,67 @@ test('AC5: releasing outside every column, or Esc, cancels the drag', async () =
   await page.waitForTimeout(400)
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 })
+
+/** `runner` in In Progress, then `c1`…`c<n>` at the bottom of Backlog through `board create`. */
+async function fillBacklog(n: number): Promise<void> {
+  await newCard('In Progress', 'runner')
+  await run(`for i in $(seq 1 ${n}); do board create Backlog c$i; done`)
+  await back()
+  await expect(column('Backlog').getByTestId('column-count')).toHaveText(String(n), {
+    timeout: 15_000
+  })
+}
+
+const cs = (from: number, to: number): string[] =>
+  Array.from({ length: to - from + 1 }, (_, i) => `c${from + i}`)
+
+test('a column shows its first 10 cards; Show all unfolds it until Show fewer, across Back', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await fillBacklog(12)
+  const toggle = column('Backlog').getByTestId('column-show-all')
+  await expect(titles('Backlog')).toHaveText(cs(1, 10))
+  await expect(toggle).toHaveText('Show all 12 cards')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  // A column within the limit has no button.
+  await expect(column('In Progress').getByTestId('column-show-all')).toHaveCount(0)
+
+  await toggle.click()
+  await expect(titles('Backlog')).toHaveText(cs(1, 12))
+  await expect(toggle).toHaveText('Show fewer')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await openCard('runner')
+  await back()
+  await expect(titles('Backlog')).toHaveText(cs(1, 12))
+
+  await column('Backlog').getByTestId('column-show-all').click()
+  await expect(titles('Backlog')).toHaveText(cs(1, 10))
+  await expect(column('Backlog').getByTestId('column-count')).toHaveText('12')
+})
+
+test('a card put past the fold unfolds its column: by drag, Alt+Down and Move to', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await fillBacklog(10)
+  await expect(column('Backlog').getByTestId('column-show-all')).toHaveCount(0)
+
+  // Dropped below the 10th card, `runner` is the 11th, and shown.
+  await showAllColumns()
+  // Ten cards are taller than the window: the column scrolls, and a drag scrolls nothing.
+  await card('c10').scrollIntoViewIfNeeded()
+  await drag('runner', card('c10'), 0.75)
+  await expect(titles('Backlog')).toHaveText([...cs(1, 10), 'runner'])
+  await column('Backlog').getByTestId('column-show-all').click()
+  await expect(titles('Backlog')).toHaveText(cs(1, 10))
+
+  // Alt+Down from the 10th card keeps it in view and focused.
+  await card('c10').getByTestId('card-open').focus()
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect(titles('Backlog')).toHaveText([...cs(1, 9), 'runner', 'c10'])
+  await expect.poll(focusedCard).toBe('c10')
+  await column('Backlog').getByTestId('column-show-all').click()
+
+  // Moved to the bottom from another column through its menu, open over the cards under it.
+  await menuMove('c1', 'In Progress')
+  await menuMove('c1', 'Backlog')
+  await expect(titles('Backlog')).toHaveText([...cs(2, 9), 'runner', 'c10', 'c1'])
+  await expect.poll(focusedCard).toBe('c1')
+})

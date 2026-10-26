@@ -110,7 +110,7 @@ async function worktreeCard(title: string): Promise<string> {
 
 test('a card with its own worktree runs on a new branch, with ignored files copied', async () => {
   const branch = await worktreeCard('Fix the login bug')
-  expect(branch).toBe('bikube/fix-the-login-bug')
+  expect(branch).toBe('fix-the-login-bug')
   await expect(page.getByTestId('titlebar').getByTestId('card-branch')).toHaveText(branch)
   await expect(page.getByTestId('titlebar').getByTestId('card-branch')).toHaveAttribute(
     'data-worktree',
@@ -130,18 +130,18 @@ test('a card with its own worktree runs on a new branch, with ignored files copi
 })
 
 test('the branch follows the title until edited, and a taken or bad one is refused', async () => {
-  git('branch', 'bikube/taken')
+  git('branch', 'taken')
   await page.getByTestId('column').first().getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('Taken')
   await expect(page.getByTestId('new-card-worktree')).toBeVisible()
   await page.getByTestId('new-card-worktree').check()
   const branch = page.getByTestId('new-card-branch')
   // An existing branch name is skipped.
-  await expect(branch).toHaveValue('bikube/taken-2')
+  await expect(branch).toHaveValue('taken-2')
   await branch.fill('bad name')
   await branch.press('Enter')
   await expect(page.getByTestId('new-card-error-branch')).toHaveText('Not a valid branch name')
-  await branch.fill('bikube/taken')
+  await branch.fill('taken')
   await branch.press('Enter')
   await expect(page.getByTestId('new-card-error-branch')).toHaveText('Branch already exists')
   await expect(page.getByTestId('card')).toHaveCount(0)
@@ -172,7 +172,7 @@ test('deleting a worktree card keeps or removes the worktree, never its branch',
   await expect(page.getByTestId('delete-worktree-dirty')).toBeVisible()
   await page.getByTestId('delete-with-worktree').click()
   await expect.poll(() => existsSync(removed)).toBe(false)
-  expect(git('branch', '--list', 'bikube/remove-me')).toContain('bikube/remove-me')
+  expect(git('branch', '--list', 'remove-me')).toContain('remove-me')
   expect(git('branch', '--list', branch)).toContain(branch)
   expect(readFileSync(join(repo, 'README.md'), 'utf8')).toBe('# repo\n')
 })
@@ -238,11 +238,11 @@ test('a stopped plain card moves into its own worktree and runs there from its n
   await card('Add search').getByTestId('card-menu').click()
   await page.getByTestId('card-menu-move-worktree').click()
   const dialog = page.getByTestId('move-worktree-dialog')
-  await expect(dialog.getByTestId('move-worktree-branch')).toHaveValue('bikube/add-search')
+  await expect(dialog.getByTestId('move-worktree-branch')).toHaveValue('add-search')
   await expect(dialog.getByTestId('move-worktree-hint')).toContainText('A new branch from main')
   await dialog.getByTestId('move-worktree-submit').click()
   await expect(dialog).toHaveCount(0)
-  await expect(card('Add search').getByTestId('card-branch')).toHaveText('bikube/add-search')
+  await expect(card('Add search').getByTestId('card-branch')).toHaveText('add-search')
   expect(existsSync(worktreePath('add-search'))).toBe(true)
 
   // Once it has one, the item is gone; its next start runs in the worktree.
@@ -252,9 +252,7 @@ test('a stopped plain card moves into its own worktree and runs there from its n
   await card('Add search').getByTestId('card-open').click()
   await expectCardOpen(page, 'Add search')
   await run('echo "at=$(git branch --show-current) conf=$(cat local.conf)"')
-  await expect
-    .poll(async () => (await lines()).includes('at=bikube/add-search conf=port=4000'))
-    .toBe(true)
+  await expect.poll(async () => (await lines()).includes('at=add-search conf=port=4000')).toBe(true)
   expect(git('branch', '--show-current')).toBe('main')
 })
 

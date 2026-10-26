@@ -21,11 +21,9 @@ describe('titleSlug', () => {
 })
 
 describe('suggestBranch', () => {
-  it('prefixes bikube/ and counts on when the name is taken', () => {
-    expect(suggestBranch('Fix login', new Set())).toBe('bikube/fix-login')
-    expect(suggestBranch('Fix login', new Set(['bikube/fix-login', 'bikube/fix-login-2']))).toBe(
-      'bikube/fix-login-3'
-    )
+  it('is the slug, counting on when the name is taken', () => {
+    expect(suggestBranch('Fix login', new Set())).toBe('fix-login')
+    expect(suggestBranch('Fix login', new Set(['fix-login', 'fix-login-2']))).toBe('fix-login-3')
   })
 })
 

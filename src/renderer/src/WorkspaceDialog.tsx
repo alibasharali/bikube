@@ -80,7 +80,7 @@ function WorkspaceDialog({
   const [setupError, setSetupError] = useState<string | undefined>(undefined)
   // The sidebar badge's icon (#59 D3); null is None, the name's initial.
   const [logo, setLogo] = useState<WorkspaceLogoId | null>(workspace?.logo ?? null)
-  // How it shows its cards: Default (Settings' Default view, live) for a new workspace.
+  // How it shows its cards: Follow Settings (Settings' Default view, live) for a new workspace.
   const [view, setView] = useState<WorkspaceViewChoice>(() =>
     workspace ? workspaceViewChoice(workspace) : 'default'
   )
@@ -336,12 +336,11 @@ function WorkspaceDialog({
                 name={`${id}-view`}
                 value="default"
                 data-testid="workspace-view-default"
-                aria-describedby={`${id}-view-hint`}
                 checked={view === 'default'}
                 onChange={() => setView('default')}
               />
               <Settings2 {...SMALL_ICON} />
-              {`Default (${defaultLabel})`}
+              {`Follow Settings (${defaultLabel})`}
             </label>
             {VIEWS.map(([value, label, Icon]) => (
               <label key={value} className="radio">
@@ -358,10 +357,6 @@ function WorkspaceDialog({
               </label>
             ))}
           </div>
-          <p className="field-hint" id={`${id}-view-hint`}>
-            Default follows the Default view in Settings, so changing it there changes this
-            workspace too.
-          </p>
         </fieldset>
         <StartupField
           draft={startup}

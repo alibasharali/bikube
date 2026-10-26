@@ -166,6 +166,12 @@ test('#66 AC2, AC3: with the Default shell running, New shell opens Terminal 1, 
   await page.getByTestId('palette-input').fill('New shell')
   await page.keyboard.press('Enter')
   await expectCardOpen(page, 'Terminal 4')
+  // #67 D1: with the panel hidden, the title bar's chip counts the Default shell alone.
+  await page.getByTestId('titlebar-panel').click()
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  const chip = page.getByTestId('titlebar-shells')
+  await expect(chip).toHaveText('1 shell')
+  await expect(chip).toHaveAttribute('title', 'Running: Default shell. Show them in the panel')
 })
 
 test('#66 AC4: a new shell is removed when it stops, its name reused, and never saved', async () => {
@@ -191,6 +197,9 @@ test('#66 AC4: a new shell is removed when it stops, its name reused, and never 
   await closeCard(page)
   await page.getByTestId('confirm-close').click()
   await expect(treeTerminal('Terminal 2')).toHaveCount(0)
+  // Removed, not only stopped: its name is free again.
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 2')
 
   // A named shell added after them is saved; they never are.
   await newShell('Later', '')
@@ -206,7 +215,13 @@ test('#66 AC4: a new shell is removed when it stops, its name reused, and never 
   await showShells(page)
   await expect(shell('Later')).toBeVisible()
   await expect(page.getByTestId('shell')).toHaveCount(2)
-  await expect(shell('Terminal 1')).toHaveCount(0)
+  // Not read back either: the palette, which lists stopped shells too, names none.
+  await page.keyboard.press(darwin ? 'Meta+K' : 'Control+Shift+P')
+  const shellRows = page
+    .locator('[data-testid=palette-section][data-section=shells]')
+    .getByTestId('palette-row-title')
+  await expect(shellRows).toHaveText(['Default shell', 'Later'])
+  await page.keyboard.press('Escape')
 })
 
 test('#66 AC4: with a Sync folder on, the folder never names a new shell', async () => {

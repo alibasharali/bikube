@@ -358,7 +358,7 @@ test('AC6: a worktree card matches its branch; a card matches its activity, whic
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('search index')
   await page.getByTestId('new-card-worktree').check()
-  await expect(page.getByTestId('new-card-branch')).toHaveValue('search-index')
+  await expect(page.getByTestId('new-card-branch')).toHaveValue('bikube/search-index')
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, 'search index')
   await backToBoard(page)
@@ -370,7 +370,7 @@ test('AC6: a worktree card matches its branch; a card matches its activity, whic
   await page.keyboard.type('search-index')
   await expect(row('search index')).toHaveCount(1)
   await expect(row('search index').getByTestId('palette-row-meta')).toHaveText(
-    'repo · search-index · Running'
+    'repo · bikube/search-index · Running'
   )
 
   await search().fill('needs')

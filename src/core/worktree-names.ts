@@ -1,8 +1,9 @@
 /**
- * Names for a card's own git worktree: the branch (the slug of the card title) and the worktree's
- * folder (the branch's last part). Plain TS.
+ * Names for a card's own git worktree: the branch (`bikube/<slug of the card title>`) and the
+ * worktree's folder (the slug). Plain TS.
  */
 
+export const BRANCH_PREFIX = 'bikube/'
 export const MAX_SLUG_LENGTH = 40
 
 /**
@@ -22,9 +23,9 @@ export function titleSlug(title: string): string {
   return (dash > 0 ? cut.slice(0, dash) : slug.slice(0, MAX_SLUG_LENGTH)).replace(/-+$/, '')
 }
 
-/** The branch suggested for a card titled `title`: its slug, `-2`, `-3`… when taken. */
+/** The branch suggested for a card titled `title`: `bikube/<slug>`, `-2`, `-3`… when taken. */
 export function suggestBranch(title: string, taken: ReadonlySet<string>): string {
-  const base = titleSlug(title)
+  const base = `${BRANCH_PREFIX}${titleSlug(title)}`
   if (!taken.has(base)) return base
   for (let n = 2; ; n++) {
     if (!taken.has(`${base}-${n}`)) return `${base}-${n}`

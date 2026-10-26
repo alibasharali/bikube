@@ -1,6 +1,6 @@
 /**
- * How many cards a board column or a grid section shows before its Show all button: the Cards
- * before Show all setting.
+ * How many cards a board column or a grid section shows before its Show all button: the Card
+ * display limit setting.
  * Plain TS, no DOM.
  */
 

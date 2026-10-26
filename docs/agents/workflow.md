@@ -6,7 +6,7 @@ How every change in this repo is made. Managed by Software Factory's agent kit (
 
 ## What Software Factory is
 
-The developer's personal control plane for all their projects. Each project has a board in the factory; each board item is worked on by Claude sessions the factory starts, and moves from idea to production without the developer driving git by hand. The factory scaffolds new projects and imports existing ones, and every project follows this same workflow, so the board, pipelines and releases work the same everywhere. What that relies on, in every repo:
+The developer's personal control plane for all their projects. Each project has a board in the factory; each board item is worked on by Claude sessions the factory starts (or the developer starts from their own clone), and moves from idea to production without the developer driving git by hand. The factory scaffolds new projects and imports existing ones, and every project follows this same workflow, so the board, pipelines and releases work the same everywhere. What that relies on, in every repo:
 
 - items, specs and branches named as below, so the factory can link them;
 - `.claude/check.sh` as the one definition of green, run by agents, hooks and the `check` job on every PR;
@@ -57,14 +57,18 @@ Deploys report through GitHub Actions jobs with `environment: dev` / `prod`; rel
 
 ## Steps
 
-1. **Start.** The factory fires a session with the item. The `item` skill reads it (`get_item`), finds where it stands, and resumes.
+1. **Start.** The factory fires a session with the item, or the developer starts one in their own clone with the command **Start locally** shows on the item page. The `item` skill reads it (`get_item`), finds where it stands, and resumes.
 2. **Spec** (`write-spec`). Features: grill the developer on every open decision in rounds of questions on the item page (options, a recommendation, free text), then write and push the spec. Bugs/chores: a short spec, no grilling. A new project's first item uses `bootstrap`, which agrees with the developer where to start (a proof of concept of the riskiest part, or the smallest thing that runs end to end), scaffolds the picked stack when no tested recipe did, turns the rest of the description into ideas, and records what it learned about stacks the factory doesn't know yet. An imported repo's first item uses `onboard` first, which specs what the repo lacks compared with a new factory project (checks, PR CI, what its delivery preset needs, URLs, `CLAUDE.md`).
-3. **Gate** (features only). The developer reads the spec and approves it: by saying "approved" in the session, or with **Approve** on the item page, which records the spec's blob SHA and starts a fresh session. No production code before that. Under full auto the session approves its own spec unless it changes the stack (below).
+3. **Gate** (features only). The developer reads the spec and approves it: by saying "approved" in the session, or with **Approve** on the item page, which records the spec's blob SHA and starts a fresh session (on a local item, below, it starts none). No production code before that. Under full auto the session approves its own spec unless it changes the stack (below).
 4. **Implement** (`implement-spec`). The session orchestrates: a fresh `slice-implementer` builds each slice test-first, the orchestrator commits, a `slice-reviewer` checks it.
 5. **Verify.** All checks green (`.claude/check.sh`), then the `verifier` subagent checks every acceptance criterion against the running app and returns a summary. When the branch changes user-visible UI, the `ux-reviewer` subagent then looks at the change on the running app (screenshots and DOM measurements at 320/768/1280 px, light and dark) against `docs/agents/ux-standard.md`; must-fix findings go back for at most two `fix(ux)` rounds, polish is listed in the PR. Otherwise the step is skipped with a one-line reason. Nothing is written to the repo.
 6. **Ship** (`ship`). Review the branch in a fresh subagent and fix findings, run the retro (`lesson`), push, and open the PR through `open_pull_request`. The factory moves the item to *In review* and turns on auto-merge where the preset and GitHub allow it.
 7. **Review.** CI and the Claude review run on the PR. The review fixes unambiguous findings (`fix(review): …`) and leaves an unresolved thread for everything else. Reply `@claude <what you want>` in a thread to have Claude fix it. Then the PR merges into the base branch (squash) one of two ways: GitHub auto-merges it once CI and the review pass and every thread is resolved, where the preset allows it and the repo has rulesets (public repos, or GitHub Pro); otherwise the developer presses **Merge** on the item in the factory, which only merges with the required checks green. Agents never merge.
 8. **Deliver.** Per the preset: the developer tests on dev and merges the release PR, a deploy or a published release ships it, or the merge itself was the delivery.
+
+## Local items
+
+The developer can work an item from their own clone instead of a cloud session: **Start locally** on the item page puts the item in local mode and shows a `claude '…'` command to run in the clone (with `FACTORY_URL`, `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` set, as the project's setup page shows under *Work locally*). While an item is local the board starts no sessions for it and lights-out leaves it alone: answers, **Request changes** and **Approve** are recorded, and the developer types `continue` in the local session, which re-reads `get_item` and carries on. Sessions act on local mode only when `get_item` returns `workMode: "local"`; they first check that the clone is the project's repo. **Switch to cloud** (or starting a cloud session) ends local mode.
 
 ## Other sessions
 

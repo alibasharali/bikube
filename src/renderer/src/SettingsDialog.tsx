@@ -320,7 +320,7 @@ function AppearanceSection({
 }
 
 /**
- * Cards per column: how many cards a board column shows before its Show all button, 1 to 100,
+ * Cards before Show all: how many cards a board column shows before its Show all button, 1 to 100,
  * saved as typed while valid, or stepped with the buttons and the arrow keys.
  */
 function CardsPerColumnRow(): React.JSX.Element {
@@ -346,14 +346,14 @@ function CardsPerColumnRow(): React.JSX.Element {
   return (
     <div className="settings-row">
       <label className="settings-label" htmlFor={inputId}>
-        Cards per column
+        Cards before Show all
       </label>
       <div className="settings-control">
         <div className="stepper">
           <button
             type="button"
             className="stepper-btn"
-            aria-label="Fewer cards per column"
+            aria-label="Fewer cards before Show all"
             disabled={settings.columnCardLimit <= MIN_COLUMN_CARD_LIMIT}
             onClick={() => step(-1)}
           >
@@ -378,7 +378,7 @@ function CardsPerColumnRow(): React.JSX.Element {
           <button
             type="button"
             className="stepper-btn"
-            aria-label="More cards per column"
+            aria-label="More cards before Show all"
             disabled={settings.columnCardLimit >= MAX_COLUMN_CARD_LIMIT}
             onClick={() => step(1)}
           >
@@ -396,7 +396,7 @@ function CardsPerColumnRow(): React.JSX.Element {
           </p>
         ) : (
           <p className="field-hint" id={`${id}-limit-hint`}>
-            A Kanban column shows this many cards, then Show all.
+            A Kanban column or a grid section shows this many cards, then Show all.
           </p>
         )}
       </div>

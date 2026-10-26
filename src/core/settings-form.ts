@@ -12,9 +12,9 @@ export function parseFontSize(text: string): number | null {
   return isFontSize(size) ? size : null
 }
 
-export const COLUMN_CARD_LIMIT_ERROR = `Cards per column must be a whole number from ${MIN_COLUMN_CARD_LIMIT} to ${MAX_COLUMN_CARD_LIMIT}`
+export const COLUMN_CARD_LIMIT_ERROR = `Cards before Show all must be a whole number from ${MIN_COLUMN_CARD_LIMIT} to ${MAX_COLUMN_CARD_LIMIT}`
 
-/** The number typed in the Cards per column field, or null when it isn't one from 1 to 100. */
+/** The number typed in the Cards before Show all field, or null when it isn't one from 1 to 100. */
 export function parseColumnCardLimit(text: string): number | null {
   const trimmed = text.trim()
   if (!/^\d+$/.test(trimmed)) return null

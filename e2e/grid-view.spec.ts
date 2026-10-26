@@ -307,3 +307,33 @@ test("a workspace on Default follows Settings' Default view live; one with its o
   await page.getByTestId('workspace-item').filter({ hasText: 'beta' }).click()
   await expect(page.getByTestId('board')).toBeVisible()
 })
+
+test('each grid section shows its first Cards before Show all cards, then Show all', async () => {
+  await launch()
+  await createWorkspace('alpha', 'grid')
+  await newCard('runner')
+  await openCard('runner')
+  await run('for i in $(seq 1 4); do board create Backlog c$i; done')
+  await backToBoard(page)
+  const stopped = page.getByTestId('grid-section-stopped')
+  await expect(stopped.getByTestId('card')).toHaveCount(4, { timeout: 15_000 })
+
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-column-card-limit').fill('2')
+  await page.keyboard.press('Escape')
+  // Latest first: the last created two.
+  await expect.poll(() => titles(stopped)).toEqual(['c4', 'c3'])
+  const showAll = stopped.getByTestId('grid-show-all')
+  await expect(showAll).toHaveText('Show all 4 cards')
+  // Running has one card: no button.
+  await expect(page.getByTestId('grid-section-running').getByTestId('grid-show-all')).toHaveCount(0)
+
+  await showAll.click()
+  await expect.poll(() => titles(stopped)).toEqual(['c4', 'c3', 'c2', 'c1'])
+  await expect(showAll).toHaveText('Show fewer')
+  await openCard('runner')
+  await backToBoard(page)
+  await expect.poll(() => titles(stopped)).toEqual(['c4', 'c3', 'c2', 'c1'])
+  await stopped.getByTestId('grid-show-all').click()
+  await expect.poll(() => titles(stopped)).toEqual(['c4', 'c3'])
+})

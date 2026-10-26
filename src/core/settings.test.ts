@@ -807,7 +807,7 @@ describe('the default view and the view prompt preferences', () => {
   })
 })
 
-describe('the Cards per column preference', () => {
+describe('the Cards before Show all preference', () => {
   const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
   const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
 

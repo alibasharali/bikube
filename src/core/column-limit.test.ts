@@ -24,7 +24,7 @@ describe('showAllLabel', () => {
   })
 })
 
-describe('the Cards per column setting', () => {
+describe('the Cards before Show all setting', () => {
   it('takes a whole number from 1 to 100', () => {
     expect([1, 10, 100].every(isColumnCardLimit)).toBe(true)
     expect([0, 101, 2.5, '10', null].some(isColumnCardLimit)).toBe(false)

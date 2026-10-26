@@ -7,15 +7,23 @@ import {
   type GridFilter
 } from '../../core/card-grid'
 import type { Card, Workspace } from '../../core/workspace-store'
+import { shownCards, showAllLabel } from '../../core/column-limit'
 import { useWaitingQueue } from './attention'
 import CardItem from './CardItem'
 import { useRunningIds } from './card-terminals'
 import { ICON, SMALL_ICON } from './icons'
 import NewCard from './NewCard'
 import { useNewCardRequest } from './new-card-request'
+import { useSettings } from './settings'
 
 /** Whether the Stopped section is open, for the run of the app, in every workspace. */
 let stoppedOpen = true
+
+/**
+ * The sections unfolded with Show all, as `<workspace id>:<section>`, for the run of the app (kept
+ * across Back, as a board column's).
+ */
+const expandedSections = new Set<string>()
 
 /**
  * The grid view of a workspace: every card in one grid, latest first, instead of its columns.
@@ -34,6 +42,9 @@ function GridView({
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<GridFilter>('all')
   const [showStopped, setShowStopped] = useState(stoppedOpen)
+  // Cards before Show all: each section shows its first this many, as a board column does.
+  const limit = useSettings().columnCardLimit
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(expandedSections))
   const running = useRunningIds(workspace.cards)
   const waitingQueue = useWaitingQueue()
   const waiting = new Set(waitingQueue)
@@ -58,20 +69,43 @@ function GridView({
     setShowStopped(stoppedOpen)
   }
 
-  const grid = (cards: Card[]): React.JSX.Element => (
-    <ul className="card-grid">
-      {cards.map((card) => (
-        <CardItem
-          key={card.id}
-          workspaceId={workspace.id}
-          card={card}
-          columns={workspace.columns}
-          movable={false}
-          onOpen={() => onOpenCard(card.id)}
-        />
-      ))}
-    </ul>
-  )
+  const grid = (section: GridFilter, cards: Card[]): React.JSX.Element => {
+    const key = `${workspace.id}:${section}`
+    const open = expanded.has(key)
+    const label = showAllLabel(cards.length, open, limit)
+    const toggle = (): void => {
+      if (open) expandedSections.delete(key)
+      else expandedSections.add(key)
+      setExpanded(new Set(expandedSections))
+    }
+    return (
+      <>
+        <ul className="card-grid">
+          {shownCards(cards, open, limit).map((card) => (
+            <CardItem
+              key={card.id}
+              workspaceId={workspace.id}
+              card={card}
+              columns={workspace.columns}
+              movable={false}
+              onOpen={() => onOpenCard(card.id)}
+            />
+          ))}
+        </ul>
+        {label && (
+          <button
+            type="button"
+            className="column-show-all"
+            data-testid="grid-show-all"
+            aria-expanded={open}
+            onClick={toggle}
+          >
+            {label}
+          </button>
+        )}
+      </>
+    )
+  }
 
   return (
     <section
@@ -146,7 +180,7 @@ function GridView({
               {GRID_FILTER_LABELS.waiting}
               <span className="count">{sections.waiting.length}</span>
             </h2>
-            {grid(sections.waiting)}
+            {grid('waiting', sections.waiting)}
           </section>
         )}
         {sections.running.length > 0 && (
@@ -155,7 +189,7 @@ function GridView({
               {GRID_FILTER_LABELS.running}
               <span className="count">{sections.running.length}</span>
             </h2>
-            {grid(sections.running)}
+            {grid('running', sections.running)}
           </section>
         )}
         {sections.stopped.length > 0 && filter === 'stopped' && (
@@ -165,7 +199,7 @@ function GridView({
               {GRID_FILTER_LABELS.stopped}
               <span className="count">{sections.stopped.length}</span>
             </h2>
-            {grid(sections.stopped)}
+            {grid('stopped', sections.stopped)}
           </section>
         )}
         {sections.stopped.length > 0 && filter !== 'stopped' && (
@@ -183,7 +217,7 @@ function GridView({
                 <span className="count">{sections.stopped.length}</span>
               </button>
             </h2>
-            {showStopped && grid(sections.stopped)}
+            {showStopped && grid('stopped', sections.stopped)}
           </section>
         )}
       </div>

@@ -588,7 +588,7 @@ test('Settings sets how many cards a column shows, live, refusing a number out o
   await expect(field).toHaveValue('10')
   await field.fill('0')
   await expect(page.getByTestId('settings-error-column-card-limit')).toHaveText(
-    'Cards per column must be a whole number from 1 to 100'
+    'Cards before Show all must be a whole number from 1 to 100'
   )
   await field.fill('3')
   await expect(page.getByTestId('settings-error-column-card-limit')).toHaveCount(0)

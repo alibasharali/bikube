@@ -932,7 +932,7 @@ test('#66 AC6: Appearance has no terminal font rows; Terminal has them above the
     'App theme',
     'App font',
     'Default view',
-    'Cards per column'
+    'Cards before Show all'
   ])
 
   await dialog(page).getByTestId('settings-section-terminal').click()

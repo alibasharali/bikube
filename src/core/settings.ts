@@ -22,6 +22,7 @@ import { isGlobalShortcut } from './global-hotkey'
 import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides } from './keymap'
 import { BIKUBE_DARK, BIKUBE_LIGHT, isTerminalThemeName } from './terminal-themes'
 import { WORKSPACE_VIEWS, type WorkspaceView } from './workspace-store'
+import { COLUMN_CARD_LIMIT, isColumnCardLimit } from './column-limit'
 
 export const SETTINGS_FILE_NAME = 'bikube-settings.json'
 export const SETTINGS_VERSION = 1
@@ -134,6 +135,8 @@ export interface Preferences {
    * workspace yet, so a board from before it never asks.
    */
   viewChosen: boolean
+  /** How many cards a board column shows before its Show all button, 1 to 100. */
+  columnCardLimit: number
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -163,7 +166,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   appTheme: 'default',
   appFontFamily: '',
   defaultView: 'kanban',
-  viewChosen: false
+  viewChosen: false,
+  columnCardLimit: COLUMN_CARD_LIMIT
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -214,7 +218,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     v.length <= MAX_FONT_FAMILY_LENGTH &&
     !CONTROL_CHARS.test(v),
   defaultView: oneOf(WORKSPACE_VIEWS),
-  viewChosen: isBoolean
+  viewChosen: isBoolean,
+  columnCardLimit: isColumnCardLimit
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

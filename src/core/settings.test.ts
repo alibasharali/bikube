@@ -806,3 +806,25 @@ describe('the default view and the view prompt preferences', () => {
     expect(parsed.replaced).toEqual(['defaultView'])
   })
 })
+
+describe('the Cards per column preference', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is 10 by default, written only when it differs, and read back', () => {
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.columnCardLimit).toBe(10)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('columnCardLimit')
+    const text = serializeSettings({ ...base, columnCardLimit: 25 })
+    expect(JSON.parse(text).settings.columnCardLimit).toBe(25)
+    expect(parseSettingsFile(text, 'linux').settings.columnCardLimit).toBe(25)
+  })
+
+  it('refuses a number outside 1 to 100 or not whole', () => {
+    for (const value of [0, 101, 2.5, '10']) {
+      expect(validateSettings({ ...base, columnCardLimit: value }, 'linux')).toBeNull()
+      const parsed = parseSettingsFile(file({ ...base, columnCardLimit: value }), 'linux')
+      expect(parsed.settings.columnCardLimit).toBe(10)
+      expect(parsed.replaced).toEqual(['columnCardLimit'])
+    }
+  })
+})

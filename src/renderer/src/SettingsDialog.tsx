@@ -54,7 +54,14 @@ import { terminalTheme } from '../../core/terminal-themes'
 import type { ShellChoices } from '../../shared/api'
 import { APP_FONT_CHOICES, UI_FONT_STACK, appFontChoiceOf, appFontOf } from '../../core/app-fonts'
 import { FONT_CHOICES, familyOf, fontChoiceOf } from '../../core/font-choices'
-import { FONT_SIZE_ERROR, fontFamilyField, parseFontSize } from '../../core/settings-form'
+import {
+  COLUMN_CARD_LIMIT_ERROR,
+  FONT_SIZE_ERROR,
+  fontFamilyField,
+  parseColumnCardLimit,
+  parseFontSize
+} from '../../core/settings-form'
+import { MAX_COLUMN_CARD_LIMIT, MIN_COLUMN_CARD_LIMIT } from '../../core/column-limit'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import { ghosttyStore, useGhosttyTheme } from './ghostty'
 import { installedAppFonts, installedFonts } from './installed-fonts'
@@ -306,7 +313,93 @@ function AppearanceSection({
           </p>
         </div>
       </fieldset>
+      <CardsPerColumnRow />
     </>
+  )
+}
+
+/**
+ * Cards per column: how many cards a board column shows before its Show all button, 1 to 100,
+ * saved as typed while valid, or stepped with the buttons and the arrow keys.
+ */
+function CardsPerColumnRow(): React.JSX.Element {
+  const settings = useSettings()
+  const id = useId()
+  const [text, setText] = useState(() => String(settingsStore.get().columnCardLimit))
+  const [invalid, setInvalid] = useState(false)
+  const change = (next: string): void => {
+    setText(next)
+    const limit = parseColumnCardLimit(next)
+    setInvalid(limit === null)
+    if (limit !== null) settingsStore.update({ columnCardLimit: limit })
+  }
+  const step = (by: number): void => {
+    const limit = Math.min(
+      MAX_COLUMN_CARD_LIMIT,
+      Math.max(MIN_COLUMN_CARD_LIMIT, settings.columnCardLimit + by)
+    )
+    change(String(limit))
+  }
+  const inputId = `${id}-limit`
+  const errorId = `${id}-limit-error`
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={inputId}>
+        Cards per column
+      </label>
+      <div className="settings-control">
+        <div className="stepper">
+          <button
+            type="button"
+            className="stepper-btn"
+            aria-label="Fewer cards per column"
+            disabled={settings.columnCardLimit <= MIN_COLUMN_CARD_LIMIT}
+            onClick={() => step(-1)}
+          >
+            <Minus {...SMALL_ICON} />
+          </button>
+          <input
+            id={inputId}
+            className="stepper-input"
+            data-testid="settings-column-card-limit"
+            inputMode="numeric"
+            value={text}
+            autoComplete="off"
+            aria-invalid={invalid ? true : undefined}
+            aria-describedby={invalid ? errorId : `${id}-limit-hint`}
+            onChange={(e) => change(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+              e.preventDefault()
+              step(e.key === 'ArrowUp' ? 1 : -1)
+            }}
+          />
+          <button
+            type="button"
+            className="stepper-btn"
+            aria-label="More cards per column"
+            disabled={settings.columnCardLimit >= MAX_COLUMN_CARD_LIMIT}
+            onClick={() => step(1)}
+          >
+            <Plus {...SMALL_ICON} />
+          </button>
+        </div>
+        {invalid ? (
+          <p
+            className="field-error"
+            id={errorId}
+            role="alert"
+            data-testid="settings-error-column-card-limit"
+          >
+            {COLUMN_CARD_LIMIT_ERROR}
+          </p>
+        ) : (
+          <p className="field-hint" id={`${id}-limit-hint`}>
+            A Kanban column shows this many cards, then Show all.
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 

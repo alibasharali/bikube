@@ -927,7 +927,13 @@ test('#66 AC6: Appearance has no terminal font rows; Terminal has them above the
     'settings-letter-spacing'
   ]
   for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toHaveCount(0)
-  expect(await sectionLabels(page)).toEqual(['Theme', 'App theme', 'App font', 'Default view'])
+  expect(await sectionLabels(page)).toEqual([
+    'Theme',
+    'App theme',
+    'App font',
+    'Default view',
+    'Cards per column'
+  ])
 
   await dialog(page).getByTestId('settings-section-terminal').click()
   for (const testId of fontIds) await expect(dialog(page).getByTestId(testId)).toBeVisible()

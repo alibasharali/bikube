@@ -577,3 +577,26 @@ test('a card put past the fold unfolds its column: by drag, Alt+Down and Move to
   await expect(titles('Backlog')).toHaveText([...cs(2, 9), 'runner', 'c10', 'c1'])
   await expect.poll(focusedCard).toBe('c1')
 })
+
+test('Settings sets how many cards a column shows, live, refusing a number out of range', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await fillBacklog(5)
+  await expect(column('Backlog').getByTestId('column-show-all')).toHaveCount(0)
+
+  await page.getByTestId('settings-open').click()
+  const field = page.getByTestId('settings-column-card-limit')
+  await expect(field).toHaveValue('10')
+  await field.fill('0')
+  await expect(page.getByTestId('settings-error-column-card-limit')).toHaveText(
+    'Cards per column must be a whole number from 1 to 100'
+  )
+  await field.fill('3')
+  await expect(page.getByTestId('settings-error-column-card-limit')).toHaveCount(0)
+  await field.press('ArrowDown')
+  await expect(field).toHaveValue('2')
+  await field.press('ArrowUp')
+  await page.keyboard.press('Escape')
+
+  await expect(titles('Backlog')).toHaveText(cs(1, 3))
+  await expect(column('Backlog').getByTestId('column-show-all')).toHaveText('Show all 5 cards')
+})

@@ -50,7 +50,9 @@ const readState = (): SavedState => {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).state : { workspaces: [] }
 }
 
-async function createWorkspace(name: string, view?: 'kanban' | 'grid'): Promise<void> {
+type ViewChoice = 'default' | 'kanban' | 'grid'
+
+async function createWorkspace(name: string, view?: ViewChoice): Promise<void> {
   const dir = join(root, name)
   mkdirSync(dir)
   await page.getByTestId('workspace-add').click()
@@ -62,7 +64,7 @@ async function createWorkspace(name: string, view?: 'kanban' | 'grid'): Promise<
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
 }
 
-async function editView(view: 'kanban' | 'grid'): Promise<void> {
+async function editView(view: ViewChoice): Promise<void> {
   const row = page.locator('.workspace-row').first()
   await row.hover()
   await row.getByTestId('workspace-edit').click()
@@ -112,8 +114,8 @@ test('a first launch asks for the view, and Grid becomes the default for new wor
   const prompt = page.getByTestId('view-prompt')
   await expect(prompt).toBeVisible()
   await expect(prompt).toContainText('How do you want to see your session cards?')
-  await expect(prompt).toContainText('This is the view new workspaces start in.')
-  await expect(prompt).toContainText('Each workspace can have its own')
+  await expect(prompt).toContainText('This becomes the default view for your workspaces.')
+  await expect(prompt).toContainText('Each workspace can still have its own')
   await expect(prompt.getByTestId('view-prompt-kanban').locator('input')).toBeChecked()
   await expect(prompt.locator('.view-preview')).toHaveCount(2)
 
@@ -123,12 +125,19 @@ test('a first launch asks for the view, and Grid becomes the default for new wor
   await expect.poll(readSettings).toMatchObject({ defaultView: 'grid', viewChosen: true })
 
   await page.getByTestId('workspace-add').click()
-  await expect(page.getByTestId('workspace-view-grid')).toBeChecked()
+  // A new workspace follows the default, its label naming it.
+  await expect(page.getByTestId('workspace-view-default')).toBeChecked()
+  await expect(
+    page
+      .getByTestId('workspace-dialog')
+      .locator('label', { has: page.getByTestId('workspace-view-default') })
+  ).toHaveText('Default (Grid)')
   await page.getByTestId('workspace-cancel').click()
   await createWorkspace('alpha')
   await expect(grid()).toBeVisible()
   await expect(page.getByTestId('column')).toHaveCount(0)
-  await expect.poll(() => readState().workspaces[0]?.view).toBe('grid')
+  await expect.poll(() => readState().workspaces[0]?.name).toBe('alpha')
+  expect(readState().workspaces[0]).not.toHaveProperty('view')
 
   // Answered once: never again, even with no workspace left.
   const dir = dataDir
@@ -194,6 +203,9 @@ test('switching a workspace between Kanban and Grid changes no card', async () =
   await expect
     .poll(() => readState().workspaces[0]?.cards.map((c) => [c.title, c.columnId]))
     .toEqual(before.map((c) => [c.title, c.columnId]))
+  await expect.poll(() => readState().workspaces[0]?.view).toBe('kanban')
+  await editView('default')
+  await expect(page.getByTestId('board')).toBeVisible()
   await expect.poll(() => readState().workspaces[0]?.view).toBeUndefined()
 })
 
@@ -279,4 +291,19 @@ test("Settings' Default view sets new workspaces' view", async () => {
   await page.keyboard.press('Escape')
   await createWorkspace('alpha')
   await expect(grid()).toBeVisible()
+})
+
+test("a workspace on Default follows Settings' Default view live; one with its own keeps it", async () => {
+  await launch()
+  await createWorkspace('alpha')
+  await createWorkspace('beta', 'kanban')
+  await page.getByTestId('workspace-item').filter({ hasText: 'alpha' }).click()
+  await expect(page.getByTestId('board')).toBeVisible()
+
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-view-grid').check()
+  await page.keyboard.press('Escape')
+  await expect(grid()).toBeVisible()
+  await page.getByTestId('workspace-item').filter({ hasText: 'beta' }).click()
+  await expect(page.getByTestId('board')).toBeVisible()
 })

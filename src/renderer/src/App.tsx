@@ -59,7 +59,7 @@ function App(): React.JSX.Element {
   const syncStatus = syncStatusText(useSyncStatus())
   const [collapsed, setCollapsed] = useState(false)
   const active = workspaces.find((w) => w.id === activeId) ?? null
-  const { sidePanelOpen, viewChosen } = useSettings()
+  const { sidePanelOpen, viewChosen, defaultView } = useSettings()
   // The first launch asks which view new workspaces start in, before there is any.
   const viewPrompt = showViewPrompt(
     viewChosen,
@@ -423,7 +423,7 @@ function App(): React.JSX.Element {
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2).
             <div className="board-layout">
-              {workspaceView(active) === 'grid' ? (
+              {workspaceView(active, defaultView) === 'grid' ? (
                 <GridView key={active.id} workspace={active} onOpenCard={onOpenCard} />
               ) : (
                 <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />

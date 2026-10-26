@@ -831,6 +831,12 @@ button {
     color var(--transition);
 }
 
+/* Segments as wide as their labels, the rest shared, so a longer label never wraps. */
+.segmented-fit .radio {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
 .segmented .radio:hover {
   color: var(--text);
 }

@@ -4,6 +4,8 @@ import {
   InMemoryWorkspaceStore,
   basename,
   cardsInColumn,
+  workspaceView,
+  workspaceViewChoice,
   type Card,
   type Column,
   type Result,
@@ -1431,12 +1433,25 @@ describe('temporary shells (#66 D2, D3)', () => {
 })
 
 describe('workspace views and card open times', () => {
-  it('creates a Kanban workspace with no view key, or a Grid one', () => {
+  it('creates a workspace following the default with no view key, or with its own view', () => {
     const s = make()
     expect('view' in create(s, 'alpha')).toBe(false)
-    expect(ok(s.createWorkspace({ name: 'beta', directory: '/tmp/beta', view: 'grid' })).view).toBe(
+    expect(
+      'view' in ok(s.createWorkspace({ name: 'b', directory: '/tmp/b', view: 'default' }))
+    ).toBe(false)
+    expect(ok(s.createWorkspace({ name: 'c', directory: '/tmp/c', view: 'grid' })).view).toBe(
       'grid'
     )
+    expect(ok(s.createWorkspace({ name: 'd', directory: '/tmp/d', view: 'kanban' })).view).toBe(
+      'kanban'
+    )
+  })
+
+  it("shows its own view, or without one Settings' default", () => {
+    expect(workspaceView({}, 'grid')).toBe('grid')
+    expect(workspaceView({ view: 'kanban' }, 'grid')).toBe('kanban')
+    expect(workspaceViewChoice({})).toBe('default')
+    expect(workspaceViewChoice({ view: 'grid' })).toBe('grid')
   })
 
   it('switches a workspace between views without changing any card', () => {
@@ -1446,7 +1461,8 @@ describe('workspace views and card open times', () => {
     const before = s.getState().workspaces[0].cards
     expect(ok(s.updateWorkspace(w.id, { view: 'grid' })).view).toBe('grid')
     expect(s.getState().workspaces[0].cards).toBe(before)
-    expect('view' in ok(s.updateWorkspace(w.id, { view: 'kanban' }))).toBe(false)
+    expect(ok(s.updateWorkspace(w.id, { view: 'kanban' })).view).toBe('kanban')
+    expect('view' in ok(s.updateWorkspace(w.id, { view: 'default' }))).toBe(false)
     expect(s.getState().workspaces[0].cards).toBe(before)
     expect(s.updateWorkspace(w.id, { view: 'list' as never })).toMatchObject({ ok: false })
   })

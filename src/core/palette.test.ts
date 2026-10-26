@@ -62,6 +62,7 @@ function input(state: WorkspaceState, extra: Partial<PaletteInput> = {}): Palett
     view: null,
     theme: 'system',
     appTheme: 'default',
+    defaultView: 'kanban',
     keymap: defaultKeymap('linux'),
     platform: 'linux',
     waiting: [],
@@ -546,6 +547,13 @@ describe('paletteItems workspace view', () => {
     const rows = paletteItems(input(grid, { view })).actions
     expect(rows.find((r) => r.action.id === 'workspaceView')?.label).toBe('View: Kanban')
     expect(rows.some((r) => r.action.id === 'moveCard')).toBe(false)
+    // Without its own view, the workspace follows Settings' Default view.
+    const followsGrid = paletteItems(
+      input({ workspaces: [alpha], activeId: 'a' }, { defaultView: 'grid' })
+    )
+    expect(followsGrid.actions.find((r) => r.action.id === 'workspaceView')?.label).toBe(
+      'View: Kanban'
+    )
     expect(
       paletteItems(input({ workspaces: [], activeId: null })).actions.map((r) => r.label)
     ).not.toContain('View: Grid')

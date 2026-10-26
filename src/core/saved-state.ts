@@ -11,6 +11,7 @@ import {
   checkShell,
   checkWorktreeSetup,
   isShellType,
+  isWorkspaceView,
   type Card,
   type CardWorktree,
   type Column,
@@ -111,7 +112,7 @@ function readWorkspace(raw: unknown): Workspace | string {
     columns.map((c) => c.id)
   )
   if (autoMove === 'bad') return 'bad autoMove'
-  // Missing is Kanban; a view this version doesn't know, from a newer one, is Kanban too.
+  // Missing follows the default; so does a view this version doesn't know, from a newer one.
   if (raw.view !== undefined && typeof raw.view !== 'string') return 'bad view'
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
@@ -134,7 +135,7 @@ function readWorkspace(raw: unknown): Workspace | string {
     shells,
     worktreeSetup: setup.value,
     ...(autoMove !== null && { autoMove }),
-    ...(raw.view === 'grid' && { view: 'grid' as const })
+    ...(isWorkspaceView(raw.view) && { view: raw.view })
   }
 }
 

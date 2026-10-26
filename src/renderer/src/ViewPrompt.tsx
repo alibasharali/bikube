@@ -72,8 +72,8 @@ function ViewPrompt(): React.JSX.Element {
         ))}
       </div>
       <p className="field-hint">
-        This is the view new workspaces start in. Each workspace can have its own, set in its Edit
-        dialog, and you can change the default later in Settings.
+        This becomes the default view for your workspaces. Each workspace can still have its own,
+        set in its Edit dialog, and you can change the default later in Settings.
       </p>
       <div className="modal-actions">
         <button

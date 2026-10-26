@@ -535,6 +535,14 @@ describe('workspace views and card open times in the saved state', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 
+  it('keeps a Kanban view of its own, as written', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    ok(s.updateWorkspace(s.getState().workspaces[0].id, { view: 'kanban' }))
+    const text = serializeSavedState(s.getState())
+    expect(JSON.parse(text).state.workspaces[0].view).toBe('kanban')
+    expect(parseSavedState(text)).toEqual({ ok: true, value: s.getState() })
+  })
+
   it('rejects a view that is not a string', () => {
     expectRejected(fileWith((s) => (s.workspaces[0].view = 1)))
   })

@@ -28,9 +28,24 @@ export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number]
 export const isWorkspaceView = (value: unknown): value is WorkspaceView =>
   (WORKSPACE_VIEWS as readonly unknown[]).includes(value)
 
-/** The workspace's view: absent, as in files from before views, is Kanban. */
-export const workspaceView = (workspace: Pick<Workspace, 'view'>): WorkspaceView =>
-  workspace.view ?? 'kanban'
+/** A workspace's View setting: `default` follows Settings' Default view, else its own. */
+export type WorkspaceViewChoice = 'default' | WorkspaceView
+
+export const isWorkspaceViewChoice = (value: unknown): value is WorkspaceViewChoice =>
+  value === 'default' || isWorkspaceView(value)
+
+/**
+ * The view the workspace shows: its own, or without one (Default, as in files from before views)
+ * the app's `defaultView`, this machine's setting.
+ */
+export const workspaceView = (
+  workspace: Pick<Workspace, 'view'>,
+  defaultView: WorkspaceView
+): WorkspaceView => workspace.view ?? defaultView
+
+/** The workspace's View setting as its dialog shows it. */
+export const workspaceViewChoice = (workspace: Pick<Workspace, 'view'>): WorkspaceViewChoice =>
+  workspace.view ?? 'default'
 
 export interface Column {
   id: string
@@ -136,8 +151,8 @@ export interface Workspace {
    * rule is off. Deleting a column turns off the rules naming it.
    */
   autoMove?: AutoMove
-  /** How it shows its cards; absent for Kanban, so a file never holds `kanban`. */
-  view?: 'grid'
+  /** Its own view; absent when it follows Settings' Default view (on each machine). */
+  view?: WorkspaceView
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -237,8 +252,8 @@ export interface WorkspaceInput {
   worktreeSetup?: string
   /** One of `WORKSPACE_LOGOS` (#59 D1); absent or null means none. */
   logo?: WorkspaceLogoId | null
-  /** Defaults to Kanban. */
-  view?: WorkspaceView
+  /** Defaults to `default`, following Settings' Default view. */
+  view?: WorkspaceViewChoice
 }
 
 export interface WorkspacePatch {
@@ -257,8 +272,8 @@ export interface WorkspacePatch {
    * of this workspace; `{}` turns them all off.
    */
   autoMove?: AutoMove
-  /** How it shows its cards; no card changes. */
-  view?: WorkspaceView
+  /** How it shows its cards, `default` to follow Settings; no card changes. */
+  view?: WorkspaceViewChoice
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -447,7 +462,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       defaultStartup: startup.value,
       shells: [],
       worktreeSetup: setup.value,
-      ...(input.view === 'grid' && { view: 'grid' })
+      ...(isWorkspaceView(input.view) && { view: input.view })
     }
     this.set({
       workspaces: [...this.state.workspaces, workspace],
@@ -493,8 +508,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       if (!checked.ok) return checked
       logo = checked.value
     }
-    const view = patch.view === undefined ? workspaceView(current) : patch.view
-    if (!isWorkspaceView(view)) return fail('workspace', 'Unknown view')
+    const view = patch.view === undefined ? workspaceViewChoice(current) : patch.view
+    if (!isWorkspaceViewChoice(view)) return fail('workspace', 'Unknown view')
     let autoMove = current.autoMove ?? null
     if (patch.autoMove !== undefined) {
       const columnIds = current.columns.map((c) => c.id)
@@ -511,8 +526,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     // And no `autoMove` key with every rule off (#42 D2).
     if (autoMove === null) delete updated.autoMove
     else updated.autoMove = autoMove
-    // And no `view` key for Kanban.
-    if (view === 'kanban') delete updated.view
+    // And no `view` key for one following the default.
+    if (view === 'default') delete updated.view
     else updated.view = view
     this.replace(updated)
     return { ok: true, value: updated }

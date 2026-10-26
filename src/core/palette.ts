@@ -157,6 +157,8 @@ export interface PaletteInput {
   theme: Theme
   /** The current app theme (#64 D9). */
   appTheme: AppThemeId
+  /** Settings' Default view, which a workspace without its own follows. */
+  defaultView: WorkspaceView
   keymap: Keymap
   platform: string
   /** The waiting cards' and shells' ids, oldest first (#41 D2). */
@@ -248,7 +250,7 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)
   // The grid view shows no columns, so it offers no moves between them.
-  if (!workspace || !card || workspaceView(workspace) === 'grid') return rows
+  if (!workspace || !card || workspaceView(workspace, input.defaultView) === 'grid') return rows
   for (const column of workspace.columns) {
     if (column.id === card.columnId) continue
     rows.push({
@@ -276,7 +278,8 @@ function actionRows(input: PaletteInput): ActionRow[] {
   // The other view for the active workspace, as its Edit dialog's View sets it.
   const active = state.workspaces.find((w) => w.id === state.activeId)
   if (active) {
-    const other: WorkspaceView = workspaceView(active) === 'grid' ? 'kanban' : 'grid'
+    const other: WorkspaceView =
+      workspaceView(active, input.defaultView) === 'grid' ? 'kanban' : 'grid'
     rows.push({
       kind: 'action',
       action: { id: 'workspaceView', view: other },

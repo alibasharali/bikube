@@ -413,7 +413,8 @@ function WorkspaceDialog({
             )}
           </div>
         )}
-        {workspace && (
+        {/* Grid shows no columns: its rules stay saved for Kanban but are hidden and not run. */}
+        {workspace && (view === 'default' ? defaultView : view) === 'kanban' && (
           <fieldset className="field radio-group auto-move">
             <legend>Move cards automatically</legend>
             {AUTO_MOVE_RULES.map(([trigger, label]) => (

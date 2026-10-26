@@ -420,3 +420,33 @@ test('#42 AC6: quitting moves no card, even while a shell that ignores the hangu
   await expect(titlesIn('Running')).toHaveText(['api', 'slow'])
   await expect(titlesIn('Done')).toHaveCount(0)
 })
+
+test('a workspace shown as Grid hides its rules and runs none, keeping them for Kanban', async () => {
+  await createWorkspace()
+  await setRules({ 'When waiting for you': 'Needs me' })
+  await newCard('Running', 'api')
+  await back()
+
+  await openEdit()
+  const rules = page.getByRole('group', { name: 'Move cards automatically', exact: true })
+  await page.getByTestId('workspace-view-grid').check()
+  await expect(rules).toHaveCount(0)
+  // Default follows Settings' Default view, Kanban here.
+  await page.getByTestId('workspace-view-default').check()
+  await expect(rules).toBeVisible()
+  await page.getByTestId('workspace-view-grid').check()
+  await closeDialog('workspace-submit')
+  await expect(page.getByTestId('grid-view')).toBeVisible()
+
+  await openCard('api')
+  await board('board activity . waiting')
+  await backToBoard(page)
+  await expect(page.getByTestId('grid-view')).toBeVisible()
+
+  await openEdit()
+  await page.getByTestId('workspace-view-kanban').check()
+  expect(await chosen(rule('When waiting for you'))).toBe('Needs me')
+  await closeDialog('workspace-submit')
+  await expect(titlesIn('Running')).toHaveText(['api'])
+  await expect(titlesIn('Needs me')).toHaveCount(0)
+})

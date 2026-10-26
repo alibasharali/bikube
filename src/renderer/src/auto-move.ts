@@ -1,12 +1,14 @@
 import { autoMoveTarget, type AutoMoveEvent } from '../../core/auto-move'
+import { workspaceView } from '../../core/workspace-store'
 import { cardTerminals } from './card-terminals'
+import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 
 /**
  * Automatic moves (#42 D3–D5, D8): as a card's activity changes or its shell stops, its
  * workspace's rules move it through the store, so the move is saved and synced like `board move`.
  * Only this instance applies them, since activity and stops are runtime only. A workspace's
- * shells aren't cards of any workspace, so nothing moves them.
+ * shells aren't cards of any workspace, so nothing moves them. Nor does a workspace shown as Grid.
  */
 
 let started = false
@@ -17,6 +19,8 @@ function apply(cardId: string, event: AutoMoveEvent): void {
   for (const workspace of workspaceStore.getState().workspaces) {
     const card = workspace.cards.find((c) => c.id === cardId)
     if (!card) continue
+    // A workspace shown as Grid has no columns to see, so its rules wait until it is Kanban again.
+    if (workspaceView(workspace, settingsStore.get().defaultView) === 'grid') return
     const target = autoMoveTarget(workspace, card, event)
     if (target) workspaceStore.moveCard(workspace.id, card.id, target.columnId, target.index)
     return

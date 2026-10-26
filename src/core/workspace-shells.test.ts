@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findShellCard, shellCards } from './workspace-shells'
+import { findShellCard, listedShellCards, shellCards } from './workspace-shells'
 import { defaultShellId, type Workspace } from './workspace-store'
 
 const workspace: Workspace = {
@@ -91,5 +91,27 @@ describe('a shell running in a worktree card', () => {
     expect(findShellCard(withRunIn('gone'), 's1')?.directory).toBe('/tmp/alpha')
     expect(findShellCard(withRunIn('plain'), 's1')?.directory).toBe('/tmp/alpha')
     expect(findShellCard(withRunIn('k1', { host: 'devbox' }), 's1')?.directory).toBe('/tmp/alpha')
+  })
+})
+
+describe('the shells the Shells tab lists (#67 D1)', () => {
+  it('leaves temporary shells out, keeping the Default shell and saved ones in order', () => {
+    const withTemporary: Workspace = {
+      ...workspace,
+      shells: [
+        {
+          id: 't1',
+          name: 'Terminal 1',
+          command: '',
+          autostart: false,
+          type: 'shell',
+          temporary: true
+        },
+        ...workspace.shells
+      ]
+    }
+    expect(listedShellCards(withTemporary).map((c) => c.id)).toEqual([defaultShellId('w'), 's1'])
+    // Every shell is still a terminal elsewhere (the sidebar tree, the palette).
+    expect(shellCards(withTemporary).map((c) => c.id)).toEqual([defaultShellId('w'), 't1', 's1'])
   })
 })

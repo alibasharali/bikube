@@ -44,6 +44,17 @@ export function shellCards(workspace: Workspace): Card[] {
   return [shellCard(workspace, null), ...workspace.shells.map((s) => shellCard(workspace, s))]
 }
 
+/**
+ * The shells the Shells tab lists (#67 D1): the Default shell first, then the named shells the
+ * user saved. Temporary shells (#66 D2) show only in the sidebar tree and the palette.
+ */
+export function listedShellCards(workspace: Workspace): Card[] {
+  return [
+    shellCard(workspace, null),
+    ...workspace.shells.filter((s) => !s.temporary).map((s) => shellCard(workspace, s))
+  ]
+}
+
 /** The workspace's shell with this id (the Default one included), or undefined. */
 export function findShellCard(workspace: Workspace, id: string): Card | undefined {
   if (id === defaultShellId(workspace.id)) return shellCard(workspace, null)

@@ -2,7 +2,7 @@ import { ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
-import { DEFAULT_SHELL_TITLE, shellCards } from '../../core/workspace-shells'
+import { DEFAULT_SHELL_TITLE, listedShellCards } from '../../core/workspace-shells'
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { BranchChip } from './BranchMenu'
 import { ToolIcon } from './AgentLogo'
@@ -126,7 +126,8 @@ function TitleBar({
  * shows the panel on its Shells tab. Nothing when none runs.
  */
 function RunningShellsChip({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const shells = shellCards(workspace)
+  // The shells the Shells tab lists (#67 D1), the panel this chip opens.
+  const shells = listedShellCards(workspace)
   const running = useRunningCount(shells)
   if (running === 0) return null
   const names = shells

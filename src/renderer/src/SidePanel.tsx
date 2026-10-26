@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { MIN_SIDE_PANEL_WIDTH, type SidePanelTab } from '../../core/settings'
 import { draggedPanelWidth, PANEL_KEY_STEP, shownPanelWidth } from '../../core/side-panel'
-import { shellCards } from '../../core/workspace-shells'
+import { listedShellCards } from '../../core/workspace-shells'
 import type { Card, Workspace } from '../../core/workspace-store'
 import { useRunningCount } from './card-terminals'
 import FilesTab from './FilesTab'
@@ -188,7 +188,7 @@ function SidePanel({
 
 /** How many of the workspace's shells run, on the Shells tab; nothing when none does. */
 function RunningShells({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const running = useRunningCount(shellCards(workspace))
+  const running = useRunningCount(listedShellCards(workspace))
   if (running === 0) return null
   return (
     <span

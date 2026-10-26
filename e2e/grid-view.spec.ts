@@ -131,7 +131,7 @@ test('a first launch asks for the view, and Grid becomes the default for new wor
     page
       .getByTestId('workspace-dialog')
       .locator('label', { has: page.getByTestId('workspace-view-default') })
-  ).toHaveText('Follow Settings (Grid)')
+  ).toHaveText('Default (Grid)')
   await page.getByTestId('workspace-cancel').click()
   await createWorkspace('alpha')
   await expect(grid()).toBeVisible()

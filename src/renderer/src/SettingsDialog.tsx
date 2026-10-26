@@ -309,8 +309,8 @@ function AppearanceSection({
             ))}
           </div>
           <p className="field-hint">
-            Workspaces set to Follow Settings show this view. A workspace can pick its own in its
-            Edit dialog.
+            Workspaces set to Default show this view. A workspace can pick its own in its Edit
+            dialog.
           </p>
         </div>
       </fieldset>

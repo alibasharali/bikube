@@ -46,7 +46,7 @@ function ViewPrompt(): React.JSX.Element {
   }
   return (
     <Modal
-      title="How do you want to see your cards?"
+      title="How do you want to see your session cards?"
       onClose={choose}
       testId="view-prompt"
       className="modal-view-prompt"
@@ -72,7 +72,8 @@ function ViewPrompt(): React.JSX.Element {
         ))}
       </div>
       <p className="field-hint">
-        You can change this later in Settings, and for each workspace in its Edit dialog.
+        This is the view new workspaces start in. Each workspace can have its own, set in its Edit
+        dialog, and you can change the default later in Settings.
       </p>
       <div className="modal-actions">
         <button

@@ -111,8 +111,9 @@ test('a first launch asks for the view, and Grid becomes the default for new wor
   await launch({ prompt: true })
   const prompt = page.getByTestId('view-prompt')
   await expect(prompt).toBeVisible()
-  await expect(prompt).toContainText('How do you want to see your cards?')
-  await expect(prompt).toContainText('You can change this later in Settings')
+  await expect(prompt).toContainText('How do you want to see your session cards?')
+  await expect(prompt).toContainText('This is the view new workspaces start in.')
+  await expect(prompt).toContainText('Each workspace can have its own')
   await expect(prompt.getByTestId('view-prompt-kanban').locator('input')).toBeChecked()
   await expect(prompt.locator('.view-preview')).toHaveCount(2)
 

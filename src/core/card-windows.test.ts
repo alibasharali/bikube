@@ -47,4 +47,8 @@ describe('cardWindowOptions', () => {
     expect(mac.autoHideMenuBar).toBe(false)
     expect(mac).not.toHaveProperty('titleBarStyle')
   })
+
+  it('takes the click that activates it, as the main window does', () => {
+    expect(cardWindowOptions('darwin', '#fff').acceptFirstMouse).toBe(true)
+  })
 })

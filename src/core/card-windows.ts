@@ -29,6 +29,7 @@ export interface CardWindowOptions {
   height: number
   backgroundColor: string
   autoHideMenuBar: boolean
+  acceptFirstMouse: true
   webPreferences: {
     contextIsolation: true
     nodeIntegration: false
@@ -48,6 +49,8 @@ export function cardWindowOptions(platform: string, backgroundColor: string): Ca
     height: 640,
     backgroundColor,
     autoHideMenuBar: platform !== 'darwin',
+    // A click on the window while another app is active reaches the pane under it too (macOS).
+    acceptFirstMouse: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

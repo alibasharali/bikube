@@ -80,6 +80,9 @@ function createWindow(settings: MainSettings): void {
     // Off macOS the default menu bar stays hidden until Alt is pressed; its accelerators still
     // work (#14 D9). macOS keeps its app menu.
     autoHideMenuBar: process.platform !== 'darwin',
+    // A click on the window while another app is active also reaches what is under it, such as a
+    // split pane, as in other terminals (macOS; elsewhere the first click always does).
+    acceptFirstMouse: true,
     // On macOS Bikube draws its own title bar, with the window buttons inset over the sidebar.
     ...(process.platform === 'darwin' && {
       titleBarStyle: 'hiddenInset' as const,

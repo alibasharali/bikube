@@ -42,7 +42,7 @@ function GridView({
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<GridFilter>('all')
   const [showStopped, setShowStopped] = useState(stoppedOpen)
-  // Cards before Show all: each section shows its first this many, as a board column does.
+  // Card display limit: each section shows its first this many, as a board column does.
   const limit = useSettings().columnCardLimit
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(expandedSections))
   const running = useRunningIds(workspace.cards)

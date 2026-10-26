@@ -308,7 +308,7 @@ test("a workspace on Default follows Settings' Default view live; one with its o
   await expect(page.getByTestId('board')).toBeVisible()
 })
 
-test('each grid section shows its first Cards before Show all cards, then Show all', async () => {
+test('each grid section shows its first cards up to the Card display limit, then Show all', async () => {
   await launch()
   await createWorkspace('alpha', 'grid')
   await newCard('runner')

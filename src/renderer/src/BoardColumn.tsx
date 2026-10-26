@@ -39,7 +39,7 @@ function BoardColumn({
   const workspaceId = workspace.id
   const cards = cardsInColumn(workspace, column.id)
   const deletable = columnDeleteHint(workspace, column.id)
-  // Cards before Show all: a folded column shows its first this many.
+  // Card display limit: a folded column shows its first this many.
   const limit = useSettings().columnCardLimit
   const [expanded, setExpandedState] = useState(() => expandedColumns.has(column.id))
   const setExpanded = (next: boolean): void => {

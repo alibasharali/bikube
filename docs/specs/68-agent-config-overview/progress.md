@@ -22,5 +22,5 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- todo
-- UX review: todo
+- done (verifier ALL PASS: AC1–AC19, 21/21 in e2e/agent-setup.spec.ts, plus a hand drive of AC1 and AC18's strip)
+- UX review: running

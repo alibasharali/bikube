@@ -1,4 +1,4 @@
-import { AppWindow } from 'lucide-react'
+import { AppWindow, Blocks } from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
@@ -14,6 +14,8 @@ interface WorkspaceTerminalsProps {
   onOpen: (workspaceId: string, cardId: string) => void
   /** Whether each row shows its Ctrl+digit number (Alt+digit off macOS) in place of its logo. */
   showNumbers: boolean
+  /** The workspace's Agent setup row while that page is its view (#68 D3), else null. */
+  agentSetup?: { current: boolean; onOpen: () => void } | null
 }
 
 /**
@@ -26,9 +28,10 @@ function WorkspaceTerminals({
   terminals,
   currentId,
   onOpen,
-  showNumbers
+  showNumbers,
+  agentSetup = null
 }: WorkspaceTerminalsProps): React.JSX.Element | null {
-  if (terminals.length === 0) return null
+  if (terminals.length === 0 && !agentSetup) return null
   return (
     <ul className="workspace-terminals" data-testid="workspace-terminals">
       {terminals.map((row, index) => (
@@ -40,7 +43,38 @@ function WorkspaceTerminals({
           number={showNumbers && index < 9 ? index + 1 : null}
         />
       ))}
+      {agentSetup && <AgentSetupRow {...agentSetup} />}
     </ul>
+  )
+}
+
+/**
+ * The workspace's Agent setup page, after its cards and shells while it is the workspace's view
+ * (#68 D3): neutral, with no status; a click shows it.
+ */
+function AgentSetupRow({
+  current,
+  onOpen
+}: {
+  current: boolean
+  onOpen: () => void
+}): React.JSX.Element {
+  return (
+    <li>
+      <button
+        type="button"
+        className={current ? 'workspace-terminal active' : 'workspace-terminal'}
+        data-testid="workspace-agent-setup"
+        aria-current={current ? 'true' : undefined}
+        title="Agent setup"
+        onClick={onOpen}
+      >
+        <span className="workspace-terminal-kind">
+          <Blocks {...SMALL_ICON} />
+        </span>
+        <span className="workspace-terminal-title">Agent setup</span>
+      </button>
+    </li>
   )
 }
 

@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
+import { Blocks, ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
@@ -19,15 +19,22 @@ import StatusIcon from './StatusIcon'
  * for the macOS window buttons over the sidebar, and names where the user is (the workspace, and
  * the open card with its startup tag). With a card open, the workspace name goes back to its board
  * and a button at the right end shows or hides the side panel (#55 D2).
- * The window title follows it.
+ * On the board, a button left of it opens the Agent setup page (#68 D2), which then reads as an
+ * open card does (D3). The window title follows it.
  */
 function TitleBar({
   collapsed,
   workspace,
   card,
   isShell = false,
+  agentSetup = false,
+  onAgentSetup,
   onBack
 }: {
+  /** The workspace shows its Agent setup page (#68 D3). */
+  agentSetup?: boolean
+  /** Opens the workspace's Agent setup page (D2). */
+  onAgentSetup?: () => void
   /** The open terminal is one of the workspace's shells, not a card. */
   isShell?: boolean
   collapsed: boolean
@@ -36,7 +43,9 @@ function TitleBar({
   workspace: Workspace | null | undefined
   card: Card | null
 }): React.JSX.Element {
-  const title = windowTitle(workspace, card)
+  const title = windowTitle(workspace, card ?? (agentSetup ? { title: AGENT_SETUP } : null))
+  // Back goes to the board from an open card or the Agent setup page alike.
+  const away = card !== null || agentSetup
   // The branch where what is shown runs, and where the branch menu acts (#33 D2): an open worktree
   // card's own directory, else the workspace's folder. Local workspaces only (D11).
   const local = workspace && workspace.host === undefined ? workspace : null
@@ -57,7 +66,7 @@ function TitleBar({
       <div className="titlebar-main" data-testid="titlebar-title">
         {workspace ? (
           <>
-            {card ? (
+            {away ? (
               <button
                 type="button"
                 className="titlebar-workspace"
@@ -72,8 +81,17 @@ function TitleBar({
                 {workspace.name}
               </span>
             )}
-            {!card && <WorkspaceLocation workspace={workspace} />}
-            {!card && dir && branch && <BranchChip key={dir} dir={dir} branch={branch} />}
+            {!away && <WorkspaceLocation workspace={workspace} />}
+            {!away && dir && branch && <BranchChip key={dir} dir={dir} branch={branch} />}
+            {agentSetup && (
+              <>
+                <ChevronRight {...ICON} className="titlebar-separator" />
+                <Blocks {...ICON} className="titlebar-agent-setup-icon" />
+                <span className="titlebar-current" data-testid="titlebar-agent-setup-title">
+                  {AGENT_SETUP}
+                </span>
+              </>
+            )}
             {card && (
               <>
                 <ChevronRight {...ICON} className="titlebar-separator" />
@@ -101,9 +119,22 @@ function TitleBar({
         ) : (
           <span className="titlebar-current">Bikube</span>
         )}
-        {workspace && !sidePanelOpen && <RunningShellsChip workspace={workspace} />}
+        {/* Agent setup shows no side panel (#68 D1): nothing here opens or toggles one. */}
+        {workspace && !agentSetup && !sidePanelOpen && <RunningShellsChip workspace={workspace} />}
+        {workspace && !away && (
+          <button
+            type="button"
+            className="icon-btn titlebar-agent-setup"
+            data-testid="titlebar-agent-setup"
+            aria-label={AGENT_SETUP}
+            title={AGENT_SETUP}
+            onClick={onAgentSetup}
+          >
+            <Blocks {...ICON} />
+          </button>
+        )}
         {/* On the board as in a card (#57 D4). */}
-        {workspace && (
+        {workspace && !agentSetup && (
           <button
             type="button"
             className="icon-btn titlebar-panel"
@@ -120,6 +151,9 @@ function TitleBar({
     </header>
   )
 }
+
+/** The page's name everywhere it shows (#68 D4). */
+const AGENT_SETUP = 'Agent setup'
 
 /**
  * While the side panel is hidden, how many of the workspace's shells run, with a dot; a click

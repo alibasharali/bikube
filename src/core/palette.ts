@@ -113,6 +113,7 @@ export type PaletteAction =
   | { id: 'appTheme'; appTheme: AppThemeId }
   | { id: 'switchWorkspace'; workspaceId: string }
   | { id: 'workspaceView'; view: WorkspaceView }
+  | { id: 'agentSetup' }
 
 /** An action row (D6): its label and, when it has one, its shortcut as D7 text. */
 export interface ActionRow {
@@ -152,8 +153,10 @@ export interface PaletteInput {
   state: WorkspaceState
   /** The live status of a card or shell by id. */
   status: (cardId: string) => RowStatus
-  /** The card or shell open at full size, or null on the board. */
+  /** The card or shell open at full size, or null on the board or Agent setup. */
   view: OpenView | null
+  /** Whether the active workspace shows its Agent setup page (#68 D3). */
+  agentSetup?: boolean
   theme: Theme
   /** The current app theme (#64 D9). */
   appTheme: AppThemeId
@@ -223,6 +226,7 @@ type KeymapAction = Exclude<
   | 'appTheme'
   | 'switchWorkspace'
   | 'workspaceView'
+  | 'agentSetup'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -265,8 +269,13 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
 function actionRows(input: PaletteInput): ActionRow[] {
   const { state, keymap, view } = input
   const hasActive = state.workspaces.some((w) => w.id === state.activeId)
-  // On the board the panel toggles too, as in a card (#57 D4).
-  const rows = view ? viewRows(input, view) : hasActive ? [keymapRow('togglePanel', keymap)] : []
+  // On the board the panel toggles too, as in a card (#57 D4). Agent setup shows no panel, and
+  // goes back to the board as a card does (#68 D3).
+  const rows = view
+    ? viewRows(input, view)
+    : hasActive
+      ? [keymapRow(input.agentSetup ? 'back' : 'togglePanel', keymap)]
+      : []
   if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
@@ -287,6 +296,10 @@ function actionRows(input: PaletteInput): ActionRow[] {
     })
   }
   rows.push({ kind: 'action', action: { id: 'newWorkspace' }, label: 'New workspace' })
+  // The active workspace's Agent setup page, unless it is in front (#68 D2).
+  if (active && !input.agentSetup) {
+    rows.push({ kind: 'action', action: { id: 'agentSetup' }, label: 'Agent setup' })
+  }
   rows.push(keymapRow('settings', keymap))
   for (const theme of THEME_ORDER) {
     if (theme === input.theme) continue

@@ -45,6 +45,8 @@ export interface OpenTerminal {
 interface CommandPaletteProps {
   /** The card or shell open at full size, or null on the board. */
   open: OpenTerminal | null
+  /** Whether the active workspace shows its Agent setup page (#68 D2). */
+  agentSetup?: boolean
   onClose: () => void
   /** Opens a card or shell row (D7); the palette is closed first. */
   onOpenTerminal: (row: TerminalRow) => void
@@ -127,6 +129,7 @@ function openView(
 /** The command palette (#40 D2): a search field over the Cards, Shells and Actions sections. */
 function CommandPalette({
   open,
+  agentSetup = false,
   onClose,
   onOpenTerminal,
   onRunAction
@@ -150,6 +153,7 @@ function CommandPalette({
           state,
           status: rowStatus,
           view: openView(open, runState, layout),
+          agentSetup,
           theme,
           appTheme,
           defaultView,
@@ -161,7 +165,19 @@ function CommandPalette({
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, open, runState, layout, theme, appTheme, defaultView, query, statusKey, waiting]
+    [
+      state,
+      open,
+      agentSetup,
+      runState,
+      layout,
+      theme,
+      appTheme,
+      defaultView,
+      query,
+      statusKey,
+      waiting
+    ]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,

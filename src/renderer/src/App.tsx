@@ -4,13 +4,16 @@ import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/ke
 import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
 import {
+  agentSetupWorkspaces,
   enterWorkspace,
   forgetCards,
   forgetView,
   NO_VIEWS,
   openedCard,
+  rememberAgentSetup,
   rememberCard,
   selectWorkspace,
+  showsAgentSetup,
   type ViewMemory
 } from '../../core/view-memory'
 import { nextWaitingCard } from '../../core/waiting'
@@ -30,6 +33,7 @@ import {
   windowedKey
 } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
+import AgentSetupPage from './AgentSetupPage'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
 import ConfirmDialog from './ConfirmDialog'
@@ -103,6 +107,13 @@ function App(): React.JSX.Element {
     setViews((v) => forgetCards(v, windowed.split('\n')))
   }
   const openedId = activeId ? openedCard(views, activeId) : null
+  // The active workspace shows its Agent setup page (#68 D1, D3), remembered as an open card is.
+  const agentSetup = activeId !== null && showsAgentSetup(views, activeId)
+  const agentSetupIds = agentSetupWorkspaces(views)
+  // From the title bar's button or the palette (D2): replaces the card open in the workspace.
+  const openAgentSetup = useCallback(() => {
+    if (activeId) setViews((v) => rememberAgentSetup(v, activeId))
+  }, [activeId, setViews])
   // The open terminal: one of the board's cards, or one of the workspace's shells.
   const openCard = openedId
     ? (active?.cards.find((c) => c.id === openedId) ??
@@ -297,6 +308,7 @@ function App(): React.JSX.Element {
     runAction.current = (action) => {
       if (isCardViewAction(action.id)) runCardViewAction(action.id)
       else if (action.id === 'togglePanel') togglePanel()
+      else if (action.id === 'agentSetup') openAgentSetup()
       // To the column's bottom, as the card menu's move (#6 D8); the card stays open.
       else if (action.id === 'moveCard') {
         if (activeId && openCard && !openIsShell) {
@@ -392,6 +404,8 @@ function App(): React.JSX.Element {
         workspace={active}
         card={active ? openCard : null}
         isShell={openIsShell}
+        agentSetup={agentSetup}
+        onAgentSetup={openAgentSetup}
         onBack={closeCard}
       />
       <div className="app-body">
@@ -408,6 +422,10 @@ function App(): React.JSX.Element {
           syncStatus={syncStatus}
           openId={openId}
           onOpenTerminal={onPaletteOpen}
+          agentSetupIds={agentSetupIds}
+          onOpenAgentSetup={(id) => {
+            if (id !== activeId) workspaceStore.selectWorkspace(id)
+          }}
           heldNumbers={held}
         />
         <main className="main">
@@ -420,6 +438,9 @@ function App(): React.JSX.Element {
               onOpenInWindow={onOpenInWindow}
               onOpenShell={onOpenCard}
             />
+          ) : active && agentSetup ? (
+            // A full page in the main area, with no side panel (#68 D1).
+            <AgentSetupPage key={active.id} workspace={active} onBack={closeCard} />
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2).
             <div className="board-layout">
@@ -454,6 +475,7 @@ function App(): React.JSX.Element {
                 }
               : null
           }
+          agentSetup={agentSetup}
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}
           onRunAction={onRunAction}

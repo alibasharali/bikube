@@ -927,6 +927,25 @@ test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal s
   await reveal.click()
   await expect.poll(revealedPaths).toEqual([skill])
 
+  // AC19: hidden until hovered or focused, the buttons are in the Tab order: from the control
+  // before them, Tab shows and focuses Open file, then Reveal, then the next row's Open file.
+  const opacity = (button: Locator): Promise<string> =>
+    button.evaluate((el) => getComputedStyle(el.parentElement!).opacity)
+  await open.focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(open).not.toBeFocused()
+  await page.mouse.move(0, 0)
+  await expect.poll(() => opacity(open)).toBe('0')
+  await page.keyboard.press('Tab')
+  await expect(open).toBeFocused()
+  await expect.poll(() => opacity(open)).toBe('1')
+  await page.keyboard.press('Tab')
+  await expect(reveal).toBeFocused()
+  await expect.poll(() => opacity(reveal)).toBe('1')
+  await page.keyboard.press('Tab')
+  await expect(row('notes').getByRole('button', { name: 'Open file' })).toBeFocused()
+  await expect.poll(() => opacity(open)).toBe('0')
+
   // Paths the read didn't list, asked for from the page: nothing runs, nothing is shown.
   const notes = join(folder, 'notes.md')
   write(notes, 'x')

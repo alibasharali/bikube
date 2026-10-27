@@ -5,7 +5,8 @@ import { SPAWN_REFUSAL } from '../../core/spawn-refusals'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
-import { requestCloseCard } from './card-actions'
+import { requestCloseCard, runPendingInWorkspaceFolder, startCard } from './card-actions'
+import { usePendingWorktree, type PendingWorktreeRun } from './pending-worktrees'
 import CloseCardDialog from './CloseCardDialog'
 import DescriptionDialog from './DescriptionDialog'
 import RemoveWorktreeDialog from './RemoveWorktreeDialog'
@@ -55,6 +56,60 @@ interface FindProps {
  */
 interface ZoomProps {
   zoomedPanes?: number
+}
+
+/**
+ * A card's pending worktree at its first open (#69 D10), in place of its panes: being made, or
+ * git's reason it failed with Retry and Run in workspace folder (which drops it).
+ */
+function PendingWorktreeView({
+  run,
+  branch,
+  onRetry,
+  onRunInFolder
+}: {
+  run: PendingWorktreeRun
+  branch: string | undefined
+  onRetry: () => void
+  onRunInFolder: () => void
+}): React.JSX.Element {
+  if (run.kind === 'making') {
+    return (
+      <div className="empty-state" data-testid="pending-worktree" role="status">
+        <h1>Making its worktree…</h1>
+        <p>
+          A new branch{branch ? ` ${branch}` : ''} from the workspace folder, with ignored files
+          copied. The card starts there once it is ready.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="empty-state" data-testid="pending-worktree">
+      <h1>Couldn’t make its worktree</h1>
+      <p role="alert" data-testid="pending-worktree-error">
+        {run.reason}
+      </p>
+      <div className="modal-actions">
+        <button
+          type="button"
+          className="btn"
+          data-testid="pending-worktree-folder"
+          onClick={onRunInFolder}
+        >
+          Run in workspace folder
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="pending-worktree-retry"
+          onClick={onRetry}
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -216,8 +271,12 @@ function CardView({
   const [goneDismissed, setGoneDismissed] = useState(false)
   if (goneDismissed && !worktreeGone) setGoneDismissed(false)
 
+  // Its pending worktree being made or failed (#69 D10): the card isn't started yet.
+  const pendingRun = usePendingWorktree(card.id)
+  const awaitingWorktree = pendingRun !== undefined && runState.kind !== 'running'
+
   // When the shell exits the card is Stopped and the view goes back to the board (#5 D6).
-  const stopped = runState.kind === 'stopped'
+  const stopped = runState.kind === 'stopped' && pendingRun === undefined
   useEffect(() => {
     if (stopped) onBack()
   }, [stopped, onBack])
@@ -322,14 +381,23 @@ function CardView({
           data-testid="card-terminal"
           data-zoomed={layout.zoomed === true}
         >
-          <PaneTree
-            cardId={card.id}
-            tree={layout.tree}
-            focused={layout.focused}
-            find={find}
-            onCloseFind={closeFind}
-            zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
-          />
+          {awaitingWorktree ? (
+            <PendingWorktreeView
+              run={pendingRun}
+              branch={card.pendingWorktree?.branch}
+              onRetry={() => startCard(workspaceId, card.id)}
+              onRunInFolder={() => runPendingInWorkspaceFolder(workspaceId, card.id)}
+            />
+          ) : (
+            <PaneTree
+              cardId={card.id}
+              tree={layout.tree}
+              focused={layout.focused}
+              find={find}
+              onCloseFind={closeFind}
+              zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
+            />
+          )}
         </div>
         {editingDescription && (
           <DescriptionDialog

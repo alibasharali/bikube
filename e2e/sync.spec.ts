@@ -955,3 +955,55 @@ test("#26 AC1: a stalled sync file freezes nothing, and this machine's changed b
     closeSync(openSync(feed, 'r+'))
   }
 })
+
+test('#69 AC10: a pending worktree reaches B, B makes it at its first open, and A then shows a worktree card', async () => {
+  const folder = makeDir('F')
+  const { a, b } = await twoSynced(folder)
+  // Each machine has its own clone of the repository in `api`.
+  for (const home of [a.home, b.home]) {
+    const git = (...args: string[]): string =>
+      execFileSync('git', args, { cwd: join(home, 'api'), encoding: 'utf8' }).trim()
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 'test@example.com')
+    git('config', 'user.name', 'Test')
+    writeFileSync(join(home, 'api', 'README.md'), '# api\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'first')
+  }
+  await newCard(a.page, 'caller')
+  await card(a.page, 'caller').getByTestId('card-open').click()
+  await expectCardOpen(a.page, 'caller')
+  await a.page.getByTestId('card-view').getByTestId('terminal').click()
+  await a.page.keyboard.type(
+    "board create --worktree --branch port-x Backlog 'Port X' >made.out 2>&1; echo made rc=$?"
+  )
+  await a.page.keyboard.press('Enter')
+  await expect
+    .poll(async () => (await bufferLines(a.page)).some((l) => l.startsWith('made rc=0')), {
+      timeout: 15_000
+    })
+    .toBe(true)
+  await backToBoard(a.page)
+  await expect(card(a.page, 'Port X').getByTestId('card-pending-worktree')).toBeVisible()
+
+  await expect(card(b.page, 'Port X').getByTestId('card-pending-worktree')).toHaveText(
+    'Worktree on first open',
+    { timeout: 10_000 }
+  )
+  await card(b.page, 'Port X').getByTestId('card-open').click()
+  await expectCardOpen(b.page, 'Port X')
+  await expect(b.page.getByTestId('titlebar').getByTestId('card-branch')).toHaveText('port-x')
+  const branches = (home: string): string =>
+    execFileSync('git', ['branch', '--list', 'port-x'], {
+      cwd: join(home, 'api'),
+      encoding: 'utf8'
+    }).trim()
+  expect(branches(b.home)).toContain('port-x')
+  expect(branches(a.home)).toBe('')
+  await backToBoard(b.page)
+
+  await expect(card(a.page, 'Port X').getByTestId('card-branch')).toHaveText('port-x', {
+    timeout: 10_000
+  })
+  await expect(card(a.page, 'Port X').getByTestId('card-pending-worktree')).toHaveCount(0)
+})

@@ -78,7 +78,7 @@ const TAKES_WORKSPACE = new Set([
 
 /** Each command's optional string fields (#69 D6, D8). */
 function optionalFields(command: BoardCommand['command']): readonly string[] {
-  if (command === 'create') return ['workspace', 'agent', 'description']
+  if (command === 'create') return ['workspace', 'agent', 'description', 'branch']
   return TAKES_WORKSPACE.has(command) ? ['workspace'] : []
 }
 
@@ -123,7 +123,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * reply with: anything but exactly a version-1 workspaces or list (format `text` or `json`, #69
  * D6), create, rename, move, status, activity (#31 D12), session, setup (#39 D4), usage (#50 D5),
  * description or describe (#69 D5) with string fields, a `workspace` only on the commands D6
- * names, create's `agent` one `board` takes (#69 D8), an activity's or a setup's value being one
+ * names, create's `agent` one `board` takes (#69 D8), create's `worktree` true with an optional `branch`
+ * (D10), an activity's or a setup's value being one
  * `board` takes and a usage shaped as `asUsage` checks, is refused.
  */
 export function parseRequestLine(line: string): ParsedRequest {
@@ -151,7 +152,8 @@ export function parseRequestLine(line: string): ParsedRequest {
     key === 'cardId' ||
     key === 'command' ||
     required.includes(key) ||
-    optional.includes(key)
+    optional.includes(key) ||
+    (name === 'create' && key === 'worktree')
   const shaped =
     typeof value.cardId === 'string' &&
     keys.every(known) &&
@@ -179,8 +181,11 @@ function asRequest(
         ? { v: 1, cardId, command, format: value.format, ...where }
         : null
     case 'create': {
-      const { agent } = value
+      const { agent, worktree } = value
       if (agent !== undefined && !isBoardAgent(agent)) return null
+      // `worktree` is true or absent, and a branch comes only with it (#69 D10).
+      if (worktree !== undefined && worktree !== true) return null
+      if (value.branch !== undefined && worktree !== true) return null
       return {
         v: 1,
         cardId,
@@ -189,7 +194,9 @@ function asRequest(
         title: str('title'),
         ...where,
         ...(agent !== undefined && { agent }),
-        ...(value.description !== undefined && { description: str('description') })
+        ...(value.description !== undefined && { description: str('description') }),
+        ...(worktree === true && { worktree: true as const }),
+        ...(value.branch !== undefined && { branch: str('branch') })
       }
     }
     case 'rename':

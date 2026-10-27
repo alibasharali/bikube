@@ -1620,3 +1620,66 @@ describe('card descriptions (#69 D1)', () => {
     })
   })
 })
+
+describe('pending worktree (#69 D10)', () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/port-x',
+    worktree: { path: '/data/worktrees/repo-abc123/port-x', branch: 'port-x', repo: '/tmp/repo' }
+  }
+  const pending = { pendingWorktree: { branch: 'port-x' } }
+
+  it('creates a local card in the workspace folder with its pending worktree, none without one', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const c = ok(
+      s.createCard(w.id, w.columns[0].id, 'Port X', undefined, undefined, undefined, pending)
+    )
+    expect(c.pendingWorktree).toEqual({ branch: 'port-x' })
+    expect(c.directory).toBe('/tmp/repo')
+    expect(c).not.toHaveProperty('worktree')
+    expect(c).not.toHaveProperty('setup')
+    expect(ok(s.createCard(w.id, w.columns[0].id, 'plain'))).not.toHaveProperty('pendingWorktree')
+  })
+
+  it('refuses one for an SSH workspace or with a bad branch, creating nothing', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const r = ok(s.createWorkspace({ name: 'r', directory: '~/a', host: 'devbox' }))
+    const before = s.getState()
+    const opts = (branch: string): { pendingWorktree: { branch: string } } => ({
+      pendingWorktree: { branch }
+    })
+    expect(
+      s.createCard(r.id, r.columns[0].id, 'x', undefined, undefined, undefined, pending)
+    ).toMatchObject({ ok: false, error: { field: 'card' } })
+    expect(
+      s.createCard(w.id, w.columns[0].id, 'x', undefined, undefined, undefined, opts('a b'))
+    ).toMatchObject({ ok: false, error: { message: 'Not a valid branch name' } })
+    expect(s.getState()).toBe(before)
+  })
+
+  it('is made by moving the card to its worktree, which clears it in the same change', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const c = ok(
+      s.createCard(w.id, w.columns[0].id, 'Port X', undefined, undefined, undefined, pending)
+    )
+    const moved = ok(s.moveCardToWorktree(w.id, c.id, worktree))
+    expect(moved.worktree).toEqual(worktree.worktree)
+    expect(moved).not.toHaveProperty('pendingWorktree')
+  })
+
+  it('is dropped by clearPendingWorktree, the card staying in the workspace folder', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const c = ok(
+      s.createCard(w.id, w.columns[0].id, 'Port X', undefined, undefined, undefined, pending)
+    )
+    const cleared = ok(s.clearPendingWorktree(w.id, c.id))
+    expect(cleared).not.toHaveProperty('pendingWorktree')
+    expect(cleared.directory).toBe('/tmp/repo')
+    const state = s.getState()
+    ok(s.clearPendingWorktree(w.id, c.id))
+    expect(s.getState()).toBe(state)
+  })
+})

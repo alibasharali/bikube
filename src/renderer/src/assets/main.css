@@ -1406,6 +1406,11 @@ button {
   margin-top: var(--space-4);
 }
 
+/* A pending worktree's failure in the card view (#69 D10): its actions under the centred text. */
+.empty-state .modal-actions {
+  justify-content: center;
+}
+
 .field {
   display: flex;
   flex-direction: column;

@@ -79,6 +79,8 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
             repo: portableDirectory(c.worktree.repo, home)
           }
         }),
+        // Whichever machine opens the card first makes it (#69 D10).
+        ...(c.pendingWorktree && { pendingWorktree: { branch: c.pendingWorktree.branch } }),
         startup: startupCopy(c.startup),
         agentSessionId: c.agentSessionId,
         claudeStarted: c.host === undefined ? false : c.claudeStarted,

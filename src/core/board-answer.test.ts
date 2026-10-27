@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answerBoardCommand } from './board-answer'
+import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './board-answer'
 import { NOT_IN_A_CARD } from './board-commands'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
@@ -924,5 +924,120 @@ describe('answerBoardCommand across workspaces (#69 D6–D9, D11)', () => {
     expect(
       answer(store, 'a-claude', { command: 'activity', card: 'b-port', activity: 'working' })
     ).toEqual({ ok: false, error: 'board: no card "b-port" in this workspace' })
+  })
+
+  describe('create --worktree (#69 D10, AC9)', () => {
+    const repo = (branches: string[] | null): { asked: string[]; info: RepoBranches } => {
+      const asked: string[] = []
+      return {
+        asked,
+        info: async (dir: string): Promise<{ branches: string[] } | null> => {
+          asked.push(dir)
+          return branches && { branches }
+        }
+      }
+    }
+    const create = (over: object = {}) =>
+      ({
+        command: 'create',
+        column: 'Todo',
+        title: 'Port X',
+        workspace: 'Beta',
+        worktree: true,
+        ...over
+      }) as const
+
+    it('fills in the branch given, or the one suggested from the title, and leaves other commands as they are', async () => {
+      const store = crossSetup()
+      const git = repo(['main', 'bikube/port-x'])
+      expect(
+        await checkCreateWorktree(
+          store.getState(),
+          'a-claude',
+          create({ branch: 'port-x' }),
+          git.info
+        )
+      ).toEqual({ ok: true, command: create({ branch: 'port-x' }) })
+      expect(git.asked).toEqual(['/tmp/bikube-beta'])
+      expect(await checkCreateWorktree(store.getState(), 'a-claude', create(), git.info)).toEqual({
+        ok: true,
+        command: create({ branch: 'bikube/port-x-2' })
+      })
+      const plain = { command: 'create', column: 'Todo', title: 'x' } as const
+      const none = repo(null)
+      expect(await checkCreateWorktree(store.getState(), 'a-claude', plain, none.info)).toEqual({
+        ok: true,
+        command: plain
+      })
+      expect(none.asked).toEqual([])
+    })
+
+    it('refuses an SSH workspace, a folder outside git, a bad name and a branch that exists, asking git nothing for the first and third', async () => {
+      const store = crossSetup()
+      const git = repo(['main'])
+      expect(
+        await checkCreateWorktree(
+          store.getState(),
+          'a-claude',
+          create({ workspace: 'Remote' }),
+          git.info
+        )
+      ).toEqual({ ok: false, error: 'board: Remote is an SSH workspace' })
+      expect(
+        await checkCreateWorktree(store.getState(), 'a-claude', create({ branch: 'a b' }), git.info)
+      ).toEqual({ ok: false, error: 'board: Not a valid branch name' })
+      expect(git.asked).toEqual([])
+      expect(
+        await checkCreateWorktree(
+          store.getState(),
+          'a-claude',
+          create({ branch: 'main' }),
+          git.info
+        )
+      ).toEqual({ ok: false, error: "board: a branch named 'main' already exists" })
+      expect(
+        await checkCreateWorktree(store.getState(), 'a-claude', create(), repo(null).info)
+      ).toEqual({
+        ok: false,
+        error: 'board: /tmp/bikube-beta is not in a git repository'
+      })
+      expect(
+        await checkCreateWorktree(
+          store.getState(),
+          'a-claude',
+          create({ workspace: 'nope' }),
+          git.info
+        )
+      ).toEqual({ ok: false, error: 'board: no workspace named nope' })
+      expect(
+        await checkCreateWorktree(
+          store.getState(),
+          'a-claude',
+          create({ column: 'Nope' }),
+          git.info
+        )
+      ).toMatchObject({ ok: false })
+    })
+
+    it('creates the card with its pending worktree in the workspace folder, no worktree yet', () => {
+      const store = crossSetup()
+      const reply = answer(store, 'a-claude', create({ branch: 'port-x' }))
+      expect(reply).toMatchObject({ ok: true })
+      const made = lastOf(store, ids.beta)
+      expect(made?.title).toBe('Port X')
+      expect(made?.pendingWorktree).toEqual({ branch: 'port-x' })
+      expect(made?.directory).toBe('/tmp/bikube-beta')
+      expect(made).not.toHaveProperty('worktree')
+    })
+
+    it('refuses a worktree whose branch was never checked, creating nothing', () => {
+      const store = crossSetup()
+      const before = store.getState()
+      expect(answer(store, 'a-claude', create())).toEqual({
+        ok: false,
+        error: 'board: invalid request'
+      })
+      expect(store.getState()).toBe(before)
+    })
   })
 })

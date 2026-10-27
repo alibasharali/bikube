@@ -273,8 +273,7 @@ describe('parseBoardArgs across workspaces (#69 D6–D8)', () => {
       ['create', '--agent', 'vim', 'Todo', 'T1'],
       ['create', '--agent', 'Todo', 'T1'],
       ['create', '--description-file', 'Todo', 'T1'],
-      ['rename', '--agent', 'codex', '.', 'T1'],
-      ['create', '--worktree', 'Todo', 'T1']
+      ['rename', '--agent', 'codex', '.', 'T1']
     ]) {
       expect(parseBoardArgs(argv)).toEqual(usage)
     }
@@ -292,6 +291,62 @@ describe('parseBoardArgs across workspaces (#69 D6–D8)', () => {
     expect(BOARD_USAGE).toContain('--workspace <w>')
     expect(BOARD_USAGE).toContain('--agent <agent>')
     expect(BOARD_USAGE).toContain('--description-file <file>|-')
-    expect(BOARD_USAGE).not.toContain('--worktree')
+  })
+})
+
+describe('parseBoardArgs: create --worktree (#69 D10)', () => {
+  const usage = { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
+
+  it('parses --worktree alone and with --branch, anywhere before --', () => {
+    expect(parseBoardArgs(['create', '--worktree', 'Todo', 'Port X'])).toEqual({
+      kind: 'command',
+      command: { command: 'create', column: 'Todo', title: 'Port X', worktree: true }
+    })
+    expect(
+      parseBoardArgs([
+        'create',
+        '--workspace',
+        'Beta',
+        'Todo',
+        '--branch',
+        'port-x',
+        '--worktree',
+        'Port X'
+      ])
+    ).toEqual({
+      kind: 'command',
+      command: {
+        command: 'create',
+        column: 'Todo',
+        title: 'Port X',
+        workspace: 'Beta',
+        worktree: true,
+        branch: 'port-x'
+      }
+    })
+    expect(
+      parseBoardArgs(['create', '--worktree', '--description-file', '-', 'Todo', 'Port X'])
+    ).toEqual({
+      kind: 'createWithDescription',
+      path: '-',
+      command: { command: 'create', column: 'Todo', title: 'Port X', worktree: true }
+    })
+  })
+
+  it('refuses --branch without --worktree, a repeated or valueless one, and both on other commands', () => {
+    for (const argv of [
+      ['create', '--branch', 'x', 'Todo', 'T1'],
+      ['create', '--worktree', '--worktree', 'Todo', 'T1'],
+      ['create', '--worktree', '--branch', 'a', '--branch', 'b', 'Todo', 'T1'],
+      ['create', '--worktree', 'Todo', 'T1', '--branch'],
+      ['rename', '--worktree', '.', 'T1'],
+      ['move', '--branch', 'x', '.', 'Todo']
+    ]) {
+      expect(parseBoardArgs(argv)).toEqual(usage)
+    }
+  })
+
+  it('names --worktree [--branch <name>] in the usage text', () => {
+    expect(BOARD_USAGE).toContain('[--worktree [--branch <name>]]')
   })
 })

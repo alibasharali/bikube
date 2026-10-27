@@ -10,6 +10,7 @@ import { asUsage } from './board-protocol'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import { isWorkspaceLogo } from './workspace-logos'
+import { branchProblem } from './worktree-names'
 import {
   checkShell,
   checkWorktreeSetup,
@@ -196,6 +197,8 @@ function readCard(raw: unknown): Card | string {
     directory,
     ...host,
     ...worktree,
+    // A bad one, or one on an SSH card or a worktree card, is dropped (#69 D10).
+    ...readPendingWorktree(raw.pendingWorktree, host.host, worktree),
     startup,
     agentSessionId,
     claudeStarted,
@@ -221,6 +224,18 @@ function readLastSeen(raw: Record<string, unknown>): Pick<Card, 'lastStatus' | '
     ...(status !== undefined && { lastStatus: status }),
     ...(usage && usage.tokens > 0 && { lastUsage: usage })
   }
+}
+
+/** `{ pendingWorktree }` for a local card without a worktree and a valid branch; else `{}`. */
+function readPendingWorktree(
+  raw: unknown,
+  host: string | undefined,
+  worktree: { worktree?: unknown }
+): { pendingWorktree?: { branch: string } } {
+  if (host !== undefined || worktree.worktree !== undefined || !isObject(raw)) return {}
+  const { branch } = raw
+  if (typeof branch !== 'string' || branchProblem(branch) !== null) return {}
+  return { pendingWorktree: { branch } }
 }
 
 /** A time in ms since the epoch; anything else is dropped, as if the card had none. */

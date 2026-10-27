@@ -415,3 +415,166 @@ test('a worktree card whose folder is gone offers to run in the workspace folder
   // git's entry for the missing folder is pruned.
   expect(git('worktree', 'list')).not.toContain(path)
 })
+
+// #69 D10: `board create --worktree` makes a card whose worktree is made at its first open.
+
+let boardRuns = 0
+
+/** Runs `command` in the open card's shell (in `dir`); its exit code, stdout and stderr. */
+async function board(
+  dir: string,
+  command: string
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const tag = `w${++boardRuns}`
+  await run(`${command} >${tag}.out 2>${tag}.err; echo "${tag} rc=$?"`)
+  const pattern = new RegExp(`^${tag} rc=(\\d+)`)
+  let code = -1
+  await expect
+    .poll(
+      async () => {
+        const line = (await lines()).find((l) => pattern.test(l))
+        code = line ? Number(pattern.exec(line)![1]) : -1
+        return code
+      },
+      { timeout: 15_000 }
+    )
+    .toBeGreaterThanOrEqual(0)
+  return {
+    code,
+    stdout: readFileSync(join(dir, `${tag}.out`), 'utf8'),
+    stderr: readFileSync(join(dir, `${tag}.err`), 'utf8')
+  }
+}
+
+/** Adds workspace `name` in `dir` (a local folder, or one on `host`) with plain cards. */
+async function addWorkspace(name: string, dir: string, host?: string): Promise<void> {
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  if (host !== undefined) {
+    await page.getByTestId('workspace-location-ssh').check()
+    await page.getByTestId('workspace-host').fill(host)
+  }
+  await page.getByTestId('workspace-directory').fill(dir)
+  await page.getByTestId('workspace-name').fill(name)
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+}
+
+async function selectWorkspace(name: string): Promise<void> {
+  await page.getByTestId('workspace-item').filter({ hasText: name }).click()
+  await expect(page.getByTestId('board-title')).toHaveText(name)
+}
+
+/** A card running in workspace `alpha` (a folder outside git), open; returns its folder. */
+async function callerInAlpha(): Promise<string> {
+  const alpha = join(root, 'alpha')
+  mkdirSync(alpha)
+  await addWorkspace('alpha', alpha)
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('caller')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'caller')
+  return alpha
+}
+
+const refusal = (error: string): { code: number; stdout: string; stderr: string } => ({
+  code: 1,
+  stdout: '',
+  stderr: `${error}\n`
+})
+
+test('#69 AC9: board create --worktree makes the worktree at the first open, and refuses what it cannot make', async () => {
+  await addWorkspace('remote', '~/app', 'devbox')
+  const alpha = await callerInAlpha()
+
+  const created = await board(
+    alpha,
+    "board create --workspace repo --worktree --branch port-x Backlog 'Port X'"
+  )
+  expect(created.code).toBe(0)
+  expect(created.stdout).toMatch(/^\S+ repo\n$/)
+  // Nothing is made yet: no branch, no worktree.
+  expect(git('branch', '--list', 'port-x')).toBe('')
+  expect(existsSync(join(dataDir, 'worktrees'))).toBe(false)
+
+  expect(await board(alpha, "board create --workspace remote --worktree Backlog 'Port X'")).toEqual(
+    refusal('board: remote is an SSH workspace')
+  )
+  expect(await board(alpha, "board create --worktree Backlog 'Port X'")).toEqual(
+    refusal(`board: ${alpha} is not in a git repository`)
+  )
+  expect(
+    await board(alpha, "board create --workspace repo --worktree --branch main Backlog 'Port X'")
+  ).toEqual(refusal("board: a branch named 'main' already exists"))
+
+  await backToBoard(page)
+  // Nothing was created by the refused ones.
+  await expect(page.getByTestId('card-title')).toHaveText(['caller'])
+  await selectWorkspace('remote')
+  await expect(page.getByTestId('card')).toHaveCount(0)
+  await selectWorkspace('repo')
+  await expect(page.getByTestId('card-title')).toHaveText(['Port X'])
+  await expect(card('Port X').getByTestId('card-pending-worktree')).toHaveText(
+    'Worktree on first open'
+  )
+
+  await card('Port X').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Port X')
+  await expect(page.getByTestId('titlebar').getByTestId('card-branch')).toHaveText('port-x')
+  await run('echo "at=$(git branch --show-current) conf=$(cat local.conf)"')
+  await expect.poll(async () => (await lines()).includes('at=port-x conf=port=4000')).toBe(true)
+  expect(existsSync(worktreePath('port-x'))).toBe(true)
+  expect(git('branch', '--show-current')).toBe('main')
+
+  await backToBoard(page)
+  await expect(card('Port X').getByTestId('card-branch')).toHaveText('port-x')
+  await expect(card('Port X').getByTestId('card-pending-worktree')).toHaveCount(0)
+})
+
+test('#69 D10: a worktree that fails at the first open shows git’s reason, with Retry and Run in workspace folder', async () => {
+  const alpha = await callerInAlpha()
+  for (const [branch, title] of [
+    ['port-y', 'Port Y'],
+    ['port-z', 'Port Z']
+  ]) {
+    const made = await board(
+      alpha,
+      `board create --workspace repo --worktree --branch ${branch} Backlog '${title}'`
+    )
+    expect(made.code).toBe(0)
+  }
+  // Taken after the card was created: its first open can't make it.
+  git('branch', 'port-y')
+  git('branch', 'port-z')
+  await backToBoard(page)
+  await selectWorkspace('repo')
+
+  await card('Port Y').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Port Y')
+  await expect(page.getByTestId('pending-worktree-error')).toHaveText('Branch already exists')
+  git('branch', '-D', 'port-y')
+  await page.getByTestId('pending-worktree-retry').click()
+  await expect(page.getByTestId('pending-worktree')).toHaveCount(0)
+  await expect(page.getByTestId('titlebar').getByTestId('card-branch')).toHaveText('port-y')
+  await run('echo "at=$(git branch --show-current)"')
+  await expect.poll(async () => (await lines()).includes('at=port-y')).toBe(true)
+  await backToBoard(page)
+
+  await card('Port Z').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Port Z')
+  await expect(page.getByTestId('pending-worktree-error')).toHaveText('Branch already exists')
+  // Back leaves it pending.
+  await backToBoard(page)
+  await expect(card('Port Z').getByTestId('card-pending-worktree')).toBeVisible()
+  await card('Port Z').getByTestId('card-open').click()
+  await page.getByTestId('pending-worktree-folder').click()
+  await expect(page.getByTestId('pending-worktree')).toHaveCount(0)
+  await run('echo "at=$(git branch --show-current) in=$(basename "$PWD")"')
+  await expect.poll(async () => (await lines()).includes('at=main in=repo')).toBe(true)
+  await backToBoard(page)
+  await expect(card('Port Z').getByTestId('card-pending-worktree')).toHaveCount(0)
+  await expect(card('Port Z').getByTestId('card-branch')).toHaveCount(0)
+  await expect
+    .poll(() => readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+    .not.toContain('pendingWorktree')
+})

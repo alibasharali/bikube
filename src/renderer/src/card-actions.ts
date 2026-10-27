@@ -3,13 +3,15 @@ import type { Workspace, Card } from '../../core/workspace-store'
 import type { FirstStart } from '../../core/startup-command'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
+import { forgetPendingWorktree, makePendingWorktree } from './pending-worktrees'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 import { clearCardUsage } from './usage'
 
 /**
  * Starts the card if its shell isn't running, with its current startup command (#5 D7, D8);
- * a running card is left as it is. Opening a card, and creating one, goes through here.
+ * a running card is left as it is. Opening a card, and creating one, goes through here, so a
+ * card with a pending worktree (#69 D10) gets it made first, by whichever path opens it.
  */
 export function startCard(workspaceId: string, cardId: string): void {
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
@@ -17,7 +19,28 @@ export function startCard(workspaceId: string, cardId: string): void {
   const card =
     workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return
-  cardTerminals().start(card, recordFirstStart(workspaceId, cardId))
+  const start = (starting: Card): void =>
+    cardTerminals().start(starting, recordFirstStart(workspaceId, cardId))
+  if (
+    card.pendingWorktree &&
+    card.host === undefined &&
+    !card.worktree &&
+    cardTerminals().runState(cardId)?.kind !== 'running'
+  ) {
+    makePendingWorktree(workspaceId, card, start)
+    return
+  }
+  start(card)
+}
+
+/**
+ * Run in workspace folder (#69 D10): drops the card's pending worktree (saved and synced) and
+ * starts it in the workspace folder.
+ */
+export function runPendingInWorkspaceFolder(workspaceId: string, cardId: string): void {
+  workspaceStore.clearPendingWorktree(workspaceId, cardId)
+  startCard(workspaceId, cardId)
+  forgetPendingWorktree(cardId)
 }
 
 /**

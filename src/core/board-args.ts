@@ -26,7 +26,8 @@ export const SSH_BOARD_USAGE = `usage: board move <card> <column>
 
 export const BOARD_USAGE = `usage: board workspaces [--json]
        board list [--json]
-       board create [--agent <agent>] [--description-file <file>|-] <column> <title>
+       board create [--agent <agent>] [--description-file <file>|-]
+                    [--worktree [--branch <name>]] <column> <title>
        board rename <card> <title>
        board move <card> <column>
        board status <card> <text>
@@ -48,6 +49,10 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
                (the workspace's default when this card runs a custom command or a shell)
   --description-file <file>|-
                the new card's task description (- reads stdin)
+  --worktree [--branch <name>]
+               the new card gets its own git worktree on the new branch <name> (else one
+               named from its title) when it is first opened; a local workspace in a git
+               repository only
   <card>       . for this card, a card's id (in any workspace), or a card's title
   <column>     a column title of the workspace (any case); a move uses the card's own workspace
   <text>       the card's status text; "" clears it
@@ -80,6 +85,13 @@ export type BoardCommand =
       agent?: BoardAgent
       /** From `--description-file` (#69 D8), read by the CLI; absent for none. */
       description?: string
+      /** `--worktree` (#69 D10): its own worktree on first open; absent for none. */
+      worktree?: true
+      /**
+       * `--branch` (only with `--worktree`): the worktree's new branch; absent for the one
+       * `suggestBranch` names from the title, filled in by the board before it creates the card.
+       */
+      branch?: string
     }
   | { command: 'rename'; card: string; title: string; workspace?: string }
   | { command: 'move'; card: string; column: string; workspace?: string }
@@ -140,7 +152,9 @@ interface Options {
   workspace?: string
   agent?: string
   descriptionFile?: string
+  branch?: string
   json?: true
+  worktree?: true
 }
 
 /**
@@ -157,6 +171,7 @@ function splitOptions(
   if (name === 'create') {
     valued['--agent'] = 'agent'
     valued['--description-file'] = 'descriptionFile'
+    valued['--branch'] = 'branch'
   }
   const takesJson = name === 'list' || name === 'workspaces'
   const options: Options = {}
@@ -176,6 +191,11 @@ function splitOptions(
     if (takesJson && arg === '--json') {
       if (options.json) return null
       options.json = true
+      continue
+    }
+    if (name === 'create' && arg === '--worktree') {
+      if (options.worktree) return null
+      options.worktree = true
       continue
     }
     // An option of another command, or one `board` doesn't know: a wrong shape.
@@ -220,12 +240,16 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
   const [card, value] = operands
   if (name === 'create') {
     if (options.agent !== undefined && !isBoardAgent(options.agent)) return USAGE
+    // A branch names the worktree's: without --worktree there is none (#69 D10).
+    if (options.branch !== undefined && !options.worktree) return USAGE
     const command: Extract<BoardCommand, { command: 'create' }> = {
       command: 'create',
       column: card,
       title: value,
       ...where,
-      ...(options.agent !== undefined && { agent: options.agent as BoardAgent })
+      ...(options.agent !== undefined && { agent: options.agent as BoardAgent }),
+      ...(options.worktree && { worktree: true as const }),
+      ...(options.branch !== undefined && { branch: options.branch })
     }
     if (options.descriptionFile !== undefined) {
       return { kind: 'createWithDescription', path: options.descriptionFile, command }

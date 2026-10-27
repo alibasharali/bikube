@@ -500,6 +500,17 @@ function CardItem({
               )}
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
+            {card.pendingWorktree && !card.worktree && (
+              // Made at its first open on any machine (#69 D10).
+              <span
+                className="card-branch card-branch-worktree"
+                data-testid="card-pending-worktree"
+                title={`Gets its own worktree on ${card.pendingWorktree.branch} when first opened`}
+              >
+                <TreePine {...SMALL_ICON} />
+                <span className="card-branch-name">Worktree on first open</span>
+              </span>
+            )}
           </span>
           <CardLines
             status={status}

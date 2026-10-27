@@ -189,3 +189,14 @@ describe('BoardRelay across workspaces (#69 D6–D8)', () => {
     expect(sent.map((s) => s.command)).toEqual(commands)
   })
 })
+
+describe('BoardRelay: create with a worktree (#69 D10)', () => {
+  it('forwards worktree and branch', () => {
+    const commands: BoardCommand[] = [
+      { command: 'create', column: 'T', title: 'x', worktree: true },
+      { command: 'create', column: 'T', title: 'x', worktree: true, branch: 'port-x' }
+    ]
+    for (const command of commands) void relay.handle({ v: 1, cardId: 'c1', ...command })
+    expect(sent.map((s) => s.command)).toEqual(commands)
+  })
+})

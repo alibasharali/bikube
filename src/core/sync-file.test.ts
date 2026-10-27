@@ -557,3 +557,30 @@ describe('the New mark in the sync file (#69 D11)', () => {
     expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('unopened')
   })
 })
+
+describe('a pending worktree in the sync file (#69 D10)', () => {
+  it('writes it only on a card that has one, reads it back, and drops a bad value', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [
+            card('a', 'w-backlog', { pendingWorktree: { branch: 'port-x' } }),
+            card('b', 'w-backlog')
+          ]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.pendingWorktree).toEqual({ branch: 'port-x' })
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('pendingWorktree')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.pendingWorktree).toEqual({ branch: 'port-x' })
+    expect(read.ok && read.workspaces[0]!.cards[1]!).not.toHaveProperty('pendingWorktree')
+    file.board.workspaces[0].cards[0].pendingWorktree = { branch: 7 }
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('pendingWorktree')
+  })
+})

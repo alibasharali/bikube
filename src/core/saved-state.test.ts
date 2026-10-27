@@ -677,3 +677,25 @@ describe('the New mark in the saved state (#69 D11)', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 })
+
+describe('a pending worktree in the saved state (#69 D10)', () => {
+  it('writes it only on a card that has one, reads it back, and drops a bad value only', () => {
+    const state = fullState()
+    state.workspaces[0]!.cards[0] = {
+      ...state.workspaces[0]!.cards[0]!,
+      pendingWorktree: { branch: 'port-x' }
+    }
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces[0].cards
+    expect(first.pendingWorktree).toEqual({ branch: 'port-x' })
+    expect('pendingWorktree' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+    const read = parseSavedState(
+      fileWith((f) => {
+        f.workspaces[0].cards[0].pendingWorktree = { branch: 'a b' }
+        f.workspaces[0].cards[1].pendingWorktree = 'port-x'
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+})

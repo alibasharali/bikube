@@ -31,7 +31,52 @@ import {
 } from './board-commands'
 import { INVALID_REQUEST, type BoardReply } from './board-protocol'
 import type { ClaudeUsage } from './claude-usage-types'
-import type { Card, WorkspaceStore } from './workspace-store'
+import type { Card, WorkspaceState, WorkspaceStore } from './workspace-store'
+import { branchProblem, suggestBranch } from './worktree-names'
+
+/** The local branches of the repository a folder is in, or null outside one (main's `worktree.info`). */
+export type RepoBranches = (dir: string) => Promise<{ branches: string[] } | null>
+
+/**
+ * `board create --worktree`'s checks (#69 D10), run before the card is created since they ask
+ * git: the target workspace must be local and inside a git repository, and the branch (the one
+ * given, else `suggestBranch`'s from the title, free among the repository's branches) must be a
+ * valid name, checked before git is asked, that doesn't exist yet. Answers with the command,
+ * its `branch` filled in, or the reason to refuse it with. Any other command, and a create the
+ * board refuses anyway (no calling card, an SSH card's, no title), comes back as it is.
+ */
+export async function checkCreateWorktree(
+  state: WorkspaceState,
+  callingCardId: string,
+  command: BoardCommand,
+  repoBranches: RepoBranches
+): Promise<{ ok: true; command: BoardCommand } | { ok: false; error: string }> {
+  const unchanged = { ok: true as const, command }
+  if (command.command !== 'create' || !command.worktree) return unchanged
+  const calling = findCallingWorkspace(state, callingCardId)
+  if (!calling.ok) return unchanged
+  if (calling.value.cards.find((c) => c.id === callingCardId)?.host !== undefined) return unchanged
+  const title = cleanCardTitle(command.title)
+  if (!title) return unchanged
+  const target =
+    command.workspace !== undefined ? resolveWorkspace(state, command.workspace) : calling
+  if (!target.ok) return target
+  const ws = target.value
+  const column = resolveColumn(ws, command.column)
+  if (!column.ok) return column
+  if (ws.host !== undefined) return { ok: false, error: `board: ${ws.name} is an SSH workspace` }
+  if (command.branch !== undefined) {
+    const problem = branchProblem(command.branch)
+    if (problem) return { ok: false, error: `board: ${problem}` }
+  }
+  const repo = await repoBranches(ws.directory)
+  if (!repo) return { ok: false, error: `board: ${ws.directory} is not in a git repository` }
+  const branch = command.branch ?? suggestBranch(title, new Set(repo.branches))
+  if (repo.branches.includes(branch)) {
+    return { ok: false, error: `board: a branch named '${branch}' already exists` }
+  }
+  return { ok: true, command: { ...command, branch } }
+}
 
 /**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
@@ -107,6 +152,10 @@ export function answerBoardCommand(
     if (!title) return { ok: false, error: TITLE_REQUIRED }
     const column = resolveColumn(titles, command.column)
     if (!column.ok) return column
+    // Its branch is filled in by `checkCreateWorktree`, which must have run (#69 D10).
+    if (command.worktree && command.branch === undefined) {
+      return { ok: false, error: INVALID_REQUEST }
+    }
     const startup =
       command.agent !== undefined ? agentStartup(command.agent) : inheritedStartup(callingCard)
     const created = store.createCard(
@@ -116,7 +165,12 @@ export function answerBoardCommand(
       startup,
       undefined,
       command.description,
-      { unopened: titles.id !== calling.id, allowShell: command.agent === 'shell' }
+      {
+        unopened: titles.id !== calling.id,
+        allowShell: command.agent === 'shell',
+        ...(command.worktree &&
+          command.branch !== undefined && { pendingWorktree: { branch: command.branch } })
+      }
     )
     if (!created.ok) return { ok: false, error: `board: ${created.error.message}` }
     return { ok: true, output: `${created.value.id} ${titles.name}\n` }

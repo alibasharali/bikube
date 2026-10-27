@@ -1,4 +1,4 @@
-import { answerBoardCommand } from '../../core/board-answer'
+import { answerBoardCommand, checkCreateWorktree } from '../../core/board-answer'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
@@ -10,10 +10,19 @@ import { setCardUsage } from './usage'
  * status shows on the card's status line, and an activity as its pill, until cleared or the card
  * stops (#9 D8, #31 D12). A setup's `ok` types the card's start line, its `failed` shows on the
  * card (#39 D4, D5). A usage is kept for the card's usage line, runtime only (#50 D7).
+ * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  */
 export function listenForBoardRequests(): () => void {
-  return window.bikube.board.onRequest((cardId, command) =>
-    answerBoardCommand(
+  return window.bikube.board.onRequest(async (cardId, request) => {
+    const checked = await checkCreateWorktree(
+      workspaceStore.getState(),
+      cardId,
+      request,
+      window.bikube.worktree.info
+    )
+    if (!checked.ok) return checked
+    const command = checked.command
+    return answerBoardCommand(
       workspaceStore,
       cardId,
       command,
@@ -37,5 +46,5 @@ export function listenForBoardRequests(): () => void {
         return { running, activity: status?.activity, status: status?.agentStatus }
       }
     )
-  )
+  })
 }

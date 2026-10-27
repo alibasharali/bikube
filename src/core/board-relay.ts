@@ -72,7 +72,9 @@ function commandOf(request: BoardRequest): BoardCommand {
         title: request.title,
         ...where,
         ...(request.agent !== undefined && { agent: request.agent }),
-        ...(request.description !== undefined && { description: request.description })
+        ...(request.description !== undefined && { description: request.description }),
+        ...(request.worktree && { worktree: true as const }),
+        ...(request.branch !== undefined && { branch: request.branch })
       }
     case 'rename':
       return { command: 'rename', card: request.card, title: request.title, ...where }

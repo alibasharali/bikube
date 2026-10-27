@@ -327,8 +327,35 @@ describe('requests across workspaces (#69 D6–D8)', () => {
       { ...base, command: 'session', card: '.', session: 'x', workspace: 'b' },
       { ...base, command: 'list', format: 'text', workspace: 3 },
       { ...base, command: 'create', column: 'T', title: 'x', agent: 'vim' },
-      { ...base, command: 'create', column: 'T', title: 'x', description: 1 },
-      { ...base, command: 'create', column: 'T', title: 'x', worktree: true }
+      { ...base, command: 'create', column: 'T', title: 'x', description: 1 }
+    ]) {
+      expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+})
+
+describe('create with a worktree (#69 D10)', () => {
+  it('round-trips worktree alone and with a branch', () => {
+    for (const command of [
+      { command: 'create', column: 'Todo', title: 'Port X', worktree: true },
+      { command: 'create', column: 'Todo', title: 'Port X', worktree: true, branch: 'port-x' }
+    ] as const) {
+      expect(parseRequestLine(serializeRequest('c1', command))).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'c1', ...command }
+      })
+    }
+  })
+
+  it('rejects a worktree other than true, a branch without it, and either on another command', () => {
+    const base = { v: 1, cardId: 'c1' }
+    for (const value of [
+      { ...base, command: 'create', column: 'T', title: 'x', worktree: 'yes' },
+      { ...base, command: 'create', column: 'T', title: 'x', worktree: false },
+      { ...base, command: 'create', column: 'T', title: 'x', branch: 'b' },
+      { ...base, command: 'create', column: 'T', title: 'x', worktree: true, branch: 3 },
+      { ...base, command: 'rename', card: '.', title: 'x', worktree: true },
+      { ...base, command: 'move', card: '.', column: 'x', branch: 'b' }
     ]) {
       expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
     }

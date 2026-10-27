@@ -10,6 +10,7 @@ import { keepKnownRules, rulesNameKnownColumns, type AutoMove } from './auto-mov
 import type { ClaudeUsage } from './claude-usage-types'
 import { checkDescription } from './card-description'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
+import { branchProblem } from './worktree-names'
 import { isWorkspaceLogo, type WorkspaceLogoId } from './workspace-logos'
 import {
   CLAUDE_STARTUP,
@@ -72,6 +73,12 @@ export interface Card {
   directory: string
   /** The card's own git worktree, when it was created with one; absent otherwise. */
   worktree?: CardWorktree
+  /**
+   * The worktree `board create --worktree` asked for (#69 D10), made on the new `branch` at the
+   * card's first open on any machine, which clears it. Local cards only; saved and synced;
+   * absent when none.
+   */
+  pendingWorktree?: PendingWorktree
   /** The SSH host, copied from the workspace at creation and never changed; absent when local (#12 D1). */
   host?: string
   /** What is typed into the shell on every start (#5 D2); changed only per card (#5 D11). */
@@ -127,6 +134,11 @@ export interface CardWorktree {
   repo: string
 }
 
+/** A worktree a card gets at its first open (#69 D10): only its new branch's name. */
+export interface PendingWorktree {
+  branch: string
+}
+
 /** A card created in its own worktree instead of the workspace's folder. */
 export interface NewCardWorktree {
   directory: string
@@ -139,6 +151,8 @@ export interface NewCardOptions {
   unopened?: boolean
   /** Takes a plain shell startup (`--agent shell`), which a card made by hand never has. */
   allowShell?: boolean
+  /** Its own worktree at its first open (#69 D10): a local workspace's card only. */
+  pendingWorktree?: PendingWorktree
 }
 
 export interface Workspace {
@@ -398,6 +412,11 @@ export interface WorkspaceStore {
    * folder) and no pending setup. A shell set to run in its worktree runs in the folder again.
    */
   moveCardOutOfWorktree(workspaceId: string, cardId: string): Result<Card>
+  /**
+   * Drops the card's pending worktree (#69 D10: Run in workspace folder): it runs in the
+   * workspace folder from its next start. A card without one is left as it is.
+   */
+  clearPendingWorktree(workspaceId: string, cardId: string): Result<Card>
   /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
@@ -687,6 +706,12 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     if (!checked.ok) return checked
     const described = checkDescription(description ?? '')
     if (!described.ok) return described
+    const pending = options.pendingWorktree
+    if (pending) {
+      if (ws.host !== undefined) return fail('card', 'An SSH card can’t have its own worktree')
+      const problem = branchProblem(pending.branch)
+      if (problem) return fail('card', problem)
+    }
     const trimmed = title.trim()
     const created: Card = {
       id: this.generateId(),
@@ -696,6 +721,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       directory: worktree && ws.host === undefined ? worktree.directory : ws.directory,
       ...(ws.host !== undefined && { host: ws.host }),
       ...(worktree && ws.host === undefined && { worktree: { ...worktree.worktree } }),
+      ...(pending && !worktree && { pendingWorktree: { branch: pending.branch } }),
       startup: checked.value,
       agentSessionId: this.generateSessionId(),
       claudeStarted: false,
@@ -931,7 +957,20 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
         startedAgents: []
       }
       if (ws.worktreeSetup) moved.setup = ws.worktreeSetup
+      // A pending worktree (#69 D10) is made by this move.
+      delete moved.pendingWorktree
       return { ok: true, value: moved }
+    })
+  }
+
+  clearPendingWorktree(workspaceId: string, cardId: string): Result<Card> {
+    const current = this.find(workspaceId)?.cards.find((c) => c.id === cardId)
+    // None to drop changes nothing, so nothing is saved.
+    if (current && !current.pendingWorktree) return { ok: true, value: current }
+    return this.updateCard(workspaceId, cardId, (card) => {
+      const cleared: Card = { ...card }
+      delete cleared.pendingWorktree
+      return { ok: true, value: cleared }
     })
   }
 

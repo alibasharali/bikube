@@ -848,7 +848,7 @@ function PluginRow({
         <div className="agent-setup-row-provides" data-testid="agent-setup-plugin-provides">
           {provides.map((item, i) => (
             <span key={item.section}>
-              {i > 0 && <span aria-hidden="true"> · </span>}
+              {i > 0 && <span aria-hidden="true">{'\u00a0·\u00a0'}</span>}
               <button
                 type="button"
                 className="agent-setup-link agent-setup-link-quiet"
@@ -864,7 +864,7 @@ function PluginRow({
           ))}
           {plugin.author && (
             <span className="agent-setup-row-meta">
-              {provides.length > 0 ? ' · ' : ''}by {plugin.author}
+              {provides.length > 0 ? '\u00a0· ' : ''}by {plugin.author}
             </span>
           )}
         </div>

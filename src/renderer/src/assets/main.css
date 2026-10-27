@@ -4460,6 +4460,12 @@ button.dev-server-chip:focus-visible {
   font-weight: 600;
 }
 
+/* Muted text falls short of 4.5:1 on the selected tint in some themes, so its count reads in the
+   text colour. */
+.agent-setup-tab[aria-selected='true'] .agent-setup-tab-count {
+  color: var(--text);
+}
+
 .agent-setup-tab-label {
   flex: 1;
   min-width: 0;
@@ -4500,9 +4506,10 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-sm);
 }
 
-/* A section with no row matching the search (#68 D25). */
-.agent-setup-tab[data-dimmed='true'] {
-  opacity: 0.5;
+/* While searching, a section with a matching row reads in the text colour and one with none
+   (#68 D25) stays muted: a colour token, not opacity, so its text keeps 4.5:1. */
+.agent-setup-nav[data-searching='true'] .agent-setup-tab:not([data-dimmed='true']) {
+  color: var(--text);
 }
 
 /* Overview's cards (D12), one per section with rows, then the Warnings list. */
@@ -4532,7 +4539,11 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-setup-card[data-dimmed='true'] {
-  opacity: 0.5;
+  color: var(--text-muted);
+}
+
+.agent-setup-card[data-dimmed='true'] .agent-setup-card-label {
+  font-weight: 400;
 }
 
 .agent-setup-card-head {
@@ -4586,9 +4597,12 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-sm);
 }
 
-/* A plugin's entry while the plugin is off (D18). */
-.agent-setup-row-off > :not(.agent-setup-imports) {
-  opacity: 0.55;
+/* A plugin's entry while the plugin is off (D18): its text muted (a colour token, not opacity,
+   so it keeps 4.5:1), beside its Plugin off chip. */
+.agent-setup-row-off .agent-setup-row-name,
+.agent-setup-row-off .agent-setup-row-command {
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .agent-setup-row-main {
@@ -4692,12 +4706,14 @@ button.dev-server-chip:focus-visible {
   gap: var(--space-1);
 }
 
-/* An amber warning (D24). */
+/* An amber warning (D24): amber text and outline on the row's surface, since the amber tint under
+   amber text falls short of 4.5:1 in some light themes. */
 .agent-setup-warning {
   max-width: 100%;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
-  background: var(--pill-question-bg);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--pill-question-text);
   color: var(--pill-question-text);
   font-size: var(--text-xs);
   line-height: 18px;
@@ -4853,7 +4869,8 @@ button.dev-server-chip:focus-visible {
 
 /* A settings file that doesn't parse (D13): its state in the warning's amber. */
 .agent-setup-chip[data-state='invalid'] {
-  background: var(--pill-question-bg);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--pill-question-text);
   color: var(--pill-question-text);
 }
 
@@ -4889,7 +4906,8 @@ button.dev-server-chip:focus-visible {
 
 /* A project MCP server Claude Code hasn't been allowed to start yet (D16). */
 .agent-setup-chip[data-state='not-approved'] {
-  background: var(--pill-question-bg);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--pill-question-text);
   color: var(--pill-question-text);
 }
 
@@ -5001,7 +5019,6 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-chart-peak {
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
 }
 
 .agent-setup-chart-days {

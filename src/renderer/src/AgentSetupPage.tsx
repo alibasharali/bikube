@@ -367,6 +367,7 @@ export function SectionList({
       aria-label="Agent setup sections"
       aria-orientation={orientation}
       data-testid="agent-setup-sections"
+      data-searching={dimmed !== undefined}
       onKeyDown={onKeyDown}
     >
       {AGENT_SETUP_GROUPS.map((group, index) => [

@@ -141,6 +141,12 @@ describe('contrast in every version (#64 D5, AC1)', () => {
       for (const bg of textBackgrounds) need(`${text} on ${bg}`, t[text], t[bg], 4.5)
     }
     need('text-muted on chip', t['text-muted'], t.chip, 4.5)
+    // Agent setup (#68 D7): a dimmed Overview card hovered, the selected section tab and its count
+    // on the accent tint over the section list, and the amber warnings and chips on a row.
+    need('text-muted on surface-hover', t['text-muted'], t['surface-hover'], 4.5)
+    const selectedTab = composite(t['accent-soft'], t.surface)
+    need('text on accent-soft over surface', t.text, selectedTab, 4.5)
+    need('pill-question-text on surface', t['pill-question-text'], t.surface, 4.5)
     for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)
     need('accent-text on accent', t['accent-text'], t.accent, 4.5)
     // D5's one named exception: Default dark's danger text, #ffffff on #e5484d, as it is today.

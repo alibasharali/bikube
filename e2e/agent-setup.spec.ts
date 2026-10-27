@@ -468,6 +468,17 @@ test('AC15: the search filters every section, dims those without a match, and Es
     'data-dimmed',
     'false'
   )
+  // Dimmed by a muted text colour, not opacity, so its text keeps its contrast: a section without
+  // a match reads in another colour than an unselected one with a match.
+  const style = (id: string): Promise<{ color: string; opacity: string }> =>
+    page.getByTestId(`agent-setup-section-${id}`).evaluate((el) => {
+      const computed = getComputedStyle(el)
+      return { color: computed.color, opacity: computed.opacity }
+    })
+  const dimmedTab = await style('commands')
+  const matchingTab = await style('agents')
+  expect(dimmedTab.opacity).toBe('1')
+  expect(dimmedTab.color).not.toBe(matchingTab.color)
   // Not filtered: Status and Stats.
   await expect(page.getByTestId('agent-setup-section-status')).toHaveAttribute(
     'data-dimmed',

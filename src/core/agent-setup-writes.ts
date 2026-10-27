@@ -1,0 +1,84 @@
+/**
+ * Main's check of the Agent setup page's switches (#68 D28) before settings.local.json is written
+ * (`settings-local-writer.ts`, D23): a plugin switch only for a key `~/.claude/plugins/
+ * installed_plugins.json` lists, a project MCP server switch only for a name `<folder>/.mcp.json`
+ * lists, both files read again for each request. Anything else is refused and nothing is written.
+ * D22's edits (S5) add their own check beside these.
+ */
+
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { AgentSetupSwitch, SettingsWriteResult } from './agent-setup-snapshot'
+import { writeSettingsLocal, type SettingsFs } from './settings-local-writer'
+
+/** The longest plugin key or server name taken. */
+const MAX_NAME = 512
+
+const isName = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= MAX_NAME
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** A switch request from the renderer, or null when it isn't one. */
+export function parseSwitchRequest(value: unknown): AgentSetupSwitch | null {
+  if (!isRecord(value) || typeof value['enabled'] !== 'boolean') return null
+  const enabled = value['enabled']
+  if (value['kind'] === 'plugin' && isName(value['key'])) {
+    return { kind: 'plugin', key: value['key'], enabled }
+  }
+  if (value['kind'] === 'mcpServer' && isName(value['name'])) {
+    return { kind: 'mcpServer', name: value['name'], enabled }
+  }
+  return null
+}
+
+/** The object at `key` of the JSON file `path`, or null when it can't be read. */
+async function readObject(
+  path: string,
+  key: string,
+  read: (path: string, encoding: 'utf8') => Promise<string>
+): Promise<Record<string, unknown> | null> {
+  try {
+    const value = JSON.parse(await read(path, 'utf8')) as unknown
+    return isRecord(value) && isRecord(value[key]) ? value[key] : null
+  } catch {
+    return null
+  }
+}
+
+export interface AgentSetupWriteOptions {
+  /** The workspace folder (absolute, an existing directory: the caller checked it). */
+  folder: string
+  /** The user's home (main's `BIKUBE_HOME_DIR`, else the OS home). */
+  home: string
+  edit: AgentSetupSwitch
+  fs?: SettingsFs
+}
+
+/** Writes `edit` to settings.local.json when D28 allows it. */
+export async function agentSetupWrite({
+  folder,
+  home,
+  edit,
+  fs
+}: AgentSetupWriteOptions): Promise<SettingsWriteResult> {
+  const read = fs?.readFile.bind(fs) ?? readFile
+  const listed =
+    edit.kind === 'plugin'
+      ? await readObject(
+          join(home, '.claude', 'plugins', 'installed_plugins.json'),
+          'plugins',
+          read
+        )
+      : await readObject(join(folder, '.mcp.json'), 'mcpServers', read)
+  const name = edit.kind === 'plugin' ? edit.key : edit.name
+  if (!listed || !Object.hasOwn(listed, name)) {
+    return {
+      ok: false,
+      reason: 'refused',
+      message: "Couldn't save: not listed in this workspace's setup"
+    }
+  }
+  return writeSettingsLocal(folder, edit, fs)
+}

@@ -7,9 +7,16 @@ import {
   fileLabel,
   filterDefinitions,
   filterMemory,
+  filterPlugins,
   hookGroups,
   isPluginOff,
+  marketplaceRows,
+  mcpServerRows,
+  mcpStateLabel,
   permissionsView,
+  pluginProvides,
+  pluginQuery,
+  pluginSource,
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
@@ -22,16 +29,24 @@ import {
   type EntrySource,
   type HookEntry,
   type JsonFileState,
-  type MemoryEntry
+  type MemoryEntry,
+  type PluginEntry
 } from '../../core/agent-setup-snapshot'
-import { toggleExpanded, useClaudeVersion } from './agent-setup-data'
+import type { McpServerRow } from '../../core/agent-setup-rows'
+import {
+  saveSwitch,
+  switchKey,
+  toggleExpanded,
+  useAgentSetupData,
+  useClaudeVersion
+} from './agent-setup-data'
 import { SMALL_ICON } from './icons'
 import { useSettings } from './settings'
 
 /**
- * The Agent setup page's sections built so far (#68 D12, D13, D17–D20, D24): Overview, Status,
- * Skills, Agents, Commands, Hooks, Memory and Permissions, each showing the rows of the snapshot
- * that match the search (D25; Status is not filtered).
+ * The Agent setup page's sections built so far (#68 D12, D13, D15–D20, D24): Overview, Status,
+ * Plugins, MCP servers, Skills, Agents, Commands, Hooks, Memory and Permissions, each showing the
+ * rows of the snapshot that match the search (D25; Status is not filtered).
  */
 
 /** What every section's view gets. */
@@ -41,6 +56,8 @@ export interface SectionViewProps {
   query: string
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
+  /** Puts `query` in the search box (a plugin's provides-counts, D15). */
+  onSearch: (query: string) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
 }
@@ -644,3 +661,294 @@ export function StatusSection({ snapshot }: SectionViewProps): React.JSX.Element
 }
 
 const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
+
+/** An on/off switch as Settings' (D7), labelled for screen readers by `label`. */
+function Switch({
+  label,
+  checked,
+  testId,
+  onChange
+}: {
+  label: string
+  checked: boolean
+  testId: string
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <span className="switch agent-setup-switch">
+      <input
+        type="checkbox"
+        role="switch"
+        aria-label={label}
+        title={label}
+        data-testid={testId}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="switch-track" aria-hidden="true" />
+    </span>
+  )
+}
+
+function PluginRow({
+  plugin,
+  snapshot,
+  onShowSection,
+  onSearch
+}: {
+  plugin: PluginEntry
+  snapshot: AgentSetupSnapshot
+  onShowSection: SectionViewProps['onShowSection']
+  onSearch: SectionViewProps['onSearch']
+}): React.JSX.Element {
+  const { saving } = useAgentSetupData(snapshot.folder)
+  const asked = saving.get(switchKey({ kind: 'plugin', key: plugin.key }))
+  const provides = pluginProvides(snapshot, plugin)
+  const manifest = `${plugin.installPath}/.claude-plugin/plugin.json`
+  return (
+    <li className="agent-setup-row" data-testid="agent-setup-plugin" data-key={plugin.key}>
+      <div className="agent-setup-row-main">
+        <span className="agent-setup-row-name" data-testid="agent-setup-row-name">
+          {plugin.name}
+        </span>
+        <span className="agent-setup-row-meta" title="Marketplace">
+          @{plugin.marketplace}
+        </span>
+        {plugin.version && <span className="agent-setup-row-meta">v{plugin.version}</span>}
+        <span className="agent-setup-row-chips">
+          <SourceChip source={pluginSource(plugin)} />
+        </span>
+        <Switch
+          label={`Use ${plugin.key} in this workspace`}
+          checked={asked ?? plugin.enabled}
+          testId="agent-setup-plugin-switch"
+          onChange={(enabled) =>
+            void saveSwitch(snapshot.folder, { kind: 'plugin', key: plugin.key, enabled })
+          }
+        />
+        {snapshot.paths.includes(manifest) && <FileActions file={manifest} />}
+      </div>
+      {plugin.description && (
+        <p className="agent-setup-row-description" title={plugin.description}>
+          {plugin.description}
+        </p>
+      )}
+      {(plugin.author || provides.length > 0) && (
+        <div className="agent-setup-row-provides" data-testid="agent-setup-plugin-provides">
+          {provides.map((item, i) => (
+            <span key={item.section}>
+              {i > 0 && <span aria-hidden="true"> · </span>}
+              <button
+                type="button"
+                className="agent-setup-link agent-setup-link-quiet"
+                title={`Show ${label(item.section)} from ${plugin.name}`}
+                onClick={() => {
+                  onSearch(pluginQuery(plugin))
+                  onShowSection(item.section)
+                }}
+              >
+                {item.label}
+              </button>
+            </span>
+          ))}
+          {plugin.author && (
+            <span className="agent-setup-row-meta">
+              {provides.length > 0 ? ' · ' : ''}by {plugin.author}
+            </span>
+          )}
+        </div>
+      )}
+      <Warnings warnings={plugin.warnings} />
+    </li>
+  )
+}
+
+/** A marketplace's last update as a local date, or the text as the file holds it. */
+const updatedText = (value: string): string => {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+}
+
+/**
+ * Plugins (D15): the installed plugins listed for the workspace, each with its switch for this
+ * workspace and what it provides, then the known marketplaces, read-only.
+ */
+export function PluginsSection({
+  snapshot,
+  query,
+  onShowSection,
+  onSearch
+}: SectionViewProps): React.JSX.Element {
+  const plugins = filterPlugins(snapshot.plugins, query)
+  const marketplaces = marketplaceRows(snapshot, query)
+  const searching = query.trim() !== ''
+  return (
+    <div className="agent-setup-groups" data-testid="agent-setup-plugins">
+      <section className="agent-setup-group">
+        <h4 className="agent-setup-subheading">Installed</h4>
+        {snapshot.plugins.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-empty">
+            No plugins installed. Install them in Claude Code with /plugin.
+          </p>
+        ) : plugins.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-no-match">
+            No plugins match “{query.trim()}”.
+          </p>
+        ) : (
+          <ul className="agent-setup-rows">
+            {plugins.map((plugin) => (
+              <PluginRow
+                key={plugin.key}
+                plugin={plugin}
+                snapshot={snapshot}
+                onShowSection={onShowSection}
+                onSearch={onSearch}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="agent-setup-group">
+        <h4 className="agent-setup-subheading">Marketplaces</h4>
+        {marketplaces.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-marketplaces-empty">
+            {searching
+              ? `No marketplaces match “${query.trim()}”.`
+              : 'No marketplaces known. Add one in Claude Code with /plugin marketplace add.'}
+          </p>
+        ) : (
+          <ul className="agent-setup-rows" data-testid="agent-setup-marketplaces">
+            {marketplaces.map((market) => (
+              <li
+                key={market.name}
+                className="agent-setup-row"
+                data-testid="agent-setup-marketplace"
+              >
+                <div className="agent-setup-row-main">
+                  <span className="agent-setup-row-name" data-testid="agent-setup-row-name">
+                    {market.name}
+                  </span>
+                  <span className="agent-setup-row-file" title={market.source}>
+                    {market.source}
+                  </span>
+                  {market.lastUpdated && (
+                    <span className="agent-setup-row-meta agent-setup-row-end">
+                      Updated {updatedText(market.lastUpdated)}
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function McpServerItem({
+  server,
+  snapshot
+}: {
+  server: McpServerRow
+  snapshot: AgentSetupSnapshot
+}): React.JSX.Element {
+  const { saving } = useAgentSetupData(snapshot.folder)
+  const project = server.source.kind === 'project'
+  const asked = project
+    ? saving.get(switchKey({ kind: 'mcpServer', name: server.name }))
+    : undefined
+  // While a switch is saved the state reads as asked for; the read after it confirms it.
+  const state = asked === undefined ? server.state : asked ? 'on' : 'off'
+  const off = state === 'plugin-off'
+  const variables: [string, string[]][] = [
+    ['Environment', server.envNames],
+    ['Headers', server.headerNames]
+  ]
+  return (
+    <li
+      className={off ? 'agent-setup-row agent-setup-row-off' : 'agent-setup-row'}
+      data-testid="agent-setup-mcp-server"
+      data-name={server.name}
+      data-plugin-off={off}
+    >
+      <div className="agent-setup-row-main">
+        <span className="agent-setup-row-name" data-testid="agent-setup-row-name">
+          {server.name}
+        </span>
+        <span className="agent-setup-chip" data-testid="agent-setup-mcp-type" title="Type">
+          {server.type}
+        </span>
+        <span className="agent-setup-row-chips">
+          <SourceChip source={server.source} />
+          <span className="agent-setup-chip" data-state={state} data-testid="agent-setup-mcp-state">
+            {mcpStateLabel(state)}
+          </span>
+        </span>
+        {project && (
+          <Switch
+            label={`Use MCP server ${server.name} in this workspace`}
+            checked={state === 'on'}
+            testId="agent-setup-mcp-switch"
+            onChange={(enabled) =>
+              void saveSwitch(snapshot.folder, { kind: 'mcpServer', name: server.name, enabled })
+            }
+          />
+        )}
+        {snapshot.paths.includes(server.file) && <FileActions file={server.file} />}
+      </div>
+      {server.target && (
+        <code
+          className="agent-setup-row-command"
+          title={server.target}
+          data-testid="agent-setup-mcp-target"
+        >
+          {server.target}
+        </code>
+      )}
+      {variables.map(
+        ([name, names]) =>
+          names.length > 0 && (
+            <span key={name} className="agent-setup-row-meta" data-testid="agent-setup-mcp-names">
+              {name}: {names.join(', ')}
+            </span>
+          )
+      )}
+    </li>
+  )
+}
+
+/**
+ * MCP servers (D16): the project's, Local and User servers from ~/.claude.json and the plugins',
+ * with a switch for each project server. No server is started or connected to; environment and
+ * header values are never shown.
+ */
+export function McpServersSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
+  const all = mcpServerRows(snapshot, '')
+  const rows = mcpServerRows(snapshot, query)
+  if (all.length === 0) {
+    return (
+      <p className="agent-setup-empty" data-testid="agent-setup-empty">
+        No MCP servers found. Add them to .mcp.json in the workspace folder, or with claude mcp add.
+      </p>
+    )
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="agent-setup-empty" data-testid="agent-setup-no-match">
+        No MCP servers match “{query.trim()}”.
+      </p>
+    )
+  }
+  return (
+    <ul className="agent-setup-rows" data-testid="agent-setup-mcp">
+      {rows.map((server) => (
+        <McpServerItem
+          key={`${server.source.kind}\n${server.file}\n${server.name}`}
+          server={server}
+          snapshot={snapshot}
+        />
+      ))}
+    </ul>
+  )
+}

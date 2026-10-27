@@ -1,4 +1,8 @@
-import type { AgentSetupRead } from '../core/agent-setup-snapshot'
+import type {
+  AgentSetupRead,
+  AgentSetupSwitch,
+  SettingsWriteResult
+} from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
@@ -83,6 +87,7 @@ export const IPC = {
   agentsInstalled: 'agents:installed',
   agentSetupRead: 'agentSetup:read',
   agentSetupClaudeVersion: 'agentSetup:claudeVersion',
+  agentSetupSwitch: 'agentSetup:switch',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -347,6 +352,14 @@ export interface AgentSetupApi {
    * agents are; null when the check failed. Asked for on the page's open and Refresh only (D26).
    */
   claudeVersion(): Promise<ClaudeVersion | null>
+  /**
+   * Turns a plugin or a project MCP server on or off for the workspace folder `folder` (#68 D15,
+   * D16, D23): written to `<folder>/.claude/settings.local.json` only, re-read just before. Main
+   * refuses (`refused`) a folder that isn't an absolute existing directory, a plugin key
+   * `installed_plugins.json` doesn't list and a server name `.mcp.json` doesn't list (D28); a
+   * settings.local.json that isn't valid JSON is left as it is (`invalid-json`).
+   */
+  setSwitch(folder: string, change: AgentSetupSwitch): Promise<SettingsWriteResult>
 }
 
 export interface AgentsApi {

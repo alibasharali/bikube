@@ -3,9 +3,9 @@
  * rows and count split by source, the search, the warnings list and a plugin entry's off state.
  * Plain TS with no Node or DOM imports: the renderer runs it.
  *
- * Sections with rows are those `sectionSummaries` returns; later slices add theirs (Plugins, MCP
- * servers) there, and their warnings to `setupWarnings`. Hooks (D19), Permissions (D20) and
- * Status' rows (D13) are read here too.
+ * Sections with rows are those `sectionSummaries` returns; a later slice adds its own (Config)
+ * there, and its warnings to `setupWarnings`. Hooks (D19), Permissions (D20), Status' rows (D13),
+ * Plugins and their marketplaces (D15) and MCP servers (D16) are read here too.
  */
 
 import type { AgentSetupSectionId } from './agent-setup-sections'
@@ -17,6 +17,7 @@ import {
   type HookEntry,
   type JsonFileState,
   type MemoryEntry,
+  type PluginEntry,
   type SettingsFile
 } from './agent-setup-snapshot'
 
@@ -273,7 +274,9 @@ export function sectionSummaries(
         .filter((entry) => memoryMatches(entry, query))
         .map((e) => e.source)
     ),
-    permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source))
+    permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source)),
+    plugins: summary(filterPlugins(snapshot.plugins, query).map(pluginSource)),
+    mcp: summary(mcpServerRows(snapshot, query).map((r) => r.source))
   }
 }
 
@@ -344,4 +347,232 @@ export function fileLabel(
   if (inFolder) return inFolder
   const inHome = inside(snapshot.home)
   return inHome ? `~/${inHome}` : file
+}
+
+/** An installed plugin's source chip (D9): its install's scope, `User` when it names none. */
+export function pluginSource(plugin: PluginEntry): EntrySource {
+  return plugin.scope === 'project' || plugin.scope === 'local'
+    ? { kind: plugin.scope }
+    : { kind: 'user' }
+}
+
+/** The installed plugins matching `query` (D25): by name, key, description, author or source. */
+export function filterPlugins(plugins: readonly PluginEntry[], query: string): PluginEntry[] {
+  return plugins.filter((plugin) =>
+    matchesQuery(query, [
+      plugin.name,
+      plugin.key,
+      plugin.description,
+      plugin.author,
+      plugin.version,
+      sourceLabel(pluginSource(plugin))
+    ])
+  )
+}
+
+/** One of a plugin's provides-counts (D15), linking to `section` filtered by the plugin. */
+export interface PluginProvides {
+  section: AgentSetupSectionId
+  label: string
+}
+
+const counted = (count: number, one: string, many: string): string =>
+  `${count} ${count === 1 ? one : many}`
+
+/** What `plugin` provides (D15): `2 skills · 1 agent · 3 commands · hooks · 1 MCP server`, the empty ones left out. */
+export function pluginProvides(
+  snapshot: AgentSetupSnapshot,
+  plugin: PluginEntry
+): PluginProvides[] {
+  const own = (entry: { source: EntrySource }): boolean =>
+    entry.source.kind === 'plugin' && entry.source.key === plugin.key
+  const provides: PluginProvides[] = []
+  const skills = snapshot.skills.filter(own).length
+  if (skills > 0) provides.push({ section: 'skills', label: counted(skills, 'skill', 'skills') })
+  const agents = snapshot.agents.filter(own).length
+  if (agents > 0) provides.push({ section: 'agents', label: counted(agents, 'agent', 'agents') })
+  const commands = snapshot.commands.filter(own).length
+  if (commands > 0) {
+    provides.push({ section: 'commands', label: counted(commands, 'command', 'commands') })
+  }
+  if (snapshot.hooks.some(own)) provides.push({ section: 'hooks', label: 'hooks' })
+  const servers = Object.keys(plugin.mcpServers ?? {}).length
+  if (servers > 0) {
+    provides.push({ section: 'mcp', label: counted(servers, 'MCP server', 'MCP servers') })
+  }
+  return provides
+}
+
+/**
+ * The search a provides-count link puts in the search box (D15, D25): the plugin's source chip,
+ * which every entry of the plugin, and no other entry's source, reads.
+ */
+export const pluginQuery = (plugin: PluginEntry): string => `Plugin ${plugin.name}`
+
+/** A known marketplace (D15), read-only. */
+export interface MarketplaceRow {
+  name: string
+  /** `github: <repo>`, a git URL or a path. */
+  source: string
+  /** Its `lastUpdated` as the file holds it (an ISO date). */
+  lastUpdated?: string
+}
+
+const marketplaceSource = (source: unknown): string => {
+  if (!isObject(source)) return typeof source === 'string' ? source : ''
+  const text = (key: string): string | undefined =>
+    typeof source[key] === 'string' ? source[key] : undefined
+  if (source['source'] === 'github' && text('repo')) return `github: ${text('repo')}`
+  return text('url') ?? text('path') ?? text('repo') ?? ''
+}
+
+/** The marketplaces of `known_marketplaces.json` matching `query` (D15, D25), in file order. */
+export function marketplaceRows(snapshot: AgentSetupSnapshot, query: string): MarketplaceRow[] {
+  const value = snapshot.marketplaces.value
+  if (!isObject(value)) return []
+  const rows: MarketplaceRow[] = []
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isObject(entry)) continue
+    const row: MarketplaceRow = { name, source: marketplaceSource(entry['source']) }
+    if (typeof entry['lastUpdated'] === 'string') row.lastUpdated = entry['lastUpdated']
+    if (matchesQuery(query, [row.name, row.source])) rows.push(row)
+  }
+  return rows
+}
+
+/**
+ * An MCP server's state (D16): a project server's `on`, `off` or `not-approved` (its switch),
+ * `enabled` for Local and User servers (no switch), a plugin's following its plugin.
+ */
+export type McpServerState = 'on' | 'off' | 'not-approved' | 'enabled' | 'plugin-on' | 'plugin-off'
+
+const MCP_STATE_LABELS: Record<McpServerState, string> = {
+  on: 'Enabled',
+  off: 'Disabled',
+  'not-approved': 'Not approved yet',
+  enabled: 'Enabled',
+  'plugin-on': 'Enabled',
+  'plugin-off': 'Plugin off'
+}
+
+/** The text of an MCP server's state (D16). */
+export const mcpStateLabel = (state: McpServerState): string => MCP_STATE_LABELS[state]
+
+/** One MCP server (D16). Environment and header values are never kept, only their names. */
+export interface McpServerRow {
+  name: string
+  /** `stdio`, `http` or `sse` (its `type`, else `http` for a URL and `stdio` for a command). */
+  type: string
+  /** Its command with its arguments, or its URL. */
+  target: string
+  envNames: string[]
+  headerNames: string[]
+  source: EntrySource
+  /** The file it is set in. */
+  file: string
+  state: McpServerState
+}
+
+/** An argument as a shell line would quote it, for reading only (never run). */
+const shellWord = (word: string): string =>
+  word !== '' && /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`
+
+function mcpServer(
+  name: string,
+  value: unknown,
+  source: EntrySource,
+  file: string,
+  state: McpServerState
+): McpServerRow {
+  const server = isObject(value) ? value : {}
+  const text = (key: string): string | undefined =>
+    typeof server[key] === 'string' ? server[key] : undefined
+  const names = (key: string): string[] => (isObject(server[key]) ? Object.keys(server[key]) : [])
+  const url = text('url')
+  const command = text('command')
+  const args = Array.isArray(server['args'])
+    ? server['args'].filter((a): a is string => typeof a === 'string')
+    : []
+  return {
+    name,
+    type: text('type') ?? (url !== undefined && command === undefined ? 'http' : 'stdio'),
+    target: url ?? (command !== undefined ? [command, ...args.map(shellWord)].join(' ') : ''),
+    envNames: names('env'),
+    headerNames: names('headers'),
+    source,
+    file,
+    state
+  }
+}
+
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+
+/** A project server's state from the effective lists (D10, D16): disabled first, then approved. */
+function projectServerState(settings: readonly SettingsFile[], name: string): McpServerState {
+  if (stringList(effectiveSetting(settings, 'disabledMcpjsonServers')?.value).includes(name)) {
+    return 'off'
+  }
+  if (
+    stringList(effectiveSetting(settings, 'enabledMcpjsonServers')?.value).includes(name) ||
+    effectiveSetting(settings, 'enableAllProjectMcpServers')?.value === true
+  ) {
+    return 'on'
+  }
+  return 'not-approved'
+}
+
+/**
+ * Every MCP server matching `query` (D16, D25): `.mcp.json`'s (Project), `~/.claude.json`'s
+ * project entry (Local) and its own (User), then each plugin's. Nothing is started or connected to.
+ */
+export function mcpServerRows(snapshot: AgentSetupSnapshot, query: string): McpServerRow[] {
+  const rows: McpServerRow[] = []
+  const project = isObject(snapshot.mcpJson.value) ? snapshot.mcpJson.value['mcpServers'] : null
+  if (isObject(project)) {
+    for (const [name, value] of Object.entries(project)) {
+      rows.push(
+        mcpServer(
+          name,
+          value,
+          { kind: 'project' },
+          snapshot.mcpJson.file,
+          projectServerState(snapshot.settings, name)
+        )
+      )
+    }
+  }
+  const { claudeJson } = snapshot
+  for (const [servers, kind] of [
+    [claudeJson.localMcpServers, 'local'],
+    [claudeJson.mcpServers, 'user']
+  ] as const) {
+    for (const [name, value] of Object.entries(servers)) {
+      rows.push(mcpServer(name, value, { kind }, claudeJson.file, 'enabled'))
+    }
+  }
+  for (const plugin of snapshot.plugins) {
+    const source: EntrySource = { kind: 'plugin', plugin: plugin.name, key: plugin.key }
+    for (const [name, value] of Object.entries(plugin.mcpServers ?? {})) {
+      rows.push(
+        mcpServer(
+          name,
+          value,
+          source,
+          `${plugin.installPath}/.mcp.json`,
+          plugin.enabled ? 'plugin-on' : 'plugin-off'
+        )
+      )
+    }
+  }
+  return rows.filter((row) =>
+    matchesQuery(query, [
+      row.name,
+      row.type,
+      row.target,
+      ...row.envNames,
+      ...row.headerNames,
+      sourceLabel(row.source)
+    ])
+  )
 }

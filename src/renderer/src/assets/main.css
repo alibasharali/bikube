@@ -4826,6 +4826,58 @@ button.dev-server-chip:focus-visible {
   color: var(--pill-question-text);
 }
 
+/* Plugins and MCP servers (D15, D16): a row's switch at its end, Settings' switch centred. */
+.agent-setup-switch {
+  flex: none;
+  align-self: center;
+  margin-top: 0;
+}
+
+.agent-setup-row-provides {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.agent-setup-link-quiet {
+  min-height: 24px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.agent-setup-link-quiet:hover {
+  color: var(--text);
+}
+
+.agent-setup-row-end {
+  margin-left: auto;
+}
+
+/* A project MCP server Claude Code hasn't been allowed to start yet (D16). */
+.agent-setup-chip[data-state='not-approved'] {
+  background: var(--pill-question-bg);
+  color: var(--pill-question-text);
+}
+
+/* Under the header (D23): changes apply from now on, or why a switch couldn't be saved. */
+.agent-setup-notice-slot {
+  display: contents;
+}
+
+.agent-setup-notice {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.agent-setup-notice-error {
+  color: var(--danger);
+}
+
 @container agent-setup (max-width: 479.98px) {
   .agent-setup-fact {
     grid-template-columns: minmax(0, 1fr);

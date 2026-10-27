@@ -21,9 +21,11 @@ import {
   AgentsSection,
   CommandsSection,
   HooksSection,
+  McpServersSection,
   MemorySection,
   OverviewSection,
   PermissionsSection,
+  PluginsSection,
   SkillsSection,
   StatusSection
 } from './AgentSetupSections'
@@ -44,6 +46,8 @@ export interface AgentSetupSectionProps {
   query: string
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
+  /** Puts `query` in the search box (a plugin's provides-counts, D15). */
+  onSearch: (query: string) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
 }
@@ -57,6 +61,8 @@ const SECTION_VIEWS: Partial<
 > = {
   overview: OverviewSection,
   status: StatusSection,
+  plugins: PluginsSection,
+  mcp: McpServersSection,
   skills: SkillsSection,
   agents: AgentsSection,
   commands: CommandsSection,
@@ -116,6 +122,7 @@ function AgentSetupPage({
             Claude Code · {workspace.directory}
           </p>
         )}
+        {!ssh && <SaveNotice folder={workspace.directory} />}
       </header>
       {ssh ? (
         <p className="agent-setup-message" data-testid="agent-setup-ssh">
@@ -125,6 +132,30 @@ function AgentSetupPage({
         <LocalAgentSetup workspace={workspace} />
       )}
     </section>
+  )
+}
+
+/**
+ * Under the header (D23): the last save's error line, else, once a switch was saved for the
+ * folder in this run, that changes apply to Claude Code sessions started from now on.
+ */
+function SaveNotice({ folder }: { folder: string }): React.JSX.Element | null {
+  const { saveError, saved } = useAgentSetupData(folder)
+  return (
+    <div role="status" className="agent-setup-notice-slot">
+      {saveError !== null ? (
+        <p
+          className="agent-setup-notice agent-setup-notice-error"
+          data-testid="agent-setup-save-error"
+        >
+          {saveError}
+        </p>
+      ) : saved ? (
+        <p className="agent-setup-notice" data-testid="agent-setup-saved-note">
+          Changes apply to Claude Code sessions started from now on
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -258,6 +289,7 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
             snapshot={snapshot}
             query={query}
             onShowSection={setSection}
+            onSearch={setQuery}
             expanded={expanded}
           />
         ) : SectionView && failed ? (

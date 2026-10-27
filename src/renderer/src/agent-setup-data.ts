@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
+import type { AgentSetupSnapshot, AgentSetupSwitch } from '../../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../../core/claude-version'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
  * The Agent setup page's data (#68 D26), kept per workspace folder for the run of the app (never
- * saved): the last snapshot main read, the last read's error, and the expanded memory rows. A
+ * saved): the last snapshot main read, the last read's error, the expanded memory rows, and the
+ * switches being saved with the last save's outcome (D23). A
  * read replaces only the parts of the snapshot that changed, so rows that read as before keep
  * their objects; never two reads at a time for one folder.
  */
@@ -20,10 +21,17 @@ export interface AgentSetupData {
   failed: boolean
   /** Expanded memory rows' keys (D17), kept across reads. */
   expanded: ReadonlySet<string>
+  /** Switches being saved (by `switchKey`), with the state asked for: shown until the read after it. */
+  saving: ReadonlyMap<string, boolean>
+  /** The last save's error line (D23), until a save succeeds. */
+  saveError: string | null
+  /** A switch was saved for this folder in this run: the page says changes apply from now on (D23). */
+  saved: boolean
 }
 
 interface FolderData extends AgentSetupData {
   expanded: Set<string>
+  saving: Map<string, boolean>
   version: number
 }
 
@@ -36,7 +44,15 @@ const listeners = new Set<() => void>()
 function dataOf(folder: string): FolderData {
   let data = folders.get(folder)
   if (!data) {
-    data = { snapshot: null, failed: false, expanded: new Set(), version: 0 }
+    data = {
+      snapshot: null,
+      failed: false,
+      expanded: new Set(),
+      saving: new Map(),
+      saveError: null,
+      saved: false,
+      version: 0
+    }
     folders.set(folder, data)
   }
   return data
@@ -128,7 +144,47 @@ export function useAgentSetupData(folder: string): AgentSetupData {
   }, [])
   useSyncExternalStore(subscribe, () => dataOf(folder).version)
   const data = dataOf(folder)
-  return { snapshot: data.snapshot, failed: data.failed, expanded: data.expanded }
+  return {
+    snapshot: data.snapshot,
+    failed: data.failed,
+    expanded: data.expanded,
+    saving: data.saving,
+    saveError: data.saveError,
+    saved: data.saved
+  }
+}
+
+/** The key of a switch in `saving`: `plugin:<key>` or `mcp:<name>`. */
+export const switchKey = (
+  change: { kind: 'plugin'; key: string } | { kind: 'mcpServer'; name: string }
+): string => (change.kind === 'plugin' ? `plugin:${change.key}` : `mcp:${change.name}`)
+
+/**
+ * Turns a plugin or a project MCP server on or off for `folder` (D15, D16, D23): the switch shows
+ * the state asked for at once, main writes settings.local.json, and the page reads again; on a
+ * failure the switch goes back to the state read and the error line shows.
+ */
+export async function saveSwitch(folder: string, change: AgentSetupSwitch): Promise<void> {
+  const data = dataOf(folder)
+  const key = switchKey(change)
+  data.saving.set(key, change.enabled)
+  changed(data)
+  let message: string | null = null
+  try {
+    const result = await window.bikube.agentSetup.setSwitch(folder, change)
+    if (!result.ok) message = result.message
+  } catch {
+    message = "Couldn't save settings.local.json"
+  }
+  if (message === null) {
+    data.saveError = null
+    data.saved = true
+    changed(data)
+    await refreshAgentSetup(folder)
+  } else data.saveError = message
+  // A later click on the same switch owns it now.
+  if (data.saving.get(key) === change.enabled) data.saving.delete(key)
+  changed(data)
 }
 
 /**

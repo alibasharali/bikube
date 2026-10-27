@@ -4,11 +4,10 @@
  * TS with no Node or DOM imports: the renderer imports its types and `agent-setup-rows.ts` reads it.
  *
  * Hooks (D19) are read here, since D19's check needs the file system; Permissions and Status
- * (D13, D20) come from `settings`, `claudeJson`, `mcpJson` and `bikubeSettings`. Later slices:
- * Plugins and MCP servers (S4)
- * `plugins`, `marketplaces`, `mcpJson`, `claudeJson`'s servers and the plugins' `mcpServers`,
- * Config (S5) `settings` and `claudeJson.preferences`; Open file and Reveal (S6) check a path
- * against `paths`.
+ * (D13, D20) come from `settings`, `claudeJson`, `mcpJson` and `bikubeSettings`; Plugins and MCP
+ * servers (D15, D16) from `plugins`, `marketplaces`, `mcpJson`, `claudeJson`'s servers and the
+ * plugins' `mcpServers`. Later slices: Config (S5) `settings` and `claudeJson.preferences`; Open
+ * file and Reveal (S6) check a path against `paths`.
  */
 
 /** Where an entry comes from (D9): its source chip. */
@@ -191,3 +190,21 @@ export interface AgentSetupSnapshot {
 /** Outcome of `agentSetup:read`. */
 export type AgentSetupRead =
   { ok: true; snapshot: AgentSetupSnapshot } | { ok: false; reason: 'not-directory' }
+
+/**
+ * Outcome of a change to `<folder>/.claude/settings.local.json` (#68 D23): `message` is the error
+ * line the page shows (`Couldn't save: settings.local.json is not valid JSON`). `refused`: main's
+ * check (D28) turned the request down and nothing was read or written.
+ */
+export type SettingsWriteResult =
+  | { ok: true }
+  | {
+      ok: false
+      reason: 'invalid-json' | 'not-object' | 'unexpected-value' | 'refused' | 'failed'
+      message: string
+    }
+
+/** A switch on the page (#68 D15, D16): a plugin's for this workspace, or a project MCP server's. */
+export type AgentSetupSwitch =
+  | { kind: 'plugin'; key: string; enabled: boolean }
+  | { kind: 'mcpServer'; name: string; enabled: boolean }

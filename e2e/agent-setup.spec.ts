@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
@@ -12,7 +12,8 @@ import { plainCards } from './plain-cards'
 // (#68 S2) what it reads from a fake home (`BIKUBE_HOME_DIR`) and the workspace folder: Overview,
 // Skills, Agents, Commands and Memory with their sources, counts, warnings, search and refresh;
 // (#68 S3) Hooks with Bikube's own, Permissions, and Status with `claude --version` read through
-// the login shell (a fake `claude` on a fake login PATH).
+// the login shell (a fake `claude` on a fake login PATH); (#68 S4) Plugins and MCP servers with
+// their switches, written to the workspace's `.claude/settings.local.json` and read from the test.
 
 const darwin = process.platform === 'darwin'
 /** The command palette's default shortcut (#40 D1) as a Playwright press. */
@@ -252,7 +253,10 @@ test('AC19: the arrow keys move through the sections; Tab reaches search and Ref
   await expect(plugins).toHaveAttribute('aria-selected', 'true')
   await expect(plugins).toBeFocused()
   await expect(page.getByTestId('agent-setup-panel')).toHaveAttribute('data-section', 'plugins')
-  await expect(page.getByTestId('agent-setup-panel').getByRole('heading')).toHaveText('Plugins')
+  // The panel's own heading (its sections have subheadings of their own, #68 S4).
+  await expect(page.getByTestId('agent-setup-panel').getByRole('heading', { level: 3 })).toHaveText(
+    'Plugins'
+  )
   await page.keyboard.press('ArrowUp')
   await expect(page.getByRole('tab', { name: 'Stats' })).toBeFocused()
 
@@ -650,4 +654,130 @@ test('the Toggle panel shortcut does nothing while the page is in front', async 
   await page.keyboard.press(SHORTCUTS.back)
   await expect(board()).toBeVisible()
   await expect(sidePanel).toBeVisible()
+})
+
+/** The workspace's settings.local.json, as the page wrote it. */
+const localSettings = (folder: string): string =>
+  readFileSync(join(folder, '.claude/settings.local.json'), 'utf8')
+
+const pluginSwitch = (): Locator =>
+  panel()
+    .getByTestId('agent-setup-plugin')
+    .filter({ has: page.getByTestId('agent-setup-row-name').getByText('kit', { exact: true }) })
+    .getByTestId('agent-setup-plugin-switch')
+
+test("AC5: a plugin's switch writes settings.local.json only, and its entries read Plugin off", async () => {
+  const userSettings = join(home, '.claude/settings.json')
+  const folder = await openWith((at) => {
+    ac4Fixtures(at)
+    write(join(at, '.claude/settings.local.json'), '{\n  "model": "opus"\n}\n')
+  })
+  const before = readFileSync(userSettings, 'utf8')
+  await expect(count('plugins')).toHaveText('1')
+  await tab('Plugins').click()
+  const plugin = panel().getByTestId('agent-setup-plugin')
+  await expect(plugin).toHaveCount(1)
+  await expect(plugin.getByTestId('agent-setup-source')).toHaveText('User')
+  await expect(plugin).toContainText('@market')
+  await expect(plugin.getByTestId('agent-setup-plugin-provides')).toHaveText('1 skill · 1 agent')
+  await expect(pluginSwitch()).toBeChecked()
+  await expect(page.getByTestId('agent-setup-saved-note')).toHaveCount(0)
+
+  await pluginSwitch().click()
+  await expect(pluginSwitch()).not.toBeChecked()
+  await expect
+    .poll(() => localSettings(folder))
+    .toBe('{\n  "model": "opus",\n  "enabledPlugins": {\n    "kit@market": false\n  }\n}\n')
+  expect(readFileSync(userSettings, 'utf8')).toBe(before)
+  await expect(page.getByTestId('agent-setup-saved-note')).toHaveText(
+    'Changes apply to Claude Code sessions started from now on'
+  )
+
+  // The provides-count shows Skills filtered by the plugin; its entries read Plugin off.
+  await plugin.getByRole('button', { name: '1 skill' }).click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('agent-setup-search')).toHaveValue('Plugin kit')
+  await expect(rowNames()).toHaveText(['kit:lint'])
+  await expect(row('kit:lint')).toHaveAttribute('data-plugin-off', 'true')
+  await expect(row('kit:lint').getByTestId('agent-setup-plugin-off')).toHaveText('Plugin off')
+  await tab('Agents').click()
+  await expect(row('kit:fixer')).toHaveAttribute('data-plugin-off', 'true')
+
+  await page.getByTestId('agent-setup-search').press('Escape')
+  await tab('Plugins').click()
+  await pluginSwitch().click()
+  await expect(pluginSwitch()).toBeChecked()
+  await expect
+    .poll(() => JSON.parse(localSettings(folder)) as unknown)
+    .toEqual({ model: 'opus', enabledPlugins: { 'kit@market': true } })
+  await tab('Skills').click()
+  await expect(row('kit:lint')).toHaveAttribute('data-plugin-off', 'false')
+  expect(readFileSync(userSettings, 'utf8')).toBe(before)
+})
+
+test('AC6: MCP servers with their type, command, variable names and switches', async () => {
+  const folder = await openWith((at) => {
+    write(
+      join(at, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          db: { command: 'db-server', args: ['--port', '5432'], env: { TOKEN: 's3cret' } },
+          api: { type: 'http', url: 'https://api.example/mcp' }
+        }
+      })
+    )
+    write(
+      join(home, '.claude.json'),
+      JSON.stringify({ mcpServers: { docs: { type: 'http', url: 'https://docs.example/mcp' } } })
+    )
+  })
+  await expect(count('mcp')).toHaveText('3')
+  await tab('MCP servers').click()
+  const server = (name: string): Locator =>
+    panel().locator(`[data-testid="agent-setup-mcp-server"][data-name="${name}"]`)
+  await expect(server('db').getByTestId('agent-setup-mcp-type')).toHaveText('stdio')
+  await expect(server('db').getByTestId('agent-setup-mcp-target')).toHaveText(
+    'db-server --port 5432'
+  )
+  await expect(server('db')).toContainText('TOKEN')
+  await expect(panel()).not.toContainText('s3cret')
+  for (const name of ['db', 'api']) {
+    await expect(server(name).getByTestId('agent-setup-mcp-state')).toHaveText('Not approved yet')
+    await expect(server(name).getByTestId('agent-setup-mcp-switch')).not.toBeChecked()
+  }
+  await expect(server('api').getByTestId('agent-setup-mcp-type')).toHaveText('http')
+  await expect(server('docs').getByTestId('agent-setup-source')).toHaveText('User')
+  await expect(server('docs').getByTestId('agent-setup-mcp-state')).toHaveText('Enabled')
+  await expect(server('docs').getByTestId('agent-setup-mcp-switch')).toHaveCount(0)
+
+  await server('db').getByTestId('agent-setup-mcp-switch').click()
+  await expect
+    .poll(() => JSON.parse(localSettings(folder)) as unknown)
+    .toEqual({ enabledMcpjsonServers: ['db'] })
+  await expect(server('db').getByTestId('agent-setup-mcp-switch')).toBeChecked()
+  await expect(server('db').getByTestId('agent-setup-mcp-state')).toHaveText('Enabled')
+
+  await server('db').getByTestId('agent-setup-mcp-switch').click()
+  await expect
+    .poll(() => JSON.parse(localSettings(folder)) as unknown)
+    .toEqual({ enabledMcpjsonServers: [], disabledMcpjsonServers: ['db'] })
+  await expect(server('db').getByTestId('agent-setup-mcp-switch')).not.toBeChecked()
+  await expect(server('db').getByTestId('agent-setup-mcp-state')).toHaveText('Disabled')
+})
+
+test('AC12: an invalid settings.local.json is left as it is and the switch goes back', async () => {
+  const invalid = '{ "model": '
+  const folder = await openWith((at) => {
+    ac4Fixtures(at)
+    write(join(at, '.claude/settings.local.json'), invalid)
+  })
+  await tab('Plugins').click()
+  await expect(pluginSwitch()).toBeChecked()
+  await pluginSwitch().click()
+  await expect(page.getByTestId('agent-setup-save-error')).toHaveText(
+    "Couldn't save: settings.local.json is not valid JSON"
+  )
+  await expect(pluginSwitch()).toBeChecked()
+  expect(localSettings(folder)).toBe(invalid)
+  await expect(page.getByTestId('agent-setup-saved-note')).toHaveCount(0)
 })

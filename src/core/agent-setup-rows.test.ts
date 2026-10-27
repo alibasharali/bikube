@@ -6,9 +6,16 @@ import {
   filterDefinitions,
   filterMemory,
   hookGroups,
+  filterPlugins,
   isPluginOff,
+  marketplaceRows,
   matchesQuery,
+  mcpServerRows,
+  mcpStateLabel,
   permissionsView,
+  pluginProvides,
+  pluginQuery,
+  pluginSource,
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
@@ -20,6 +27,7 @@ import type {
   EntrySource,
   HookEntry,
   MemoryEntry,
+  PluginEntry,
   SettingsFile
 } from './agent-setup-snapshot'
 
@@ -408,5 +416,197 @@ describe('Status', () => {
       ['/h/.claude.json', 'user', 'missing', undefined],
       ['/f/.mcp.json', 'project', 'missing', undefined]
     ])
+  })
+})
+
+const plugin = (key: string, more: Partial<PluginEntry> = {}): PluginEntry => ({
+  key,
+  name: key.slice(0, key.indexOf('@')),
+  marketplace: key.slice(key.indexOf('@') + 1),
+  installPath: `/p/${key}`,
+  enabled: true,
+  hooks: null,
+  mcpServers: null,
+  warnings: [],
+  ...more
+})
+
+describe('Plugins', () => {
+  const s = snapshot({
+    plugins: [
+      plugin('kit@market', {
+        scope: 'user',
+        description: 'A kit of tools',
+        mcpServers: { search: { command: 'search' } }
+      }),
+      plugin('local@market', { scope: 'project', enabled: false })
+    ],
+    skills: [def('kit:lint', kit), def('kit:fmt', kit), def('review', { kind: 'project' })],
+    agents: [def('kit:fixer', kit)],
+    hooks: [hook('Stop', 'x', { source: kit }), hook('Stop', 'y', { source: kit })]
+  })
+
+  it('D15: what a plugin provides, each count with its section', () => {
+    expect(pluginProvides(s, s.plugins[0]!)).toEqual([
+      { section: 'skills', label: '2 skills' },
+      { section: 'agents', label: '1 agent' },
+      { section: 'hooks', label: 'hooks' },
+      { section: 'mcp', label: '1 MCP server' }
+    ])
+    expect(pluginProvides(s, s.plugins[1]!)).toEqual([])
+    // The link's search shows only that plugin's entries.
+    expect(filterDefinitions(s.skills, pluginQuery(s.plugins[0]!)).map((e) => e.name)).toEqual([
+      'kit:lint',
+      'kit:fmt'
+    ])
+  })
+
+  it('D15, D25: filters plugins by name, key, description and source, counted by scope', () => {
+    expect(filterPlugins(s.plugins, 'tools').map((p) => p.key)).toEqual(['kit@market'])
+    expect(filterPlugins(s.plugins, 'project').map((p) => p.key)).toEqual(['local@market'])
+    expect(sectionSummaries(s, '').plugins).toEqual({
+      count: 2,
+      bySource: { User: 1, Project: 1 }
+    })
+    expect(pluginSource(plugin('a@m'))).toEqual({ kind: 'user' })
+    expect(pluginSource(plugin('a@m', { scope: 'local' }))).toEqual({ kind: 'local' })
+  })
+
+  it('D15: marketplaces with their source and last update, read-only', () => {
+    const rows = marketplaceRows(
+      snapshot({
+        marketplaces: {
+          file: '/h/.claude/plugins/known_marketplaces.json',
+          state: 'found',
+          value: {
+            official: {
+              source: { source: 'github', repo: 'anthropics/plugins' },
+              lastUpdated: '2026-01-02T03:04:05.000Z'
+            },
+            team: { source: { source: 'git', url: 'https://git.example/team.git' } },
+            mine: { source: { source: 'directory', path: '/src/market' } },
+            odd: 7
+          }
+        }
+      }),
+      ''
+    )
+    expect(rows).toEqual([
+      {
+        name: 'official',
+        source: 'github: anthropics/plugins',
+        lastUpdated: '2026-01-02T03:04:05.000Z'
+      },
+      { name: 'team', source: 'https://git.example/team.git' },
+      { name: 'mine', source: '/src/market' }
+    ])
+    expect(marketplaceRows(snapshot(), '')).toEqual([])
+  })
+})
+
+describe('MCP servers', () => {
+  const mcp = snapshot({
+    mcpJson: {
+      file: '/f/.mcp.json',
+      state: 'found',
+      value: {
+        mcpServers: {
+          db: { command: 'npx', args: ['db-server', '--dir', 'a b'], env: { TOKEN: 's3cret' } },
+          api: { type: 'http', url: 'https://api.example/mcp', headers: { Authorization: 'x' } }
+        }
+      }
+    },
+    claudeJson: {
+      file: '/h/.claude.json',
+      state: 'found',
+      mcpServers: { docs: { type: 'sse', url: 'https://docs.example/sse' } },
+      localMcpServers: { mine: { command: 'mine' } },
+      oauthAccount: null,
+      preferences: {}
+    },
+    plugins: [plugin('kit@market', { enabled: false, mcpServers: { search: { command: 's' } } })]
+  })
+
+  it('AC6: each server with its type, command or URL, variable names only, source and state', () => {
+    const rows = mcpServerRows(mcp, '')
+    expect(
+      rows.map((r) => [r.name, r.type, r.target, r.envNames, r.headerNames, r.source, r.state])
+    ).toEqual([
+      [
+        'db',
+        'stdio',
+        "npx db-server --dir 'a b'",
+        ['TOKEN'],
+        [],
+        { kind: 'project' },
+        'not-approved'
+      ],
+      [
+        'api',
+        'http',
+        'https://api.example/mcp',
+        [],
+        ['Authorization'],
+        { kind: 'project' },
+        'not-approved'
+      ],
+      ['mine', 'stdio', 'mine', [], [], { kind: 'local' }, 'enabled'],
+      ['docs', 'sse', 'https://docs.example/sse', [], [], { kind: 'user' }, 'enabled'],
+      ['search', 'stdio', 's', [], [], kit, 'plugin-off']
+    ])
+    expect(JSON.stringify(rows)).not.toContain('s3cret')
+    expect(rows.map((r) => r.file)).toEqual([
+      '/f/.mcp.json',
+      '/f/.mcp.json',
+      '/h/.claude.json',
+      '/h/.claude.json',
+      '/p/kit@market/.mcp.json'
+    ])
+    expect(rows.map((r) => mcpStateLabel(r.state))).toEqual([
+      'Not approved yet',
+      'Not approved yet',
+      'Enabled',
+      'Enabled',
+      'Plugin off'
+    ])
+    expect(sectionSummaries(mcp, '').mcp).toEqual({
+      count: 5,
+      bySource: { Project: 2, Local: 1, User: 1, Plugin: 1 }
+    })
+  })
+
+  it('D16: a project server is off when disabled, on when enabled or all are, by precedence', () => {
+    const state = (settings: SettingsFile[]): string[] =>
+      mcpServerRows({ ...mcp, settings }, '')
+        .filter((r) => r.source.kind === 'project')
+        .map((r) => r.state)
+    expect(state([settingsFile('local', { enabledMcpjsonServers: ['db'] })])).toEqual([
+      'on',
+      'not-approved'
+    ])
+    expect(state([settingsFile('project', { enableAllProjectMcpServers: true })])).toEqual([
+      'on',
+      'on'
+    ])
+    expect(
+      state([
+        settingsFile('local', { disabledMcpjsonServers: ['db'] }),
+        settingsFile('project', { enableAllProjectMcpServers: true })
+      ])
+    ).toEqual(['off', 'on'])
+    // The first file that sets a list wins (D10).
+    expect(
+      state([
+        settingsFile('local', { enabledMcpjsonServers: [] }),
+        settingsFile('user', { enabledMcpjsonServers: ['db', 'api'] })
+      ])
+    ).toEqual(['not-approved', 'not-approved'])
+  })
+
+  it('D25: filters by name, command, URL and source', () => {
+    expect(mcpServerRows(mcp, 'db-server').map((r) => r.name)).toEqual(['db'])
+    expect(mcpServerRows(mcp, 'docs.example').map((r) => r.name)).toEqual(['docs'])
+    expect(mcpServerRows(mcp, 'plugin kit').map((r) => r.name)).toEqual(['search'])
+    expect(mcpServerRows(mcp, 's3cret')).toEqual([])
   })
 })

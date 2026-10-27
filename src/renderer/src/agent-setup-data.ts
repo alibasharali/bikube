@@ -1,0 +1,149 @@
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
+import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
+
+/**
+ * The Agent setup page's data (#68 D26), kept per workspace folder for the run of the app (never
+ * saved): the last snapshot main read, the last read's error, and the expanded memory rows. A
+ * read replaces only the parts of the snapshot that changed, so rows that read as before keep
+ * their objects; never two reads at a time for one folder.
+ */
+
+/** How often the page reads again while a Bikube window is focused (D26). */
+export const REFRESH_MS = 3000
+
+export interface AgentSetupData {
+  /** Null until the first read ends. */
+  snapshot: AgentSetupSnapshot | null
+  /** The last read failed: shown while there is no snapshot. */
+  failed: boolean
+  /** Expanded memory rows' keys (D17), kept across reads. */
+  expanded: ReadonlySet<string>
+}
+
+interface FolderData extends AgentSetupData {
+  expanded: Set<string>
+  version: number
+}
+
+const folders = new Map<string, FolderData>()
+const reading = new Map<string, Promise<void>>()
+/** Folders asked to read again while a read ran: exactly one more read follows it. */
+const pending = new Set<string>()
+const listeners = new Set<() => void>()
+
+function dataOf(folder: string): FolderData {
+  let data = folders.get(folder)
+  if (!data) {
+    data = { snapshot: null, failed: false, expanded: new Set(), version: 0 }
+    folders.set(folder, data)
+  }
+  return data
+}
+
+const changed = (data: FolderData): void => {
+  data.version++
+  for (const listener of [...listeners]) listener()
+}
+
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+/** `next` with every part (a top-level key, an array's item) that reads as in `before` kept from it. */
+function merge(before: AgentSetupSnapshot, next: AgentSetupSnapshot): AgentSetupSnapshot {
+  const merged: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(next)) {
+    const old = (before as unknown as Record<string, unknown>)[key]
+    if (same(old, value)) merged[key] = old
+    else if (Array.isArray(value) && Array.isArray(old)) {
+      merged[key] = value.map((item, i) => (same(old[i], item) ? old[i] : item))
+    } else merged[key] = value
+  }
+  return merged as unknown as AgentSetupSnapshot
+}
+
+async function readOnce(folder: string): Promise<void> {
+  const data = dataOf(folder)
+  let next: AgentSetupSnapshot | null = null
+  try {
+    const read = await window.bikube.agentSetup.read(folder)
+    if (read.ok) next = read.snapshot
+  } catch {
+    // Kept as failed below.
+  }
+  if (!next) {
+    // A failed read keeps the snapshot read before it.
+    if (data.snapshot === null && !data.failed) {
+      data.failed = true
+      changed(data)
+    }
+    return
+  }
+  const before = data.snapshot
+  if (before && same(before, next) && !data.failed) return
+  data.snapshot = before ? merge(before, next) : next
+  data.failed = false
+  changed(data)
+}
+
+/**
+ * Reads `folder`'s setup again (D26). Asked for while a read runs (a poll, a Refresh click), it
+ * reads once more when that read ends, never two at once; the promise ends after that read.
+ */
+export function refreshAgentSetup(folder: string): Promise<void> {
+  const running = reading.get(folder)
+  if (running) {
+    pending.add(folder)
+    return running
+  }
+  const run = (async () => {
+    try {
+      do {
+        pending.delete(folder)
+        await readOnce(folder)
+      } while (pending.has(folder))
+    } finally {
+      pending.delete(folder)
+      reading.delete(folder)
+    }
+  })()
+  reading.set(folder, run)
+  return run
+}
+
+/** Expands or collapses memory row `key` of `folder`'s page. */
+export function toggleExpanded(folder: string, key: string): void {
+  const data = dataOf(folder)
+  if (!data.expanded.delete(key)) data.expanded.add(key)
+  changed(data)
+}
+
+/** `folder`'s data, re-rendered on every change. */
+export function useAgentSetupData(folder: string): AgentSetupData {
+  const subscribe = useCallback((listener: () => void) => {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+  useSyncExternalStore(subscribe, () => dataOf(folder).version)
+  const data = dataOf(folder)
+  return { snapshot: data.snapshot, failed: data.failed, expanded: data.expanded }
+}
+
+/**
+ * Reads `folder`'s setup at once, every 3 seconds while a Bikube window is focused, and when one
+ * gains the focus (D26, #53 D10); nothing once the page is gone (Back, another card opened).
+ */
+export function useAgentSetupRefresh(folder: string): void {
+  useEffect(() => {
+    void refreshAgentSetup(folder)
+    const timer = setInterval(() => {
+      if (anyWindowFocused()) void refreshAgentSetup(folder)
+    }, REFRESH_MS)
+    const stopFocus = onAnyWindowFocus(() => void refreshAgentSetup(folder))
+    return () => {
+      clearInterval(timer)
+      stopFocus()
+    }
+  }, [folder])
+}

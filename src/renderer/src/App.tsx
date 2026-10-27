@@ -114,6 +114,11 @@ function App(): React.JSX.Element {
   const openAgentSetup = useCallback(() => {
     if (activeId) setViews((v) => rememberAgentSetup(v, activeId))
   }, [activeId, setViews])
+  // Agent setup has no side panel (D1): Toggle panel does nothing while it is in front.
+  const agentSetupShown = useRef(false)
+  useEffect(() => {
+    agentSetupShown.current = agentSetup
+  })
   // The open terminal: one of the board's cards, or one of the workspace's shells.
   const openCard = openedId
     ? (active?.cards.find((c) => c.id === openedId) ??
@@ -274,6 +279,7 @@ function App(): React.JSX.Element {
       // The side panel shows or hides on the board and in every card at once (#55 D3, #57 D4).
       if (action === 'togglePanel') {
         if (!hasWorkspace.current || document.querySelector('[aria-modal="true"]')) return
+        if (agentSetupShown.current) return
         event.preventDefault()
         event.stopPropagation()
         if (!event.repeat) togglePanel()

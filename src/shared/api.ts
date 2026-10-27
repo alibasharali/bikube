@@ -1,3 +1,4 @@
+import type { AgentSetupRead } from '../core/agent-setup-snapshot'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -79,6 +80,7 @@ export const IPC = {
   filesStatus: 'files:status',
   filesOpen: 'files:open',
   agentsInstalled: 'agents:installed',
+  agentSetupRead: 'agentSetup:read',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -331,6 +333,15 @@ export interface GitApi {
   merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
+export interface AgentSetupApi {
+  /**
+   * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
+   * main from the folder and the user's home; `not-directory` unless `folder` is an absolute,
+   * existing directory. One read at a time per folder: a request during one shares its answer.
+   */
+  read(folder: string): Promise<AgentSetupRead>
+}
+
 export interface AgentsApi {
   /**
    * The agents whose CLI the user's login shell finds (`claude`, `codex`, `gemini`, `opencode`, `pi`),
@@ -463,5 +474,6 @@ export interface BikubeApi {
   git: GitApi
   files: FilesApi
   agents: AgentsApi
+  agentSetup: AgentSetupApi
   update: UpdateApi
 }

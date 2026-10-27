@@ -1,14 +1,16 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
 // The Agent setup page (#68 S1): opened from the board's title bar or the palette, a workspace's
 // view as an open card is (its sidebar row, Back, remembered per workspace for the run), its
-// section list, search box and Refresh, the SSH message, the narrow layout and the keyboard.
+// section list, search box and Refresh, the SSH message, the narrow layout and the keyboard; and
+// (#68 S2) what it reads from a fake home (`BIKUBE_HOME_DIR`) and the workspace folder: Overview,
+// Skills, Agents, Commands and Memory with their sources, counts, warnings, search and refresh.
 
 const darwin = process.platform === 'darwin'
 /** The command palette's default shortcut (#40 D1) as a Playwright press. */
@@ -20,10 +22,14 @@ let app: ElectronApplication | undefined
 let page: Page
 let dataDir: string
 let root: string
+/** The fake home every launch reads as `~` (`BIKUBE_HOME_DIR`). */
+let home: string
 
 test.beforeEach(() => {
   dataDir = newDataDir()
   root = mkdtempSync(join(tmpdir(), 'bikube-agent-setup-'))
+  home = join(root, 'home')
+  mkdirSync(home)
 })
 
 test.afterEach(async () => {
@@ -34,7 +40,10 @@ test.afterEach(async () => {
 })
 
 async function launch(): Promise<void> {
-  ;({ app, page } = await launchApp({ dataDir }))
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
+  env['BIKUBE_HOME_DIR'] = home
+  ;({ app, page } = await launchApp({ dataDir, env }))
 }
 
 async function createWorkspace(name: string, host?: string): Promise<string> {
@@ -259,4 +268,211 @@ test('AC19: the arrow keys move through the sections; Tab reaches search and Ref
   await expect(page.getByTestId('agent-setup-search')).toHaveValue('lint')
   await page.getByTestId('agent-setup-search').press('Escape')
   await expect(page.getByTestId('agent-setup-search')).toHaveValue('')
+})
+
+/** Writes `text` to `path`, making its folders. */
+function write(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, text)
+}
+
+const frontmatter = (name: string, description: string): string =>
+  `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`
+
+/** AC4's fixtures in `folder` and the fake home. */
+function ac4Fixtures(folder: string): void {
+  write(join(folder, '.claude/skills/review/SKILL.md'), frontmatter('review', 'Reviews the diff'))
+  write(join(home, '.claude/skills/notes/SKILL.md'), frontmatter('notes', 'Takes notes'))
+  write(join(folder, '.claude/agents/tester.md'), frontmatter('tester', 'Runs the tests'))
+  const installPath = join(home, '.claude/plugins/cache/market/kit/1.0.0')
+  write(
+    join(home, '.claude/plugins/installed_plugins.json'),
+    JSON.stringify({
+      version: 2,
+      plugins: { 'kit@market': [{ scope: 'user', installPath, version: '1.0.0' }] }
+    })
+  )
+  write(join(installPath, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'kit' }))
+  write(join(installPath, 'skills/lint/SKILL.md'), frontmatter('lint', 'Lints the code'))
+  write(join(installPath, 'agents/fixer.md'), frontmatter('fixer', 'Fixes what lint finds'))
+  write(
+    join(home, '.claude/settings.json'),
+    JSON.stringify({ enabledPlugins: { 'kit@market': true } })
+  )
+}
+
+const tab = (label: string): Locator => page.getByRole('tab', { name: label })
+const panel = (): Locator => page.getByTestId('agent-setup-panel')
+/** The section list's count of section `id`. */
+const count = (id: string): Locator =>
+  page.getByTestId(`agent-setup-section-${id}`).getByTestId('agent-setup-section-count')
+/** The rows of the section shown, by name. */
+const rowNames = (): Locator => panel().getByTestId('agent-setup-row-name')
+/** The shown section's row named `name`. */
+const row = (name: string): Locator =>
+  panel()
+    .getByTestId('agent-setup-row')
+    .filter({ has: page.getByTestId('agent-setup-row-name').getByText(name, { exact: true }) })
+
+/** Creates workspace `Proj` with `fixtures` written to its folder first, and opens the page. */
+async function openWith(fixtures: (folder: string) => void): Promise<string> {
+  await launch()
+  const folder = await createWorkspace('Proj')
+  fixtures(folder)
+  await setupButton().click()
+  await expect(agentSetup()).toBeVisible()
+  return folder
+}
+
+test('AC4: skills and agents from the project, the user and a plugin, counted by source', async () => {
+  await openWith(ac4Fixtures)
+  await expect(count('skills')).toHaveText('3')
+  await expect(count('agents')).toHaveText('2')
+  await expect(
+    page.getByTestId('agent-setup-overview-skills').getByTestId('agent-setup-overview-split')
+  ).toHaveText('1 Project · 1 User · 1 Plugin')
+  await expect(page.getByTestId('agent-setup-no-warnings')).toHaveText('No problems found')
+
+  await page.getByTestId('agent-setup-overview-skills').click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(rowNames()).toHaveText(['review', 'notes', 'kit:lint'])
+  await expect(row('review').getByTestId('agent-setup-source')).toHaveText('Project')
+  await expect(row('notes').getByTestId('agent-setup-source')).toHaveText('User')
+  await expect(row('kit:lint').getByTestId('agent-setup-source')).toHaveText('Plugin kit')
+  await expect(row('review')).toContainText('Reviews the diff')
+  await expect(row('kit:lint')).toHaveAttribute('data-plugin-off', 'false')
+
+  await tab('Agents').click()
+  await expect(rowNames()).toHaveText(['tester', 'kit:fixer'])
+})
+
+test('AC8: an agent without frontmatter is warned about on its row and in Overview', async () => {
+  await openWith((folder) => {
+    write(join(folder, '.claude/agents/bare.md'), 'You are a helper.\n')
+    write(join(folder, '.claude/settings.json'), '{ "model": ')
+  })
+  const warnings = page.getByTestId('agent-setup-warning-item')
+  await expect(warnings).toHaveCount(2)
+  await expect(warnings.filter({ hasText: 'bare' })).toContainText('.claude/agents/bare.md')
+  await expect(warnings.filter({ hasText: 'bare' })).toContainText('⚠ No frontmatter')
+  await expect(warnings.filter({ hasText: '.claude/settings.json' })).toContainText(
+    'Invalid JSON: '
+  )
+  await expect(
+    page.getByTestId('agent-setup-section-agents').getByTestId('agent-setup-section-warning')
+  ).toBeVisible()
+
+  // The entry's name shows its section.
+  await warnings.filter({ hasText: 'bare' }).getByRole('button', { name: 'bare' }).click()
+  await expect(tab('Agents')).toHaveAttribute('aria-selected', 'true')
+  await expect(row('bare').getByTestId('agent-setup-row-warning')).toHaveText('⚠ No frontmatter')
+})
+
+test('AC9: memory files in load order, imports nested, a missing import warned about', async () => {
+  await openWith((folder) => {
+    write(join(folder, 'CLAUDE.md'), '# Project\n@docs/rules.md\n@missing.md\n')
+    write(join(folder, 'docs/rules.md'), 'Be kind.\n')
+    write(join(home, '.claude/CLAUDE.md'), '# Me\n')
+  })
+  await tab('Memory').click()
+  const memory = panel().getByTestId('agent-setup-memory')
+  const top = memory.locator(':scope > [data-testid="agent-setup-memory-row"]')
+  await expect(top).toHaveCount(2)
+  await expect(top.nth(0)).toHaveAttribute('data-label', '~/.claude/CLAUDE.md')
+  await expect(top.nth(0).getByTestId('agent-setup-source').first()).toHaveText('User')
+  await expect(top.nth(1)).toHaveAttribute('data-label', 'CLAUDE.md')
+  await expect(top.nth(1).getByTestId('agent-setup-source').first()).toHaveText('Project')
+  const imports = top
+    .nth(1)
+    .locator('.agent-setup-imports > [data-testid="agent-setup-memory-row"]')
+  await expect(imports).toHaveCount(2)
+  await expect(imports.nth(0)).toHaveAttribute('data-label', 'docs/rules.md')
+  await expect(imports.nth(1)).toHaveAttribute('data-label', 'missing.md')
+  await expect(imports.nth(1).getByTestId('agent-setup-row-warning')).toHaveText(
+    '⚠ Imported file not found'
+  )
+
+  // Expanding a row shows its first lines.
+  await top.nth(1).getByRole('button', { name: 'CLAUDE.md' }).click()
+  await expect(top.nth(1).getByTestId('agent-setup-memory-preview').first()).toContainText(
+    '# Project'
+  )
+})
+
+test('AC15: the search filters every section, dims those without a match, and Esc clears it', async () => {
+  await openWith(ac4Fixtures)
+  await tab('Skills').click()
+  await expect(rowNames()).toHaveCount(3)
+  const search = page.getByTestId('agent-setup-search')
+  await search.fill('lint')
+  await expect(count('skills')).toHaveText('1')
+  await expect(rowNames()).toHaveText(['kit:lint'])
+  // The plugin's agent matches by its description; the commands and memory have no match.
+  await expect(count('agents')).toHaveText('1')
+  await expect(page.getByTestId('agent-setup-section-commands')).toHaveAttribute(
+    'data-dimmed',
+    'true'
+  )
+  await expect(page.getByTestId('agent-setup-section-memory')).toHaveAttribute(
+    'data-dimmed',
+    'true'
+  )
+  await expect(page.getByTestId('agent-setup-section-skills')).toHaveAttribute(
+    'data-dimmed',
+    'false'
+  )
+  // Not filtered: Status and Stats.
+  await expect(page.getByTestId('agent-setup-section-status')).toHaveAttribute(
+    'data-dimmed',
+    'false'
+  )
+
+  await search.press('Escape')
+  await expect(search).toHaveValue('')
+  await expect(count('skills')).toHaveText('3')
+  await expect(rowNames()).toHaveText(['review', 'notes', 'kit:lint'])
+  await expect(page.getByTestId('agent-setup-section-commands')).toHaveAttribute(
+    'data-dimmed',
+    'false'
+  )
+})
+
+test('AC16: a new skill shows within 4 seconds, keeping the scroll and the search', async () => {
+  const folder = await openWith((at) => {
+    // Enough skills to scroll the section.
+    for (let i = 0; i < 40; i++) {
+      write(
+        join(at, `.claude/skills/s${i}/SKILL.md`),
+        frontmatter(`skill-${i}`, `Skill number ${i}`)
+      )
+    }
+  })
+  await tab('Skills').click()
+  await expect(rowNames()).toHaveCount(40)
+  const search = page.getByTestId('agent-setup-search')
+  await search.fill('skill')
+  await panel().evaluate((el) => {
+    el.scrollTop = 200
+  })
+  const scrolled = await panel().evaluate((el) => el.scrollTop)
+  expect(scrolled).toBeGreaterThan(0)
+
+  write(join(folder, '.claude/skills/zz-new/SKILL.md'), frontmatter('skill-new', 'Just added'))
+  await expect(row('skill-new')).toBeVisible({ timeout: 4000 })
+  await expect(count('skills')).toHaveText('41')
+  await expect(search).toHaveValue('skill')
+  expect(await panel().evaluate((el) => el.scrollTop)).toBe(scrolled)
+})
+
+test('the Toggle panel shortcut does nothing while the page is in front', async () => {
+  await launch()
+  await createWorkspace('Proj')
+  const sidePanel = page.getByTestId('side-panel')
+  await expect(sidePanel).toBeVisible()
+  await setupButton().click()
+  await expect(agentSetup()).toBeVisible()
+  await page.keyboard.press(darwin ? 'Alt+Meta+B' : 'Control+Alt+B')
+  await page.keyboard.press(SHORTCUTS.back)
+  await expect(board()).toBeVisible()
+  await expect(sidePanel).toBeVisible()
 })

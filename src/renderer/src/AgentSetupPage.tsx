@@ -1,14 +1,24 @@
 import { RefreshCw, Search } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AGENT_SETUP_GROUPS,
   AGENT_SETUP_SECTIONS,
   adjacentSection,
   type AgentSetupSectionId
 } from '../../core/agent-setup-sections'
+import { sectionSummaries, setupWarnings } from '../../core/agent-setup-rows'
+import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
 import { keymapAction } from '../../core/keymap'
 import type { Workspace } from '../../core/workspace-store'
+import { refreshAgentSetup, useAgentSetupData, useAgentSetupRefresh } from './agent-setup-data'
 import { useAgentSetupMemory } from './agent-setup-memory'
+import {
+  AgentsSection,
+  CommandsSection,
+  MemorySection,
+  OverviewSection,
+  SkillsSection
+} from './AgentSetupSections'
 import { registerCardViewActions } from './card-view-actions'
 import { SMALL_ICON } from './icons'
 import { currentKeymap } from './settings'
@@ -17,13 +27,17 @@ import { dialogOpenIn, useViewWindow } from './view-window'
 /** Below this page width the section list is a horizontal strip above the content (#68 D7). */
 const NARROW_WIDTH = 640
 
-/** What every section's view gets: the workspace and the search query (D25). */
+/** What every section's view gets: the workspace, the last snapshot read and the search query (D25). */
 export interface AgentSetupSectionProps {
   workspace: Workspace
+  /** Everything main's last read found (D8); replaced by each read that changed something (D26). */
+  snapshot: AgentSetupSnapshot
   /** The search box's text; a section shows only its rows matching it. */
   query: string
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
+  /** The memory rows expanded (D17), kept across reads. */
+  expanded: ReadonlySet<string>
 }
 
 /**
@@ -32,7 +46,13 @@ export interface AgentSetupSectionProps {
  */
 const SECTION_VIEWS: Partial<
   Record<AgentSetupSectionId, (props: AgentSetupSectionProps) => React.JSX.Element>
-> = {}
+> = {
+  overview: OverviewSection,
+  skills: SkillsSection,
+  agents: AgentsSection,
+  commands: CommandsSection,
+  memory: MemorySection
+}
 
 /**
  * A workspace's Agent setup page (#68 D1, D5, D7): its header, a search box and Refresh above the
@@ -123,6 +143,35 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
   const current = AGENT_SETUP_SECTIONS.find((s) => s.id === section)!
   const SectionView = SECTION_VIEWS[section]
   const panelId = `${id}-panel`
+  // Read on open, every 3 s while focused, on focus and on Refresh (D26).
+  const folder = workspace.directory
+  useAgentSetupRefresh(folder)
+  const { snapshot, failed, expanded } = useAgentSetupData(folder)
+  const summaries = useMemo(
+    () => (snapshot ? sectionSummaries(snapshot, query) : null),
+    [snapshot, query]
+  )
+  const counts = useMemo(() => {
+    if (!summaries) return undefined
+    const result: Partial<Record<AgentSetupSectionId, number>> = {}
+    for (const [key, summary] of Object.entries(summaries)) {
+      result[key as AgentSetupSectionId] = summary.count
+    }
+    return result
+  }, [summaries])
+  // Sections with no row matching the search are dimmed (D25); Stats and Status are not filtered.
+  const dimmed = useMemo(() => {
+    if (!summaries || query.trim() === '') return undefined
+    const result = new Set<AgentSetupSectionId>()
+    for (const [key, summary] of Object.entries(summaries)) {
+      if (summary.count === 0) result.add(key as AgentSetupSectionId)
+    }
+    return result
+  }, [summaries, query])
+  const warnings = useMemo(
+    () => (snapshot ? new Set(setupWarnings(snapshot).map((w) => w.section)) : undefined),
+    [snapshot]
+  )
   return (
     <div
       ref={body}
@@ -158,6 +207,7 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
             className="btn btn-small agent-setup-refresh"
             data-testid="agent-setup-refresh"
             title="Read the files again"
+            onClick={() => void refreshAgentSetup(folder)}
           >
             <RefreshCw {...SMALL_ICON} />
             {/* A narrow page shows the icon alone; the name stays for screen readers. */}
@@ -170,6 +220,9 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
           orientation={narrow ? 'horizontal' : 'vertical'}
           tabId={(key) => `${id}-tab-${key}`}
           panelId={panelId}
+          counts={counts}
+          warnings={warnings}
+          dimmed={dimmed}
         />
       </div>
       <div
@@ -181,8 +234,22 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
         data-section={section}
       >
         <h3 className="agent-setup-panel-title">{current.label}</h3>
-        {SectionView ? (
-          <SectionView workspace={workspace} query={query} onShowSection={setSection} />
+        {SectionView && snapshot ? (
+          <SectionView
+            workspace={workspace}
+            snapshot={snapshot}
+            query={query}
+            onShowSection={setSection}
+            expanded={expanded}
+          />
+        ) : SectionView && failed ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-failed">
+            Couldn&apos;t read the workspace folder. Check that it still exists, then press Refresh.
+          </p>
+        ) : SectionView ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-loading">
+            Reading the setup…
+          </p>
         ) : (
           <p className="agent-setup-empty" data-testid="agent-setup-empty">
             Nothing to show here yet.
@@ -205,7 +272,8 @@ export function SectionList({
   tabId,
   panelId,
   counts,
-  warnings
+  warnings,
+  dimmed
 }: {
   section: AgentSetupSectionId
   onSelect: (id: AgentSetupSectionId) => void
@@ -216,6 +284,8 @@ export function SectionList({
   counts?: Partial<Record<AgentSetupSectionId, number>>
   /** The sections with an entry that has a warning (D24). */
   warnings?: ReadonlySet<AgentSetupSectionId>
+  /** The sections with no row matching the search (D25), shown dimmed. */
+  dimmed?: ReadonlySet<AgentSetupSectionId>
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement>(null)
   const onKeyDown = (event: React.KeyboardEvent): void => {
@@ -250,6 +320,7 @@ export function SectionList({
               id={tabId(id)}
               className="agent-setup-tab"
               data-section={id}
+              data-dimmed={dimmed?.has(id) === true}
               data-testid={`agent-setup-section-${id}`}
               aria-selected={section === id}
               aria-controls={panelId}

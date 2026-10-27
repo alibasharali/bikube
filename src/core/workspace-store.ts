@@ -102,6 +102,12 @@ export interface Card {
    */
   lastOpenedAt?: number
   /**
+   * Created by `board create` from a card in another workspace and never opened since (#69 D11):
+   * shown as a `New` pill until its first open on any machine clears it. Saved and synced; absent
+   * when false.
+   */
+  unopened?: true
+  /**
    * Its last `board status` text (cleaned), shown on it once Stopped, also after a restart: saved,
    * never synced, since every status would write the sync file. Absent when none or cleared.
    */
@@ -125,6 +131,14 @@ export interface CardWorktree {
 export interface NewCardWorktree {
   directory: string
   worktree: CardWorktree
+}
+
+/** How `board create` makes a card beyond what the New card dialog sets (#69 D8, D11). */
+export interface NewCardOptions {
+  /** Marks it `unopened`: made from a card in another workspace. */
+  unopened?: boolean
+  /** Takes a plain shell startup (`--agent shell`), which a card made by hand never has. */
+  allowShell?: boolean
 }
 
 export interface Workspace {
@@ -315,6 +329,7 @@ export interface WorkspaceStore {
    * defaults to the workspace's default startup command (#5 D9, D10). With `worktree` (a local
    * workspace only) the card runs in that worktree instead of the workspace's folder. A
    * `description` is kept as `setCardDescription` keeps it, and one over the cap refuses the card.
+   * `options` are `board create`'s (#69 D8, D11).
    */
   createCard(
     workspaceId: string,
@@ -322,7 +337,8 @@ export interface WorkspaceStore {
     title: string,
     startup?: StartupCommand,
     worktree?: NewCardWorktree,
-    description?: string
+    description?: string,
+    options?: NewCardOptions
   ): Result<Card>
   renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
   /**
@@ -658,12 +674,16 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     title: string,
     startup?: StartupCommand,
     worktree?: NewCardWorktree,
-    description?: string
+    description?: string,
+    options: NewCardOptions = {}
   ): Result<Card> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
-    const checked = checkCardStartup(startup ?? ws.defaultStartup)
+    const checked =
+      options.allowShell && startup?.kind === 'shell'
+        ? checkStartup(startup)
+        : checkCardStartup(startup ?? ws.defaultStartup)
     if (!checked.ok) return checked
     const described = checkDescription(description ?? '')
     if (!described.ok) return described
@@ -682,7 +702,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       startedAgents: [],
       // Its worktree is new: the workspace's setup runs first, until it succeeds (#39 D2, D7).
       ...(worktree && ws.host === undefined && ws.worktreeSetup && { setup: ws.worktreeSetup }),
-      ...(this.now && { createdAt: this.now() })
+      ...(this.now && { createdAt: this.now() }),
+      ...(options.unopened && { unopened: true as const })
     }
     this.replace({
       ...ws,
@@ -823,11 +844,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   markCardOpened(workspaceId: string, cardId: string, at: number): Result<Card> {
     const current = this.find(workspaceId)?.cards.find((c) => c.id === cardId)
     // The same time again changes nothing, so nothing is saved.
-    if (current?.lastOpenedAt === at) return { ok: true, value: current }
-    return this.updateCard(workspaceId, cardId, (card) => ({
-      ok: true,
-      value: { ...card, lastOpenedAt: at }
-    }))
+    if (current?.lastOpenedAt === at && !current.unopened) return { ok: true, value: current }
+    return this.updateCard(workspaceId, cardId, (card) => {
+      // The first open clears the New mark in the same change (#69 D11).
+      const opened: Card = { ...card, lastOpenedAt: at }
+      delete opened.unopened
+      return { ok: true, value: opened }
+    })
   }
 
   setCardLastStatus(workspaceId: string, cardId: string, text: string): Result<Card> {

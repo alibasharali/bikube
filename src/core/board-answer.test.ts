@@ -477,7 +477,7 @@ describe('answerBoardCommand: list, create and rename', () => {
     })
   })
 
-  it('creates a card at the bottom of the column, not started, and answers with its id', () => {
+  it('creates a card at the bottom of the column, not started, and answers with its id and workspace', () => {
     const store = setup()
     const reply = answerBoardCommand(
       store,
@@ -492,7 +492,8 @@ describe('answerBoardCommand: list, create and rename', () => {
       title: 'Fix login bug (NOT-12)',
       startup: { kind: 'claude' }
     })
-    expect(reply).toEqual({ ok: true, output: `${created?.id}\n` })
+    // `<id> <workspace name>` (#69 D8).
+    expect(reply).toEqual({ ok: true, output: `${created?.id} alpha\n` })
   })
 
   it('refuses a create with no title or an unknown column, changing nothing', () => {
@@ -624,5 +625,304 @@ describe('answerBoardCommand: description and describe (#69 D5)', () => {
       ok: false,
       error: 'board: no card "ghost" in this workspace'
     })
+  })
+})
+
+describe('answerBoardCommand across workspaces (#69 D6–D9, D11)', () => {
+  const ws = (
+    id: string,
+    name: string,
+    cards: Card[],
+    over: Partial<Workspace> = {}
+  ): Workspace => ({
+    ...workspace(id, cards),
+    name,
+    columns: [
+      { id: `${id}-todo`, name: 'Todo' },
+      { id: `${id}-doing`, name: 'Doing' }
+    ],
+    ...over
+  })
+  const agentCard = (id: string, columnId: string, startup: Card['startup'], title = id): Card => ({
+    ...card(id, columnId, title),
+    startup
+  })
+  const ids = { alpha: 'w-alpha', beta: 'w-beta', remote: 'w-remote' }
+
+  function crossSetup(extra: Workspace[] = []): InMemoryWorkspaceStore {
+    const state: WorkspaceState = {
+      workspaces: [
+        ws(ids.alpha, 'Alpha', [
+          agentCard('a-claude', `${ids.alpha}-todo`, { kind: 'claude' }),
+          agentCard('a-codex', `${ids.alpha}-todo`, { kind: 'codex' }),
+          agentCard('a-custom', `${ids.alpha}-todo`, { kind: 'custom', command: ':' }),
+          agentCard('a-shell', `${ids.alpha}-todo`, { kind: 'shell' })
+        ]),
+        ws(
+          ids.beta,
+          'Beta',
+          [agentCard('b-port', `${ids.beta}-todo`, { kind: 'claude' }, 'Port Y')],
+          {
+            directory: '/tmp/bikube-beta',
+            defaultStartup: { kind: 'opencode' }
+          }
+        ),
+        ws(
+          ids.remote,
+          'Remote',
+          [{ ...agentCard('r-1', `${ids.remote}-todo`, { kind: 'claude' }), host: 'devbox' }],
+          { host: 'devbox', directory: '/srv/app' }
+        ),
+        ...extra
+      ],
+      activeId: ids.beta
+    }
+    return new InMemoryWorkspaceStore({ initialState: state })
+  }
+  const answer = (
+    store: InMemoryWorkspaceStore,
+    calling: string,
+    command: Parameters<typeof answerBoardCommand>[2]
+  ): ReturnType<typeof answerBoardCommand> =>
+    answerBoardCommand(
+      store,
+      calling,
+      command,
+      () => true,
+      () => {}
+    )
+  const cardOf = (store: InMemoryWorkspaceStore, id: string): Card | undefined =>
+    store
+      .getState()
+      .workspaces.flatMap((w) => w.cards)
+      .find((c) => c.id === id)
+  const lastOf = (store: InMemoryWorkspaceStore, workspaceId: string): Card | undefined =>
+    store
+      .getState()
+      .workspaces.find((w) => w.id === workspaceId)
+      ?.cards.at(-1)
+
+  it("lists every workspace in sidebar order, marking the calling card's (AC5)", () => {
+    const store = crossSetup()
+    expect(answer(store, 'a-claude', { command: 'workspaces', format: 'text' })).toEqual({
+      ok: true,
+      output: [
+        `${ids.alpha}  Alpha  local  /tmp/bikube-${ids.alpha}  *`,
+        `${ids.beta}  Beta  local  /tmp/bikube-beta`,
+        `${ids.remote}  Remote  ssh devbox  /srv/app`,
+        ''
+      ].join('\n')
+    })
+    const reply = answer(store, 'a-claude', { command: 'workspaces', format: 'json' })
+    if (!reply.ok || reply.output === undefined) throw new Error('no output')
+    expect(JSON.parse(reply.output)).toEqual([
+      {
+        id: ids.alpha,
+        name: 'Alpha',
+        location: 'local',
+        directory: `/tmp/bikube-${ids.alpha}`,
+        current: true
+      },
+      { id: ids.beta, name: 'Beta', location: 'local', directory: '/tmp/bikube-beta' },
+      { id: ids.remote, name: 'Remote', location: 'ssh', host: 'devbox', directory: '/srv/app' }
+    ])
+  })
+
+  it('creates in another workspace, printing its id and workspace, with the description and the New mark (AC6)', () => {
+    const store = crossSetup()
+    const reply = answer(store, 'a-claude', {
+      command: 'create',
+      workspace: 'beta',
+      column: 'todo',
+      title: 'Port X',
+      description: '# Port\nDo X'
+    })
+    const created = lastOf(store, ids.beta)
+    expect(reply).toEqual({ ok: true, output: `${created?.id} Beta\n` })
+    expect(created).toMatchObject({
+      columnId: `${ids.beta}-todo`,
+      title: 'Port X',
+      description: '# Port\nDo X',
+      directory: '/tmp/bikube-beta',
+      startup: { kind: 'claude' },
+      claudeStarted: false,
+      unopened: true
+    })
+  })
+
+  it('creates in its own workspace without the New mark, and in an SSH workspace with its host (D8, D11)', () => {
+    const store = crossSetup()
+    answer(store, 'a-claude', { command: 'create', column: 'Todo', title: 'Here' })
+    expect(lastOf(store, ids.alpha)).not.toHaveProperty('unopened')
+    answer(store, 'a-claude', {
+      command: 'create',
+      workspace: ids.alpha,
+      column: 'Todo',
+      title: 'Here too'
+    })
+    expect(lastOf(store, ids.alpha)).not.toHaveProperty('unopened')
+    answer(store, 'a-claude', {
+      command: 'create',
+      workspace: 'remote',
+      column: 'Todo',
+      title: 'R'
+    })
+    expect(lastOf(store, ids.remote)).toMatchObject({ host: 'devbox', directory: '/srv/app' })
+  })
+
+  it("gives the card the calling card's agent, else the workspace's default, or the one --agent names (AC8)", () => {
+    const store = crossSetup()
+    const create = (calling: string, agent?: 'gemini' | 'shell' | 'claude'): Card | undefined => {
+      answer(store, calling, {
+        command: 'create',
+        workspace: 'Beta',
+        column: 'Todo',
+        title: 'T1',
+        ...(agent && { agent })
+      })
+      return lastOf(store, ids.beta)
+    }
+    expect(create('a-codex')?.startup).toEqual({ kind: 'codex' })
+    expect(create('a-claude')?.startup).toEqual({ kind: 'claude' })
+    expect(create('a-custom')?.startup).toEqual({ kind: 'opencode' })
+    expect(create('a-shell')?.startup).toEqual({ kind: 'opencode' })
+    expect(create('a-codex', 'gemini')?.startup).toEqual({ kind: 'gemini' })
+    expect(create('a-codex', 'claude')?.startup).toEqual({ kind: 'claude' })
+    expect(create('a-claude', 'shell')?.startup).toEqual({ kind: 'shell' })
+  })
+
+  it("acts on another workspace's card by its id; the column is the card's workspace's (AC7)", () => {
+    const store = crossSetup()
+    const statuses: [string, string][] = []
+    expect(
+      answer(store, 'a-claude', { command: 'rename', card: 'b-port', title: 'Port Z' })
+    ).toEqual({ ok: true })
+    expect(cardOf(store, 'b-port')?.title).toBe('Port Z')
+    expect(answer(store, 'a-claude', { command: 'move', card: 'b-port', column: 'Doing' })).toEqual(
+      { ok: true }
+    )
+    expect(cardOf(store, 'b-port')?.columnId).toBe(`${ids.beta}-doing`)
+    expect(
+      answerBoardCommand(
+        store,
+        'a-claude',
+        { command: 'status', card: 'b-port', text: 'queued' },
+        () => true,
+        (id, text) => statuses.push([id, text])
+      )
+    ).toEqual({ ok: true })
+    expect(statuses).toEqual([['b-port', 'queued']])
+    store.setCardDescription(ids.beta, 'b-port', 'Hello')
+    expect(answer(store, 'a-claude', { command: 'description', card: 'b-port' })).toEqual({
+      ok: true,
+      output: 'Hello\n'
+    })
+    expect(
+      answer(store, 'a-claude', { command: 'describe', card: 'b-port', description: 'New' })
+    ).toEqual({ ok: true })
+    expect(cardOf(store, 'b-port')?.description).toBe('New')
+  })
+
+  it('resolves titles only in the calling workspace, or the one --workspace names (AC7)', () => {
+    const store = crossSetup()
+    expect(answer(store, 'a-claude', { command: 'rename', card: 'Port Y', title: 'Z' })).toEqual({
+      ok: false,
+      error: 'board: no card "Port Y" in this workspace'
+    })
+    expect(
+      answer(store, 'a-claude', {
+        command: 'rename',
+        card: 'Port Y',
+        title: 'Z',
+        workspace: 'Beta'
+      })
+    ).toEqual({ ok: true })
+    expect(cardOf(store, 'b-port')?.title).toBe('Z')
+    expect(
+      answer(store, 'a-claude', { command: 'move', card: 'Z', column: 'doing', workspace: 'beta' })
+    ).toEqual({
+      ok: true
+    })
+    expect(cardOf(store, 'b-port')?.columnId).toBe(`${ids.beta}-doing`)
+    // `.` is the calling card whichever workspace is named.
+    expect(
+      answer(store, 'a-claude', { command: 'move', card: '.', column: 'Doing', workspace: 'Beta' })
+    ).toEqual({ ok: true })
+    expect(cardOf(store, 'a-claude')?.columnId).toBe(`${ids.alpha}-doing`)
+  })
+
+  it("lists the workspace --workspace names, each card's description flagged (AC7, D7)", () => {
+    const store = crossSetup()
+    store.setCardDescription(ids.beta, 'b-port', 'Hello')
+    const reply = answer(store, 'a-claude', { command: 'list', format: 'json', workspace: 'Beta' })
+    if (!reply.ok || reply.output === undefined) throw new Error('no output')
+    const listing = JSON.parse(reply.output)
+    expect(listing.workspace.name).toBe('Beta')
+    expect(listing.columns[0].cards).toEqual([
+      { id: 'b-port', title: 'Port Y', state: 'running', hasDescription: true }
+    ])
+    expect(
+      answer(store, 'a-claude', { command: 'list', format: 'text', workspace: 'Beta' })
+    ).toEqual({
+      ok: true,
+      output: [
+        'Beta (/tmp/bikube-beta)',
+        '',
+        'Todo (1)',
+        '  Port Y  [b-port]  running · description',
+        '',
+        'Doing (0)',
+        ''
+      ].join('\n')
+    })
+  })
+
+  it('refuses a workspace that names none or several, changing nothing (AC7)', () => {
+    const store = crossSetup([ws('w-beta2', 'beta', [])])
+    const before = store.getState()
+    expect(
+      answer(store, 'a-claude', { command: 'list', format: 'text', workspace: 'nope' })
+    ).toEqual({
+      ok: false,
+      error: 'board: no workspace named nope'
+    })
+    expect(
+      answer(store, 'a-claude', {
+        command: 'create',
+        column: 'Todo',
+        title: 'x',
+        workspace: 'Beta'
+      })
+    ).toEqual({ ok: false, error: 'board: 2 workspaces are named Beta; use its id' })
+    expect(store.getState()).toBe(before)
+  })
+
+  it("keeps an SSH card to its own workspace: no other workspace's ids, no --workspace, workspaces, create, rename or describe (D9)", () => {
+    const store = crossSetup()
+    const before = store.getState()
+    expect(answer(store, 'r-1', { command: 'move', card: 'b-port', column: 'Doing' })).toEqual({
+      ok: false,
+      error: 'board: no card "b-port" in this workspace'
+    })
+    for (const command of [
+      { command: 'workspaces', format: 'text' },
+      { command: 'list', format: 'text', workspace: 'Beta' },
+      { command: 'create', column: 'Todo', title: 'x' },
+      { command: 'rename', card: '.', title: 'x' },
+      { command: 'describe', card: '.', description: 'x' }
+    ] as const) {
+      expect(answer(store, 'r-1', command)).toEqual({ ok: false, error: 'board: invalid request' })
+    }
+    expect(store.getState()).toBe(before)
+    expect(answer(store, 'r-1', { command: 'move', card: '.', column: 'Doing' })).toEqual({
+      ok: true
+    })
+  })
+
+  it('keeps activity to the calling workspace (D7)', () => {
+    const store = crossSetup()
+    expect(
+      answer(store, 'a-claude', { command: 'activity', card: 'b-port', activity: 'working' })
+    ).toEqual({ ok: false, error: 'board: no card "b-port" in this workspace' })
   })
 })

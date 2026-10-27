@@ -488,6 +488,16 @@ function CardItem({
                   <span className="visually-hidden">Has a description</span>
                 </span>
               )}
+              {card.unopened && (
+                // Made by `board create` from another workspace, until its first open (#69 D11).
+                <span
+                  className="card-new"
+                  data-testid="card-new"
+                  title="Added from another workspace; opening it clears this"
+                >
+                  New
+                </span>
+              )}
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>

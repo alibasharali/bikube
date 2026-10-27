@@ -203,6 +203,8 @@ function readCard(raw: unknown): Card | string {
     ...setup,
     ...(isTime(raw.createdAt) && { createdAt: raw.createdAt }),
     ...(isTime(raw.lastOpenedAt) && { lastOpenedAt: raw.lastOpenedAt }),
+    // Anything but true is dropped, as if the card had no New mark (#69 D11).
+    ...(raw.unopened === true && { unopened: true as const }),
     ...readLastSeen(raw)
   }
 }

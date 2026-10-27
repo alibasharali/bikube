@@ -658,3 +658,22 @@ describe('card descriptions in the saved state (#69 D1)', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 })
+
+describe('the New mark in the saved state (#69 D11)', () => {
+  it('writes unopened only on a card marked, reads it back, and drops a bad value only', () => {
+    const state = fullState()
+    state.workspaces[0]!.cards[0] = { ...state.workspaces[0]!.cards[0]!, unopened: true }
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces[0].cards
+    expect(first.unopened).toBe(true)
+    expect('unopened' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+    const read = parseSavedState(
+      fileWith((f) => {
+        f.workspaces[0].cards[0].unopened = 'yes'
+        f.workspaces[0].cards[1].unopened = false
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+})

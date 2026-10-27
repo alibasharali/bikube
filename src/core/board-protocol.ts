@@ -4,7 +4,7 @@
  */
 
 import { isActivityValue } from './activity'
-import { isListFormat, isSessionId, isSetupResult } from './board-args'
+import { isBoardAgent, isListFormat, isSessionId, isSetupResult } from './board-args'
 import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-usage-types'
 
@@ -49,19 +49,40 @@ export function isOverLineLimit(line: string): boolean {
   return new TextEncoder().encode(line).length > MAX_REQUEST_LINE_BYTES
 }
 
+/** Each command's required fields besides `v`, `cardId` and `command`. */
 const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
-  list: ['v', 'cardId', 'command', 'format'],
-  create: ['v', 'cardId', 'command', 'column', 'title'],
-  rename: ['v', 'cardId', 'command', 'card', 'title'],
-  move: ['v', 'cardId', 'command', 'card', 'column'],
-  status: ['v', 'cardId', 'command', 'card', 'text'],
-  activity: ['v', 'cardId', 'command', 'card', 'activity'],
-  session: ['v', 'cardId', 'command', 'card', 'session'],
-  setup: ['v', 'cardId', 'command', 'card', 'result'],
-  usage: ['v', 'cardId', 'command', 'card', 'usage'],
-  description: ['v', 'cardId', 'command', 'card'],
-  describe: ['v', 'cardId', 'command', 'card', 'description']
+  workspaces: ['format'],
+  list: ['format'],
+  create: ['column', 'title'],
+  rename: ['card', 'title'],
+  move: ['card', 'column'],
+  status: ['card', 'text'],
+  activity: ['card', 'activity'],
+  session: ['card', 'session'],
+  setup: ['card', 'result'],
+  usage: ['card', 'usage'],
+  description: ['card'],
+  describe: ['card', 'description']
 }
+
+/** The commands that take a `workspace` (#69 D6). */
+const TAKES_WORKSPACE = new Set([
+  'list',
+  'create',
+  'rename',
+  'move',
+  'status',
+  'description',
+  'describe'
+])
+
+/** Each command's optional string fields (#69 D6, D8). */
+function optionalFields(command: BoardCommand['command']): readonly string[] {
+  if (command === 'create') return ['workspace', 'agent', 'description']
+  return TAKES_WORKSPACE.has(command) ? ['workspace'] : []
+}
+
+const COMMANDS = new Set(Object.keys(FIELDS))
 
 /** Longest model name a usage may carry (#50 D5). */
 export const MAX_USAGE_MODEL_LENGTH = 200
@@ -99,9 +120,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The request in one received line (a trailing newline is ignored), or the error reason to
- * reply with: anything but exactly a version-1 list (format `text` or `json`), create, rename, move, status, activity (#31 D12), session, setup
- * (#39 D4), usage (#50 D5), description or describe (#69 D5) with string fields, an activity's or a setup's value being one `board`
- * takes and a usage shaped as `asUsage` checks, is refused.
+ * reply with: anything but exactly a version-1 workspaces or list (format `text` or `json`, #69
+ * D6), create, rename, move, status, activity (#31 D12), session, setup (#39 D4), usage (#50 D5),
+ * description or describe (#69 D5) with string fields, a `workspace` only on the commands D6
+ * names, create's `agent` one `board` takes (#69 D8), an activity's or a setup's value being one
+ * `board` takes and a usage shaped as `asUsage` checks, is refused.
  */
 export function parseRequestLine(line: string): ParsedRequest {
   const text = line.endsWith('\n') ? line.slice(0, -1) : line
@@ -116,73 +139,86 @@ export function parseRequestLine(line: string): ParsedRequest {
     return { ok: false, error: INVALID_REQUEST }
   }
   const command = value.command
-  if (
-    command !== 'list' &&
-    command !== 'create' &&
-    command !== 'rename' &&
-    command !== 'move' &&
-    command !== 'status' &&
-    command !== 'activity' &&
-    command !== 'session' &&
-    command !== 'setup' &&
-    command !== 'usage' &&
-    command !== 'description' &&
-    command !== 'describe'
-  ) {
+  if (typeof command !== 'string' || !COMMANDS.has(command)) {
     return { ok: false, error: INVALID_REQUEST }
   }
-  const fields = FIELDS[command]
+  const name = command as BoardCommand['command']
+  const required = FIELDS[name]
+  const optional = optionalFields(name)
   const keys = Object.keys(value)
+  const known = (key: string): boolean =>
+    key === 'v' ||
+    key === 'cardId' ||
+    key === 'command' ||
+    required.includes(key) ||
+    optional.includes(key)
   const shaped =
-    keys.length === fields.length &&
-    fields.every(
-      (f) => f === 'v' || f === 'command' || f === 'usage' || typeof value[f] === 'string'
-    )
+    typeof value.cardId === 'string' &&
+    keys.every(known) &&
+    required.every((f) => f in value && (f === 'usage' || typeof value[f] === 'string')) &&
+    optional.every((f) => value[f] === undefined || typeof value[f] === 'string')
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
-  const { cardId, card } = value as Record<string, string>
-  if (command === 'list') {
-    const format = value.format
-    if (!isListFormat(format)) return { ok: false, error: INVALID_REQUEST }
-    return { ok: true, request: { v: 1, cardId, command, format } }
+  const request = asRequest(name, value as Record<string, unknown>)
+  return request ? { ok: true, request } : { ok: false, error: INVALID_REQUEST }
+}
+
+/** The request in a shaped value, its fields checked per command; null when one is wrong. */
+function asRequest(
+  command: BoardCommand['command'],
+  value: Record<string, unknown>
+): BoardRequest | null {
+  const str = (key: string): string => value[key] as string
+  const cardId = str('cardId')
+  const card = str('card')
+  const where = value.workspace !== undefined ? { workspace: str('workspace') } : {}
+  switch (command) {
+    case 'workspaces':
+      return isListFormat(value.format) ? { v: 1, cardId, command, format: value.format } : null
+    case 'list':
+      return isListFormat(value.format)
+        ? { v: 1, cardId, command, format: value.format, ...where }
+        : null
+    case 'create': {
+      const { agent } = value
+      if (agent !== undefined && !isBoardAgent(agent)) return null
+      return {
+        v: 1,
+        cardId,
+        command,
+        column: str('column'),
+        title: str('title'),
+        ...where,
+        ...(agent !== undefined && { agent }),
+        ...(value.description !== undefined && { description: str('description') })
+      }
+    }
+    case 'rename':
+      return { v: 1, cardId, command, card, title: str('title'), ...where }
+    case 'move':
+      return { v: 1, cardId, command, card, column: str('column'), ...where }
+    case 'status':
+      return { v: 1, cardId, command, card, text: str('text'), ...where }
+    case 'description':
+      return { v: 1, cardId, command, card, ...where }
+    case 'describe':
+      return { v: 1, cardId, command, card, description: str('description'), ...where }
+    case 'session':
+      return isSessionId(value.session)
+        ? { v: 1, cardId, command, card, session: value.session }
+        : null
+    case 'usage': {
+      const usage = asUsage(value.usage)
+      return usage ? { v: 1, cardId, command, card, usage } : null
+    }
+    case 'setup':
+      return isSetupResult(value.result)
+        ? { v: 1, cardId, command, card, result: value.result }
+        : null
+    case 'activity':
+      return isActivityValue(value.activity)
+        ? { v: 1, cardId, command, card, activity: value.activity }
+        : null
   }
-  if (command === 'create') {
-    const { column, title } = value as Record<string, string>
-    return { ok: true, request: { v: 1, cardId, command, column, title } }
-  }
-  if (command === 'rename') {
-    return { ok: true, request: { v: 1, cardId, command, card, title: value.title as string } }
-  }
-  if (command === 'move') {
-    return { ok: true, request: { v: 1, cardId, command, card, column: value.column as string } }
-  }
-  if (command === 'status') {
-    return { ok: true, request: { v: 1, cardId, command, card, text: value.text as string } }
-  }
-  if (command === 'description') {
-    return { ok: true, request: { v: 1, cardId, command, card } }
-  }
-  if (command === 'describe') {
-    const description = value.description as string
-    return { ok: true, request: { v: 1, cardId, command, card, description } }
-  }
-  if (command === 'session') {
-    const session = value.session
-    if (!isSessionId(session)) return { ok: false, error: INVALID_REQUEST }
-    return { ok: true, request: { v: 1, cardId, command, card, session } }
-  }
-  if (command === 'usage') {
-    const usage = asUsage(value.usage)
-    if (!usage) return { ok: false, error: INVALID_REQUEST }
-    return { ok: true, request: { v: 1, cardId, command, card, usage } }
-  }
-  if (command === 'setup') {
-    const result = value.result
-    if (!isSetupResult(result)) return { ok: false, error: INVALID_REQUEST }
-    return { ok: true, request: { v: 1, cardId, command, card, result } }
-  }
-  const activity = value.activity
-  if (!isActivityValue(activity)) return { ok: false, error: INVALID_REQUEST }
-  return { ok: true, request: { v: 1, cardId, command, card, activity } }
 }
 
 /** The reply line main writes, newline included. */

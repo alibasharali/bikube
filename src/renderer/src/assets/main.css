@@ -2456,6 +2456,18 @@ button.dev-server-chip:focus-visible {
   color: var(--text-muted);
 }
 
+/* A card another workspace's agent added, until its first open (#69 D11). */
+.card-new {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--pill-working-bg);
+  color: var(--pill-working-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+
 /* The Description field (#69 D3, D4): plain text, scrolling inside its own box. */
 .field .description-input {
   box-sizing: border-box;

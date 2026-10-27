@@ -84,7 +84,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         claudeStarted: c.host === undefined ? false : c.claudeStarted,
         startedAgents: c.host === undefined ? [] : [...c.startedAgents],
         // When it was opened is this machine's: every open would write the file.
-        ...(c.createdAt !== undefined && { createdAt: c.createdAt })
+        ...(c.createdAt !== undefined && { createdAt: c.createdAt }),
+        // The New mark is cleared by the first open on any machine (#69 D11).
+        ...(c.unopened && { unopened: true as const })
       })),
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup),

@@ -3,7 +3,9 @@
  * these against its store and answers with the error text, which the CLI prints verbatim.
  */
 
+import type { BoardAgent, BoardCommand } from './board-args'
 import type { CardMoveTarget } from './card-moves'
+import type { StartupCommand } from './startup-command'
 import { stripEscapes } from './card-status'
 import {
   cardsInColumn,
@@ -52,6 +54,92 @@ export function resolveCard(
     }
   }
   return { ok: false, error: `board: no card "${ref}" in this workspace` }
+}
+
+/**
+ * The workspace `--workspace <ref>` names (#69 D6): an exact id, else a name matched
+ * case-insensitively; none, or more than one name match, is refused.
+ */
+export function resolveWorkspace(state: WorkspaceState, ref: string): BoardResult<Workspace> {
+  const byId = state.workspaces.find((w) => w.id === ref)
+  if (byId) return { ok: true, value: byId }
+  const wanted = ref.trim().toLowerCase()
+  const byName = state.workspaces.filter((w) => w.name.toLowerCase() === wanted)
+  if (byName.length === 1) return { ok: true, value: byName[0] }
+  if (byName.length > 1) {
+    return { ok: false, error: `board: ${byName.length} workspaces are named ${ref}; use its id` }
+  }
+  return { ok: false, error: `board: no workspace named ${ref}` }
+}
+
+/** A card with the workspace holding it. */
+export interface PlacedCard {
+  workspace: Workspace
+  card: Card
+}
+
+/**
+ * The card `<card>` names for a local card's `board` (#69 D7): `.` is the calling card and a
+ * card's id names it in any workspace; a title resolves only in `titles`, the calling card's
+ * workspace or the one `--workspace` names.
+ */
+export function resolveAnyCard(
+  state: WorkspaceState,
+  titles: Workspace,
+  callingCardId: string,
+  ref: string
+): BoardResult<PlacedCard> {
+  const id = ref === CALLING_CARD ? callingCardId : ref
+  for (const workspace of state.workspaces) {
+    const card = workspace.cards.find((c) => c.id === id)
+    if (card) return { ok: true, value: { workspace, card } }
+  }
+  const byTitle = resolveCard(titles, callingCardId, ref)
+  return byTitle.ok ? { ok: true, value: { workspace: titles, card: byTitle.value } } : byTitle
+}
+
+/** The commands whose `<card>` may be another workspace's card, by its id (#69 D7). */
+export const ACROSS_WORKSPACES: ReadonlySet<BoardCommand['command']> = new Set([
+  'rename',
+  'move',
+  'status',
+  'description',
+  'describe'
+])
+
+/** `resolveCard`'s result with the workspace it resolved in. */
+export function placedIn(workspace: Workspace, card: BoardResult<Card>): BoardResult<PlacedCard> {
+  return card.ok ? { ok: true, value: { workspace, card: card.value } } : card
+}
+
+/**
+ * Whether an SSH card's `board` may send `command` (#69 D9): its session socket serves only its
+ * own card's workspace, so never `workspaces`, `create`, `rename`, `describe` or a `--workspace`.
+ */
+export function servesRemoteCard(command: BoardCommand): boolean {
+  if ('workspace' in command && command.workspace !== undefined) return false
+  return !REMOTE_REFUSED.has(command.command)
+}
+
+const REMOTE_REFUSED: ReadonlySet<BoardCommand['command']> = new Set([
+  'workspaces',
+  'create',
+  'rename',
+  'describe'
+])
+
+/** The startup `board create --agent <agent>` gives a card (#69 D8). */
+export function agentStartup(agent: BoardAgent): StartupCommand {
+  return { kind: agent }
+}
+
+/**
+ * The startup a card `board create` makes without `--agent` gets from the calling card (#69 D8):
+ * its agent, or undefined (the target workspace's default) for a Custom command or a shell.
+ */
+export function inheritedStartup(calling: Card): StartupCommand | undefined {
+  const { kind } = calling.startup
+  return kind === 'custom' || kind === 'shell' ? undefined : { kind }
 }
 
 /** The column `<column>` names: a title matched case-insensitively after trimming (#9 D7). */

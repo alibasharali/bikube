@@ -20,7 +20,10 @@ export function startCard(workspaceId: string, cardId: string): void {
   cardTerminals().start(card, recordFirstStart(workspaceId, cardId))
 }
 
-/** Records that a board card was opened now, so the grid view shows it first; shells aren't. */
+/**
+ * Records that a board card was opened now, so the grid view shows it first, and clears its New
+ * mark (#69 D11); shells aren't.
+ */
 export function markCardOpened(workspaceId: string, cardId: string): void {
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
   if (workspace?.cards.some((c) => c.id === cardId)) {

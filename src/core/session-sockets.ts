@@ -8,6 +8,7 @@
 import { randomBytes } from 'node:crypto'
 import { lstatSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { servesRemoteCard } from './board-commands'
 import { INVALID_REQUEST, type BoardReply, type BoardRequest } from './board-protocol'
 import { startBoardServer, type BoardHandler, type BoardServer } from './board-server'
 import type { BoardForward } from './ssh-command'
@@ -54,10 +55,11 @@ export function removeLeftoverSessionSockets(dir: string): void {
 
 /**
  * Whether a session socket serves `request`: its own card's only (D3), its `description` only for
- * that card (`.` or its id) and never a `describe` (#69 D9).
+ * that card (`.` or its id), and never a `describe`, `workspaces`, `create`, `rename` or a
+ * `--workspace` (#69 D9).
  */
 function servesOwnCard(request: BoardRequest, cardId: string): boolean {
-  if (request.cardId !== cardId || request.command === 'describe') return false
+  if (request.cardId !== cardId || !servesRemoteCard(request)) return false
   return request.command !== 'description' || request.card === '.' || request.card === cardId
 }
 

@@ -4,8 +4,21 @@
  */
 import type { Activity } from './activity'
 import type { BoardCommand, SetupResult } from './board-args'
-import { boardListing, formatBoardListing, type CardRuntime } from './board-list'
 import {
+  boardListing,
+  formatBoardListing,
+  formatWorkspacesListing,
+  workspacesListing,
+  type CardRuntime
+} from './board-list'
+import {
+  ACROSS_WORKSPACES,
+  agentStartup,
+  inheritedStartup,
+  placedIn,
+  resolveAnyCard,
+  resolveWorkspace,
+  servesRemoteCard,
   boardMoveTarget,
   cleanAgentStatus,
   cleanCardTitle,
@@ -16,7 +29,7 @@ import {
   resolveCard,
   resolveColumn
 } from './board-commands'
-import type { BoardReply } from './board-protocol'
+import { INVALID_REQUEST, type BoardReply } from './board-protocol'
 import type { ClaudeUsage } from './claude-usage-types'
 import type { Card, WorkspaceStore } from './workspace-store'
 
@@ -58,11 +71,31 @@ export function answerBoardCommand(
   setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {},
   runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) })
 ): BoardReply {
-  const workspace = findCallingWorkspace(store.getState(), callingCardId)
+  const state = store.getState()
+  const workspace = findCallingWorkspace(state, callingCardId)
   if (!workspace.ok) return workspace
-  const ws = workspace.value
+  const calling = workspace.value
+  const callingCard = calling.cards.find((c) => c.id === callingCardId) as Card
+  // An SSH card's session socket serves only its own card's workspace (#69 D9).
+  const remote = callingCard.host !== undefined
+  if (remote && !servesRemoteCard(command)) return { ok: false, error: INVALID_REQUEST }
+  if (command.command === 'workspaces') {
+    const listing = workspacesListing(state, calling.id)
+    const output =
+      command.format === 'json'
+        ? `${JSON.stringify(listing, null, 2)}\n`
+        : formatWorkspacesListing(listing)
+    return { ok: true, output }
+  }
+  // Titles resolve in the workspace `--workspace` names, else the calling card's (#69 D6, D7).
+  let titles = calling
+  if ('workspace' in command && command.workspace !== undefined) {
+    const named = resolveWorkspace(state, command.workspace)
+    if (!named.ok) return named
+    titles = named.value
+  }
   if (command.command === 'list') {
-    const listing = boardListing(ws, callingCardId, runtime)
+    const listing = boardListing(titles, callingCardId, runtime)
     const output =
       command.format === 'json'
         ? `${JSON.stringify(listing, null, 2)}\n`
@@ -72,14 +105,31 @@ export function answerBoardCommand(
   if (command.command === 'create') {
     const title = cleanCardTitle(command.title)
     if (!title) return { ok: false, error: TITLE_REQUIRED }
-    const column = resolveColumn(ws, command.column)
+    const column = resolveColumn(titles, command.column)
     if (!column.ok) return column
-    const created = store.createCard(ws.id, column.value.id, title)
+    const startup =
+      command.agent !== undefined ? agentStartup(command.agent) : inheritedStartup(callingCard)
+    const created = store.createCard(
+      titles.id,
+      column.value.id,
+      title,
+      startup,
+      undefined,
+      command.description,
+      { unopened: titles.id !== calling.id, allowShell: command.agent === 'shell' }
+    )
     if (!created.ok) return { ok: false, error: `board: ${created.error.message}` }
-    return { ok: true, output: `${created.value.id}\n` }
+    return { ok: true, output: `${created.value.id} ${titles.name}\n` }
   }
-  const card = resolveCard(ws, callingCardId, command.card)
-  if (!card.ok) return card
+  // A card's id names it in any workspace for a local card (#69 D7); `activity`, `session`,
+  // `setup` and `usage` stay in the calling workspace, as an SSH card's commands do (D9).
+  const placed =
+    remote || !ACROSS_WORKSPACES.has(command.command)
+      ? placedIn(calling, resolveCard(calling, callingCardId, command.card))
+      : resolveAnyCard(state, titles, callingCardId, command.card)
+  if (!placed.ok) return placed
+  const ws = placed.value.workspace
+  const card = { ok: true as const, value: placed.value.card }
   if (command.command === 'description') {
     const { description } = card.value
     return description ? { ok: true, output: `${description}\n` } : { ok: true }

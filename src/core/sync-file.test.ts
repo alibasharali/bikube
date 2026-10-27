@@ -533,3 +533,27 @@ describe('card descriptions in the sync file (#69 D1)', () => {
     expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('description')
   })
 })
+
+describe('the New mark in the sync file (#69 D11)', () => {
+  it('writes unopened only on a card marked, reads it back, and drops a bad value', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('a', 'w-backlog', { unopened: true }), card('b', 'w-backlog')]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.unopened).toBe(true)
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('unopened')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.unopened).toBe(true)
+    expect(read.ok && read.workspaces[0]!.cards[1]!).not.toHaveProperty('unopened')
+    file.board.workspaces[0].cards[0].unopened = 1
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('unopened')
+  })
+})

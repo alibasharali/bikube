@@ -6,8 +6,10 @@ import {
   findCallingWorkspace,
   noSetupError,
   notRunningError,
+  resolveAnyCard,
   resolveCard,
   resolveColumn,
+  resolveWorkspace,
   MAX_AGENT_STATUS_LENGTH
 } from './board-commands'
 import type { Card, Workspace, WorkspaceState } from './workspace-store'
@@ -174,5 +176,63 @@ describe('noSetupError (#39 D4)', () => {
     expect(noSetupError(card('c-api', 'backlog', 'api fix'))).toBe(
       'board: api fix has no setup running'
     )
+  })
+})
+
+describe('resolveWorkspace (#69 D6)', () => {
+  const named = (id: string, name: string): Workspace => ({ ...workspace(id, []), name })
+  const many: WorkspaceState = {
+    workspaces: [
+      named('w1', 'Alpha'),
+      named('w2', 'Beta'),
+      named('w3', 'beta'),
+      named('Gamma', 'x')
+    ],
+    activeId: 'w1'
+  }
+
+  it('takes an exact id first, then a name in any case', () => {
+    expect(resolveWorkspace(many, 'w2')).toEqual({ ok: true, value: many.workspaces[1] })
+    expect(resolveWorkspace(many, 'ALPHA')).toEqual({ ok: true, value: many.workspaces[0] })
+    expect(resolveWorkspace(many, 'Gamma')).toEqual({ ok: true, value: many.workspaces[3] })
+  })
+
+  it('refuses no match and more than one name match', () => {
+    expect(resolveWorkspace(many, 'nope')).toEqual({
+      ok: false,
+      error: 'board: no workspace named nope'
+    })
+    expect(resolveWorkspace(many, 'BETA')).toEqual({
+      ok: false,
+      error: 'board: 2 workspaces are named BETA; use its id'
+    })
+  })
+})
+
+describe('resolveAnyCard (#69 D7)', () => {
+  it("finds a card's id in any workspace, with that workspace", () => {
+    expect(resolveAnyCard(state, alpha, 'c-api', 'c-other')).toEqual({
+      ok: true,
+      value: { workspace: beta, card: beta.cards[0] }
+    })
+    expect(resolveAnyCard(state, alpha, 'c-api', '.')).toEqual({
+      ok: true,
+      value: { workspace: alpha, card: alpha.cards[0] }
+    })
+  })
+
+  it('resolves a title only in the workspace given', () => {
+    expect(resolveAnyCard(state, alpha, 'c-api', 'other')).toEqual({
+      ok: false,
+      error: 'board: no card "other" in this workspace'
+    })
+    expect(resolveAnyCard(state, beta, 'c-api', 'other')).toEqual({
+      ok: true,
+      value: { workspace: beta, card: beta.cards[0] }
+    })
+    expect(resolveAnyCard(state, beta, 'c-api', '.')).toEqual({
+      ok: true,
+      value: { workspace: alpha, card: alpha.cards[0] }
+    })
   })
 })

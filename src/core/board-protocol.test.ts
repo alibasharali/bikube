@@ -289,3 +289,48 @@ describe('serializeReply / parseReplyLine', () => {
     }
   })
 })
+
+describe('requests across workspaces (#69 D6–D8)', () => {
+  it('round-trips workspaces, a workspace on the commands that take it, and create with agent and description', () => {
+    for (const command of [
+      { command: 'workspaces', format: 'json' },
+      { command: 'workspaces', format: 'text' },
+      { command: 'list', format: 'text', workspace: 'Beta' },
+      { command: 'rename', card: 'x', title: 'Y', workspace: 'b' },
+      { command: 'move', card: 'x', column: 'Done', workspace: 'b' },
+      { command: 'status', card: 'x', text: 'q', workspace: 'b' },
+      { command: 'description', card: 'x', workspace: 'b' },
+      { command: 'describe', card: 'x', description: 'd', workspace: 'b' },
+      {
+        command: 'create',
+        column: 'Todo',
+        title: 'Port X',
+        workspace: 'beta',
+        agent: 'shell',
+        description: '# Port\nDo X'
+      }
+    ] as const) {
+      expect(parseRequestLine(serializeRequest('c1', command))).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'c1', ...command }
+      })
+    }
+  })
+
+  it('rejects a workspace where none is taken, a mistyped one, and an unknown agent', () => {
+    const base = { v: 1, cardId: 'c1' }
+    for (const value of [
+      { ...base, command: 'workspaces', format: 'json', workspace: 'b' },
+      { ...base, command: 'workspaces', format: 'yaml' },
+      { ...base, command: 'workspaces' },
+      { ...base, command: 'activity', card: '.', activity: 'none', workspace: 'b' },
+      { ...base, command: 'session', card: '.', session: 'x', workspace: 'b' },
+      { ...base, command: 'list', format: 'text', workspace: 3 },
+      { ...base, command: 'create', column: 'T', title: 'x', agent: 'vim' },
+      { ...base, command: 'create', column: 'T', title: 'x', description: 1 },
+      { ...base, command: 'create', column: 'T', title: 'x', worktree: true }
+    ]) {
+      expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+})

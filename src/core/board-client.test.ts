@@ -283,6 +283,62 @@ describe('runBoard: description and describe (#69 D5)', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
+  it("reads create's --description-file, - for stdin, and sends it with the card (#69 D8, AC6)", async () => {
+    const handler = vi.fn(async () => ({ ok: true, output: 'c-new Beta\n' }) as BoardReply)
+    await serve(handler)
+    const argv = ['create', '--workspace', 'beta', '--description-file', '-', 'Todo', 'Port X']
+    expect(await boardIn(argv, utf8('# Port\nDo X'))).toEqual({
+      code: 0,
+      stdout: 'c-new Beta\n',
+      stderr: ''
+    })
+    expect(handler).toHaveBeenLastCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'create',
+      column: 'Todo',
+      title: 'Port X',
+      workspace: 'beta',
+      description: '# Port\nDo X'
+    })
+    const long = join(dir, 'long.md')
+    await writeFile(long, 'a'.repeat(100_001))
+    handler.mockClear()
+    expect(await boardIn(['create', '--description-file', long, 'Todo', 'x'])).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: 'board: Description is longer than 100,000 characters\n'
+    })
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('sends a create with an empty description file as one without (#69 D1)', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    await boardIn(['create', '--description-file', '-', 'Todo', 'x'], utf8('  \n'))
+    expect(handler).toHaveBeenLastCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'create',
+      column: 'Todo',
+      title: 'x'
+    })
+  })
+
+  it('sends a describe with its --workspace (#69 D6)', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    await boardIn(['describe', '--workspace', 'b', 'x', '-'], utf8('t'))
+    expect(handler).toHaveBeenLastCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'describe',
+      card: 'x',
+      description: 't',
+      workspace: 'b'
+    })
+  })
+
   it('sends a 100,000-character multi-byte description whole (AC14)', async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler)

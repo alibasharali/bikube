@@ -12,8 +12,11 @@ import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
+import { FIRST_PROMPT } from '../src/core/startup-command'
 import { MAX_REQUEST_LINE_BYTES } from '../src/core/board-protocol'
 import { backToBoard, checkOnBoard, expectCardOpen, splitRight } from './card-view'
+import { agentLogLines, fakeAgentsHome } from './fake-agents'
+import { claudeLogLines } from './fake-claude'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -45,8 +48,8 @@ test.afterEach(async () => {
   removeDataDirs()
 })
 
-async function launch(): Promise<void> {
-  ;({ app, page } = await launchApp({ dataDir }))
+async function launch(env?: Record<string, string>): Promise<void> {
+  ;({ app, page } = await launchApp({ dataDir, ...(env && { env }) }))
 }
 
 async function createWorkspace(dir: string, name: string): Promise<void> {
@@ -639,8 +642,10 @@ test('board list shows the columns and cards, create adds a card it prints the i
   const created = await board(alpha, `board create 'in progress' 'Fix login (NOT-12)'`)
   expect(created.code).toBe(0)
   expect(created.stderr).toBe('')
-  const newId = created.stdout.trim()
+  // `<id> <workspace name>` (#69 D8).
+  const [newId, createdIn] = created.stdout.trim().split(' ')
   expect(newId).not.toBe('')
+  expect(createdIn).toBe('alpha')
   expect(await board(alpha, `board rename shipped 'Shipped it'`)).toEqual(ok)
 
   const listed = await board(alpha, 'board list --json')
@@ -711,4 +716,186 @@ test("#69 AC4/AC14: board description prints the card's description and describe
   expect(await board(alpha, 'board description .')).toEqual(ok)
   await back()
   await expect(card('api').getByTestId('card-description')).toHaveCount(0)
+})
+
+test("#69 AC5/AC7: board workspaces lists them; an id reaches another workspace's card, a title only with --workspace", async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  const beta = makeDir('beta')
+  await createWorkspace(alpha, 'Alpha')
+  await createWorkspace(beta, 'Beta')
+  await selectWorkspace('Alpha')
+  await newCard('Backlog', 'api')
+
+  // AC5: both, in sidebar order, the calling card's marked.
+  const json = await board(alpha, 'board workspaces --json')
+  expect(json.code).toBe(0)
+  const listed = JSON.parse(json.stdout)
+  expect(listed).toEqual([
+    { id: expect.any(String), name: 'Alpha', location: 'local', directory: alpha, current: true },
+    { id: expect.any(String), name: 'Beta', location: 'local', directory: beta }
+  ])
+  const [a, b] = listed as { id: string }[]
+  expect(await board(alpha, 'board workspaces')).toEqual({
+    code: 0,
+    stdout: `${a.id}  Alpha  local  ${alpha}  *\n${b.id}  Beta  local  ${beta}\n`,
+    stderr: ''
+  })
+
+  const created = await board(alpha, "board create --workspace beta Backlog 'Port X'")
+  expect(created.code).toBe(0)
+  const [id, name] = created.stdout.trim().split(' ')
+  expect(name).toBe('Beta')
+  // Opened once in Beta, so `board status` finds it running.
+  await back()
+  await selectWorkspace('Beta')
+  await openCard('Port X')
+  await back()
+  await selectWorkspace('Alpha')
+  await openCard('api')
+
+  // AC7: by its id, from Alpha.
+  expect(await board(alpha, `board rename ${id} 'Port Y'`)).toEqual(ok)
+  expect(await board(alpha, `board move ${id} 'in progress'`)).toEqual(ok)
+  expect(await board(alpha, `board status ${id} queued`)).toEqual(ok)
+  expect(await board(alpha, `printf 'Do Y' | board describe ${id} -`)).toEqual(ok)
+  expect(await board(alpha, `board description ${id}`)).toEqual({
+    code: 0,
+    stdout: 'Do Y\n',
+    stderr: ''
+  })
+  // A title only in this workspace, or the one --workspace names.
+  expect(await board(alpha, "board rename 'Port Y' Z")).toEqual(
+    refused('board: no card "Port Y" in this workspace')
+  )
+  expect(await board(alpha, "board rename --workspace Beta 'Port Y' Z")).toEqual(ok)
+  const list = await board(alpha, 'board list --workspace Beta')
+  expect(list.code).toBe(0)
+  expect(list.stdout.split('\n')[0]).toBe(`Beta (${beta})`)
+  expect(list.stdout).toContain(`In Progress (1)\n  Z  [${id}]  running · description\n`)
+  expect(await board(alpha, 'board list --workspace nope')).toEqual(
+    refused('board: no workspace named nope')
+  )
+
+  await back()
+  await selectWorkspace('Beta')
+  await expect(titlesIn('In Progress')).toHaveText(['Z'])
+  await expect(card('Z').getByTestId('card-agent-status')).toHaveText('queued')
+  await expect(card('Z').getByTestId('card-description')).toHaveAttribute('title', 'Do Y')
+
+  // Two workspaces named Beta, which only a file can hold (the dialog refuses a taken name): the
+  // name is ambiguous.
+  await createWorkspace(makeDir('gamma'), 'Gamma')
+  await app!.close()
+  const statePath = join(dataDir, 'bikube-state.json')
+  const saved = JSON.parse(readFileSync(statePath, 'utf8'))
+  saved.state.workspaces[2].name = 'beta'
+  writeFileSync(statePath, JSON.stringify(saved))
+  await launch()
+  await selectWorkspace('Alpha')
+  await openCard('api')
+  expect(await board(alpha, 'board list --workspace Beta')).toEqual(
+    refused('board: 2 workspaces are named Beta; use its id')
+  )
+})
+
+/**
+ * Ends the open card's fake agent (it waits for one line), once `logged` says it started, and
+ * waits for the shell's prompt to take commands again.
+ */
+async function endFakeAgent(logged: () => boolean): Promise<void> {
+  await expect.poll(logged, { timeout: 15_000 }).toBe(true)
+  await page.keyboard.press('Enter')
+  const tag = `agent-ended-${++commands}`
+  await run(`echo ${tag}-$((1+1))`)
+  await expect.poll(async () => (await bufferLines()).includes(`${tag}-2`)).toBe(true)
+}
+
+/** Creates a card through `+ New card` with the agent `agent` (its select's label). */
+async function newAgentCard(columnName: string, title: string, agent: string): Promise<void> {
+  await column(columnName).getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill(title)
+  await page.getByTestId('new-card-startup').selectOption({ label: agent })
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, title)
+  await expect.poll(terminalFocused).toBe(true)
+}
+
+test("#69 AC6/AC8: a card created in another workspace gets the description, the calling card's agent and a New pill until opened", async () => {
+  const fake = fakeAgentsHome(root)
+  await launch(fake.env)
+  const alpha = makeDir('alpha')
+  const beta = makeDir('beta')
+  await createWorkspace(alpha, 'Alpha')
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  await page.getByTestId('workspace-startup').selectOption({ label: 'OpenCode' })
+  await page.getByTestId('workspace-directory').fill(beta)
+  await page.getByTestId('workspace-name').fill('Beta')
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await selectWorkspace('Alpha')
+
+  // AC6: from a Claude Code card.
+  await newAgentCard('Backlog', 'lead', 'Claude Code')
+  await endFakeAgent(() => claudeLogLines(fake.log).length === 1)
+  const created = await board(
+    alpha,
+    "printf '# Port\\nDo X' | board create --workspace beta --description-file - Backlog 'Port X'"
+  )
+  expect(created.code).toBe(0)
+  expect(created.stderr).toBe('')
+  expect(created.stdout).toMatch(/^\S+ Beta\n$/)
+
+  // AC8: from a Codex card, a Custom command card, and with --agent.
+  await back()
+  await newAgentCard('Backlog', 'coder', 'Codex')
+  await endFakeAgent(() => agentLogLines(fake.agentLog).length === 1)
+  expect((await board(alpha, 'board create --workspace Beta Backlog T1')).code).toBe(0)
+  expect((await board(alpha, 'board create --workspace Beta --agent gemini Backlog T3')).code).toBe(
+    0
+  )
+  await back()
+  await newCard('Backlog', 'plain')
+  expect((await board(alpha, 'board create --workspace Beta Backlog T2')).code).toBe(0)
+  // In its own workspace a card gets no New pill.
+  expect((await board(alpha, 'board create Backlog here')).code).toBe(0)
+
+  await back()
+  await expect(card('here').getByTestId('card-new')).toHaveCount(0)
+  await selectWorkspace('Beta')
+  await expect(titlesIn('Backlog')).toHaveText(['Port X', 'T1', 'T3', 'T2'])
+  const kinds = { 'Port X': 'claude', T1: 'codex', T2: 'opencode', T3: 'gemini' }
+  for (const [title, kind] of Object.entries(kinds)) {
+    await expect(card(title).getByTestId('card-tag')).toHaveAttribute('data-kind', kind)
+    await expect(card(title).getByTestId('card-new')).toHaveText('New')
+    await expect(card(title).getByTestId('card-status-label')).toHaveText('Stopped')
+  }
+  await expect(card('Port X').getByTestId('card-description')).toHaveAttribute(
+    'title',
+    '# Port\nDo X'
+  )
+
+  // Opening it clears the pill and starts Claude Code with the first prompt (D2).
+  await openCard('Port X')
+  await expect
+    .poll(() => claudeLogLines(fake.log).at(-1))
+    .toMatch(
+      new RegExp(`--session-id \\S+ ${FIRST_PROMPT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+    )
+  await back()
+  await expect(card('Port X').getByTestId('card-new')).toHaveCount(0)
+  await expect(card('T1').getByTestId('card-new')).toHaveText('New')
+  await expect
+    .poll(() => {
+      const state = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+      const cards = state.state.workspaces[1].cards as { title: string; unopened?: boolean }[]
+      return cards.map((c) => [c.title, c.unopened ?? false])
+    })
+    .toEqual([
+      ['Port X', false],
+      ['T1', true],
+      ['T3', true],
+      ['T2', true]
+    ])
 })

@@ -1522,6 +1522,32 @@ describe('workspace views and card open times', () => {
     expect(s.markCardOpened(w.id, 'nope', 5)).toMatchObject({ ok: false, error: { field: 'card' } })
   })
 
+  it('creates a card marked unopened when asked, and its first open clears the mark (#69 D11)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const created = ok(
+      s.createCard(w.id, w.columns[0].id, 'Port X', undefined, undefined, undefined, {
+        unopened: true
+      })
+    )
+    expect(created.unopened).toBe(true)
+    expect('unopened' in card(s, w, 'plain')).toBe(false)
+    const opened = ok(s.markCardOpened(w.id, created.id, 7))
+    expect(opened.lastOpenedAt).toBe(7)
+    expect('unopened' in opened).toBe(false)
+  })
+
+  it('creates a plain shell card only when asked for one (#69 D8)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const shell = ok(
+      s.createCard(w.id, w.columns[0].id, 'sh', { kind: 'shell' }, undefined, undefined, {
+        allowShell: true
+      })
+    )
+    expect(shell.startup).toEqual({ kind: 'shell' })
+  })
+
   it("keeps a card's last status and usage, '' and no tokens forgetting them, the same saving nothing", () => {
     const s = make()
     const w = create(s, 'alpha')

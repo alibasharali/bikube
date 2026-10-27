@@ -506,7 +506,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
 
   await openPalette()
   const actions = await titles(section('actions'))
-  expect(actions.slice(0, 11)).toEqual([
+  expect(actions.slice(0, 12)).toEqual([
     'Back to board',
     'Split right',
     'Split down',
@@ -515,6 +515,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
     'Find',
     'Copy command output',
     'Open in new window',
+    'Edit description…',
     'Move card to In Progress',
     'Move card to Review',
     'Move card to Done'
@@ -545,6 +546,34 @@ async function runAction(label: string): Promise<void> {
   await page.keyboard.press('Enter')
   await expect(palette()).toHaveCount(0)
 }
+
+test('#69 D4: with a card open, Edit description… opens its dialog and Save updates the description', async () => {
+  await createWorkspace('Alpha')
+  await newCard('api')
+
+  await runAction('Edit description…')
+  const dialog = page.getByTestId('description-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(page.getByTestId('description-dialog-input')).toBeFocused()
+  await page.getByTestId('description-dialog-input').fill('Step one\nStep two')
+  await page.getByTestId('description-dialog-save').click()
+  await expect(dialog).toHaveCount(0)
+  // The card stays open and its terminal has the keyboard again; its shell got nothing.
+  await expectCardOpen(page, 'api')
+  await expect.poll(terminalFocused).toBe(true)
+  const saved = (): string | undefined => {
+    const file = join(dataDir, 'bikube-state.json')
+    if (!existsSync(file)) return undefined
+    return JSON.parse(readFileSync(file, 'utf8')).state.workspaces[0]?.cards[0]?.description
+  }
+  await expect.poll(saved).toBe('Step one\nStep two')
+  expect((await bufferLines()).some((l) => l.includes('Step'))).toBe(false)
+  await backToBoard(page)
+  await expect(boardCard('api').getByTestId('card-description')).toHaveAttribute(
+    'title',
+    'Step one\nStep two'
+  )
+})
 
 // AC8 (card view actions run from the palette as their shortcuts do) was removed on the
 // developer's request: it was flaky (Find's field not focused) and added no value.

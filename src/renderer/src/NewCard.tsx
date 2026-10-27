@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { checkDescription } from '../../core/card-description'
 import { dialogEnterAction, dialogKeyTarget } from '../../core/dialog-keys'
 import type { StartupCommand } from '../../core/startup-command'
 import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
@@ -86,6 +87,19 @@ function NewCardDialog({
   const cardTitle = title.trim() || placeholder
   const branch = typedBranch ?? suggestBranch(cardTitle, new Set(repo?.branches ?? []))
 
+  // Closed (Esc, Cancel) while main makes the worktree: nothing is created (#69 D3).
+  const closed = useRef(false)
+  useEffect(
+    () => () => {
+      closed.current = true
+    },
+    []
+  )
+  const close = (): void => {
+    closed.current = true
+    onDone()
+  }
+
   useEffect(() => {
     if (!workspace || workspace.host !== undefined) return
     let live = true
@@ -104,6 +118,12 @@ function NewCardDialog({
       create()
       return
     }
+    // Checked before main makes the worktree, which a refused card would leave behind.
+    const described = checkDescription(description)
+    if (!described.ok) {
+      setDescriptionError(described.error.message)
+      return
+    }
     const problem = branchProblem(branch)
     if (problem) {
       setBranchError(problem)
@@ -111,6 +131,11 @@ function NewCardDialog({
     }
     setCreating(true)
     void window.bikube.worktree.create(workspace.directory, branch).then((made) => {
+      if (closed.current) {
+        // Its branch stays, as when a card can't move into a new worktree.
+        if (made.ok) void window.bikube.worktree.remove(workspace.directory, made.path, false)
+        return
+      }
       setCreating(false)
       if (!made.ok) {
         setBranchError(made.reason)
@@ -134,7 +159,7 @@ function NewCardDialog({
     )
     if (created.ok) {
       onCreated(created.value.id)
-      onDone()
+      close()
     } else if (created.error.field === 'command') {
       setCommandError(created.error.message)
     } else if (created.error.field === 'description') {
@@ -166,7 +191,7 @@ function NewCardDialog({
   return (
     <Modal
       title="New card"
-      onClose={onDone}
+      onClose={close}
       testId="new-card-dialog"
       initialFocus='[data-testid="new-card-input"]'
     >
@@ -284,7 +309,7 @@ function NewCardDialog({
           </div>
         )}
         <div className="modal-actions">
-          <button type="button" className="btn" data-testid="new-card-cancel" onClick={onDone}>
+          <button type="button" className="btn" data-testid="new-card-cancel" onClick={close}>
             Cancel
           </button>
           <button

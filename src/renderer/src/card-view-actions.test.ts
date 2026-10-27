@@ -10,6 +10,8 @@ describe('card view actions', () => {
     // Prompt jumps act on the focused pane (#45 D5).
     expect(isCardViewAction('previousPrompt')).toBe(true)
     expect(isCardViewAction('nextPrompt')).toBe(true)
+    // The open card's description, from the palette (#69 D4).
+    expect(isCardViewAction('editDescription')).toBe(true)
     // Toggle panel works on the board too, so the app runs it (#57 D4).
     for (const action of ['settings', 'openShell', 'palette', 'togglePanel', null]) {
       expect(isCardViewAction(action)).toBe(false)

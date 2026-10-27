@@ -107,6 +107,7 @@ export type PaletteAction =
   | { id: 'nextWaiting' }
   | { id: 'zoomPane' }
   | { id: 'openInWindow' }
+  | { id: 'editDescription' }
   | { id: 'newWorkspace' }
   | { id: 'settings' }
   | { id: 'theme'; theme: Theme }
@@ -218,6 +219,7 @@ type KeymapAction = Exclude<
   PaletteAction['id'],
   | 'moveCard'
   | 'newCard'
+  | 'editDescription'
   | 'newWorkspace'
   | 'theme'
   | 'appTheme'
@@ -249,6 +251,9 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)
+  // The open card has no menu (#31 D1): its description is edited from here (#69 D4).
+  if (card)
+    rows.push({ kind: 'action', action: { id: 'editDescription' }, label: 'Edit description…' })
   // The grid view shows no columns, so it offers no moves between them.
   if (!workspace || !card || workspaceView(workspace, input.defaultView) === 'grid') return rows
   for (const column of workspace.columns) {

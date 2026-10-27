@@ -7,11 +7,13 @@ import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-t
 import type { Card } from '../../core/workspace-store'
 import { requestCloseCard } from './card-actions'
 import CloseCardDialog from './CloseCardDialog'
+import DescriptionDialog from './DescriptionDialog'
 import RemoveWorktreeDialog from './RemoveWorktreeDialog'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
 import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
 import { currentKeymap, settingsStore, useSettings } from './settings'
+import { workspaceStore } from './store'
 import SidePanel from './SidePanel'
 import {
   cardPanes,
@@ -201,6 +203,7 @@ function CardView({
   // Shown here, a trigger is listed in the sidebar from now on.
   useEffect(() => markOpened(card.id), [card.id])
   const [closing, setClosing] = useState(false)
+  const [editingDescription, setEditingDescription] = useState(false)
   // A card that stops or fails while its Close dialog is open has nothing left to close.
   if (closing && runState.kind !== 'running') setClosing(false)
   const layout = usePaneLayout(card.id)
@@ -265,6 +268,12 @@ function CardView({
       // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
       else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
       else if (action === 'openInWindow') onOpenInWindow?.()
+      // The open card has no menu (#31 D1): the palette edits its description (#69 D4); a
+      // shell has none.
+      else if (action === 'editDescription') {
+        const ws = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+        if (ws?.cards.some((c) => c.id === card.id)) setEditingDescription(true)
+      }
       // Splitting acts only while the card runs and has fewer than 4 panes (#11 D4); it ends a
       // zoom (#48 D4).
       else if (action === 'splitRight' || action === 'splitDown') {
@@ -279,7 +288,7 @@ function CardView({
         requestCloseCard(card.id, () => setClosing(true))
       }
     }
-  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view])
+  }, [onBack, onOpenInWindow, card, splittable, running, focusedPane, view, workspaceId])
   useEffect(() => {
     const run = (action: CardViewAction): void => runAction.current(action)
     // Capture phase: works wherever focus is, including the terminal, which swallows the key.
@@ -322,6 +331,13 @@ function CardView({
             zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
           />
         </div>
+        {editingDescription && (
+          <DescriptionDialog
+            workspaceId={workspaceId}
+            card={card}
+            onClose={() => setEditingDescription(false)}
+          />
+        )}
         {closing && (
           <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
         )}

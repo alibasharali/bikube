@@ -147,6 +147,23 @@ test('the branch follows the title until edited, and a taken or bad one is refus
   await expect(page.getByTestId('card')).toHaveCount(0)
 })
 
+test('#69: a description over the cap is refused before any worktree is made', async () => {
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Too long')
+  await page.getByTestId('new-card-worktree').check()
+  await page.getByTestId('new-card-description').fill('x'.repeat(100_001))
+  await expect(page.getByTestId('new-card-description-count')).toHaveText('100,001 / 100,000')
+  await page.getByTestId('new-card-create').click()
+  await expect(page.getByTestId('new-card-description-error')).toHaveText(
+    'Description is longer than 100,000 characters'
+  )
+  await expect(page.getByTestId('new-card-dialog')).toBeVisible()
+  await expect(page.getByTestId('card')).toHaveCount(0)
+  expect(git('branch', '--list', 'bikube/too-long')).toBe('')
+  const worktrees = join(dataDir, 'worktrees')
+  expect(existsSync(worktrees) ? readdirSync(worktrees) : []).toEqual([])
+})
+
 test('deleting a worktree card keeps or removes the worktree, never its branch', async () => {
   const branch = await worktreeCard('Keep me')
   const path = worktreePath('keep-me')

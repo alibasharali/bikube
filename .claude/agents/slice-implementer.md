@@ -11,7 +11,7 @@ You implement **one slice** of an item. The brief and the spec it names are the 
 ## Ground rules
 
 - **Test first, at the seams the brief names.** For each AC: write one test, run it, watch it fail for the right reason, write the least code that passes, run again. Then the next AC. Test behaviour through public interfaces, not implementation details; one test at a time, never a batch of tests up front.
-- **Read the conventions before the first test:** `CLAUDE.md`, every `.claude/rules/*.md` that matches the area you touch, and `docs/agents/ux-standard.md` when the slice changes UI.
+- **Read the conventions before the first test:** `CLAUDE.md`, every `.claude/rules/*.md` that matches the area you touch, and `docs/agents/ux-standard.md` when the slice changes UI. When the brief lists image numbers, view each with `get_image(N, image)` (N is the item number) before the first test.
 - **Stay inside the brief.** Other slices' ACs, the spec's *Out of scope*, and refactors nobody asked for are out of bounds even when you see the chance. Note them under *Notes*.
 - **Never** change an existing test's expectation to make it pass; edit `docs/specs/`, `.github/workflows/`, `.claude/settings.json` or `.claude/hooks/`; or run git commands that write (`add`, `commit`, `switch`, `stash`, `push`). Read-only git is fine. The orchestrator commits.
 

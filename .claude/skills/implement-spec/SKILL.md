@@ -31,7 +31,7 @@ A slice that is only factory tool calls (`set_environment_urls`, `create_item`, 
 2. `BASE=$(git rev-parse HEAD)`. Set the slice to `running` in the ledger and `report_progress(N, "Slice <k>/<total>: <slice name>")`.
 3. **Brief** a `slice-implementer`. It sees nothing but the brief:
    - **Objective:** the slice text, every AC it satisfies, and the domain decisions those ACs rest on, all verbatim.
-   - **Sources:** the spec path, the *Test seams* rows for these ACs, the ledger's *Interfaces* from earlier slices, rulings that touch this slice.
+   - **Sources:** the spec path, the *Test seams* rows for these ACs, the ledger's *Interfaces* from earlier slices, rulings that touch this slice, and the image numbers the slice depends on (from `get_item`'s `images`, or `[image N]` in the spec).
    - **Boundaries:** the spec's *Out of scope*, other slices' ACs ("not yours").
    - **Output:** the report shape from its definition. Tell it not to commit.
 4. **BLOCKED:** don't answer for the developer. Ask them with `ask_questions` (the worker's options, your recommendation, notes on where the slice stands) and hand over as `write-spec` describes (under full auto the round comes back answered with your recommendation unless it is `for_developer`: record the ruling and carry on); the answers come back here (`record_answers`) or in a new session that resumes from the ledger (on a local item, `get_item` returning `workMode: "local"`, they come back here when the developer types `continue`, as `item` describes). Record the ruling in the ledger. If it changes the spec, commit `docs(spec): …` first. Resume the **same** implementer with the ruling verbatim.
@@ -51,7 +51,7 @@ If the spec turns out wrong or incomplete, stop and ask the developer. The spec 
 
 ## 3. Verify
 
-Green checks are not verification. Brief the `verifier` with the spec path and the *Test seams and verification* table.
+Green checks are not verification. Run `.claude/local-env.sh` first: it creates the app's missing local env files from their committed examples. If it refuses because a file isn't gitignored, add that file to `.gitignore`, commit `chore: gitignore <file>`, and run it again. Then brief the `verifier` with the spec path and the *Test seams and verification* table.
 
 - `ALL PASS` → keep its summary for the PR and set the ledger's *Verification* to `done`. Don't post it yet: step 4 does, once.
 - `FAILED` → each failed AC is a bug: brief a `slice-implementer` with the AC and what the verifier saw, review the fix, then re-verify the failed ACs only.

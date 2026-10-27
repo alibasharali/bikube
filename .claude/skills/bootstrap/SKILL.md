@@ -11,7 +11,7 @@ The factory created the repo with the agent kit and `docs/agents/stack.md`: the 
 
 - The item description: the whole project in the developer's words (also in `docs/product.md`), and the stack summary. It may describe far more than one item should build.
 - `docs/agents/stack.md`: each picked option's guidelines, secrets, docs links and free-tier limits, plus anything described in words that isn't in the registry yet.
-- `docs/agents/project-standard.md`: what every factory repo needs (check.sh, the `check` job, what the delivery preset needs, board URLs, instructions in `AGENTS.md`, formatters that ignore the kit).
+- `docs/agents/project-standard.md`: what every factory repo needs (check.sh, the `check` job, what the delivery preset needs, board URLs, instructions in `AGENTS.md`, formatters that ignore the kit, a secret-free local env example).
 - The repo tree. With a recipe, its `AGENTS.md` and `.claude/check.sh` already meet most of the standard.
 
 ## 1b. Deciding the stack (auto only)

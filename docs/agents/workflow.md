@@ -89,7 +89,7 @@ Money, secrets and stack changes stay the developer's: such a round is asked `fo
 | Layer | What it enforces |
 |---|---|
 | Code | `.claude/check.sh` (tests, typecheck, build: project-defined) |
-| Harness (`.claude/settings.json`) | no reading secrets (`.env*`, `.dev.vars*`); Stop hook runs `.claude/check.sh` |
+| Harness (`.claude/settings.json`) | no reading secrets (`.env*`, `.dev.vars*`): `.claude/local-env.sh` is the one way to create a missing local env file, from its committed example; Stop hook runs `.claude/check.sh` |
 | GitHub | With rulesets (public repos, or GitHub Pro): the base branch needs a PR, CI and Claude review green, conversations resolved, squash merge; in Dev and prod, `main` needs a PR, CI green, merge commit only (keeps develop's history in main), human merge. Without rulesets (private repos on GitHub Free) nothing is enforced on GitHub: the same rules hold because merges go through the factory's Merge buttons, so never push to `develop` or `main` directly |
 | Factory | agents move items one column forward at most, never into the delivery columns |
 

@@ -1,6 +1,7 @@
 import { app, ipcMain, type WebContents } from 'electron'
 import { dirname, join } from 'node:path'
 import { boardShellEnv } from '../core/board-env'
+import { CLAUDE_SETTINGS_FILE } from '../core/claude-hooks'
 import { BoardRelay } from '../core/board-relay'
 import { NO_ANSWER } from '../core/board-protocol'
 import { startBoardServer, type BoardHandler, type BoardServer } from '../core/board-server'
@@ -30,6 +31,14 @@ function boardPaths(): { binDir: string; cliPath: string } {
     binDir: join(process.resourcesPath, 'bin'),
     cliPath: cliPath.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2')
   }
+}
+
+/**
+ * Bikube's own Claude Code settings file (#31 D14), beside `board`: the file every local Claude
+ * Code card gets as `BIKUBE_CLAUDE_SETTINGS`, whose hooks Agent setup lists (#68 D8).
+ */
+export function claudeSettingsPath(): string {
+  return join(boardPaths().binDir, CLAUDE_SETTINGS_FILE)
 }
 
 /**

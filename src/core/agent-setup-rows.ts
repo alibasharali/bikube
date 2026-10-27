@@ -4,7 +4,8 @@
  * Plain TS with no Node or DOM imports: the renderer runs it.
  *
  * Sections with rows are those `sectionSummaries` returns; later slices add theirs (Plugins, MCP
- * servers, Hooks, Permissions) there, and their warnings to `setupWarnings`.
+ * servers) there, and their warnings to `setupWarnings`. Hooks (D19), Permissions (D20) and
+ * Status' rows (D13) are read here too.
  */
 
 import type { AgentSetupSectionId } from './agent-setup-sections'
@@ -13,7 +14,10 @@ import {
   type AgentSetupSnapshot,
   type DefinitionEntry,
   type EntrySource,
-  type MemoryEntry
+  type HookEntry,
+  type JsonFileState,
+  type MemoryEntry,
+  type SettingsFile
 } from './agent-setup-snapshot'
 
 /** The search's terms: lower case, split on spaces (D25). */
@@ -72,6 +76,150 @@ function memoryRows(entries: readonly MemoryEntry[]): MemoryEntry[] {
   return entries.flatMap((entry) => [entry, ...memoryRows(entry.imports)])
 }
 
+/** Hook events in the order Claude Code's hooks reference lists them (D19). */
+export const HOOK_EVENT_ORDER: readonly string[] = [
+  'PreToolUse',
+  'PermissionRequest',
+  'PostToolUse',
+  'Notification',
+  'UserPromptSubmit',
+  'Stop',
+  'SubagentStop',
+  'PreCompact',
+  'SessionStart',
+  'SessionEnd'
+]
+
+/** One event's hooks (D19). */
+export interface HookGroup {
+  event: string
+  hooks: HookEntry[]
+}
+
+const hookMatches = (hook: HookEntry, query: string): boolean =>
+  matchesQuery(query, [hook.event, hook.matcher ?? 'All', hook.command, sourceLabel(hook.source)])
+
+/**
+ * The hooks matching `query`, grouped by event: known events in Claude Code's order, unknown ones
+ * after them by name (D19); within an event, as read (Bikube's, local, project, user, plugins).
+ */
+export function hookGroups(hooks: readonly HookEntry[], query: string): HookGroup[] {
+  const groups = new Map<string, HookEntry[]>()
+  for (const hook of hooks) {
+    if (!hookMatches(hook, query)) continue
+    const group = groups.get(hook.event)
+    if (group) group.push(hook)
+    else groups.set(hook.event, [hook])
+  }
+  const rank = (event: string): number => {
+    const at = HOOK_EVENT_ORDER.indexOf(event)
+    return at === -1 ? HOOK_EVENT_ORDER.length : at
+  }
+  return [...groups]
+    .sort(([a], [b]) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map(([event, hooks]) => ({ event, hooks }))
+}
+
+/** A settings file's source chip (D9). */
+const settingsSource = (file: SettingsFile): EntrySource => ({ kind: file.scope })
+
+/** The effective value of settings key `key` (D10): the first file, by precedence, that sets it. */
+export function effectiveSetting(
+  settings: readonly SettingsFile[],
+  key: string
+): { value: unknown; file: SettingsFile } | null {
+  for (const file of settings) {
+    if (file.value && Object.hasOwn(file.value, key)) return { value: file.value[key], file }
+  }
+  return null
+}
+
+/** A permission rule or additional directory with where it is set (D20). */
+export interface PermissionRule {
+  rule: string
+  source: EntrySource
+  file: string
+}
+
+/** Permissions (D20): the effective `defaultMode` and every source's rules, merged (D10). */
+export interface PermissionsView {
+  defaultMode: { value: string; source: EntrySource; file: string } | null
+  allow: PermissionRule[]
+  ask: PermissionRule[]
+  deny: PermissionRule[]
+  additionalDirectories: PermissionRule[]
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** The permission rules matching `query` (D25), by precedence; `defaultMode` is never filtered. */
+export function permissionsView(snapshot: AgentSetupSnapshot, query: string): PermissionsView {
+  const view: PermissionsView = {
+    defaultMode: null,
+    allow: [],
+    ask: [],
+    deny: [],
+    additionalDirectories: []
+  }
+  for (const file of snapshot.settings) {
+    const permissions = file.value?.['permissions']
+    if (!isObject(permissions)) continue
+    const source = settingsSource(file)
+    const mode = permissions['defaultMode']
+    if (view.defaultMode === null && typeof mode === 'string') {
+      view.defaultMode = { value: mode, source, file: file.file }
+    }
+    for (const list of ['allow', 'ask', 'deny', 'additionalDirectories'] as const) {
+      const rules = permissions[list]
+      if (!Array.isArray(rules)) continue
+      for (const rule of rules) {
+        if (typeof rule !== 'string') continue
+        if (!matchesQuery(query, [rule, sourceLabel(source)])) continue
+        view[list].push({ rule, source, file: file.file })
+      }
+    }
+  }
+  return view
+}
+
+/** Status' account line (D13): `<email> · <organization>`, or `Not signed in`. */
+export function accountText(snapshot: AgentSetupSnapshot): string {
+  const account = snapshot.claudeJson.oauthAccount
+  const parts = [account?.emailAddress, account?.organizationName].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : 'Not signed in'
+}
+
+/** One of Status' settings files (D13). */
+export interface SettingsFileState {
+  file: string
+  source: EntrySource
+  state: JsonFileState
+  error?: string
+}
+
+/**
+ * Status' settings files (D13): Bikube's (when read), the three settings files by precedence,
+ * `~/.claude.json` and `.mcp.json`, each Found, Missing or Invalid.
+ */
+export function settingsFileStates(snapshot: AgentSetupSnapshot): SettingsFileState[] {
+  const state = (
+    file: { file: string; state: JsonFileState; error?: string },
+    source: EntrySource
+  ): SettingsFileState => ({
+    file: file.file,
+    source,
+    state: file.state,
+    ...(file.error !== undefined ? { error: file.error } : {})
+  })
+  return [
+    ...(snapshot.bikubeSettings ? [state(snapshot.bikubeSettings, { kind: 'bikube' })] : []),
+    ...snapshot.settings.map((file) => state(file, settingsSource(file))),
+    state(snapshot.claudeJson, { kind: 'user' }),
+    state(snapshot.mcpJson, { kind: 'project' })
+  ]
+}
+
 /** The groups an Overview card splits a count into, in this order (D12). */
 const SOURCE_GROUPS = ['Project', 'Local', 'User', 'Plugin', 'Bikube'] as const
 type SourceGroup = (typeof SOURCE_GROUPS)[number]
@@ -119,12 +267,19 @@ export function sectionSummaries(
     skills: definitions('skills'),
     agents: definitions('agents'),
     commands: definitions('commands'),
+    hooks: summary(hookGroups(snapshot.hooks, query).flatMap((g) => g.hooks.map((h) => h.source))),
     memory: summary(
       memoryRows(snapshot.memory)
         .filter((entry) => memoryMatches(entry, query))
         .map((e) => e.source)
-    )
+    ),
+    permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source))
   }
+}
+
+/** Every rule and additional directory of `view`: the Permissions section's rows. */
+export function permissionRules(view: PermissionsView): PermissionRule[] {
+  return [...view.allow, ...view.ask, ...view.deny, ...view.additionalDirectories]
 }
 
 /** One line of the Overview's Warnings list (D12, D24). */
@@ -149,6 +304,16 @@ export function setupWarnings(snapshot: AgentSetupSnapshot): SetupWarning[] {
       for (const message of entry.warnings) {
         warnings.push({ section, entry: entry.name, file: entry.file, message })
       }
+    }
+  }
+  for (const hook of snapshot.hooks) {
+    for (const message of hook.warnings) {
+      warnings.push({
+        section: 'hooks',
+        entry: `${hook.event} · ${hook.command}`,
+        file: hook.file ?? snapshot.bikubeSettings?.file ?? '',
+        message
+      })
     }
   }
   for (const entry of memoryRows(snapshot.memory)) {

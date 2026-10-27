@@ -269,3 +269,100 @@ describe('readAgentSetup', () => {
     expect(agent!.tools).toEqual(['Read', 'Grep'])
   })
 })
+
+describe('readAgentSetup hooks (#68 S3)', () => {
+  const hooksOf = (event: string, command: string, more: Record<string, unknown> = {}): string =>
+    JSON.stringify({
+      hooks: { [event]: [{ ...more, hooks: [{ type: 'command', command, timeout: 10 }] }] }
+    })
+
+  it("AC7: reads Bikube's hooks without listing its file, and warns about a missing project hook", async () => {
+    const bikube = join(dir, 'bin', 'claude-settings.json')
+    write(bikube, hooksOf('Stop', '"$BIKUBE_BIN/board" activity . waiting'))
+    write(
+      inFolder('.claude/settings.json'),
+      hooksOf('PreToolUse', '$CLAUDE_PROJECT_DIR/hooks/check.sh --fast', { matcher: 'Bash' })
+    )
+    const snapshot = await readAgentSetup({ folder, home, bikubeSettings: bikube })
+    expect(snapshot.hooks).toEqual([
+      {
+        event: 'Stop',
+        matcher: null,
+        command: '"$BIKUBE_BIN/board" activity . waiting',
+        timeout: 10,
+        source: { kind: 'bikube' },
+        warnings: []
+      },
+      {
+        event: 'PreToolUse',
+        matcher: 'Bash',
+        command: '$CLAUDE_PROJECT_DIR/hooks/check.sh --fast',
+        timeout: 10,
+        source: { kind: 'project' },
+        file: inFolder('.claude/settings.json'),
+        warnings: ['Command not found']
+      }
+    ])
+    expect(snapshot.bikubeSettings).toEqual({
+      file: bikube,
+      state: 'found',
+      value: expect.anything()
+    })
+    expect(snapshot.paths).not.toContain(bikube)
+
+    // Once the file is there, no warning.
+    write(inFolder('hooks/check.sh'), '#!/bin/sh\n')
+    expect(
+      (await readAgentSetup({ folder, home, bikubeSettings: bikube })).hooks[1]!.warnings
+    ).toEqual([])
+  })
+
+  it('D19: checks absolute, quoted, ${CLAUDE_PROJECT_DIR} and plugin-root commands; others never', async () => {
+    const installPath = ac4Fixtures()
+    write(
+      inHome('.claude/settings.json'),
+      JSON.stringify({
+        enabledPlugins: { 'kit@market': true },
+        hooks: {
+          PostToolUse: [
+            {
+              matcher: 'Write|Edit',
+              hooks: [
+                { type: 'command', command: '/nowhere/fmt.sh' },
+                { type: 'command', command: '"${CLAUDE_PROJECT_DIR}"/x.sh' },
+                { type: 'command', command: 'npx prettier --write' },
+                { type: 'command', command: '$HOME/x.sh' }
+              ]
+            }
+          ]
+        }
+      })
+    )
+    write(
+      join(installPath, 'hooks/hooks.json'),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [
+                { type: 'command', command: '${CLAUDE_PLUGIN_ROOT}/start.sh' },
+                { type: 'command', command: '${CLAUDE_PLUGIN_ROOT}/gone.sh' }
+              ]
+            }
+          ]
+        }
+      })
+    )
+    write(join(installPath, 'start.sh'), '')
+    const snapshot = await read()
+    expect(snapshot.hooks.map((h) => [h.event, h.command, h.source.kind, h.warnings])).toEqual([
+      ['PostToolUse', '/nowhere/fmt.sh', 'user', ['Command not found']],
+      ['PostToolUse', '"${CLAUDE_PROJECT_DIR}"/x.sh', 'user', ['Command not found']],
+      ['PostToolUse', 'npx prettier --write', 'user', []],
+      ['PostToolUse', '$HOME/x.sh', 'user', []],
+      ['SessionStart', '${CLAUDE_PLUGIN_ROOT}/start.sh', 'plugin', []],
+      ['SessionStart', '${CLAUDE_PLUGIN_ROOT}/gone.sh', 'plugin', ['Command not found']]
+    ])
+    expect(snapshot.hooks[4]!.file).toBe(join(installPath, 'hooks/hooks.json'))
+  })
+})

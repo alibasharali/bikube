@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
+import type { ClaudeVersion } from '../../core/claude-version'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
@@ -146,4 +147,51 @@ export function useAgentSetupRefresh(folder: string): void {
       stopFocus()
     }
   }, [folder])
+}
+
+/**
+ * Status' Claude Code row (#68 D13): `claude --version` through the login shell, read when the
+ * page opens and on Refresh only, never on the periodic refresh (D26). Not per folder: it is the
+ * same claude for every workspace. `result` is undefined before the first read ends and null when
+ * the check failed.
+ */
+export interface ClaudeVersionState {
+  reading: boolean
+  result: ClaudeVersion | null | undefined
+}
+
+let claudeVersion: ClaudeVersionState = { reading: false, result: undefined }
+let versionRead: Promise<void> | null = null
+
+const setClaudeVersion = (next: ClaudeVersionState): void => {
+  claudeVersion = next
+  for (const listener of [...listeners]) listener()
+}
+
+/** Reads Claude Code's version again; one read at a time, a request during it sharing it. */
+export function refreshClaudeVersion(): Promise<void> {
+  versionRead ??= (async () => {
+    setClaudeVersion({ ...claudeVersion, reading: true })
+    let result: ClaudeVersion | null = null
+    try {
+      result = await window.bikube.agentSetup.claudeVersion()
+    } catch {
+      // A failed check reads as null.
+    }
+    setClaudeVersion({ reading: false, result })
+  })().finally(() => {
+    versionRead = null
+  })
+  return versionRead
+}
+
+/** Claude Code's version as last read, re-rendered on every change. */
+export function useClaudeVersion(): ClaudeVersionState {
+  const subscribe = useCallback((listener: () => void) => {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+  return useSyncExternalStore(subscribe, () => claudeVersion)
 }

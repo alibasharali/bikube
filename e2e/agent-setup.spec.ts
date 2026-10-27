@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
@@ -10,7 +10,9 @@ import { plainCards } from './plain-cards'
 // view as an open card is (its sidebar row, Back, remembered per workspace for the run), its
 // section list, search box and Refresh, the SSH message, the narrow layout and the keyboard; and
 // (#68 S2) what it reads from a fake home (`BIKUBE_HOME_DIR`) and the workspace folder: Overview,
-// Skills, Agents, Commands and Memory with their sources, counts, warnings, search and refresh.
+// Skills, Agents, Commands and Memory with their sources, counts, warnings, search and refresh;
+// (#68 S3) Hooks with Bikube's own, Permissions, and Status with `claude --version` read through
+// the login shell (a fake `claude` on a fake login PATH).
 
 const darwin = process.platform === 'darwin'
 /** The command palette's default shortcut (#40 D1) as a Playwright press. */
@@ -39,10 +41,12 @@ test.afterEach(async () => {
   rmSync(root, { recursive: true, force: true })
 })
 
-async function launch(): Promise<void> {
+/** Launches with the fake home, and `extra` over the inherited variables. */
+async function launch(extra: Record<string, string> = {}): Promise<void> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
   env['BIKUBE_HOME_DIR'] = home
+  Object.assign(env, extra)
   ;({ app, page } = await launchApp({ dataDir, env }))
 }
 
@@ -314,9 +318,23 @@ const row = (name: string): Locator =>
     .getByTestId('agent-setup-row')
     .filter({ has: page.getByTestId('agent-setup-row-name').getByText(name, { exact: true }) })
 
-/** Creates workspace `Proj` with `fixtures` written to its folder first, and opens the page. */
-async function openWith(fixtures: (folder: string) => void): Promise<string> {
-  await launch()
+/** Status' row for settings file `label`. */
+const statusFile = (label: string): Locator =>
+  panel()
+    .getByTestId('agent-setup-status-file')
+    .filter({
+      has: page.getByTestId('agent-setup-status-file-name').getByText(label, { exact: true })
+    })
+
+/**
+ * Creates workspace `Proj` with `fixtures` written to its folder first, and opens the page;
+ * `extra` variables over the inherited ones.
+ */
+async function openWith(
+  fixtures: (folder: string) => void,
+  extra: Record<string, string> = {}
+): Promise<string> {
+  await launch(extra)
   const folder = await createWorkspace('Proj')
   fixtures(folder)
   await setupButton().click()
@@ -366,6 +384,15 @@ test('AC8: an agent without frontmatter is warned about on its row and in Overvi
   await warnings.filter({ hasText: 'bare' }).getByRole('button', { name: 'bare' }).click()
   await expect(tab('Agents')).toHaveAttribute('aria-selected', 'true')
   await expect(row('bare').getByTestId('agent-setup-row-warning')).toHaveText('⚠ No frontmatter')
+
+  // Status reads the settings file Invalid with the parser's message, and has the warning dot.
+  await expect(
+    page.getByTestId('agent-setup-section-status').getByTestId('agent-setup-section-warning')
+  ).toBeVisible()
+  await tab('Status').click()
+  const file = statusFile('.claude/settings.json')
+  await expect(file.getByTestId('agent-setup-status-file-state')).toHaveText('Invalid')
+  await expect(file.getByTestId('agent-setup-row-warning')).toContainText('⚠ Invalid JSON: ')
 })
 
 test('AC9: memory files in load order, imports nested, a missing import warned about', async () => {
@@ -462,6 +489,152 @@ test('AC16: a new skill shows within 4 seconds, keeping the scroll and the searc
   await expect(count('skills')).toHaveText('41')
   await expect(search).toHaveValue('skill')
   expect(await panel().evaluate((el) => el.scrollTop)).toBe(scrolled)
+})
+
+test("AC7: Hooks lists Bikube's hooks and a project hook whose file is missing, warned about", async () => {
+  await openWith((folder) => {
+    write(
+      join(folder, '.claude/settings.json'),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: 'Bash',
+              hooks: [{ type: 'command', command: '$CLAUDE_PROJECT_DIR/hooks/check.sh' }]
+            }
+          ]
+        }
+      })
+    )
+  })
+  // Bikube's five hooks and the project's.
+  await expect(count('hooks')).toHaveText('6')
+  await expect(
+    page.getByTestId('agent-setup-section-hooks').getByTestId('agent-setup-section-warning')
+  ).toBeVisible()
+  const warning = page
+    .getByTestId('agent-setup-warning-item')
+    .filter({ hasText: '$CLAUDE_PROJECT_DIR/hooks/check.sh' })
+  await expect(warning).toContainText('⚠ Command not found')
+  await expect(
+    page.getByTestId('agent-setup-overview-hooks').getByTestId('agent-setup-overview-split')
+  ).toHaveText('1 Project · 5 Bikube')
+
+  await tab('Hooks').click()
+  const groups = panel().getByTestId('agent-setup-hook-group')
+  await expect(groups.getByRole('heading')).toHaveText([
+    'PreToolUse',
+    'Notification',
+    'UserPromptSubmit',
+    'Stop',
+    'SessionStart'
+  ])
+  const preToolUse = groups.filter({ has: page.getByRole('heading', { name: 'PreToolUse' }) })
+  const hookRows = preToolUse.getByTestId('agent-setup-row')
+  await expect(hookRows).toHaveCount(2)
+  // Bikube's first (D10), with its chip and no Open file.
+  await expect(hookRows.nth(0).getByTestId('agent-setup-source')).toHaveText('Bikube')
+  await expect(hookRows.nth(0).getByTestId('agent-setup-hook-matcher')).toHaveText('All')
+  await expect(hookRows.nth(0).getByTestId('agent-setup-row-warning')).toHaveCount(0)
+  await expect(hookRows.nth(0).getByRole('button')).toHaveCount(0)
+  await expect(hookRows.nth(1).getByTestId('agent-setup-hook-command')).toHaveText(
+    '$CLAUDE_PROJECT_DIR/hooks/check.sh'
+  )
+  await expect(hookRows.nth(1).getByTestId('agent-setup-hook-matcher')).toHaveText('Bash')
+  await expect(hookRows.nth(1).getByTestId('agent-setup-source')).toHaveText('Project')
+  await expect(hookRows.nth(1).getByTestId('agent-setup-row-warning')).toHaveText(
+    '⚠ Command not found'
+  )
+  // Every Bikube row carries its chip.
+  const bikube = panel()
+    .getByTestId('agent-setup-row')
+    .filter({ has: page.getByTestId('agent-setup-source').getByText('Bikube', { exact: true }) })
+  await expect(bikube).toHaveCount(5)
+
+  // The search covers hooks too.
+  await page.getByTestId('agent-setup-search').fill('check.sh')
+  await expect(count('hooks')).toHaveText('1')
+  await expect(panel().getByTestId('agent-setup-row')).toHaveCount(1)
+})
+
+test('AC10: Permissions lists each rule with its source, read-only', async () => {
+  await openWith((folder) => {
+    write(
+      join(folder, '.claude/settings.json'),
+      JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } })
+    )
+    write(
+      join(folder, '.claude/settings.local.json'),
+      JSON.stringify({ permissions: { deny: ['Read(./secrets/**)'] } })
+    )
+  })
+  await expect(count('permissions')).toHaveText('2')
+  await tab('Permissions').click()
+  const list = (name: string): Locator => panel().getByTestId(`agent-setup-permissions-${name}`)
+  await expect(list('allow').getByTestId('agent-setup-permission-rule')).toHaveText([
+    'Bash(npm test)'
+  ])
+  await expect(list('allow').getByTestId('agent-setup-source')).toHaveText(['Project'])
+  await expect(list('deny').getByTestId('agent-setup-permission-rule')).toHaveText([
+    'Read(./secrets/**)'
+  ])
+  await expect(list('deny').getByTestId('agent-setup-source')).toHaveText(['Local'])
+  await expect(list('ask')).toHaveText('None')
+  await expect(page.getByTestId('agent-setup-default-mode')).toContainText('Default')
+  // No editing controls.
+  await expect(panel().locator('input, select, textarea, [role="switch"]')).toHaveCount(0)
+})
+
+/**
+ * The variables whose login shell (`/bin/sh -l`, through `SHELL`) gets a PATH of a fake `bin` and
+ * the system folders only, with a fake `claude` there when `claude`. `HOME` is the fake home the
+ * page also reads as `~` (`BIKUBE_HOME_DIR`).
+ */
+function loginShell(claude: boolean): Record<string, string> {
+  const bin = join(root, 'bin')
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(join(home, '.profile'), `PATH='${bin}':/usr/bin:/bin; export PATH\n`)
+  if (claude) {
+    writeFileSync(join(bin, 'claude'), "#!/bin/sh\necho '2.1.0 (Claude Code)'\n")
+    chmodSync(join(bin, 'claude'), 0o755)
+  }
+  return { SHELL: '/bin/sh', HOME: home }
+}
+
+test("AC13: Status reads Claude Code's version and path, the account and each file's state", async () => {
+  const shell = loginShell(true)
+  write(
+    join(home, '.claude.json'),
+    JSON.stringify({ oauthAccount: { emailAddress: 'a@b.c', organizationName: 'Org' } })
+  )
+  await openWith((folder) => {
+    write(join(folder, '.claude/settings.json'), '{}')
+  }, shell)
+  await tab('Status').click()
+  const status = (id: string): Locator => panel().getByTestId(`agent-setup-status-${id}`)
+  await expect(status('claude')).toContainText('2.1.0 (Claude Code)')
+  await expect(status('claude')).toContainText(join(root, 'bin', 'claude'))
+  await expect(status('account')).toContainText('a@b.c · Org')
+  await expect(status('model')).toHaveText(/^Model\s*Default$/)
+  await expect(status('output-style')).toContainText('Default')
+  await expect(status('bikube')).toContainText('Active in Claude Code cards')
+  await expect(status('bikube')).toContainText('Claude Code status: On')
+  const state = (label: string): Locator =>
+    statusFile(label).getByTestId('agent-setup-status-file-state')
+  await expect(state('claude-settings.json')).toHaveText('Found')
+  await expect(state('.claude/settings.local.json')).toHaveText('Missing')
+  await expect(state('.claude/settings.json')).toHaveText('Found')
+  await expect(state('~/.claude/settings.json')).toHaveText('Missing')
+  await expect(state('~/.claude.json')).toHaveText('Found')
+  await expect(state('.mcp.json')).toHaveText('Missing')
+  await expect(statusFile('claude-settings.json').getByTestId('agent-setup-source')).toHaveText(
+    'Bikube'
+  )
+
+  // Without claude on the login PATH, Refresh reads it Not installed.
+  rmSync(join(root, 'bin', 'claude'))
+  await page.getByTestId('agent-setup-refresh').click()
+  await expect(status('claude')).toContainText('Not installed')
 })
 
 test('the Toggle panel shortcut does nothing while the page is in front', async () => {

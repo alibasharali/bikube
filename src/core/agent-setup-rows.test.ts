@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accountText,
+  effectiveSetting,
   fileLabel,
   filterDefinitions,
   filterMemory,
+  hookGroups,
   isPluginOff,
   matchesQuery,
+  permissionsView,
   sectionSummaries,
+  settingsFileStates,
   setupWarnings,
   sourceSplit
 } from './agent-setup-rows'
@@ -13,7 +18,9 @@ import type {
   AgentSetupSnapshot,
   DefinitionEntry,
   EntrySource,
-  MemoryEntry
+  HookEntry,
+  MemoryEntry,
+  SettingsFile
 } from './agent-setup-snapshot'
 
 // The Agent setup page's rows (#68 D12, D18, D24, D25): counts by source, search, warnings.
@@ -66,6 +73,8 @@ function snapshot(more: Partial<AgentSetupSnapshot> = {}): AgentSetupSnapshot {
     agents: [],
     commands: [],
     memory: [],
+    hooks: [],
+    bikubeSettings: null,
     more: {},
     fileWarnings: [],
     paths: [],
@@ -206,5 +215,198 @@ describe('fileLabel', () => {
     expect(fileLabel(at, '/h/proj/.claude/agents/a.md')).toBe('.claude/agents/a.md')
     expect(fileLabel(at, '/h/.claude/CLAUDE.md')).toBe('~/.claude/CLAUDE.md')
     expect(fileLabel(at, '/etc/x')).toBe('/etc/x')
+  })
+})
+
+const hook = (event: string, command: string, more: Partial<HookEntry> = {}): HookEntry => ({
+  event,
+  matcher: null,
+  command,
+  source: { kind: 'project' },
+  file: '/f/.claude/settings.json',
+  warnings: [],
+  ...more
+})
+
+describe('hookGroups', () => {
+  it("D19: groups hooks by event in Claude Code's order, unknown events last by name", () => {
+    const groups = hookGroups(
+      [
+        hook('Stop', 'b-stop', { source: { kind: 'bikube' } }),
+        hook('Zeta', 'z'),
+        hook('SessionStart', 'start'),
+        hook('PreToolUse', 'pre', { matcher: 'Bash' }),
+        hook('Alpha', 'a'),
+        hook('Stop', 'p-stop')
+      ],
+      ''
+    )
+    expect(groups.map((g) => [g.event, g.hooks.map((h) => h.command)])).toEqual([
+      ['PreToolUse', ['pre']],
+      ['Stop', ['b-stop', 'p-stop']],
+      ['SessionStart', ['start']],
+      ['Alpha', ['a']],
+      ['Zeta', ['z']]
+    ])
+  })
+
+  it('D25: filters by command, matcher, event and source', () => {
+    const hooks = [
+      hook('PreToolUse', 'check.sh', { matcher: 'Bash' }),
+      hook('Stop', 'board', { source: { kind: 'bikube' } })
+    ]
+    expect(hookGroups(hooks, 'bash').map((g) => g.event)).toEqual(['PreToolUse'])
+    expect(hookGroups(hooks, 'bikube').map((g) => g.event)).toEqual(['Stop'])
+    expect(hookGroups(hooks, 'stop board').map((g) => g.event)).toEqual(['Stop'])
+    expect(hookGroups(hooks, 'nothing')).toEqual([])
+  })
+})
+
+const settingsFile = (
+  scope: SettingsFile['scope'],
+  value?: Record<string, unknown>
+): SettingsFile => ({
+  scope,
+  file: `/${scope}.json`,
+  state: value ? 'found' : 'missing',
+  ...(value ? { value } : {})
+})
+
+describe('permissionsView', () => {
+  it('AC10: merges every settings file’s rules with their sources; defaultMode by precedence', () => {
+    const view = permissionsView(
+      snapshot({
+        settings: [
+          settingsFile('local', { permissions: { deny: ['Read(./secrets/**)'] } }),
+          settingsFile('project', {
+            permissions: { allow: ['Bash(npm test)'], defaultMode: 'acceptEdits' }
+          }),
+          settingsFile('user', {
+            permissions: {
+              allow: ['WebFetch', 7],
+              defaultMode: 'plan',
+              additionalDirectories: ['../docs']
+            }
+          })
+        ]
+      }),
+      ''
+    )
+    expect(view.defaultMode).toEqual({
+      value: 'acceptEdits',
+      source: { kind: 'project' },
+      file: '/project.json'
+    })
+    expect(view.allow.map((r) => [r.rule, r.source.kind])).toEqual([
+      ['Bash(npm test)', 'project'],
+      ['WebFetch', 'user']
+    ])
+    expect(view.ask).toEqual([])
+    expect(view.deny.map((r) => [r.rule, r.source.kind, r.file])).toEqual([
+      ['Read(./secrets/**)', 'local', '/local.json']
+    ])
+    expect(view.additionalDirectories.map((r) => r.rule)).toEqual(['../docs'])
+    expect(permissionsView(snapshot(), '').defaultMode).toBeNull()
+  })
+
+  it('D25: keeps only rules matching the search, by rule or source', () => {
+    const s = snapshot({
+      settings: [
+        settingsFile('local', { permissions: { deny: ['Read(./secrets/**)'] } }),
+        settingsFile('project', { permissions: { allow: ['Bash(npm test)'] } })
+      ]
+    })
+    expect(permissionsView(s, 'npm').allow.map((r) => r.rule)).toEqual(['Bash(npm test)'])
+    expect(permissionsView(s, 'npm').deny).toEqual([])
+    expect(permissionsView(s, 'local').deny.map((r) => r.rule)).toEqual(['Read(./secrets/**)'])
+  })
+})
+
+describe('hooks and permissions in counts and warnings', () => {
+  const s = snapshot({
+    hooks: [
+      hook('Stop', 'board', { source: { kind: 'bikube' }, file: undefined }),
+      hook('PreToolUse', '$CLAUDE_PROJECT_DIR/hooks/check.sh', {
+        warnings: ['Command not found']
+      })
+    ],
+    settings: [
+      settingsFile('local', { permissions: { deny: ['Read(./secrets/**)'] } }),
+      settingsFile('project', { permissions: { allow: ['Bash(npm test)'] } })
+    ]
+  })
+
+  it('AC7, AC10: counts hooks and permission rules by source', () => {
+    const summaries = sectionSummaries(s, '')
+    expect(summaries.hooks).toEqual({ count: 2, bySource: { Bikube: 1, Project: 1 } })
+    expect(sourceSplit(summaries.hooks!)).toBe('1 Project · 1 Bikube')
+    expect(summaries.permissions).toEqual({ count: 2, bySource: { Local: 1, Project: 1 } })
+    expect(sectionSummaries(s, 'npm').permissions!.count).toBe(1)
+    expect(sectionSummaries(s, 'npm').hooks!.count).toBe(0)
+  })
+
+  it("AC7: lists a hook's warning in the Hooks section", () => {
+    expect(setupWarnings(s).map((w) => [w.section, w.entry, w.message, w.file])).toEqual([
+      [
+        'hooks',
+        'PreToolUse · $CLAUDE_PROJECT_DIR/hooks/check.sh',
+        'Command not found',
+        '/f/.claude/settings.json'
+      ]
+    ])
+  })
+})
+
+describe('Status', () => {
+  it('D13: the account, or Not signed in', () => {
+    const base = snapshot()
+    expect(accountText(base)).toBe('Not signed in')
+    const signedIn = (oauthAccount: AgentSetupSnapshot['claudeJson']['oauthAccount']): string =>
+      accountText({ ...base, claudeJson: { ...base.claudeJson, oauthAccount } })
+    expect(signedIn({ emailAddress: 'a@b.c', organizationName: 'Org' })).toBe('a@b.c · Org')
+    expect(signedIn({ emailAddress: 'a@b.c' })).toBe('a@b.c')
+    expect(signedIn({})).toBe('Not signed in')
+  })
+
+  it('D10: the effective value is the first settings file that sets it', () => {
+    const settings = [
+      settingsFile('local'),
+      settingsFile('project', { model: 'opus' }),
+      settingsFile('user', { model: 'sonnet', outputStyle: 'Explanatory' })
+    ]
+    expect(effectiveSetting(settings, 'model')).toEqual({ value: 'opus', file: settings[1] })
+    expect(effectiveSetting(settings, 'outputStyle')?.value).toBe('Explanatory')
+    expect(effectiveSetting(settings, 'nope')).toBeNull()
+  })
+
+  it("D13: every settings file's state, Bikube's first, then ~/.claude.json and .mcp.json", () => {
+    const states = settingsFileStates(
+      snapshot({
+        bikubeSettings: { file: '/app/bin/claude-settings.json', state: 'found' },
+        settings: [
+          settingsFile('local'),
+          {
+            scope: 'project',
+            file: '/f/.claude/settings.json',
+            state: 'invalid',
+            error: 'Invalid JSON: Unexpected end of JSON input'
+          },
+          settingsFile('user', {})
+        ]
+      })
+    )
+    expect(states.map((f) => [f.file, f.source.kind, f.state, f.error])).toEqual([
+      ['/app/bin/claude-settings.json', 'bikube', 'found', undefined],
+      ['/local.json', 'local', 'missing', undefined],
+      [
+        '/f/.claude/settings.json',
+        'project',
+        'invalid',
+        'Invalid JSON: Unexpected end of JSON input'
+      ],
+      ['/user.json', 'user', 'found', undefined],
+      ['/h/.claude.json', 'user', 'missing', undefined],
+      ['/f/.mcp.json', 'project', 'missing', undefined]
+    ])
   })
 })

@@ -2,11 +2,16 @@ import { ChevronRight } from 'lucide-react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
 import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
 import {
+  accountText,
+  effectiveSetting,
   fileLabel,
   filterDefinitions,
   filterMemory,
+  hookGroups,
   isPluginOff,
+  permissionsView,
   sectionSummaries,
+  settingsFileStates,
   setupWarnings,
   sourceSplit
 } from '../../core/agent-setup-rows'
@@ -15,14 +20,18 @@ import {
   type AgentSetupSnapshot,
   type DefinitionEntry,
   type EntrySource,
+  type HookEntry,
+  type JsonFileState,
   type MemoryEntry
 } from '../../core/agent-setup-snapshot'
-import { toggleExpanded } from './agent-setup-data'
+import { toggleExpanded, useClaudeVersion } from './agent-setup-data'
 import { SMALL_ICON } from './icons'
+import { useSettings } from './settings'
 
 /**
- * The Agent setup page's sections built so far (#68 D12, D17, D18, D24): Overview, Skills, Agents,
- * Commands and Memory, each showing the rows of the snapshot that match the search (D25).
+ * The Agent setup page's sections built so far (#68 D12, D13, D17–D20, D24): Overview, Status,
+ * Skills, Agents, Commands, Hooks, Memory and Permissions, each showing the rows of the snapshot
+ * that match the search (D25; Status is not filtered).
  */
 
 /** What every section's view gets. */
@@ -367,3 +376,271 @@ export function MemorySection({ snapshot, query, expanded }: SectionViewProps): 
     </ul>
   )
 }
+
+/** Hooks (D19): every hook command by event, Bikube's with its chip and no Open file. */
+export function HooksSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
+  const groups = hookGroups(snapshot.hooks, query)
+  if (snapshot.hooks.length === 0) {
+    return (
+      <p className="agent-setup-empty" data-testid="agent-setup-empty">
+        No hooks found. Add them under &quot;hooks&quot; in .claude/settings.json in the workspace
+        folder or in ~/.claude/settings.json.
+      </p>
+    )
+  }
+  if (groups.length === 0) {
+    return (
+      <p className="agent-setup-empty" data-testid="agent-setup-no-match">
+        No hooks match “{query.trim()}”.
+      </p>
+    )
+  }
+  return (
+    <div className="agent-setup-groups" data-testid="agent-setup-hooks">
+      {groups.map((group) => (
+        <section
+          key={group.event}
+          className="agent-setup-group"
+          data-testid="agent-setup-hook-group"
+        >
+          <h4 className="agent-setup-subheading">{group.event}</h4>
+          <ul className="agent-setup-rows">
+            {group.hooks.map((hook, i) => (
+              <HookRow
+                key={`${hook.file ?? 'bikube'}\n${hook.command}\n${i}`}
+                hook={hook}
+                snapshot={snapshot}
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function HookRow({
+  hook,
+  snapshot
+}: {
+  hook: HookEntry
+  snapshot: AgentSetupSnapshot
+}): React.JSX.Element {
+  const off = isPluginOff(snapshot, hook)
+  return (
+    <li
+      className={off ? 'agent-setup-row agent-setup-row-off' : 'agent-setup-row'}
+      data-testid="agent-setup-row"
+      data-plugin-off={off}
+    >
+      <div className="agent-setup-row-main">
+        <span className="agent-setup-chip" data-testid="agent-setup-hook-matcher" title="Matcher">
+          {hook.matcher ?? 'All'}
+        </span>
+        {hook.timeout !== undefined && (
+          <span className="agent-setup-row-meta">Timeout {hook.timeout} s</span>
+        )}
+        <span className="agent-setup-row-chips">
+          <SourceChip source={hook.source} />
+          {off && (
+            <span className="agent-setup-chip" data-testid="agent-setup-plugin-off">
+              Plugin off
+            </span>
+          )}
+        </span>
+        {/* Bikube's own hooks have no file to open (D27). */}
+        {hook.file !== undefined && <FileActions file={hook.file} />}
+      </div>
+      <code
+        className="agent-setup-row-command"
+        title={hook.command}
+        data-testid="agent-setup-hook-command"
+      >
+        {hook.command}
+      </code>
+      <Warnings warnings={hook.warnings} />
+    </li>
+  )
+}
+
+const PERMISSION_LISTS = [
+  ['allow', 'Allow'],
+  ['ask', 'Ask'],
+  ['deny', 'Deny'],
+  ['additionalDirectories', 'Additional directories']
+] as const
+
+/** Permissions (D20), read-only: the effective default mode, then every source's rules. */
+export function PermissionsSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
+  const view = permissionsView(snapshot, query)
+  return (
+    <div className="agent-setup-groups" data-testid="agent-setup-permissions">
+      <dl className="agent-setup-facts">
+        <div className="agent-setup-fact" data-testid="agent-setup-default-mode">
+          <dt>Default mode</dt>
+          <dd>
+            {view.defaultMode ? (
+              <>
+                <span className="agent-setup-fact-value">{view.defaultMode.value}</span>
+                <SourceChip source={view.defaultMode.source} />
+              </>
+            ) : (
+              'Default'
+            )}
+          </dd>
+        </div>
+      </dl>
+      {PERMISSION_LISTS.map(([list, title]) => {
+        const testId = `agent-setup-permissions-${list === 'additionalDirectories' ? 'directories' : list}`
+        const rules = view[list]
+        return (
+          <section key={list} className="agent-setup-group">
+            <h4 className="agent-setup-subheading">{title}</h4>
+            {rules.length === 0 ? (
+              <p className="agent-setup-empty" data-testid={testId}>
+                None
+              </p>
+            ) : (
+              <ul className="agent-setup-rows" data-testid={testId}>
+                {rules.map((rule, i) => (
+                  <li
+                    key={`${rule.file}\n${rule.rule}\n${i}`}
+                    className="agent-setup-row"
+                    data-testid="agent-setup-row"
+                  >
+                    <div className="agent-setup-row-main">
+                      <code
+                        className="agent-setup-row-rule"
+                        title={rule.rule}
+                        data-testid="agent-setup-permission-rule"
+                      >
+                        {rule.rule}
+                      </code>
+                      <span className="agent-setup-row-chips">
+                        <SourceChip source={rule.source} />
+                      </span>
+                      <FileActions file={rule.file} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+const STATE_LABELS: Record<JsonFileState, string> = {
+  found: 'Found',
+  missing: 'Missing',
+  invalid: 'Invalid'
+}
+
+/** Status' Claude Code value (D13): its version and path, `Not installed`, or the check's state. */
+function ClaudeCodeValue(): React.JSX.Element {
+  const { reading, result } = useClaudeVersion()
+  if (result === undefined) return <>{reading ? 'Checking…' : 'Not checked yet'}</>
+  if (result === null) {
+    return (
+      <>Couldn&apos;t check: your login shell didn&apos;t answer. Press Refresh to try again.</>
+    )
+  }
+  if (!result.installed) return <>Not installed</>
+  return (
+    <>
+      <span className="agent-setup-fact-value">{result.version ?? 'Unknown version'}</span>
+      <span className="agent-setup-row-file" title={result.path}>
+        {result.path}
+      </span>
+    </>
+  )
+}
+
+/** A setting's effective string value with its source chip (D10), else `Default`. */
+function EffectiveValue({
+  snapshot,
+  setting
+}: {
+  snapshot: AgentSetupSnapshot
+  setting: string
+}): React.JSX.Element {
+  const effective = effectiveSetting(snapshot.settings, setting)
+  if (!effective || typeof effective.value !== 'string') return <>Default</>
+  return (
+    <>
+      <span className="agent-setup-fact-value">{effective.value}</span>
+      <SourceChip source={{ kind: effective.file.scope }} />
+    </>
+  )
+}
+
+/** Status (D13): Claude Code, the account, the model and output style, and every settings file. */
+export function StatusSection({ snapshot }: SectionViewProps): React.JSX.Element {
+  const settings = useSettings()
+  const facts: [string, string, React.ReactNode][] = [
+    ['claude', 'Claude Code', <ClaudeCodeValue key="claude" />],
+    ['account', 'Account', accountText(snapshot)],
+    ['model', 'Model', <EffectiveValue key="model" snapshot={snapshot} setting="model" />],
+    [
+      'output-style',
+      'Output style',
+      <EffectiveValue key="output-style" snapshot={snapshot} setting="outputStyle" />
+    ],
+    [
+      'bikube',
+      'Bikube hooks',
+      `Active in Claude Code cards · Claude Code status: ${settings.claudeStatus ? 'On' : 'Off'}`
+    ]
+  ]
+  return (
+    <div className="agent-setup-groups" data-testid="agent-setup-status">
+      <dl className="agent-setup-facts">
+        {facts.map(([id, name, value]) => (
+          <div key={id} className="agent-setup-fact" data-testid={`agent-setup-status-${id}`}>
+            <dt>{name}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <section className="agent-setup-group">
+        <h4 className="agent-setup-subheading">Settings files</h4>
+        <ul className="agent-setup-rows">
+          {settingsFileStates(snapshot).map((file) => {
+            const bikube = file.source.kind === 'bikube'
+            const name = bikube ? baseName(file.file) : fileLabel(snapshot, file.file)
+            return (
+              <li key={file.file} className="agent-setup-row" data-testid="agent-setup-status-file">
+                <div className="agent-setup-row-main">
+                  <span
+                    className="agent-setup-row-name agent-setup-row-mono"
+                    title={file.file}
+                    data-testid="agent-setup-status-file-name"
+                  >
+                    {name}
+                  </span>
+                  <span
+                    className="agent-setup-chip"
+                    data-state={file.state}
+                    data-testid="agent-setup-status-file-state"
+                  >
+                    {STATE_LABELS[file.state]}
+                  </span>
+                  <span className="agent-setup-row-chips">
+                    <SourceChip source={file.source} />
+                  </span>
+                  {/* Bikube's own file has no Open file (D27); a missing one has nothing to open. */}
+                  {!bikube && file.state !== 'missing' && <FileActions file={file.file} />}
+                </div>
+                {file.error !== undefined && <Warnings warnings={[file.error]} />}
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)

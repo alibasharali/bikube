@@ -3,8 +3,9 @@
  * (`agent-setup-reader.ts`) returns for one workspace folder, sent to the renderer as it is. Plain
  * TS with no Node or DOM imports: the renderer imports its types and `agent-setup-rows.ts` reads it.
  *
- * Later slices extend it: Hooks and Permissions (S3) read `settings` and the plugins' `hooks`,
- * Status (S3) `settings`, `claudeJson` and `mcpJson`'s states, Plugins and MCP servers (S4)
+ * Hooks (D19) are read here, since D19's check needs the file system; Permissions and Status
+ * (D13, D20) come from `settings`, `claudeJson`, `mcpJson` and `bikubeSettings`. Later slices:
+ * Plugins and MCP servers (S4)
  * `plugins`, `marketplaces`, `mcpJson`, `claudeJson`'s servers and the plugins' `mcpServers`,
  * Config (S5) `settings` and `claudeJson.preferences`; Open file and Reveal (S6) check a path
  * against `paths`.
@@ -93,6 +94,23 @@ export interface PluginEntry {
   warnings: string[]
 }
 
+/** One hook command (D19), in a settings file, a plugin's `hooks/hooks.json` or Bikube's file. */
+export interface HookEntry {
+  /** The event it runs on (`PreToolUse`, `Stop`, …), as the file names it. */
+  event: string
+  /** Its group's `matcher`, or null for every tool or source (`All`). */
+  matcher: string | null
+  /** The command as the file holds it (never run). */
+  command: string
+  /** Its `timeout` in seconds, when set. */
+  timeout?: number
+  source: EntrySource
+  /** The file it is set in; none for Bikube's own hooks, which have no Open file (D27). */
+  file?: string
+  /** D19's `Command not found`. */
+  warnings: string[]
+}
+
 /** A JSON file's state (D13's Found, Missing or Invalid). */
 export type JsonFileState = 'found' | 'missing' | 'invalid'
 
@@ -159,6 +177,10 @@ export interface AgentSetupSnapshot {
   agents: DefinitionEntry[]
   commands: DefinitionEntry[]
   memory: MemoryEntry[]
+  /** Every hook (D19): Bikube's, then the settings files' by precedence, then the plugins'. */
+  hooks: HookEntry[]
+  /** Bikube's own Claude Code settings file (D8, read-only), when main named one. */
+  bikubeSettings: JsonFile | null
   /** Entries left out past D11's 500 per folder: the `… <n> more` row. */
   more: Partial<Record<CappedSection, number>>
   fileWarnings: FileWarning[]

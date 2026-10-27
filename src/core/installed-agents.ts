@@ -83,20 +83,17 @@ export interface InstalledDeps {
 }
 
 /**
- * The installed agents, as the login shell finds their commands; null when the check failed
- * (the shell missing, a non-zero exit, a timeout), so nothing is shown as not installed.
- * Detached (its own process group, killed at the timeout), stdin closed.
+ * Runs `plan` (a login shell's `-l -c` check) and gives its stdout, or null when it failed (the
+ * shell missing, a non-zero exit, a timeout). Detached (its own process group, killed at the
+ * timeout), stdin closed, at most 64 KiB of output kept.
  */
-export function readInstalledAgents({
-  spawn,
-  shell,
-  env,
-  timeoutMs = INSTALLED_TIMEOUT_MS
-}: InstalledDeps): Promise<AgentChoice[] | null> {
-  const plan = installedPlan(shell, Object.values(AGENT_COMMANDS))
+export function runLoginShell(
+  plan: { command: string; args: string[] },
+  { spawn, env, timeoutMs = INSTALLED_TIMEOUT_MS }: Omit<InstalledDeps, 'shell'>
+): Promise<string | null> {
   return new Promise((done) => {
     let settled = false
-    const finish = (result: AgentChoice[] | null): void => {
+    const finish = (result: string | null): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -129,6 +126,18 @@ export function readInstalledAgents({
       if (stdout.length < 64 * 1024) stdout += chunk
     })
     child.on('error', () => finish(null))
-    child.on('close', (code) => finish(code === 0 ? parseInstalled(stdout) : null))
+    child.on('close', (code) => finish(code === 0 ? stdout : null))
   })
+}
+
+/**
+ * The installed agents, as the login shell finds their commands; null when the check failed
+ * (the shell missing, a non-zero exit, a timeout), so nothing is shown as not installed.
+ */
+export async function readInstalledAgents({
+  shell,
+  ...deps
+}: InstalledDeps): Promise<AgentChoice[] | null> {
+  const stdout = await runLoginShell(installedPlan(shell, Object.values(AGENT_COMMANDS)), deps)
+  return stdout === null ? null : parseInstalled(stdout)
 }

@@ -4751,6 +4751,88 @@ button.dev-server-chip:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* Hooks, Permissions and Status (D13, D19, D20): groups under subheadings, the first flush. */
+.agent-setup-group:first-child > .agent-setup-subheading {
+  margin-top: 0;
+}
+
+.agent-setup-row-command,
+.agent-setup-row-rule,
+.agent-setup-row-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* A hook's command: two lines, the full text in its tooltip (D19). */
+.agent-setup-row-command {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.agent-setup-row-rule {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status' and Permissions' label and value rows. */
+.agent-setup-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 var(--space-6);
+}
+
+.agent-setup-fact {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.agent-setup-fact dt {
+  color: var(--text-muted);
+}
+
+.agent-setup-fact dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.agent-setup-fact-value {
+  font-weight: 600;
+}
+
+/* A settings file that doesn't parse (D13): its state in the warning's amber. */
+.agent-setup-chip[data-state='invalid'] {
+  background: var(--pill-question-bg);
+  color: var(--pill-question-text);
+}
+
+@container agent-setup (max-width: 479.98px) {
+  .agent-setup-fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+
 .agent-setup-narrow {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);

@@ -181,7 +181,7 @@ function startApp(): void {
   registerGit(() => settings.shell())
   registerFiles(() => settings.editor())
   registerAgents(() => settings.shell())
-  registerAgentSetup()
+  registerAgentSetup(() => settings.shell())
   const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.

@@ -1,4 +1,5 @@
 import type { AgentSetupRead } from '../core/agent-setup-snapshot'
+import type { ClaudeVersion } from '../core/claude-version'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -81,6 +82,7 @@ export const IPC = {
   filesOpen: 'files:open',
   agentsInstalled: 'agents:installed',
   agentSetupRead: 'agentSetup:read',
+  agentSetupClaudeVersion: 'agentSetup:claudeVersion',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -340,6 +342,11 @@ export interface AgentSetupApi {
    * existing directory. One read at a time per folder: a request during one shares its answer.
    */
   read(folder: string): Promise<AgentSetupRead>
+  /**
+   * Claude Code's version and path (#68 D13), read through the user's login shell as the installed
+   * agents are; null when the check failed. Asked for on the page's open and Refresh only (D26).
+   */
+  claudeVersion(): Promise<ClaudeVersion | null>
 }
 
 export interface AgentsApi {

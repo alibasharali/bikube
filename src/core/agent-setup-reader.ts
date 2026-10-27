@@ -16,6 +16,7 @@ import type {
   EntrySource,
   FileWarning,
   FileWarningSection,
+  HookEntry,
   JsonFile,
   MemoryEntry,
   PluginEntry,
@@ -36,6 +37,7 @@ export const MAX_IMPORT_HOPS = 5
 
 export const TOO_LARGE = 'Too large to read (over 1 MB)'
 export const IMPORT_NOT_FOUND = 'Imported file not found'
+export const COMMAND_NOT_FOUND = 'Command not found'
 
 /** The file system calls a read makes; `stat` follows symlinks, so a broken one throws. */
 export interface SetupFs {
@@ -51,6 +53,11 @@ export interface ReadAgentSetupOptions {
   folder: string
   /** The user's home (main's `BIKUBE_HOME_DIR`, else the OS home). */
   home: string
+  /**
+   * Bikube's own Claude Code settings file (`claude-settings.json`, #31 D14), whose hooks every
+   * Claude Code card gets (D8). Read-only, and never listed in `paths` (no Open file, D27).
+   */
+  bikubeSettings?: string
   fs?: SetupFs
 }
 
@@ -97,12 +104,12 @@ class Reader {
     }
   }
 
-  /** A regular file's text, unless it is over 1 MB; found files are recorded in `paths`. */
-  async text(path: string): Promise<Text> {
+  /** A regular file's text, unless it is over 1 MB; found files are recorded in `paths` when `listed`. */
+  async text(path: string, listed = true): Promise<Text> {
     try {
       const info = await this.fs.stat(path)
       if (!info.isFile()) return { kind: 'missing' }
-      this.paths.add(path)
+      if (listed) this.paths.add(path)
       if (info.size > MAX_FILE_BYTES) return { kind: 'large', size: info.size }
       return { kind: 'ok', text: await this.fs.readFile(path, 'utf8'), size: info.size }
     } catch {
@@ -114,9 +121,10 @@ class Reader {
   async json(
     path: string,
     section: FileWarningSection,
-    entry = this.label(path)
+    entry = this.label(path),
+    listed = true
   ): Promise<JsonFile> {
-    const text = await this.text(path)
+    const text = await this.text(path, listed)
     if (text.kind === 'missing') return { file: path, state: 'missing' }
     let error: string
     if (text.kind === 'large') error = TOO_LARGE
@@ -429,6 +437,99 @@ async function readPlugins(
   return found
 }
 
+/** A command's first word as the shell would read it: quotes removed, up to unquoted whitespace. */
+export function firstWord(command: string): string {
+  let word = ''
+  let quote: string | null = null
+  for (const ch of command.trimStart()) {
+    if (quote !== null) {
+      if (ch === quote) quote = null
+      else word += ch
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if (/\s/.test(ch)) break
+    else word += ch
+  }
+  return word
+}
+
+/**
+ * The file a hook command's first word names (D19): an absolute path, or one under
+ * `$CLAUDE_PROJECT_DIR` (the workspace folder) or, for a plugin's hook, `${CLAUDE_PLUGIN_ROOT}`;
+ * null for anything else (a command on the PATH, another variable), which is not checked.
+ */
+export function hookCommandFile(
+  command: string,
+  folder: string,
+  pluginRoot: string | null
+): string | null {
+  const word = firstWord(command)
+  const roots: [string, string][] = [
+    ['${CLAUDE_PROJECT_DIR}', folder],
+    ['$CLAUDE_PROJECT_DIR', folder]
+  ]
+  if (pluginRoot !== null) {
+    roots.push(['${CLAUDE_PLUGIN_ROOT}', pluginRoot], ['$CLAUDE_PLUGIN_ROOT', pluginRoot])
+  }
+  // A path still holding a variable, a substitution or a pattern can't be known without a shell.
+  const plain = (path: string): boolean => !/[$`*?[]/.test(path)
+  for (const [prefix, root] of roots) {
+    if (!word.startsWith(prefix)) continue
+    const rest = word.slice(prefix.length)
+    if (rest !== '' && !rest.startsWith('/')) return null
+    return plain(rest) ? join(root, rest) : null
+  }
+  return isAbsolute(word) && plain(word) ? word : null
+}
+
+/**
+ * The hooks of one file's `hooks` object (D19): `{ <event>: [{ matcher?, hooks: [{ type,
+ * command, timeout? }] }] }`. A missing file named by a command gets `Command not found`.
+ */
+async function readHooks(
+  reader: Reader,
+  hooks: unknown,
+  source: EntrySource,
+  file: string | undefined,
+  pluginRoot: string | null
+): Promise<HookEntry[]> {
+  if (!isRecord(hooks)) return []
+  const entries: HookEntry[] = []
+  for (const [event, groups] of Object.entries(hooks)) {
+    if (!Array.isArray(groups)) continue
+    for (const group of groups) {
+      if (!isRecord(group) || !Array.isArray(group['hooks'])) continue
+      const matcher =
+        typeof group['matcher'] === 'string' && group['matcher'] !== '' && group['matcher'] !== '*'
+          ? group['matcher']
+          : null
+      for (const hook of group['hooks']) {
+        if (!isRecord(hook)) continue
+        const command =
+          typeof hook['command'] === 'string'
+            ? hook['command']
+            : typeof hook['prompt'] === 'string'
+              ? hook['prompt']
+              : null
+        if (command === null) continue
+        const entry: HookEntry = { event, matcher, command, source, warnings: [] }
+        if (typeof hook['timeout'] === 'number' && Number.isFinite(hook['timeout'])) {
+          entry.timeout = hook['timeout']
+        }
+        if (file !== undefined) entry.file = file
+        const target =
+          typeof hook['command'] === 'string'
+            ? hookCommandFile(command, reader.folder, pluginRoot)
+            : null
+        if (target !== null && (await reader.kind(target)) !== 'file') {
+          entry.warnings.push(COMMAND_NOT_FOUND)
+        }
+        entries.push(entry)
+      }
+    }
+  }
+  return entries
+}
+
 /** `@path` imports in a memory file's text: tokens after whitespace, outside code (D17). */
 export function memoryImports(text: string): string[] {
   const found: string[] = []
@@ -542,9 +643,14 @@ async function readMemory(reader: Reader): Promise<MemoryEntry[]> {
 export async function readAgentSetup({
   folder,
   home,
+  bikubeSettings,
   fs = nodeFs
 }: ReadAgentSetupOptions): Promise<AgentSetupSnapshot> {
   const reader = new Reader(folder, home, fs)
+  const bikube =
+    bikubeSettings === undefined
+      ? null
+      : await reader.json(bikubeSettings, 'status', 'Bikube settings', false)
   const project = join(folder, '.claude')
   const user = join(home, '.claude')
   const settings = [
@@ -579,6 +685,33 @@ export async function readAgentSetup({
   }
   const memory = await readMemory(reader)
 
+  // Hooks merge across every source (D10): Bikube's, the settings files', the plugins'.
+  const hooks: HookEntry[] = []
+  if (bikube && isRecord(bikube.value)) {
+    hooks.push(
+      ...(await readHooks(reader, bikube.value['hooks'], { kind: 'bikube' }, undefined, null))
+    )
+  }
+  for (const file of settings) {
+    hooks.push(
+      ...(await readHooks(reader, file.value?.['hooks'], { kind: file.scope }, file.file, null))
+    )
+  }
+  for (const plugin of plugins) {
+    const value = plugin.entry.hooks
+    // A plugin's hooks.json holds `{ description?, hooks }`; an older one the events alone.
+    const events = isRecord(value) && isRecord(value['hooks']) ? value['hooks'] : value
+    hooks.push(
+      ...(await readHooks(
+        reader,
+        events,
+        plugin.source,
+        join(plugin.entry.installPath, 'hooks', 'hooks.json'),
+        plugin.entry.installPath
+      ))
+    )
+  }
+
   return {
     folder,
     home,
@@ -592,6 +725,8 @@ export async function readAgentSetup({
     agents,
     commands,
     memory,
+    hooks,
+    bikubeSettings: bikube,
     more: reader.more,
     fileWarnings: reader.fileWarnings,
     paths: [...reader.paths].sort()

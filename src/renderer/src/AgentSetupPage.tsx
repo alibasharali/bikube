@@ -10,14 +10,22 @@ import { sectionSummaries, setupWarnings } from '../../core/agent-setup-rows'
 import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
 import { keymapAction } from '../../core/keymap'
 import type { Workspace } from '../../core/workspace-store'
-import { refreshAgentSetup, useAgentSetupData, useAgentSetupRefresh } from './agent-setup-data'
+import {
+  refreshAgentSetup,
+  refreshClaudeVersion,
+  useAgentSetupData,
+  useAgentSetupRefresh
+} from './agent-setup-data'
 import { useAgentSetupMemory } from './agent-setup-memory'
 import {
   AgentsSection,
   CommandsSection,
+  HooksSection,
   MemorySection,
   OverviewSection,
-  SkillsSection
+  PermissionsSection,
+  SkillsSection,
+  StatusSection
 } from './AgentSetupSections'
 import { registerCardViewActions } from './card-view-actions'
 import { SMALL_ICON } from './icons'
@@ -48,10 +56,13 @@ const SECTION_VIEWS: Partial<
   Record<AgentSetupSectionId, (props: AgentSetupSectionProps) => React.JSX.Element>
 > = {
   overview: OverviewSection,
+  status: StatusSection,
   skills: SkillsSection,
   agents: AgentsSection,
   commands: CommandsSection,
-  memory: MemorySection
+  hooks: HooksSection,
+  memory: MemorySection,
+  permissions: PermissionsSection
 }
 
 /**
@@ -146,6 +157,10 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
   // Read on open, every 3 s while focused, on focus and on Refresh (D26).
   const folder = workspace.directory
   useAgentSetupRefresh(folder)
+  // Claude Code's version: on open and Refresh only, never on the periodic refresh (D13, D26).
+  useEffect(() => {
+    void refreshClaudeVersion()
+  }, [])
   const { snapshot, failed, expanded } = useAgentSetupData(folder)
   const summaries = useMemo(
     () => (snapshot ? sectionSummaries(snapshot, query) : null),
@@ -207,7 +222,10 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
             className="btn btn-small agent-setup-refresh"
             data-testid="agent-setup-refresh"
             title="Read the files again"
-            onClick={() => void refreshAgentSetup(folder)}
+            onClick={() => {
+              void refreshAgentSetup(folder)
+              void refreshClaudeVersion()
+            }}
           >
             <RefreshCw {...SMALL_ICON} />
             {/* A narrow page shows the icon alone; the name stays for screen readers. */}

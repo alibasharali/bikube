@@ -888,6 +888,26 @@ test('#25 AC2, AC3: the same errors as a local card, and only its own card', asy
   await expect(tileStatus('api')).toHaveText('Running')
 })
 
+test('#69 AC11: an SSH card prints its own description; describe, workspaces and create are usage', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('api')
+  await page.getByTestId('new-card-description').fill('# Port\nDo X é')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'api')
+  await connected()
+
+  const printed = { code: 0, stdout: '# Port\nDo X é\n', stderr: '' }
+  expect(await remoteRun('board description .')).toEqual(printed)
+  expect(await remoteRun('board description "$BIKUBE_CARD_ID"')).toEqual(printed)
+  const usage = { code: 2, stdout: '', stderr: SSH_BOARD_USAGE }
+  expect(await remoteRun("printf 'New text' | board describe . -")).toEqual(usage)
+  expect(await remoteRun('board workspaces')).toEqual(usage)
+  expect(await remoteRun('board create Backlog T1')).toEqual(usage)
+  expect(await remoteRun('board description .')).toEqual(printed)
+})
+
 test('#25 AC4: an extra pane of an SSH card has board through its own forward', async () => {
   await launch()
   await createSsh('me@devbox', REMOTE_DIR, 'remote')

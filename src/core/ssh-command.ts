@@ -4,7 +4,7 @@
  * re-checked by D2 and D3. The renderer never sends a command. Plain TS, no Node imports.
  */
 import {
-  CLAUDE_INSTRUCTION,
+  SSH_CLAUDE_INSTRUCTION,
   CLAUDE_INSTRUCTION_FILE,
   CLAUDE_SETTINGS_FILE,
   claudeSettings
@@ -84,7 +84,7 @@ function claudeSetup(): string {
   return (
     `b=$(awk ${shellQuote('BEGIN { printf "%c", 92 }')} 2>/dev/null) || b=; ` +
     `if [ -n "$b" ] && printf %s ${json} >"$d/${CLAUDE_SETTINGS_FILE}" 2>/dev/null && ` +
-    `printf %s ${shellQuote(`${CLAUDE_INSTRUCTION}\n`)} >"$d/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
+    `printf %s ${shellQuote(`${SSH_CLAUDE_INSTRUCTION}\n`)} >"$d/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
     `then BIKUBE_CLAUDE_SETTINGS=$d/${CLAUDE_SETTINGS_FILE}; export BIKUBE_CLAUDE_SETTINGS; fi; `
   )
 }

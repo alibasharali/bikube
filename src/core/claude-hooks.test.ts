@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   CLAUDE_INSTRUCTION,
   LOCAL_CLAUDE_INSTRUCTION,
+  SSH_CLAUDE_INSTRUCTION,
   CLAUDE_INSTRUCTION_FILE,
   CLAUDE_SETTINGS_FILE,
   claudeSettings
@@ -68,6 +69,25 @@ describe('the Claude settings file (#31 D15)', () => {
     expect(LOCAL_CLAUDE_INSTRUCTION.startsWith(`${CLAUDE_INSTRUCTION} `)).toBe(true)
     expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$BIKUBE_BIN/board" list --json')
     expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$BIKUBE_BIN/board" create <column> <title>')
+  })
+
+  it('tells every card it may have a task description to read (#69 D14)', () => {
+    const line = '"$BIKUBE_BIN/board" description .'
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain(line)
+    expect(SSH_CLAUDE_INSTRUCTION).toBe(
+      `${CLAUDE_INSTRUCTION} This card may have a task description from the user: read it with ` +
+        `${line} when you need the task.`
+    )
+    expect(SSH_CLAUDE_INSTRUCTION).not.toContain('\\')
+  })
+
+  it('tells local cards, and only them, how to port work to another workspace (#69 D14)', () => {
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('"$BIKUBE_BIN/board" workspaces')
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain(
+      '"$BIKUBE_BIN/board" create --workspace <workspace> --description-file - <column> <title>'
+    )
+    expect(LOCAL_CLAUDE_INSTRUCTION).toContain('--worktree')
+    expect(SSH_CLAUDE_INSTRUCTION).not.toMatch(/workspaces|--workspace|create/)
   })
 
   it('gives Claude the D16 instruction, with no backslash so the SSH copy stays fish-safe', () => {

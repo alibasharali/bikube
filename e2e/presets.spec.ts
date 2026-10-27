@@ -7,6 +7,7 @@ import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { backToBoard, belowSeparator, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { FIRST_PROMPT } from '../src/core/startup-command'
 
 // Agent resume presets (#21, Pi #65): Codex, Gemini CLI, OpenCode and Pi in every startup command
 // select, the plain command on a card's first start and `<resume> || <plain>` after, kept across a
@@ -103,9 +104,12 @@ function selected(select: Locator): Locator {
 }
 
 /** Creates a card through `+ New card` with the given startup choice; its view opens. */
-async function newCard(title: string, startup?: Choice): Promise<void> {
+async function newCard(title: string, startup?: Choice, description?: string): Promise<void> {
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
+  if (description !== undefined) {
+    await page.getByTestId('new-card-description').fill(description)
+  }
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
   await page.getByTestId('new-card-input').press('Enter')
   await expectCardOpen(page, title)
@@ -272,6 +276,37 @@ test('AC2/AC3: reopening a stopped preset card resumes, starting fresh when noth
   await expect.poll(bufferLines).toContain('fake-pi')
   await back()
   await expect(card('pi card').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('#69 AC2: a preset card with a description passes the first prompt on its fresh start only', async () => {
+  await launch()
+  const dir = makeDir('alpha')
+  await createWorkspace(dir, 'alpha')
+  const flat = (text: string): string => text.replace(/\s+/g, ' ')
+  const fresh = [
+    { title: 'cx', label: 'Codex', line: 'codex', log: 'codex' },
+    { title: 'gm', label: 'Gemini CLI', line: 'gemini -i', log: 'gemini -i' },
+    { title: 'oc', label: 'OpenCode', line: 'opencode --prompt', log: 'opencode --prompt' },
+    { title: 'pi card', label: 'Pi', line: 'pi', log: 'pi' }
+  ] as const
+  for (const { title, label, line, log } of fresh) {
+    await newCard(title, label, 'Port the login fix')
+    await expect.poll(() => logLines().at(-1)).toBe(`${log} ${FIRST_PROMPT}`)
+    await expect
+      .poll(async () =>
+        flat((await bufferLines()).join(' ')).includes(flat(`${line} '${FIRST_PROMPT}'`))
+      )
+      .toBe(true)
+    await back()
+  }
+
+  // A resume holds no prompt.
+  await openCard('cx')
+  await stopAgent('cx', dir)
+  await openCard('cx')
+  await expect.poll(() => typed('codex resume --last || codex')).toBe(true)
+  await expect.poll(() => logLines().at(-1)).toBe('codex resume --last')
+  expect(flat(belowSeparator(await bufferLines()).join(' '))).not.toContain(flat(FIRST_PROMPT))
 })
 
 test('AC4: switching a card away from a preset and back keeps it started', async () => {

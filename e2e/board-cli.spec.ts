@@ -12,6 +12,7 @@ import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
+import { MAX_REQUEST_LINE_BYTES } from '../src/core/board-protocol'
 import { backToBoard, checkOnBoard, expectCardOpen, splitRight } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -403,7 +404,7 @@ test('AC10: bad requests get an error and a closed connection; board keeps worki
   await newCard('Backlog', 'api')
   await expect.poll(() => existsSync(join(dataDir, 'board', 'board.sock'))).toBe(true)
 
-  for (const line of ['hello\n', '{"v":2}\n', `${'x'.repeat(9 * 1024)}\n`]) {
+  for (const line of ['hello\n', '{"v":2}\n', `${'x'.repeat(MAX_REQUEST_LINE_BYTES + 1024)}\n`]) {
     const reply = await rawExchange(line)
     expect(reply).toMatch(/^\{"ok":false,"error":"board: [^"]+"\}\n$/)
   }
@@ -670,4 +671,44 @@ test('board list shows the columns and cards, create adds a card it prints the i
   await expect(titlesIn('In Progress')).toHaveText(['Fix login (NOT-12)'])
   await expect(card('Fix login (NOT-12)').getByTestId('card-status-label')).toHaveText('Stopped')
   await expect(titlesIn('Done')).toHaveText(['Shipped it'])
+})
+
+test("#69 AC4/AC14: board description prints the card's description and describe replaces it", async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('api')
+  await page.getByTestId('new-card-description').fill('Hello 69')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'api')
+  await expect.poll(terminalFocused).toBe(true)
+
+  expect(await board(alpha, 'board description .')).toEqual({
+    code: 0,
+    stdout: 'Hello 69\n',
+    stderr: ''
+  })
+  expect(await board(alpha, "printf 'New text' | board describe . -")).toEqual(ok)
+  writeFileSync(join(alpha, 'long.md'), 'a'.repeat(100_001))
+  expect(await board(alpha, 'board describe . long.md')).toEqual(
+    refused('board: Description is longer than 100,000 characters')
+  )
+  await back()
+  await expect(card('api').getByTestId('card-description')).toHaveAttribute('title', 'New text')
+
+  // AC14: 100,000 characters, multi-byte, stored whole and printed back unchanged.
+  await openCard('api')
+  const big = '🎉é'.repeat(50_000)
+  writeFileSync(join(alpha, 'big.md'), big)
+  expect(await board(alpha, 'board describe . big.md')).toEqual(ok)
+  const printed = await board(alpha, 'board description .')
+  expect(printed.code).toBe(0)
+  expect(printed.stdout === `${big}\n`).toBe(true)
+
+  // An empty file removes it; then it prints nothing.
+  expect(await board(alpha, "printf '' | board describe . -")).toEqual(ok)
+  expect(await board(alpha, 'board description .')).toEqual(ok)
+  await back()
+  await expect(card('api').getByTestId('card-description')).toHaveCount(0)
 })

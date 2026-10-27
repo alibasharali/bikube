@@ -27,6 +27,7 @@ import {
   LOCAL_CLAUDE_SETTINGS
 } from './fake-claude'
 import { LOCAL_CLAUDE_INSTRUCTION } from '../src/core/claude-hooks'
+import { FIRST_PROMPT } from '../src/core/startup-command'
 
 // Startup commands (#5): choosing one at creation, the workspace default, changing a card's,
 // and the Claude Code resume. Electron runs with SHELL=/bin/bash and HOME set to a temp
@@ -93,10 +94,14 @@ function selected(select: Locator): Locator {
 async function newCard(
   title: string,
   startup?: 'Shell' | 'Claude Code' | 'Custom…',
-  command?: string
+  command?: string,
+  description?: string
 ): Promise<void> {
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill(title)
+  if (description !== undefined) {
+    await page.getByTestId('new-card-description').fill(description)
+  }
   if (startup) await page.getByTestId('new-card-startup').selectOption({ label: startup })
   if (command !== undefined) {
     await page.getByTestId('new-card-command').fill(command)
@@ -227,6 +232,38 @@ test('AC2: a Claude Code card runs claude with a new session id and shows the Cl
   await back()
   await expect(card('agent').getByTestId('card-status-label')).toHaveText('Running')
   await expect(card('agent').getByTestId('card-tag')).toHaveText('Claude')
+})
+
+test('#69 AC2: a Claude Code card with a description passes the first prompt on its fresh start only', async () => {
+  const dir = makeDir('alpha')
+  await createWorkspace(dir, 'alpha')
+  await newCard('agent', 'Claude Code', undefined, '# Goal\nFix the login bug')
+  await expect.poll(logLines).toHaveLength(1)
+  const fresh = new RegExp(`^${SETTINGS_ARGS} --session-id (\\S+) (.*)$`).exec(logLines()[0])
+  expect(fresh?.[2]).toBe(FIRST_PROMPT)
+  const u = fresh![1]
+  expect(u).toMatch(UUID_V4)
+  // The typed line: the prompt single-quoted on the --session-id branch only. Whitespace is
+  // collapsed, since the line wraps and the shell may redraw it.
+  const flat = (text: string): string => text.replace(/\s+/g, ' ')
+  const firstLine =
+    `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${u} '${FIRST_PROMPT}' || ` +
+    `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${u}`
+  await expect
+    .poll(async () => flat((await bufferLines()).join(' ')).includes(flat(firstLine)))
+    .toBe(true)
+  await stopAgent(dir)
+
+  // A resume holds no prompt.
+  await openCard('agent')
+  await expect.poll(() => logLines().at(-1)).toBe(`${SETTINGS_ARGS} --resume ${u}`)
+  await expect
+    .poll(async () =>
+      belowSeparator(await bufferLines()).some((l) => l.endsWith(claudeResumeLine(u)))
+    )
+    .toBe(true)
+  expect(flat(belowSeparator(await bufferLines()).join(' '))).not.toContain(flat(FIRST_PROMPT))
+  expect(logLines()).toHaveLength(2)
 })
 
 test('AC3/AC4: claude quits to a shell; exit stops the card; opening it resumes', async () => {

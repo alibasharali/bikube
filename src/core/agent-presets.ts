@@ -12,23 +12,33 @@ export interface AgentPreset {
   tag: string
   plain: string
   resume: string
+  /** How its plain command takes a first prompt (#69 D2): the option before it, '' for none. */
+  promptFlag: string
 }
 
 export const AGENT_PRESETS = {
-  codex: { label: 'Codex', tag: 'Codex', plain: 'codex', resume: 'codex resume --last' },
+  codex: {
+    label: 'Codex',
+    tag: 'Codex',
+    plain: 'codex',
+    resume: 'codex resume --last',
+    promptFlag: ''
+  },
   gemini: {
     label: 'Gemini CLI',
     tag: 'Gemini',
     plain: 'gemini',
-    resume: 'gemini --resume latest'
+    resume: 'gemini --resume latest',
+    promptFlag: '-i'
   },
   opencode: {
     label: 'OpenCode',
     tag: 'OpenCode',
     plain: 'opencode',
-    resume: 'opencode --continue'
+    resume: 'opencode --continue',
+    promptFlag: '--prompt'
   },
-  pi: { label: 'Pi', tag: 'Pi', plain: 'pi', resume: 'pi --continue' }
+  pi: { label: 'Pi', tag: 'Pi', plain: 'pi', resume: 'pi --continue', promptFlag: '' }
 } as const satisfies Record<string, AgentPreset>
 
 export type AgentKind = keyof typeof AGENT_PRESETS

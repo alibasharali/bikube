@@ -52,6 +52,15 @@ export function removeLeftoverSessionSockets(dir: string): void {
   }
 }
 
+/**
+ * Whether a session socket serves `request`: its own card's only (D3), its `description` only for
+ * that card (`.` or its id) and never a `describe` (#69 D9).
+ */
+function servesOwnCard(request: BoardRequest, cardId: string): boolean {
+  if (request.cardId !== cardId || request.command === 'describe') return false
+  return request.command !== 'description' || request.card === '.' || request.card === cardId
+}
+
 const defaultRandomHex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
 export class SessionSockets {
@@ -77,7 +86,7 @@ export class SessionSockets {
     const localPath = join(this.dir, `s-${this.randomHex(8)}.sock`)
     const remoteSocket = `/tmp/bikube-${this.randomHex(16)}.sock`
     const scoped = (request: BoardRequest): Promise<BoardReply> =>
-      request.cardId === cardId
+      servesOwnCard(request, cardId)
         ? this.handler(request)
         : Promise.resolve({ ok: false, error: INVALID_REQUEST })
     let server: BoardServer | null = null

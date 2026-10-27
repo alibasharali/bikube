@@ -76,8 +76,9 @@ my %KEY = (${entries(Object.entries(VALUE_KEYS), ' => ', perlString)});
 my %ACT = map { $_ => 1 } (${ACTIVITY_VALUES.map(perlString).join(', ')});
 my @a = @ARGV;
 if (!@a || (@a == 1 && ($a[0] eq "help" || $a[0] eq "--help"))) { print STDOUT $USAGE; exit 0 }
-if (!(@a == 3 && exists $KEY{$a[0]} && ($a[0] ne "activity" || $ACT{$a[2]}))) { print STDERR $USAGE; exit 2 }
 my $id = $ENV{BIKUBE_CARD_ID};
+my $desc = @a == 2 && $a[0] eq "description" && ($a[1] eq "." || (defined $id && $a[1] eq $id));
+if (!$desc && !(@a == 3 && exists $KEY{$a[0]} && ($a[0] ne "activity" || $ACT{$a[2]}))) { print STDERR $USAGE; exit 2 }
 my $path = $ENV{BIKUBE_SOCKET};
 fail(${perlString(NOT_IN_A_CARD)}) unless defined $id && length $id && defined $path && length $path;
 my @st = lstat($path);
@@ -86,9 +87,10 @@ sub js {
   my $o = join "", map { my $c = ord; ($c < 32 || $c == 34 || $c == 92) ? sprintf("%su%04x", $B, $c) : $_ } split //, $_[0];
   return $Q . $o . $Q;
 }
-my $req = "{" . join(",", js("v") . ":" . ${BOARD_PROTOCOL_VERSION}, js("cardId") . ":" . js($id),
-  js("command") . ":" . js($a[0]), js("card") . ":" . js($a[1]),
-  js($KEY{$a[0]}) . ":" . js($a[2])) . "}" . $NL;
+my @f = (js("v") . ":" . ${BOARD_PROTOCOL_VERSION}, js("cardId") . ":" . js($id),
+  js("command") . ":" . js($a[0]), js("card") . ":" . js($a[1]));
+push @f, js($KEY{$a[0]}) . ":" . js($a[2]) unless $desc;
+my $req = "{" . join(",", @f) . "}" . $NL;
 $SIG{PIPE} = "IGNORE";
 my $got = "";
 my $connected = 0;
@@ -109,7 +111,8 @@ my $NO = ${perlString(NO_ANSWER)};
 my $end = index($got, $NL);
 fail($NO) unless $done && $end >= 0;
 my $L = substr($got, 0, $end);
-fail($NO) unless utf8::decode($L);
+my $T = $L;
+fail($NO) unless utf8::decode($T);
 my $p = 0;
 sub ch { return substr($L, $p, 1) }
 sub ws { $p++ while $p < length($L) && index(" " . chr(9) . chr(10) . chr(13), ch()) >= 0 }
@@ -122,7 +125,7 @@ sub str {
   while ($p < length $L) {
     my $c = ch();
     $p++;
-    return $v if $c eq $Q;
+    if ($c eq $Q) { utf8::decode($v); return $v }
     return undef if ord($c) < 32;
     if ($c ne $B) { $v .= $c; next }
     my $e = ch();
@@ -135,7 +138,9 @@ sub str {
         my $low = hex4($p + 2);
         if ($low >= 56320 && $low < 57344) { $n = 65536 + ($n - 55296) * 1024 + ($low - 56320); $p += 6 }
       }
-      $v .= chr($n);
+      my $u = chr($n);
+      utf8::encode($u);
+      $v .= $u;
     } elsif (exists $esc{$e}) { $v .= $esc{$e} } else { return undef }
   }
   return undef;
@@ -176,7 +181,11 @@ my $r = obj();
 ws();
 fail($NO) unless $r && $p == length $L;
 my $ok = $r->{ok};
-exit 0 if $ok && $ok->[0] eq "true";
+if ($ok && $ok->[0] eq "true") {
+  my $o = $r->{output};
+  if ($o && $o->[0] eq "s") { binmode STDOUT, ":utf8"; print STDOUT $o->[1] }
+  exit 0;
+}
 my $err = $r->{error};
 fail($err->[1]) if $ok && $ok->[0] eq "false" && $err && $err->[0] eq "s";
 fail($NO);
@@ -200,9 +209,10 @@ ACT = (${ACTIVITY_VALUES.map(pythonString).join(', ')})
 a = [text(arg) for arg in sys.argv[1:]]
 if not a or (len(a) == 1 and a[0] in ("help", "--help")):
     out(sys.stdout, USAGE, 0)
-if not (len(a) == 3 and a[0] in KEY and (a[0] != "activity" or a[2] in ACT)):
-    out(sys.stderr, USAGE, 2)
 card_id = text(os.environ.get("BIKUBE_CARD_ID", ""))
+desc = len(a) == 2 and a[0] == "description" and a[1] in (".", card_id)
+if not desc and not (len(a) == 3 and a[0] in KEY and (a[0] != "activity" or a[2] in ACT)):
+    out(sys.stderr, USAGE, 2)
 path = os.environ.get("BIKUBE_SOCKET", "")
 if not card_id or not path:
     fail(${pythonString(NOT_IN_A_CARD)})
@@ -222,8 +232,9 @@ try:
     s.connect(path)
 except OSError:
     fail(CANT)
-key = KEY[a[0]]
-req = {"v": ${BOARD_PROTOCOL_VERSION}, "cardId": card_id, "command": a[0], "card": a[1], key: a[2]}
+req = {"v": ${BOARD_PROTOCOL_VERSION}, "cardId": card_id, "command": a[0], "card": a[1]}
+if not desc:
+    req[KEY[a[0]]] = a[2]
 got = b""
 try:
     s.sendall((json.dumps(req, separators=(",", ":")) + chr(10)).encode("utf-8", "surrogatepass"))
@@ -246,6 +257,8 @@ try:
 except ValueError:
     fail(NO)
 if isinstance(reply, dict) and reply.get("ok") is True:
+    if isinstance(reply.get("output"), str):
+        out(sys.stdout, reply["output"], 0)
     sys.exit(0)
 if isinstance(reply, dict) and reply.get("ok") is False and isinstance(reply.get("error"), str):
     fail(reply["error"])

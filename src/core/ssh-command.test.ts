@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardReply } from './board-protocol'
 import { startBoardServer, type BoardServer } from './board-server'
 import {
-  CLAUDE_INSTRUCTION,
+  SSH_CLAUDE_INSTRUCTION,
   CLAUDE_INSTRUCTION_FILE,
   CLAUDE_SETTINGS_FILE,
   claudeSettings
@@ -326,7 +326,7 @@ describe('the remote command with board, run by sh (#25 D4)', () => {
     const [bin, settings] = readFileSync(seen, 'utf8').split('|')
     expect(settings).toBe(`${bin}/${CLAUDE_SETTINGS_FILE}`)
     expect(readFileSync(`${copies}.json`, 'utf8')).toBe(claudeSettings())
-    expect(readFileSync(`${copies}.txt`, 'utf8')).toBe(`${CLAUDE_INSTRUCTION}\n`)
+    expect(readFileSync(`${copies}.txt`, 'utf8')).toBe(`${SSH_CLAUDE_INSTRUCTION}\n`)
     expect(existsSync(settings)).toBe(false)
     expect(existsSync(bin)).toBe(false)
   })

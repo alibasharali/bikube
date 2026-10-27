@@ -6,17 +6,22 @@
 import { isActivityValue, type ActivityValue } from './activity'
 import type { ClaudeUsage } from './claude-usage-types'
 
-/** What SSH cards' `board` takes (#25): the card commands only. */
+/**
+ * What SSH cards' `board` takes (#25): the card commands only, and `description` for their own
+ * card (`.` or its id, #69 D5, D9).
+ */
 export const SSH_BOARD_USAGE = `usage: board move <card> <column>
        board status <card> <text>
        board activity <card> working|waiting|question|none
        board session <card> <session-id>
+       board description .
 
-  <card>    . for this card, or a card's id or title in this workspace
-  <column>  a column title of this workspace (any case)
-  <text>    the card's status text; "" clears it
-  activity  working, waiting for you, or a question for you; none clears it
-  session   the Claude Code session the card resumes (Bikube's Claude hooks set it)
+  <card>       . for this card, or a card's id or title in this workspace
+  <column>     a column title of this workspace (any case)
+  <text>       the card's status text; "" clears it
+  activity     working, waiting for you, or a question for you; none clears it
+  session      the Claude Code session the card resumes (Bikube's Claude hooks set it)
+  description  prints this card's task description (markdown); nothing when it has none
 `
 
 export const BOARD_USAGE = `usage: board list [--json]
@@ -26,14 +31,18 @@ export const BOARD_USAGE = `usage: board list [--json]
        board status <card> <text>
        board activity <card> working|waiting|question|none
        board session <card> <session-id>
+       board description <card>
+       board describe <card> <file>|-
 
-  list      this workspace's columns and cards, with each card's id and state
-  create    a new card at the bottom of <column>, not started; prints its id
-  <card>    . for this card, or a card's id or title in this workspace
-  <column>  a column title of this workspace (any case)
-  <text>    the card's status text; "" clears it
-  activity  working, waiting for you, or a question for you; none clears it
-  session   the Claude Code session the card resumes (Bikube's Claude hooks set it)
+  list         this workspace's columns and cards, with each card's id and state
+  create       a new card at the bottom of <column>, not started; prints its id
+  <card>       . for this card, or a card's id or title in this workspace
+  <column>     a column title of this workspace (any case)
+  <text>       the card's status text; "" clears it
+  activity     working, waiting for you, or a question for you; none clears it
+  session      the Claude Code session the card resumes (Bikube's Claude hooks set it)
+  description  prints the card's task description (markdown); nothing when it has none
+  describe     replaces it with the file's text (- reads stdin); an empty file removes it
 `
 
 export type BoardCommand =
@@ -44,6 +53,10 @@ export type BoardCommand =
   | { command: 'status'; card: string; text: string }
   | { command: 'activity'; card: string; activity: ActivityValue }
   | { command: 'session'; card: string; session: string }
+  /** Prints the card's description (#69 D5). */
+  | { command: 'description'; card: string }
+  /** Replaces the card's description with `description`, '' removing it (#69 D5). */
+  | { command: 'describe'; card: string; description: string }
   /** Typed by a worktree card's setup line (#39 D3, D4); not in the usage text. */
   | { command: 'setup'; card: string; result: SetupResult }
   /** Sent by `board usage` after reading the transcript (#50 D5); not in the usage text. */
@@ -67,6 +80,8 @@ export type BoardArgs =
   | { kind: 'command'; command: BoardCommand }
   /** `board usage <card> <transcript>` (#50 D5): the client reads the transcript, then sends. */
   | { kind: 'transcript'; card: string; path: string }
+  /** `board describe <card> <file>|-` (#69 D5): the client reads the file, then sends. */
+  | { kind: 'descriptionFile'; card: string; path: string }
 
 /** What `board <argv...>` asks for: usage (help or a wrong shape) or one command. */
 export function parseBoardArgs(argv: readonly string[]): BoardArgs {
@@ -78,6 +93,9 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
     if (argv[1] === '--json') {
       return { kind: 'command', command: { command: 'list', format: 'json' } }
     }
+  }
+  if (argv.length === 2 && argv[0] === 'description') {
+    return { kind: 'command', command: { command: 'description', card: argv[1] } }
   }
   if (argv.length === 3) {
     const [name, card, value] = argv
@@ -96,6 +114,7 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
     if (name === 'setup' && isSetupResult(value))
       return { kind: 'command', command: { command: 'setup', card, result: value } }
     if (name === 'usage') return { kind: 'transcript', card, path: value }
+    if (name === 'describe') return { kind: 'descriptionFile', card, path: value }
   }
   return { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
 }

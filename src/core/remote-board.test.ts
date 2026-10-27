@@ -213,6 +213,66 @@ describe.each(languages)('the remote board script with only $name (#25 D5, D6)',
   })
 
   it.skipIf(!language.path)(
+    "prints its own card's description, by . or its id (#69 D5, AC11)",
+    async () => {
+      const description = 'Fix "it" \\ now\nnext é\t🙂'
+      const handler = vi.fn(async (): Promise<BoardReply> => ({
+        ok: true,
+        output: `${description}\n`
+      }))
+      await serve(handler)
+      for (const card of ['.', 'card-1']) {
+        expect(await run(['description', card], env())).toEqual({
+          code: 0,
+          stdout: `${description}\n`,
+          stderr: ''
+        })
+        expect(handler).toHaveBeenLastCalledWith({
+          v: 1,
+          cardId: 'card-1',
+          command: 'description',
+          card
+        })
+      }
+    }
+  )
+
+  it.skipIf(!language.path)('prints nothing for a card with no description (#69 D5)', async () => {
+    await serve(async () => ({ ok: true }))
+    expect(await run(['description', '.'], env())).toEqual({ code: 0, stdout: '', stderr: '' })
+  })
+
+  it.skipIf(!language.path)(
+    'prints a 100,000-character multi-byte description whole (#69 AC14)',
+    async () => {
+      const description = '🎉é'.repeat(50_000)
+      await serve(async () => ({ ok: true, output: `${description}\n` }))
+      const result = await run(['description', '.'], env())
+      expect(result.code).toBe(0)
+      expect(result.stdout === `${description}\n`).toBe(true)
+    }
+  )
+
+  it.skipIf(!language.path)(
+    "prints the usage for another card's description, describe, workspaces and create, exit 2 (#69 D9, AC11)",
+    async () => {
+      const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+      await serve(handler)
+      for (const args of [
+        ['description', 'web'],
+        ['description'],
+        ['description', '.', 'x'],
+        ['describe', '.', '-'],
+        ['workspaces'],
+        ['create', 'Todo', 'T1']
+      ]) {
+        expect(await run(args, env())).toEqual({ code: 2, stdout: '', stderr: SSH_BOARD_USAGE })
+      }
+      expect(handler).not.toHaveBeenCalled()
+    }
+  )
+
+  it.skipIf(!language.path)(
     "says no answer when the socket doesn't answer",
     async () => {
       raw = createServer((socket) => rawSockets.push(socket))

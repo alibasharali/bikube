@@ -33,7 +33,22 @@ export interface StartupState {
    * (or empty) means none.
    */
   setup?: string
+  /**
+   * The card's description (#69 D1): only whether it has one matters (D2); its text is never
+   * typed.
+   */
+  description?: string
 }
+
+/**
+ * The first prompt a fresh agent start of a card with a description passes (#69 D2). It holds no
+ * single quote, backslash or `$`, so single-quoted it reads the same in sh, bash, zsh and fish.
+ */
+export const FIRST_PROMPT =
+  'This card has a task description. Read it with: board description .  Then summarise it in a ' +
+  'few lines and ask me whether to start on it. Do not start working on it until I say so.'
+
+const QUOTED_PROMPT = `'${FIRST_PROMPT}'`
 
 /** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -72,7 +87,9 @@ export function checkCardStartup(startup: StartupCommand): Result<StartupCommand
  * UUID, since the id is typed unquoted). Claude Code gets Bikube's hooks with
  * `--settings "$BIKUBE_CLAUDE_SETTINGS"` (#31 D14), a variable every card's shell has. An agent preset types its plain command until the card
  * has started it, then `<resume> || <plain>` (#21 D2). Writing a first-start line is what the
- * caller then records (`firstStart`).
+ * caller then records (`firstStart`). A fresh agent start (Claude Code's `--session-id` branch
+ * before `claudeStarted`, a preset's plain command) of a card with a description also passes
+ * `FIRST_PROMPT` (#69 D2).
  */
 export function startLine(card: StartupState): string | null {
   switch (card.startup.kind) {
@@ -82,19 +99,22 @@ export function startLine(card: StartupState): string | null {
       const id = card.agentSessionId
       if (!UUID.test(id)) return null
       const claude = `claude --settings "$BIKUBE_CLAUDE_SETTINGS"`
+      const prompt = card.description ? ` ${QUOTED_PROMPT}` : ''
       // Started once its hooks reported a conversation (`board session`): resume it, or start that
       // id fresh when it is gone. Before that, start the id fresh, or resume it when a conversation
       // exists that the hooks couldn't report (no Bikube to reach, an older card).
       return card.claudeStarted
         ? `${claude} --resume ${id} || ${claude} --session-id ${id}`
-        : `${claude} --session-id ${id} || ${claude} --resume ${id}`
+        : `${claude} --session-id ${id}${prompt} || ${claude} --resume ${id}`
     }
     case 'custom':
       return card.exitAfterStartup ? `${card.startup.command}; exit` : card.startup.command
     default: {
       const kind = card.startup.kind
-      const { plain, resume } = AGENT_PRESETS[kind]
-      return card.startedAgents?.includes(kind) ? `${resume} || ${plain}` : plain
+      const { plain, resume, promptFlag } = AGENT_PRESETS[kind]
+      if (card.startedAgents?.includes(kind)) return `${resume} || ${plain}`
+      if (!card.description) return plain
+      return [plain, promptFlag, QUOTED_PROMPT].filter(Boolean).join(' ')
     }
   }
 }

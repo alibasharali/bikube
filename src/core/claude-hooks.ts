@@ -3,7 +3,8 @@
  * the calling card's activity with `board activity`, and a session start hook that tells Claude
  * to keep a one-line `board status`. The same text ships as `resources/bin/claude-settings.json`
  * and `resources/bin/claude-instruction.txt` (the local instruction; a test keeps them equal) and
- * is written beside the remote `board` in SSH cards, with the instruction SSH's `board` matches.
+ * is written beside the remote `board` in SSH cards, with the instruction SSH's `board` matches
+ * (`SSH_CLAUDE_INSTRUCTION`).
  * Plain TS.
  */
 import type { Activity } from './activity'
@@ -27,11 +28,26 @@ export const CLAUDE_INSTRUCTION =
   "after it (no redirection, no || true, no ; or true). Do it silently: don't mention it to the " +
   'user. If it fails, ignore it and move on.'
 
-/** The local cards' instruction: their `board` also reads the board and creates cards. */
+/** Every card may have a task description, which its `board` prints (#69 D14). */
+const DESCRIPTION_INSTRUCTION =
+  'This card may have a task description from the user: read it with ' +
+  '"$BIKUBE_BIN/board" description . when you need the task.'
+
+/** SSH cards' instruction: their `board` reads their own card's description (#69 D9, D14). */
+export const SSH_CLAUDE_INSTRUCTION = `${CLAUDE_INSTRUCTION} ${DESCRIPTION_INSTRUCTION}`
+
+/**
+ * The local cards' instruction: their `board` also reads the board and creates cards, and ports
+ * work to another workspace (#69 D14).
+ */
 export const LOCAL_CLAUDE_INSTRUCTION =
-  `${CLAUDE_INSTRUCTION} ` +
+  `${SSH_CLAUDE_INSTRUCTION} ` +
   'When the user asks you to read this board or add cards to it (for example from their task ' +
-  `tracker), use "$BIKUBE_BIN/board" list --json and "$BIKUBE_BIN/board" create <column> <title>; ` +
+  `tracker), use "$BIKUBE_BIN/board" list --json and "$BIKUBE_BIN/board" create <column> <title>. ` +
+  'When the user asks you to port work to another workspace, run "$BIKUBE_BIN/board" workspaces, ' +
+  'then write a task description from what the user asks for and pipe it to ' +
+  '"$BIKUBE_BIN/board" create --workspace <workspace> --description-file - <column> <title> ' +
+  '(add --worktree when the user asks for its own worktree). ' +
   `"$BIKUBE_BIN/board" help lists every command.`
 
 /** Every hook: a silent `board` call that never fails (D15). */

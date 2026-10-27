@@ -176,9 +176,40 @@ describe('serializeRequest / parseRequestLine', () => {
     }
   })
 
-  it('is version 1 with an 8 KB line limit', () => {
+  it('round-trips a description and a describe; a describe needs its text (#69 D5)', () => {
+    const description = { command: 'description', card: '.' } as const
+    expect(parseRequestLine(serializeRequest('c1', description))).toEqual({
+      ok: true,
+      request: { v: 1, cardId: 'c1', ...description }
+    })
+    for (const text of ['# Goal\nFix "it" \\ now 🎉', '']) {
+      const describe = { command: 'describe', card: 'api', description: text } as const
+      expect(parseRequestLine(serializeRequest('c1', describe))).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'c1', ...describe }
+      })
+    }
+    for (const bad of [
+      { v: 1, cardId: 'c1', command: 'describe', card: '.' },
+      { v: 1, cardId: 'c1', command: 'describe', card: '.', description: 7 },
+      { v: 1, cardId: 'c1', command: 'description', card: '.', description: 'x' }
+    ]) {
+      expect(parseRequestLine(line(bad))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+
+  it('carries a 100,000-character multi-byte description whole (#69 AC14)', () => {
+    const text = '🎉é'.repeat(50_000)
+    const request = serializeRequest('c1', { command: 'describe', card: '.', description: text })
+    expect(parseRequestLine(request)).toEqual({
+      ok: true,
+      request: { v: 1, cardId: 'c1', command: 'describe', card: '.', description: text }
+    })
+  })
+
+  it('is version 1 with a 512 KiB line limit (#69 D5)', () => {
     expect(BOARD_PROTOCOL_VERSION).toBe(1)
-    expect(MAX_REQUEST_LINE_BYTES).toBe(8192)
+    expect(MAX_REQUEST_LINE_BYTES).toBe(512 * 1024)
   })
 
   it('rejects invalid JSON and non-objects', () => {
@@ -215,7 +246,7 @@ describe('serializeRequest / parseRequestLine', () => {
     }
   })
 
-  it('rejects a line over 8 KB, counted in UTF-8 bytes', () => {
+  it('rejects a line over 512 KiB, counted in UTF-8 bytes', () => {
     const fits = { ...status, text: '' }
     const room = MAX_REQUEST_LINE_BYTES - line(fits).length
     expect(parseRequestLine(line({ ...status, text: 'a'.repeat(room) })).ok).toBe(true)
@@ -225,7 +256,7 @@ describe('serializeRequest / parseRequestLine', () => {
     })
     // 'é' is two bytes: half as many characters already go over.
     expect(parseRequestLine(line({ ...status, text: 'é'.repeat(room / 2 + 1) })).ok).toBe(false)
-    expect(parseRequestLine('x'.repeat(9 * 1024))).toEqual({
+    expect(parseRequestLine('x'.repeat(513 * 1024))).toEqual({
       ok: false,
       error: 'board: request too long'
     })

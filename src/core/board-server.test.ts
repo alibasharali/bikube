@@ -12,7 +12,12 @@ import { createConnection, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { serializeRequest, type BoardReply, type BoardRequest } from './board-protocol'
+import {
+  MAX_REQUEST_LINE_BYTES,
+  serializeRequest,
+  type BoardReply,
+  type BoardRequest
+} from './board-protocol'
 import { DRAIN_MS, MAX_CONNECTIONS, startBoardServer, type BoardServer } from './board-server'
 
 let dir: string
@@ -139,7 +144,11 @@ describe('startBoardServer', () => {
   it.each([
     ['not JSON', 'hello\n', 'board: invalid request'],
     ['another version', '{"v":2}\n', 'board: invalid request'],
-    ['a line over 8 KB', `${'x'.repeat(9 * 1024)}\n`, 'board: request too long']
+    [
+      'a line over 512 KiB',
+      `${'x'.repeat(MAX_REQUEST_LINE_BYTES + 1024)}\n`,
+      'board: request too long'
+    ]
   ])(
     'answers %s with an error and closes, without calling the handler (#9 D6, AC10)',
     async (_, line, error) => {
@@ -154,9 +163,24 @@ describe('startBoardServer', () => {
     }
   )
 
+  it('hands a 100,000-character multi-byte describe to the handler whole (#69 AC14)', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    const description = '🎉'.repeat(100_000)
+    const line = serializeRequest('c1', { command: 'describe', card: '.', description })
+    expect(await exchange(line)).toBe('{"ok":true}\n')
+    expect(handler).toHaveBeenCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'describe',
+      card: '.',
+      description
+    })
+  })
+
   it('answers an over-long line before its newline arrives (#9 D6)', async () => {
     await serve()
-    expect(await exchange('x'.repeat(20 * 1024))).toBe(
+    expect(await exchange('x'.repeat(MAX_REQUEST_LINE_BYTES + 20 * 1024))).toBe(
       '{"ok":false,"error":"board: request too long"}\n'
     )
   })

@@ -8,7 +8,7 @@ import { NO_ANSWER } from './board-client'
 import { NOT_IN_A_CARD } from './board-commands'
 import {
   MAX_REPLY_OUTPUT_LENGTH,
-  MAX_REQUEST_LINE_BYTES,
+  MAX_REPLY_ERROR_LENGTH,
   type BoardReply,
   type BoardRequest
 } from './board-protocol'
@@ -51,7 +51,7 @@ function asReply(value: unknown): BoardReply | null {
     }
     return null
   }
-  if (ok === false && typeof error === 'string' && error.length <= MAX_REQUEST_LINE_BYTES) {
+  if (ok === false && typeof error === 'string' && error.length <= MAX_REPLY_ERROR_LENGTH) {
     return { ok: false, error }
   }
   return null
@@ -78,6 +78,10 @@ function commandOf(request: BoardRequest): BoardCommand {
       return { command: 'setup', card: request.card, result: request.result }
     case 'usage':
       return { command: 'usage', card: request.card, usage: request.usage }
+    case 'description':
+      return { command: 'description', card: request.card }
+    case 'describe':
+      return { command: 'describe', card: request.card, description: request.description }
   }
 }
 

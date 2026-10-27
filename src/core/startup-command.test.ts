@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkStartup, startLine, typedStartLine } from './startup-command'
+import { checkStartup, FIRST_PROMPT, startLine, typedStartLine } from './startup-command'
 
 const U = '3f0e4c1a-8b2d-4c6e-9a7f-1b2c3d4e5f60'
 
@@ -161,5 +161,70 @@ describe('typedStartLine', () => {
     expect(
       typedStartLine({ startup: { kind: 'shell' }, agentSessionId: U, claudeStarted: false })
     ).toBeNull()
+  })
+})
+
+describe('the first prompt for a card with a description (#69 D2, AC2)', () => {
+  const prompt =
+    'This card has a task description. Read it with: board description .  Then summarise it in ' +
+    'a few lines and ask me whether to start on it. Do not start working on it until I say so.'
+  const described = { agentSessionId: U, description: '# Goal\nFix it' }
+
+  it('is the fixed text, which holds no quote, backslash or $', () => {
+    expect(FIRST_PROMPT).toBe(prompt)
+    expect(FIRST_PROMPT).not.toMatch(/['"\\$`]/)
+  })
+
+  it("passes it on Claude Code's fresh start only, on the --session-id branch", () => {
+    expect(startLine({ ...described, startup: { kind: 'claude' }, claudeStarted: false })).toBe(
+      `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${U} '${prompt}' || ` +
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${U}`
+    )
+    expect(startLine({ ...described, startup: { kind: 'claude' }, claudeStarted: true })).toBe(
+      `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${U} || ` +
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${U}`
+    )
+  })
+
+  it("passes it to each preset's fresh start, never to its resume", () => {
+    const fresh = [
+      ['codex', `codex '${prompt}'`],
+      ['gemini', `gemini -i '${prompt}'`],
+      ['opencode', `opencode --prompt '${prompt}'`],
+      ['pi', `pi '${prompt}'`]
+    ] as const
+    for (const [kind, line] of fresh) {
+      const card = { ...described, startup: { kind }, claudeStarted: false }
+      expect(startLine({ ...card, startedAgents: [] })).toBe(line)
+      expect(startLine({ ...card, startedAgents: [kind] })).not.toContain(prompt)
+    }
+    expect(
+      startLine({
+        ...described,
+        startup: { kind: 'codex' },
+        claudeStarted: false,
+        startedAgents: ['codex']
+      })
+    ).toBe('codex resume --last || codex')
+  })
+
+  it('never passes it to a Custom command or a shell', () => {
+    const custom = { kind: 'custom', command: 'make' } as const
+    expect(startLine({ ...described, startup: custom, claudeStarted: false })).toBe('make')
+    expect(startLine({ ...described, startup: { kind: 'shell' }, claudeStarted: false })).toBeNull()
+  })
+
+  it('starts a card without a description as before', () => {
+    expect(startLine({ agentSessionId: U, startup: { kind: 'codex' }, claudeStarted: false })).toBe(
+      'codex'
+    )
+    expect(
+      startLine({
+        agentSessionId: U,
+        description: undefined,
+        startup: { kind: 'claude' },
+        claudeStarted: false
+      })
+    ).not.toContain(prompt)
   })
 })

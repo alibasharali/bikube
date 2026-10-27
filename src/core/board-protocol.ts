@@ -9,8 +9,11 @@ import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-usage-types'
 
 export const BOARD_PROTOCOL_VERSION = 1
-/** Longest request line main reads, in UTF-8 bytes without the newline (#9 D6). */
-export const MAX_REQUEST_LINE_BYTES = 8192
+/**
+ * Longest request line main reads, in UTF-8 bytes without the newline (#9 D6): room for a
+ * `describe` carrying a whole description (#69 D5).
+ */
+export const MAX_REQUEST_LINE_BYTES = 512 * 1024
 
 export const INVALID_REQUEST = 'board: invalid request'
 export const REQUEST_TOO_LONG = 'board: request too long'
@@ -24,6 +27,9 @@ export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } 
 
 /** `output`, when present, is what the CLI prints to stdout (`board list`, `board create`). */
 export type BoardReply = { ok: true; output?: string } | { ok: false; error: string }
+
+/** Longest error a reply may carry, in characters. */
+export const MAX_REPLY_ERROR_LENGTH = 8192
 
 /** Longest output a reply may carry, in characters. */
 export const MAX_REPLY_OUTPUT_LENGTH = 1_000_000
@@ -52,7 +58,9 @@ const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   activity: ['v', 'cardId', 'command', 'card', 'activity'],
   session: ['v', 'cardId', 'command', 'card', 'session'],
   setup: ['v', 'cardId', 'command', 'card', 'result'],
-  usage: ['v', 'cardId', 'command', 'card', 'usage']
+  usage: ['v', 'cardId', 'command', 'card', 'usage'],
+  description: ['v', 'cardId', 'command', 'card'],
+  describe: ['v', 'cardId', 'command', 'card', 'description']
 }
 
 /** Longest model name a usage may carry (#50 D5). */
@@ -92,7 +100,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * The request in one received line (a trailing newline is ignored), or the error reason to
  * reply with: anything but exactly a version-1 list (format `text` or `json`), create, rename, move, status, activity (#31 D12), session, setup
- * (#39 D4) or usage (#50 D5) with string fields, an activity's or a setup's value being one `board`
+ * (#39 D4), usage (#50 D5), description or describe (#69 D5) with string fields, an activity's or a setup's value being one `board`
  * takes and a usage shaped as `asUsage` checks, is refused.
  */
 export function parseRequestLine(line: string): ParsedRequest {
@@ -117,7 +125,9 @@ export function parseRequestLine(line: string): ParsedRequest {
     command !== 'activity' &&
     command !== 'session' &&
     command !== 'setup' &&
-    command !== 'usage'
+    command !== 'usage' &&
+    command !== 'description' &&
+    command !== 'describe'
   ) {
     return { ok: false, error: INVALID_REQUEST }
   }
@@ -147,6 +157,13 @@ export function parseRequestLine(line: string): ParsedRequest {
   }
   if (command === 'status') {
     return { ok: true, request: { v: 1, cardId, command, card, text: value.text as string } }
+  }
+  if (command === 'description') {
+    return { ok: true, request: { v: 1, cardId, command, card } }
+  }
+  if (command === 'describe') {
+    const description = value.description as string
+    return { ok: true, request: { v: 1, cardId, command, card, description } }
   }
   if (command === 'session') {
     const session = value.session

@@ -560,3 +560,69 @@ describe('answerBoardCommand: list, create and rename', () => {
     ).toEqual({ ok: false, error: NOT_IN_A_CARD })
   })
 })
+
+describe('answerBoardCommand: description and describe (#69 D5)', () => {
+  const descriptionOf = (store: InMemoryWorkspaceStore, id: string): string | undefined =>
+    store
+      .getState()
+      .workspaces.flatMap((w) => w.cards)
+      .find((c) => c.id === id)?.description
+  const answer = (
+    store: InMemoryWorkspaceStore,
+    command: Parameters<typeof answerBoardCommand>[2]
+  ): ReturnType<typeof answerBoardCommand> =>
+    answerBoardCommand(store, 'c-api', command, running, () => {})
+
+  it("prints the card's description and one newline, or nothing when it has none (AC4)", () => {
+    const store = setup()
+    expect(answer(store, { command: 'description', card: '.' })).toEqual({ ok: true })
+    store.setCardDescription('alpha', 'c-web', 'Hello 69')
+    expect(answer(store, { command: 'description', card: 'web' })).toEqual({
+      ok: true,
+      output: 'Hello 69\n'
+    })
+  })
+
+  it('replaces it, stopped or running, trimmed; empty removes it (AC4)', () => {
+    const store = setup()
+    expect(answer(store, { command: 'describe', card: '.', description: 'New text\n\n' })).toEqual({
+      ok: true
+    })
+    expect(descriptionOf(store, 'c-api')).toBe('New text')
+    expect(answer(store, { command: 'describe', card: 'old', description: 'x' })).toEqual({
+      ok: true
+    })
+    expect(descriptionOf(store, 'c-old')).toBe('x')
+    expect(answer(store, { command: 'describe', card: '.', description: '' })).toEqual({ ok: true })
+    expect(descriptionOf(store, 'c-api')).toBeUndefined()
+  })
+
+  it('refuses one over 100,000 characters, changing nothing (AC4)', () => {
+    const store = setup()
+    store.setCardDescription('alpha', 'c-api', 'Hello 69')
+    expect(
+      answer(store, { command: 'describe', card: '.', description: 'a'.repeat(100_001) })
+    ).toEqual({ ok: false, error: 'board: Description is longer than 100,000 characters' })
+    expect(descriptionOf(store, 'c-api')).toBe('Hello 69')
+  })
+
+  it('keeps a 100,000-character multi-byte description whole (AC14)', () => {
+    const store = setup()
+    const text = '🎉é'.repeat(50_000)
+    expect(answer(store, { command: 'describe', card: '.', description: text })).toEqual({
+      ok: true
+    })
+    expect(answer(store, { command: 'description', card: '.' })).toEqual({
+      ok: true,
+      output: `${text}\n`
+    })
+  })
+
+  it('answers the resolution errors', () => {
+    const store = setup()
+    expect(answer(store, { command: 'description', card: 'ghost' })).toEqual({
+      ok: false,
+      error: 'board: no card "ghost" in this workspace'
+    })
+  })
+})

@@ -148,4 +148,34 @@ describe('parseBoardArgs', () => {
       expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
     }
   })
+
+  it('parses description and describe with a file to read, - for stdin (#69 D5)', () => {
+    expect(parseBoardArgs(['description', '.'])).toEqual({
+      kind: 'command',
+      command: { command: 'description', card: '.' }
+    })
+    expect(parseBoardArgs(['describe', 'api', '/tmp/x y/task.md'])).toEqual({
+      kind: 'descriptionFile',
+      card: 'api',
+      path: '/tmp/x y/task.md'
+    })
+    expect(parseBoardArgs(['describe', '.', '-'])).toEqual({
+      kind: 'descriptionFile',
+      card: '.',
+      path: '-'
+    })
+    for (const argv of [
+      ['description'],
+      ['description', '.', 'x'],
+      ['describe', '.'],
+      ['describe', '.', 'a', 'b']
+    ]) {
+      expect(parseBoardArgs(argv)).toEqual({ kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 })
+    }
+  })
+
+  it('names description and describe in the usage text (#69 D5)', () => {
+    expect(BOARD_USAGE).toContain('board description <card>')
+    expect(BOARD_USAGE).toContain('board describe <card> <file>|-')
+  })
 })

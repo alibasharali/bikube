@@ -32,7 +32,9 @@ import type { Card, WorkspaceStore } from './workspace-store'
  * card's last usage, so it is there after a restart (#50 D5, D7).
  * `list` answers with the workspace's columns and cards (`runtime` gives each card's state);
  * `create` adds a card, not started, at the bottom of a column and answers with its id; `rename`
- * renames one. Both save through the store like any board change.
+ * renames one. Both save through the store like any board change. `description` answers with
+ * the card's description and one newline, or nothing; `describe` replaces it through the store,
+ * which trims it, removes it when empty and refuses one over the cap (#69 D5).
  */
 export function answerBoardCommand(
   store: Pick<
@@ -45,6 +47,7 @@ export function answerBoardCommand(
     | 'renameCard'
     | 'setCardLastStatus'
     | 'setCardLastUsage'
+    | 'setCardDescription'
   >,
   callingCardId: string,
   command: BoardCommand,
@@ -77,6 +80,14 @@ export function answerBoardCommand(
   }
   const card = resolveCard(ws, callingCardId, command.card)
   if (!card.ok) return card
+  if (command.command === 'description') {
+    const { description } = card.value
+    return description ? { ok: true, output: `${description}\n` } : { ok: true }
+  }
+  if (command.command === 'describe') {
+    const set = store.setCardDescription(ws.id, card.value.id, command.description)
+    return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
+  }
   if (command.command === 'status') {
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
     const text = cleanAgentStatus(command.text)

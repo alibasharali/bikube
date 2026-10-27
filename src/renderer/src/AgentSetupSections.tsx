@@ -1,5 +1,5 @@
-import { ChevronRight } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { ChevronRight, FolderOpen, SquarePen, X } from 'lucide-react'
+import { createContext, useContext, useId, useMemo, useRef, useState } from 'react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
 import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
 import {
@@ -37,6 +37,7 @@ import {
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
 import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
+import { openErrorLine } from '../../core/open-result'
 import type { Workspace } from '../../core/workspace-store'
 import {
   saveConfig,
@@ -70,13 +71,107 @@ export interface SectionViewProps {
   expanded: ReadonlySet<string>
 }
 
+/** What a row's Open file and Reveal need (D27, D28): the folder main read and what it listed. */
+interface FileActionsScope {
+  folder: string
+  /** The files main's last read listed: only these get the buttons, as only these main opens. */
+  paths: ReadonlySet<string>
+  open: (file: string) => void
+  reveal: (file: string) => void
+}
+
+const FileActionsContext = createContext<FileActionsScope | null>(null)
+
 /**
- * Where a file-backed row's Open file and Reveal buttons go (D27). They come with S6; until then
- * the slot holds nothing.
+ * Gives the rows inside it their Open file and Reveal (D27) for the workspace folder `folder`, and
+ * shows the last open's failure as the Files tab does (`Couldn't open <file name>: <reason>`).
+ */
+export function FileActionsProvider({
+  folder,
+  snapshot,
+  children
+}: {
+  folder: string
+  snapshot: AgentSetupSnapshot
+  children: React.ReactNode
+}): React.JSX.Element {
+  const [error, setError] = useState<string | null>(null)
+  /** Only the latest open's result shows. */
+  const opens = useRef(0)
+  const paths = useMemo(() => new Set(snapshot.paths), [snapshot.paths])
+  const scope = useMemo<FileActionsScope>(
+    () => ({
+      folder,
+      paths,
+      open: (file) => {
+        const at = ++opens.current
+        setError(null)
+        void window.bikube.agentSetup.openFile(folder, file).then((result) => {
+          if (at === opens.current) setError(openErrorLine(file, result))
+        })
+      },
+      reveal: (file) => {
+        ++opens.current
+        setError(null)
+        void window.bikube.agentSetup.reveal(folder, file)
+      }
+    }),
+    [folder, paths]
+  )
+  return (
+    <FileActionsContext.Provider value={scope}>
+      {error !== null && (
+        <div className="files-error" role="alert" data-testid="agent-setup-open-error">
+          <span className="files-error-text">{error}</span>
+          <button
+            type="button"
+            className="icon-btn"
+            data-testid="agent-setup-open-error-dismiss"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setError(null)}
+          >
+            <X {...SMALL_ICON} />
+          </button>
+        </div>
+      )}
+      {children}
+    </FileActionsContext.Provider>
+  )
+}
+
+/**
+ * A file-backed row's Open file and Reveal buttons (D27), shown on the row's hover and focus.
+ * Nothing for a file main's last read didn't list (Bikube's own, a missing one, D28).
  */
 function FileActions({ file }: { file: string }): React.JSX.Element | null {
-  void file
-  return null
+  const scope = useContext(FileActionsContext)
+  if (!scope?.paths.has(file)) return null
+  const name = file.slice(file.lastIndexOf('/') + 1)
+  return (
+    <span className="agent-setup-file-actions" data-testid="agent-setup-file-actions">
+      <button
+        type="button"
+        className="icon-btn agent-setup-file-action"
+        data-testid="agent-setup-open-file"
+        aria-label="Open file"
+        title={`Open ${name}`}
+        onClick={() => scope.open(file)}
+      >
+        <SquarePen {...SMALL_ICON} />
+      </button>
+      <button
+        type="button"
+        className="icon-btn agent-setup-file-action"
+        data-testid="agent-setup-reveal"
+        aria-label="Reveal"
+        title={`Show ${name} in the file manager`}
+        onClick={() => scope.reveal(file)}
+      >
+        <FolderOpen {...SMALL_ICON} />
+      </button>
+    </span>
+  )
 }
 
 function SourceChip({ source }: { source: EntrySource }): React.JSX.Element {
@@ -1107,7 +1202,7 @@ function ConfigItem({
             <s
               key={setter.file}
               className="agent-setup-chip agent-setup-chip-overridden"
-              title={`Overridden by ${sourceLabel(row.source)}: ${fileLabel(snapshot, setter.file)}`}
+              title={`${sourceLabel(setter.source)} (${fileLabel(snapshot, setter.file)}): ${setter.text}, overridden by ${sourceLabel(row.source)}`}
               data-testid="agent-setup-config-overridden"
             >
               {sourceLabel(setter.source)}: {setter.text}

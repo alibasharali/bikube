@@ -21,6 +21,7 @@ import {
   AgentsSection,
   CommandsSection,
   ConfigSection,
+  FileActionsProvider,
   HooksSection,
   McpServersSection,
   MemorySection,
@@ -286,14 +287,16 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
       >
         <h3 className="agent-setup-panel-title">{current.label}</h3>
         {SectionView && snapshot ? (
-          <SectionView
-            workspace={workspace}
-            snapshot={snapshot}
-            query={query}
-            onShowSection={setSection}
-            onSearch={setQuery}
-            expanded={expanded}
-          />
+          <FileActionsProvider key={folder} folder={folder} snapshot={snapshot}>
+            <SectionView
+              workspace={workspace}
+              snapshot={snapshot}
+              query={query}
+              onShowSection={setSection}
+              onSearch={setQuery}
+              expanded={expanded}
+            />
+          </FileActionsProvider>
         ) : SectionView && failed ? (
           <p className="agent-setup-empty" data-testid="agent-setup-failed">
             Couldn&apos;t read the workspace folder. Check that it still exists, then press Refresh.

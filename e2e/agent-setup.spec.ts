@@ -389,6 +389,9 @@ test('AC8: an agent without frontmatter is warned about on its row and in Overvi
   await expect(warnings.filter({ hasText: '.claude/settings.json' })).toContainText(
     'Invalid JSON: '
   )
+  // Both with Open file and Reveal (#68 D27).
+  await expect(warnings.getByRole('button', { name: 'Open file' })).toHaveCount(2)
+  await expect(warnings.getByRole('button', { name: 'Reveal' })).toHaveCount(2)
   await expect(
     page.getByTestId('agent-setup-section-agents').getByTestId('agent-setup-section-warning')
   ).toBeVisible()
@@ -876,4 +879,97 @@ test('AC11: Config edits booleans and numbers in settings.local.json, and Reset 
   await expect(coAuthored.getByTestId('agent-setup-config-overridden')).toHaveCount(0)
   await expect(coAuthored.getByTestId('agent-setup-config-reset')).toHaveCount(0)
   expect(readFileSync(userSettings, 'utf8')).toBe(before)
+})
+
+// Open file and Reveal (#68 S6).
+
+const editorLog = (): string => join(root, 'editors.log')
+const editorRuns = (): string[] =>
+  existsSync(editorLog()) ? readFileSync(editorLog(), 'utf8').trimEnd().split('\n') : []
+
+/** A fake `code` in the fake login PATH's `bin` (`loginShell`), logging `run code` and its arguments. */
+function fakeCode(): void {
+  const code = join(root, 'bin', 'code')
+  writeFileSync(code, `#!/bin/sh\n{ echo "run code"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`)
+  chmodSync(code, 0o755)
+}
+
+/** Replaces `shell.showItemInFolder` in main with a recorder, so no file manager opens. */
+async function recordRevealed(): Promise<void> {
+  await app!.evaluate(({ shell }) => {
+    const revealed: string[] = []
+    ;(globalThis as { revealedPaths?: string[] }).revealedPaths = revealed
+    shell.showItemInFolder = (path: string) => {
+      revealed.push(path)
+    }
+  })
+}
+
+const revealedPaths = (): Promise<string[]> =>
+  app!.evaluate(() => [...((globalThis as { revealedPaths?: string[] }).revealedPaths ?? [])])
+
+test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal shows it; unlisted paths open nothing", async () => {
+  const shell = loginShell(false)
+  fakeCode()
+  const folder = await openWith(ac4Fixtures, shell)
+  await recordRevealed()
+  const skillFolder = join(folder, '.claude', 'skills', 'review')
+  const skill = join(skillFolder, 'SKILL.md')
+  await tab('Skills').click()
+  const review = row('review')
+  await review.hover()
+  const open = review.getByRole('button', { name: 'Open file' })
+  const reveal = review.getByRole('button', { name: 'Reveal' })
+  await expect(open).toBeVisible()
+  await open.click()
+  await expect.poll(editorRuns).toEqual(['run code', skillFolder, skill])
+  await expect(panel().getByTestId('agent-setup-open-error')).toHaveCount(0)
+  await reveal.click()
+  await expect.poll(revealedPaths).toEqual([skill])
+
+  // Paths the read didn't list, asked for from the page: nothing runs, nothing is shown.
+  const notes = join(folder, 'notes.md')
+  write(notes, 'x')
+  const asked = await page.evaluate(
+    async ([dir, paths]) => {
+      const api = (
+        window as unknown as {
+          bikube: {
+            agentSetup: {
+              openFile: (folder: string, path: string) => Promise<unknown>
+              reveal: (folder: string, path: string) => Promise<boolean>
+            }
+          }
+        }
+      ).bikube.agentSetup
+      const results: unknown[] = []
+      for (const path of paths) {
+        results.push(await api.openFile(dir, path), await api.reveal(dir, path))
+      }
+      return results
+    },
+    [folder, [notes, `${skillFolder}/../review/SKILL.md`, join(home, '.profile')]] as const
+  )
+  expect(asked).toEqual([
+    { ok: false, reason: 'refused' },
+    false,
+    { ok: false, reason: 'refused' },
+    false,
+    { ok: false, reason: 'refused' },
+    false
+  ])
+  await page.waitForTimeout(500)
+  expect(editorRuns()).toEqual(['run code', skillFolder, skill])
+  expect(await revealedPaths()).toEqual([skill])
+
+  // Bikube's own hooks and settings file have neither button, nor does a missing file (D27).
+  await tab('Hooks').click()
+  await expect(panel().getByTestId('agent-setup-hook-group').first()).toBeVisible()
+  await expect(panel().getByTestId('agent-setup-file-actions')).toHaveCount(0)
+  await tab('Status').click()
+  const actions = (label: string): Locator =>
+    statusFile(label).getByTestId('agent-setup-file-actions')
+  await expect(actions('~/.claude/settings.json')).toHaveCount(1)
+  await expect(actions('claude-settings.json')).toHaveCount(0)
+  await expect(actions('.claude/settings.local.json')).toHaveCount(0)
 })

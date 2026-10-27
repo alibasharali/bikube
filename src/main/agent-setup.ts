@@ -1,7 +1,13 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
+import {
+  ListedPaths,
+  openListedFile,
+  revealListedFile,
+  type FileActionDeps
+} from '../core/agent-setup-open'
 import { readAgentSetup } from '../core/agent-setup-reader'
 import type { AgentSetupRead, SettingsWriteResult } from '../core/agent-setup-snapshot'
 import {
@@ -12,21 +18,20 @@ import {
 } from '../core/agent-setup-writes'
 import { readClaudeVersion, type ClaudeVersion } from '../core/claude-version'
 import { isDirectory } from '../core/directories'
-import { editorShell } from '../core/editor'
+import { editorShell, type OpenResult } from '../core/editor'
+import type { Settings } from '../core/settings'
 import { IPC } from '../shared/api'
 import { claudeSettingsPath } from './board'
 
 /** Each folder's running read, shared by requests made during it (#68 D26: never two at once). */
 const reading = new Map<string, Promise<AgentSetupRead>>()
 
-/**
- * The files each folder's last read found (D28): Open file and Reveal (S6) accept only these.
- */
-const listed = new Map<string, ReadonlySet<string>>()
+/** The files each folder's last read found (D28): Open file and Reveal accept only these. */
+const listed = new ListedPaths()
 
 /** Whether the last read of workspace folder `folder` listed `path`. */
 export function agentSetupListed(folder: string, path: string): boolean {
-  return listed.get(resolve(folder))?.has(path) === true
+  return listed.has(folder, path)
 }
 
 /** Each folder's last write, the next one queued behind it (D23: every write re-reads the file). */
@@ -49,10 +54,15 @@ const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
  * plugin or a project MCP server on or off in `<folder>/.claude/settings.local.json` (D23), only for
  * a plugin key `installed_plugins.json` lists or a server name `.mcp.json` lists; `agentSetup:config`
  * sets a boolean or number setting there, or removes one it sets (D22, `agentSetupConfigWrite`);
- * one write at a time per folder across both. Requests come from the main frame only and must name an absolute, existing
+ * one write at a time per folder across both; `agentSetup:open` and `agentSetup:reveal` open a file
+ * with Settings > Editor `editorSettings()` (its own folder the project folder) or show it in the
+ * file manager (D27), only a file the folder's last read listed. Requests come from the main frame only and must name an absolute, existing
  * directory; nothing a file names is run.
  */
-export function registerAgentSetup(shellSetting: () => string): void {
+export function registerAgentSetup(
+  editorSettings: () => Pick<Settings, 'editor' | 'editorCommand' | 'shell'>
+): void {
+  const shellSetting = (): string => editorSettings().shell
   let version: Promise<ClaudeVersion | null> | null = null
   ipcMain.handle(IPC.agentSetupClaudeVersion, (event): Promise<ClaudeVersion | null> => {
     fromMainFrame(event, IPC.agentSetupClaudeVersion)
@@ -77,7 +87,7 @@ export function registerAgentSetup(shellSetting: () => string): void {
     if (!read) {
       read = readAgentSetup({ folder, home: userHome(), bikubeSettings: claudeSettingsPath() })
         .then((snapshot): AgentSetupRead => {
-          listed.set(folder, new Set(snapshot.paths))
+          listed.set(folder, snapshot.paths)
           return { ok: true, snapshot }
         })
         .finally(() => reading.delete(folder))
@@ -131,6 +141,41 @@ export function registerAgentSetup(shellSetting: () => string): void {
         requested,
         edit && ((folder) => agentSetupConfigWrite({ folder, home: userHome(), edit }))
       )
+    }
+  )
+
+  const fileActions = (): FileActionDeps => {
+    const { editor, editorCommand, shell: login } = editorSettings()
+    const env: Record<string, string> = {}
+    for (const [key, value] of Object.entries(process.env))
+      if (value !== undefined) env[key] = value
+    return {
+      listed,
+      open: {
+        editor,
+        editorCommand,
+        shell: editorShell(login, env),
+        env,
+        spawn,
+        openPath: (file: string) => shell.openPath(file)
+      },
+      reveal: (file: string) => shell.showItemInFolder(file)
+    }
+  }
+
+  ipcMain.handle(
+    IPC.agentSetupOpen,
+    (event, folder: unknown, path: unknown): Promise<OpenResult> => {
+      fromMainFrame(event, IPC.agentSetupOpen)
+      return openListedFile(folder, path, fileActions())
+    }
+  )
+
+  ipcMain.handle(
+    IPC.agentSetupReveal,
+    (event, folder: unknown, path: unknown): Promise<boolean> => {
+      fromMainFrame(event, IPC.agentSetupReveal)
+      return revealListedFile(folder, path, fileActions())
     }
   )
 }

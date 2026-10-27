@@ -90,6 +90,8 @@ export const IPC = {
   agentSetupClaudeVersion: 'agentSetup:claudeVersion',
   agentSetupSwitch: 'agentSetup:switch',
   agentSetupConfig: 'agentSetup:config',
+  agentSetupOpen: 'agentSetup:open',
+  agentSetupReveal: 'agentSetup:reveal',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -370,6 +372,17 @@ export interface AgentSetupApi {
    * show (D28).
    */
   editConfig(folder: string, edit: AgentSetupConfigEdit): Promise<SettingsWriteResult>
+  /**
+   * Opens `path` with Settings > Editor, the file's own folder as the project folder (#68 D27), as
+   * the Files tab opens a file. Main refuses (`refused`, nothing run) a path its last read of
+   * `folder` didn't list (D28), Bikube's own Claude Code settings among them.
+   */
+  openFile(folder: string, path: string): Promise<OpenResult>
+  /**
+   * Shows `path` in the OS file manager (#68 D27); false, nothing shown, for a path main's last
+   * read of `folder` didn't list (D28).
+   */
+  reveal(folder: string, path: string): Promise<boolean>
 }
 
 export interface AgentsApi {

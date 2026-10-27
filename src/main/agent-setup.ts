@@ -31,11 +31,6 @@ const reading = new Map<string, Promise<AgentSetupRead>>()
 /** The files each folder's last read found (D28): Open file and Reveal accept only these. */
 const listed = new ListedPaths()
 
-/** Whether the last read of workspace folder `folder` listed `path`. */
-export function agentSetupListed(folder: string, path: string): boolean {
-  return listed.has(folder, path)
-}
-
 /** Each Stats request's running read (D14), by its folders: a request during it shares it. */
 const statsReading = new Map<string, Promise<ClaudeStatsRead>>()
 

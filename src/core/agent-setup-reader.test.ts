@@ -394,10 +394,30 @@ describe('readAgentSetup hooks (#68 S3)', () => {
     )
     write(inFolder('.claude/settings.json'), JSON.stringify({ env: { OTHER: 'env-hidden-2' } }))
     write(join(installPath, '.mcp.json'), JSON.stringify({ mcpServers: { search: server } }))
+    write(
+      inHome('.claude/plugins/known_marketplaces.json'),
+      JSON.stringify({
+        team: {
+          source: {
+            source: 'git',
+            url: 'https://oauth2:TOKEN@gitlab.example.com/x.git?ref=ref-hidden#frag-hidden'
+          },
+          installLocation: '/h/.claude/plugins/marketplaces/team',
+          lastUpdated: '2026-10-01T10:00:00.000Z',
+          auth: { token: 'market-hidden' }
+        },
+        market: { source: { source: 'github', repo: 'acme/market' } }
+      })
+    )
 
     const snapshot = await read()
     const text = JSON.stringify(snapshot)
     for (const secret of [
+      'TOKEN@',
+      'oauth2',
+      'ref-hidden',
+      'frag-hidden',
+      'market-hidden',
       's3cret',
       'abc123',
       'oauth-hidden',
@@ -429,5 +449,15 @@ describe('readAgentSetup hooks (#68 S3)', () => {
       ['OTHER'],
       ['API_KEY']
     ])
+    // Each marketplace only as the page shows it (D15).
+    expect(snapshot.marketplaces.value).toEqual({
+      team: {
+        source: { source: 'git', url: 'https://gitlab.example.com/x.git?ref=…' },
+        lastUpdated: '2026-10-01T10:00:00.000Z'
+      },
+      market: { source: { source: 'github', repo: 'acme/market' } }
+    })
+    // The page reads plugins from `plugins`, never installed_plugins.json whole.
+    expect(snapshot.installedPlugins.value).toBeUndefined()
   })
 })

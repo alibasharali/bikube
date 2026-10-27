@@ -690,6 +690,28 @@ describe('configRows', () => {
     ])
   })
 
+  it('D22, D28: Reset only for a local boolean or finite number, never a read-only value', () => {
+    const rows = configRows(
+      snapshot({
+        settings: [
+          settingsFile('local', {
+            model: 'opus',
+            env: ['TOKEN'],
+            verbose: true,
+            cleanupPeriodDays: 3
+          })
+        ]
+      }),
+      ''
+    )
+    expect(rows.map((r) => [r.key, r.resettable])).toEqual([
+      ['cleanupPeriodDays', true],
+      ['env', false],
+      ['model', false],
+      ['verbose', true]
+    ])
+  })
+
   it('D25: matches the key, the value and the source', () => {
     const s = snapshot({
       settings: [

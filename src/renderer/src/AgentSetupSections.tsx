@@ -37,7 +37,7 @@ import {
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
 import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
-import { openErrorLine } from '../../core/open-result'
+import { listedFileErrorLine } from '../../core/open-result'
 import type { Workspace } from '../../core/workspace-store'
 import {
   saveConfig,
@@ -84,7 +84,8 @@ const FileActionsContext = createContext<FileActionsScope | null>(null)
 
 /**
  * Gives the rows inside it their Open file and Reveal (D27) for the workspace folder `folder`, and
- * shows the last open's failure as the Files tab does (`Couldn't open <file name>: <reason>`).
+ * shows the last open's or reveal's failure as the Files tab does (`Couldn't open <file name>:
+ * <reason>`), a refused one as `file not found`.
  */
 export function FileActionsProvider({
   folder,
@@ -107,13 +108,18 @@ export function FileActionsProvider({
         const at = ++opens.current
         setError(null)
         void window.bikube.agentSetup.openFile(folder, file).then((result) => {
-          if (at === opens.current) setError(openErrorLine(file, result))
+          if (at === opens.current) setError(listedFileErrorLine(file, result))
         })
       },
       reveal: (file) => {
-        ++opens.current
+        const at = ++opens.current
         setError(null)
-        void window.bikube.agentSetup.reveal(folder, file)
+        void window.bikube.agentSetup.reveal(folder, file).then((revealed) => {
+          if (at !== opens.current) return
+          setError(
+            listedFileErrorLine(file, revealed ? { ok: true } : { ok: false, reason: 'refused' })
+          )
+        })
       }
     }),
     [folder, paths]

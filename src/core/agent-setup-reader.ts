@@ -114,6 +114,44 @@ export function mcpServerConfig(value: unknown): McpServerConfig {
   return config
 }
 
+/** A JSON file's read without its value. */
+const withoutValue = (read: JsonFile): JsonFile => {
+  const file: JsonFile = { file: read.file, state: read.state }
+  if (read.error !== undefined) file.error = read.error
+  return file
+}
+
+/**
+ * `known_marketplaces.json` reduced to what the page shows (D15): each marketplace's source kind,
+ * repo, path and URL (through `safeUrl`, D28) and its `lastUpdated`, nothing else.
+ */
+export function marketplaceConfigs(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined
+  const text = (record: Record<string, unknown>, key: string): string | undefined =>
+    typeof record[key] === 'string' ? record[key] : undefined
+  const markets: Record<string, unknown> = {}
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isRecord(entry)) continue
+    const market: Record<string, unknown> = {}
+    const source = entry['source']
+    if (typeof source === 'string') market['source'] = safeUrl(source)
+    else if (isRecord(source)) {
+      const reduced: Record<string, string> = {}
+      for (const key of ['source', 'repo', 'path']) {
+        const field = text(source, key)
+        if (field !== undefined) reduced[key] = field
+      }
+      const url = text(source, 'url')
+      if (url !== undefined) reduced['url'] = safeUrl(url)
+      market['source'] = reduced
+    }
+    const lastUpdated = text(entry, 'lastUpdated')
+    if (lastUpdated !== undefined) market['lastUpdated'] = lastUpdated
+    markets[name] = market
+  }
+  return markets
+}
+
 /** A server map with each server reduced to `mcpServerConfig`. */
 const mcpServerConfigs = (value: unknown): Record<string, McpServerConfig> => {
   const servers: Record<string, McpServerConfig> = {}
@@ -728,7 +766,12 @@ export async function readAgentSetup({
     join(pluginsFolder, 'installed_plugins.json'),
     'plugins'
   )
-  const marketplaces = await reader.json(join(pluginsFolder, 'known_marketplaces.json'), 'plugins')
+  const marketsRead = await reader.json(join(pluginsFolder, 'known_marketplaces.json'), 'plugins')
+  // Only what the page shows, without credentials in a URL (D15, D28).
+  const marketplaces: JsonFile =
+    marketsRead.state === 'found'
+      ? { ...withoutValue(marketsRead), value: marketplaceConfigs(marketsRead.value) }
+      : withoutValue(marketsRead)
   const plugins = await readPlugins(reader, installedPlugins, settings)
 
   const sources: [string, EntrySource][] = [
@@ -781,7 +824,8 @@ export async function readAgentSetup({
     settings,
     claudeJson,
     mcpJson,
-    installedPlugins,
+    // The page reads `plugins`: installed_plugins.json's own value stays in main.
+    installedPlugins: withoutValue(installedPlugins),
     marketplaces,
     plugins: plugins.map((p) => p.entry),
     skills,

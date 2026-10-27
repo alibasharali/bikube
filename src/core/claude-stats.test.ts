@@ -241,6 +241,51 @@ describe('readClaudeStats', () => {
     expect(stats.tools.find((t) => t.name === 'Grep')).toEqual({ name: 'Grep', count: 1 })
   })
 
+  it("counts an older Claude Code's top-level subagent transcripts, but not as sessions", async () => {
+    transcript('/p', 'sess', [assistant({ input: 100, id: 'm1' })])
+    // Named `agent-…`, as older versions wrote them beside the session.
+    transcript('/p', 'agent-1a2b', [
+      assistant({ model: 'claude-small', input: 40, id: 's1', tools: [{ name: 'Grep', id: 'g1' }] })
+    ])
+    // Or any name, its first entry marked as a sidechain.
+    const sidechain = JSON.stringify({
+      ...JSON.parse(user('2026-03-14T09:00:00Z')),
+      isSidechain: true
+    })
+    transcript('/p', 'side', [sidechain, assistant({ input: 7, id: 's2' })])
+    const stats = await read(['/p'])
+    expect(stats.sessions).toBe(1)
+    expect(day(stats, '2026-03-14')).toEqual({ tokens: 0, sessions: 0 })
+    expect(stats.tokens).toBe(147)
+    expect(stats.models).toEqual([
+      { model: 'claude-x', tokens: 107 },
+      { model: 'claude-small', tokens: 40 }
+    ])
+    expect(stats.tools).toEqual([{ name: 'Grep', count: 1 }])
+  })
+
+  it('gives the event loop a turn every 200 lines and after each file, the counts unchanged', async () => {
+    transcript(
+      '/p',
+      'a',
+      Array.from({ length: 450 }, (_, i) => assistant({ input: 1, id: `m${i}` }))
+    )
+    transcript('/p', 'b', [assistant({ input: 2, id: 'b1' })])
+    let turns = 0
+    const stats = await readClaudeStats({
+      home,
+      folders: ['/p'],
+      now: NOW,
+      localDate: utcDate,
+      yieldToLoop: async () => {
+        turns++
+      }
+    })
+    expect(turns).toBe(4)
+    expect(stats).toEqual(await read(['/p']))
+    expect(stats.tokens).toBe(452)
+  })
+
   it('keeps the top 10 of each list, most used first, then by name', async () => {
     const tools = Array.from({ length: 12 }, (_, i) =>
       Array.from({ length: i + 1 }, (__, j) => ({

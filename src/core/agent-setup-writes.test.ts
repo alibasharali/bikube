@@ -283,6 +283,17 @@ describe('agentSetupConfigWrite', () => {
     expect(JSON.parse(readFileSync(local(), 'utf8'))).toEqual({ enabledPlugins: {} })
   })
 
+  it('D22, D28: refuses to remove a read-only value settings.local.json sets', async () => {
+    const text = '{\n  "model": "opus",\n  "env": {\n    "TOKEN": "x"\n  },\n  "verbose": true\n}\n'
+    write(local(), text)
+    for (const key of ['env', 'model']) {
+      expect(await agentSetupConfigWrite({ folder, home, edit: { kind: 'remove', key } })).toEqual(
+        refused
+      )
+    }
+    expect(readFileSync(local(), 'utf8')).toBe(text)
+  })
+
   it("D23: leaves an invalid settings.local.json as it is, with the writer's message", async () => {
     write(local(), '{ "verbose": ')
     expect(

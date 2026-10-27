@@ -7,8 +7,8 @@
  * writer copies into settings.local.json when it lacks them, so the change holds.
  * D22's Config edits have their own check (`agentSetupConfigWrite`): a set only for a key whose
  * effective value (D10, the three settings files read again) is a boolean or a finite number, with
- * a new value of the same kind; a remove only for a key settings.local.json sets; never a key
- * another section shows (`CONFIG_EXCLUDED_KEYS`), and no new keys.
+ * a new value of the same kind; a remove only for a boolean or finite number settings.local.json
+ * sets; never a key another section shows (`CONFIG_EXCLUDED_KEYS`), and no new keys.
  */
 
 import { readFile } from 'node:fs/promises'
@@ -196,6 +196,8 @@ export async function agentSetupConfigWrite({
     // An invalid file gets the writer's own message, and is left as it is.
     if (local === 'invalid') return writeSettingsLocal(folder, edit, fs)
     if (local === 'missing' || !Object.hasOwn(local, edit.key)) return CONFIG_REFUSED
+    // Only a value D22 lets the page change: a string, list, object or `env` is read-only (D28).
+    if (edit.key === 'env' || configControl(local[edit.key]) === null) return CONFIG_REFUSED
     return writeSettingsLocal(folder, edit, fs)
   }
   // The effective value (D10), every file read again now.

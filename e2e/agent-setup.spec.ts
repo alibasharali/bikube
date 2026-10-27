@@ -894,6 +894,16 @@ test('AC11: Config edits booleans and numbers in settings.local.json, and Reset 
   await expect(coAuthored.getByTestId('agent-setup-config-overridden')).toHaveCount(0)
   await expect(coAuthored.getByTestId('agent-setup-config-reset')).toHaveCount(0)
   expect(readFileSync(userSettings, 'utf8')).toBe(before)
+
+  // A string settings.local.json sets is read-only: no Reset (D22, D28).
+  write(
+    join(folder, '.claude/settings.local.json'),
+    JSON.stringify({ cleanupPeriodDays: 7, model: 'sonnet' })
+  )
+  await expect(model.getByTestId('agent-setup-source')).toHaveText('Local')
+  await expect(model.getByTestId('agent-setup-config-value')).toHaveText('sonnet')
+  await expect(model.getByTestId('agent-setup-config-reset')).toHaveCount(0)
+  await expect(days.getByTestId('agent-setup-config-reset')).toHaveCount(1)
 })
 
 // Open file and Reveal (#68 S6).

@@ -25,3 +25,15 @@ export function openErrorLine(path: string, result: OpenResult): string | null {
   if (result.reason === 'no-command') return 'Set a command in Settings > Editor'
   return `Couldn't open ${path.slice(path.lastIndexOf('/') + 1)}: ${result.message}`
 }
+
+/**
+ * The Agent setup page's error line for Open file or Reveal on `path` (#68 D27): the Files tab's,
+ * and for a path main refused (no longer a file its last read listed, so nothing ran)
+ * `Couldn't open <file name>: file not found`, since the row's button promised a file.
+ */
+export function listedFileErrorLine(path: string, result: OpenResult): string | null {
+  if (!result.ok && result.reason === 'refused') {
+    return openErrorLine(path, { ok: false, reason: 'failed', message: 'file not found' })
+  }
+  return openErrorLine(path, result)
+}

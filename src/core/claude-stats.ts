@@ -4,16 +4,11 @@
  * subagent transcripts, with #50's counts and its deduplication of streamed entries, over the last
  * 30 days ending today (local dates). No cost.
  */
+import { createReadStream } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
-import {
-  MAX_MODEL_LENGTH,
-  eachLine,
-  isObject,
-  parseLine,
-  subagentFiles,
-  usageEntry
-} from './claude-usage'
+import { basename, join, resolve } from 'node:path'
+import { createInterface } from 'node:readline'
+import { MAX_MODEL_LENGTH, isObject, parseLine, subagentFiles, usageEntry } from './claude-usage'
 import { isDirectory, isPathArg } from './directories'
 import {
   MAX_STATS_FOLDERS,
@@ -74,7 +69,44 @@ export interface StatsOptions {
   now: number
   /** The local date (`YYYY-MM-DD`) of a time in ms; injected so tests use fixed dates. */
   localDate: (ms: number) => string
+  /**
+   * Gives main's event loop a turn (`setImmediate` by default), awaited every `LINES_PER_TURN`
+   * lines and after each file, so many large transcripts never hold up PTY output and acks.
+   */
+  yieldToLoop?: () => Promise<void>
 }
+
+/** How many transcript lines are parsed between two turns of the event loop. */
+const LINES_PER_TURN = 200
+
+const nextTurn = (): Promise<void> => new Promise((done) => setImmediate(done))
+
+/** Calls `onLine` with each line of `path`, awaiting `pause` after each so it can yield. */
+async function eachLinePaced(
+  path: string,
+  onLine: (line: string) => void,
+  pause: () => Promise<void>
+): Promise<void> {
+  const stream = createReadStream(path, { encoding: 'utf8' })
+  const lines = createInterface({ input: stream, crlfDelay: Infinity })
+  let failure: unknown
+  stream.on('error', (error) => {
+    failure = error
+    lines.close()
+  })
+  for await (const line of lines) {
+    onLine(line)
+    await pause()
+  }
+  if (failure !== undefined) throw failure
+}
+
+/**
+ * Whether a top-level transcript is an older Claude Code's subagent transcript, not a session:
+ * named `agent-…`, or its first entry marked `isSidechain`.
+ */
+const isSidechainFile = (path: string, first: unknown): boolean =>
+  basename(path).startsWith('agent-') || (isObject(first) && first.isSidechain === true)
 
 interface Counted {
   date: string
@@ -141,6 +173,11 @@ const bump = (counts: Map<string, number>, name: string): void => {
  */
 export async function readClaudeStats(options: StatsOptions): Promise<ClaudeStats> {
   const { home, now, localDate } = options
+  const yieldToLoop = options.yieldToLoop ?? nextTurn
+  let lines = 0
+  const pause = async (): Promise<void> => {
+    if (++lines % LINES_PER_TURN === 0) await yieldToLoop()
+  }
   const folders = [...new Set(options.folders)]
   const days = statsWindow(localDate(now))
   const inWindow = new Set(days)
@@ -151,8 +188,20 @@ export async function readClaudeStats(options: StatsOptions): Promise<ClaudeStat
   const toolsUnkeyed: ToolUse[] = []
   const sessionDays: string[] = []
 
-  const readLine = (line: string, first: { date: string | null } | null): void => {
+  interface First {
+    /** The first entry's local date with a valid timestamp. */
+    date: string | null
+    /** Whether an entry was read, and the first one. */
+    read: boolean
+    entry: unknown
+  }
+
+  const readLine = (line: string, first: First | null): void => {
     const value = parseLine(line)
+    if (first && !first.read && isObject(value)) {
+      first.read = true
+      first.entry = value
+    }
     const date = entryDate(value, localDate)
     if (date === null || !isObject(value)) return
     if (first && first.date === null) first.date = date
@@ -181,12 +230,23 @@ export async function readClaudeStats(options: StatsOptions): Promise<ClaudeStat
     for (const file of await transcriptFiles(dir)) {
       try {
         if ((await stat(file)).mtimeMs < now - STALE_MS) continue
-        const first: { date: string | null } = { date: null }
-        await eachLine(file, (line) => readLine(line, first))
-        for (const sub of await subagentFiles(file)) {
-          await eachLine(sub, (line) => readLine(line, null))
+        const first: First = { date: null, read: false, entry: undefined }
+        try {
+          await eachLinePaced(file, (line) => readLine(line, first), pause)
+        } finally {
+          await yieldToLoop()
         }
-        if (first.date !== null) sessionDays.push(first.date)
+        for (const sub of await subagentFiles(file)) {
+          try {
+            await eachLinePaced(sub, (line) => readLine(line, null), pause)
+          } finally {
+            await yieldToLoop()
+          }
+        }
+        // An older Claude Code's subagent transcript counts its entries, but isn't a session.
+        if (first.date !== null && !isSidechainFile(file, first.entry)) {
+          sessionDays.push(first.date)
+        }
       } catch {
         // An unreadable transcript is skipped; what it gave before failing stays counted.
       }

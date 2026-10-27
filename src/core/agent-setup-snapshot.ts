@@ -154,7 +154,7 @@ export interface ClaudeJson {
   preferences: Record<string, boolean | number>
 }
 
-/** A JSON file read whole (`.mcp.json`, `known_marketplaces.json`). */
+/** A JSON file read (`.mcp.json`, `known_marketplaces.json`), its value reduced to what the page shows. */
 export interface JsonFile {
   file: string
   state: JsonFileState
@@ -185,7 +185,9 @@ export interface AgentSetupSnapshot {
   settings: SettingsFile[]
   claudeJson: ClaudeJson
   mcpJson: JsonFile
+  /** `installed_plugins.json`'s state only: its plugins are `plugins`. */
   installedPlugins: JsonFile
+  /** `known_marketplaces.json` reduced to what D15 shows, URLs without credentials (D28). */
   marketplaces: JsonFile
   plugins: PluginEntry[]
   skills: DefinitionEntry[]

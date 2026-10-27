@@ -631,7 +631,7 @@ export interface ConfigRow extends ConfigSetter {
   overridden: ConfigSetter[]
   /** D22's control for the effective value. */
   control: ConfigControl
-  /** The value comes from settings.local.json: Reset removes it there (D22). */
+  /** The value comes from settings.local.json and has a control: Reset removes it there (D22). */
   resettable: boolean
 }
 
@@ -661,12 +661,14 @@ export function configRows(snapshot: AgentSetupSnapshot, query: string): ConfigR
   }
   const rows: ConfigRow[] = []
   for (const [key, [winner, ...overridden]] of setters) {
+    const control = key === 'env' ? null : configControl(winner.value)
     const row: ConfigRow = {
       key,
       ...winner,
       overridden,
-      control: key === 'env' ? null : configControl(winner.value),
-      resettable: winner.source.kind === 'local'
+      control,
+      // Only a value D22 lets the page change; the rest is read-only (D28).
+      resettable: winner.source.kind === 'local' && control !== null
     }
     if (matchesQuery(query, [key, row.text, sourceLabel(row.source)])) rows.push(row)
   }

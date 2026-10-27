@@ -323,6 +323,10 @@ export class XtermScreen implements CardScreen {
     }
     this.marks.onCommandEnded((command) => this.markFailed(command))
     this.term.attachCustomKeyEventHandler((event) => {
+      // A dialog over the view owns the keyboard: the terminal takes none of its keys, nor does
+      // a key's release focus it again (xterm focuses itself on keyup), which would take the
+      // keyboard from a dialog opened by that key, e.g. from the palette's Enter (#69 D4).
+      if (this.term.element?.ownerDocument.querySelector('[aria-modal="true"]')) return false
       // The configurable shortcuts (#31 D5) are handled by the view and the app; the shell never
       // sees any part of them (D7), nor of Mod+1…9 (D18) or the terminal digits.
       if (keymapAction(event, currentKeymap())) return false

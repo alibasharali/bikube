@@ -555,6 +555,9 @@ test('#69 D4: with a card open, Edit description… opens its dialog and Save up
   const dialog = page.getByTestId('description-dialog')
   await expect(dialog).toBeVisible()
   await expect(page.getByTestId('description-dialog-input')).toBeFocused()
+  // Typing goes into the field, never the running shell (the Enter's release focuses no terminal).
+  await page.keyboard.type('zzqq')
+  await expect(page.getByTestId('description-dialog-input')).toHaveValue('zzqq')
   await page.getByTestId('description-dialog-input').fill('Step one\nStep two')
   await page.getByTestId('description-dialog-save').click()
   await expect(dialog).toHaveCount(0)
@@ -567,12 +570,26 @@ test('#69 D4: with a card open, Edit description… opens its dialog and Save up
     return JSON.parse(readFileSync(file, 'utf8')).state.workspaces[0]?.cards[0]?.description
   }
   await expect.poll(saved).toBe('Step one\nStep two')
-  expect((await bufferLines()).some((l) => l.includes('Step'))).toBe(false)
+  expect((await bufferLines()).some((l) => l.includes('Step') || l.includes('zzqq'))).toBe(false)
   await backToBoard(page)
   await expect(boardCard('api').getByTestId('card-description')).toHaveAttribute(
     'title',
     'Step one\nStep two'
   )
+})
+
+test('#69: Close card from the palette keeps the keyboard in its confirmation', async () => {
+  await createWorkspace('Alpha')
+  await newCard('api')
+
+  await runAction('Close card')
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  // The Enter's release gives the terminal no focus back: Cancel keeps it.
+  await expect(page.getByTestId('confirm-cancel')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expectCardOpen(page, 'api')
+  await expect.poll(terminalFocused).toBe(true)
 })
 
 // AC8 (card view actions run from the palette as their shortcuts do) was removed on the

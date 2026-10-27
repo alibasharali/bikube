@@ -1552,3 +1552,45 @@ describe('workspace views and card open times', () => {
     })
   })
 })
+
+describe('card descriptions (#69 D1)', () => {
+  it('creates a card with a trimmed description, none when empty, and refuses one over the cap', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const column = w.columns[0].id
+    const fix = ok(s.createCard(w.id, column, 'Fix', undefined, undefined, '# Goal\nFix it \n'))
+    expect(fix.description).toBe('# Goal\nFix it')
+    expect(
+      'description' in ok(s.createCard(w.id, column, 'Plain', undefined, undefined, ' \n'))
+    ).toBe(false)
+    const state = s.getState()
+    expect(s.createCard(w.id, column, 'Big', undefined, undefined, 'x'.repeat(100_001))).toEqual({
+      ok: false,
+      error: { field: 'description', message: 'Description is longer than 100,000 characters' }
+    })
+    expect(s.getState()).toBe(state)
+  })
+
+  it('sets, replaces and removes a description, changing nothing else, the same saving nothing', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const api = card(s, w, 'api')
+    expect(ok(s.setCardDescription(w.id, api.id, 'Step one\nStep two\n'))).toEqual({
+      ...api,
+      description: 'Step one\nStep two'
+    })
+    const state = s.getState()
+    ok(s.setCardDescription(w.id, api.id, 'Step one\nStep two'))
+    expect(s.getState()).toBe(state)
+    expect(s.setCardDescription(w.id, api.id, 'x'.repeat(100_001))).toMatchObject({
+      ok: false,
+      error: { field: 'description' }
+    })
+    expect(s.getState()).toBe(state)
+    expect(ok(s.setCardDescription(w.id, api.id, ''))).toEqual(api)
+    expect(s.setCardDescription(w.id, 'nope', 'x')).toMatchObject({
+      ok: false,
+      error: { field: 'card' }
+    })
+  })
+})

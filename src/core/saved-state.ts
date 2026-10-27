@@ -5,6 +5,7 @@
 import { isAgentKind, type AgentKind } from './agent-presets'
 import { readAutoMove } from './auto-move'
 import { cleanAgentStatus } from './board-commands'
+import { isDescription } from './card-description'
 import { asUsage } from './board-protocol'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
@@ -190,6 +191,8 @@ function readCard(raw: unknown): Card | string {
     id,
     columnId,
     title,
+    // A bad description is dropped, as if the card had none (#69 D1).
+    ...(isDescription(raw.description) && { description: raw.description }),
     directory,
     ...host,
     ...worktree,

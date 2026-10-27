@@ -238,3 +238,20 @@ describe('keeping when this machine last opened each card', () => {
     expect(applied!.cards[0]).toMatchObject({ lastStatus: 'Tests green', lastUsage: usage })
   })
 })
+
+describe('card descriptions from the sync file (#69 D1)', () => {
+  it("takes the file's description, last writer winning as for titles, and its removal", () => {
+    const local = workspace('api', {
+      cards: [
+        card('a', 'api-backlog', { description: 'old' }),
+        card('b', 'api-backlog', { description: 'gone' })
+      ]
+    })
+    const incoming = workspace('api', {
+      cards: [card('a', 'api-backlog', { description: 'new' }), card('b', 'api-backlog')]
+    })
+    const [applied] = applySyncBoard([incoming], [local], none)
+    expect(applied!.cards[0]!.description).toBe('new')
+    expect(applied!.cards[1]!).not.toHaveProperty('description')
+  })
+})

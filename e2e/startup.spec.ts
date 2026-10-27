@@ -642,19 +642,23 @@ test('AC9/D2: a Custom command set from the menu is required and shown in the ta
   await expect(dialog).toHaveCount(0)
 })
 
-test('D9: moving between the new-card fields keeps the form; leaving it unchanged cancels', async () => {
+test('D9: moving between the New card fields keeps the dialog; a click outside keeps it', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   const form = page.getByTestId('new-card-form')
 
-  // Leaving with an empty title and the default command cancels (as #4 D4).
+  // A click outside the New card dialog (#69 D3) keeps it, even unchanged; Esc cancels.
   await column('Backlog').getByTestId('new-card').click()
   await clickBoardBackground()
+  await expect(form).toHaveCount(1)
+  await page.keyboard.press('Escape')
   await expect(form).toHaveCount(0)
 
-  // Tabbing between the title, select and command keeps the form open.
+  // Tabbing between the title, description, select and command keeps the dialog open.
   await column('Backlog').getByTestId('new-card').click()
   await page.getByTestId('new-card-startup').selectOption({ label: 'Custom…' })
   await page.getByTestId('new-card-input').focus()
+  await page.keyboard.press('Tab')
+  await expect(page.getByTestId('new-card-description')).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByTestId('new-card-startup')).toBeFocused()
   await page.keyboard.press('Tab')

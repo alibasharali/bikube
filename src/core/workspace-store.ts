@@ -8,6 +8,7 @@
 import type { AgentKind } from './agent-presets'
 import { keepKnownRules, rulesNameKnownColumns, type AutoMove } from './auto-move'
 import type { ClaudeUsage } from './claude-usage-types'
+import { checkDescription } from './card-description'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { isWorkspaceLogo, type WorkspaceLogoId } from './workspace-logos'
 import {
@@ -59,6 +60,11 @@ export interface Card {
   columnId: string
   /** Trimmed, never empty (#4 D5). */
   title: string
+  /**
+   * Plain markdown text (#69 D1), at most `MAX_DESCRIPTION_LENGTH` characters, trailing
+   * whitespace trimmed; absent when empty. Saved and synced like the title.
+   */
+  description?: string
   /**
    * Copied from the workspace at creation and never changed (#4 D2): an absolute local path, or
    * for an SSH card a path on its host (#12 D3). A worktree card's is in its worktree.
@@ -240,6 +246,7 @@ export type ErrorField =
   | 'shell'
   | 'setup'
   | 'logo'
+  | 'description'
 
 export interface FieldError {
   field: ErrorField
@@ -306,16 +313,23 @@ export interface WorkspaceStore {
   /**
    * Adds a card at the bottom of the column; an empty title becomes `Terminal N`. `startup`
    * defaults to the workspace's default startup command (#5 D9, D10). With `worktree` (a local
-   * workspace only) the card runs in that worktree instead of the workspace's folder.
+   * workspace only) the card runs in that worktree instead of the workspace's folder. A
+   * `description` is kept as `setCardDescription` keeps it, and one over the cap refuses the card.
    */
   createCard(
     workspaceId: string,
     columnId: string,
     title: string,
     startup?: StartupCommand,
-    worktree?: NewCardWorktree
+    worktree?: NewCardWorktree,
+    description?: string
   ): Result<Card>
   renameCard(workspaceId: string, cardId: string, title: string): Result<Card>
+  /**
+   * Replaces the card's description (#69 D1, D4): trailing whitespace trimmed, empty removes it,
+   * longer than `MAX_DESCRIPTION_LENGTH` refused. Nothing is typed into its shell.
+   */
+  setCardDescription(workspaceId: string, cardId: string, text: string): Result<Card>
   deleteCard(workspaceId: string, cardId: string): Result<void>
   /**
    * Moves the card to `toColumnId` at `toIndex` (0 = top, counted among that column's cards
@@ -643,18 +657,22 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     columnId: string,
     title: string,
     startup?: StartupCommand,
-    worktree?: NewCardWorktree
+    worktree?: NewCardWorktree,
+    description?: string
   ): Result<Card> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
     const checked = checkCardStartup(startup ?? ws.defaultStartup)
     if (!checked.ok) return checked
+    const described = checkDescription(description ?? '')
+    if (!described.ok) return described
     const trimmed = title.trim()
     const created: Card = {
       id: this.generateId(),
       columnId,
       title: trimmed || `Terminal ${ws.nextCardNumber}`,
+      ...(described.value !== undefined && { description: described.value }),
       directory: worktree && ws.host === undefined ? worktree.directory : ws.directory,
       ...(ws.host !== undefined && { host: ws.host }),
       ...(worktree && ws.host === undefined && { worktree: { ...worktree.worktree } }),
@@ -684,6 +702,19 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     const renamed: Card = { ...current, title: trimmed }
     this.replace({ ...ws, cards: ws.cards.map((c) => (c.id === cardId ? renamed : c)) })
     return { ok: true, value: renamed }
+  }
+
+  setCardDescription(workspaceId: string, cardId: string, text: string): Result<Card> {
+    const checked = checkDescription(text)
+    if (!checked.ok) return checked
+    const ws = this.find(workspaceId)
+    const current = ws?.cards.find((c) => c.id === cardId)
+    if (current && current.description === checked.value) return { ok: true, value: current }
+    return this.updateCard(workspaceId, cardId, (card) => {
+      const next: Card = { ...card, description: checked.value }
+      if (checked.value === undefined) delete next.description
+      return { ok: true, value: next }
+    })
   }
 
   deleteCard(workspaceId: string, cardId: string): Result<void> {

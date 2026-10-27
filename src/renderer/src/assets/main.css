@@ -2049,10 +2049,6 @@ button.dev-server-chip:focus-visible {
   color: var(--text);
 }
 
-.new-card-form {
-  margin-top: var(--space-2);
-}
-
 /* No bar (#31 D1): the panes fill the whole area right of the sidebar. */
 .card-layout,
 .board-layout {
@@ -2427,19 +2423,12 @@ button.dev-server-chip:focus-visible {
 }
 
 /* Startup command (#5 D9, D10, D12) */
-.inline-select,
 .field select {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--text);
   font: inherit;
-}
-
-.inline-select {
-  flex: none;
-  max-width: 45%;
-  padding: var(--space-1);
 }
 
 .field select {
@@ -2458,6 +2447,42 @@ button.dev-server-chip:focus-visible {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+}
+
+/* A card with a description (#69 D4): a small document icon after its title. */
+.card-description-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+/* The Description field (#69 D3, D4): plain text, scrolling inside its own box. */
+.field .description-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  max-height: 40vh;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
+}
+
+.field .description-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.new-card-column {
+  margin-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.new-card-branch-field {
+  margin-bottom: 0;
 }
 
 /* The startup command's logo before the title, in its kind's colour, as in the sidebar tree. */

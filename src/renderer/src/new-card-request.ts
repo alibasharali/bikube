@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
 /**
- * A request to open the New card form of a workspace's first column (#40 D9), made by the command
+ * A request to open the New card dialog of a workspace's first column (#40 D9), made by the command
  * palette and taken by the next board that shows: `id` grows with each request.
  */
 export interface NewCardRequest {
@@ -15,13 +15,13 @@ const listeners = new Set<() => void>()
 
 const notify = (): void => listeners.forEach((listener) => listener())
 
-/** Asks the board of `workspaceId` to open its first column's New card form. */
+/** Asks the board of `workspaceId` to open its first column's New card dialog. */
 export function requestNewCard(workspaceId: string): void {
   request = { workspaceId, id: nextId++ }
   notify()
 }
 
-/** Forgets request `id` once a board has taken or dropped it, so it never opens the form later. */
+/** Forgets request `id` once a board has taken or dropped it, so it never opens the dialog later. */
 export function takeNewCardRequest(id: number): void {
   if (request?.id !== id) return
   request = null
@@ -34,7 +34,7 @@ export function pendingNewCardRequest(): NewCardRequest | null {
 }
 
 /**
- * The id of `pending` when it opens the form on the board of `workspaceId`: it must be for that
+ * The id of `pending` when it opens the dialog on the board of `workspaceId`: it must be for that
  * workspace, which needs a column. Any other pending request is dropped by the board that shows.
  */
 export function newCardRequestFor(
@@ -54,9 +54,9 @@ export function usePendingNewCardRequest(): NewCardRequest | null {
 }
 
 /**
- * The request id that opens the New card form of `workspaceId`'s board or grid, once per
+ * The request id that opens the New card dialog of `workspaceId`'s board or grid, once per
  * request: whichever shows takes the pending request, so one for another workspace (or one with
- * no columns) is dropped and never opens a form later.
+ * no columns) is dropped and never opens a dialog later.
  */
 export function useNewCardRequest(workspaceId: string, hasColumns: boolean): number | undefined {
   const pending = usePendingNewCardRequest()

@@ -11,7 +11,7 @@ function Board({
   workspace: Workspace
   onOpenCard: (cardId: string) => void
 }): React.JSX.Element {
-  // The command palette's New card opens the first column's form (#40 D9), once per request.
+  // The command palette's New card opens the first column's New card dialog (#40 D9), once per request.
   const newCardRequest = useNewCardRequest(workspace.id, workspace.columns.length > 0)
   return (
     <section className="board" data-testid="board" aria-label={`Board for ${workspace.name}`}>

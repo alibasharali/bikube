@@ -633,3 +633,28 @@ describe('temporary shells are never saved (#66 D2, AC4)', () => {
     expect(parsed.ok && parsed.value.workspaces[0]!.shells).toEqual([named])
   })
 })
+
+describe('card descriptions in the saved state (#69 D1)', () => {
+  it('writes a description only on a card with one, and reads it back', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    const [alpha] = s.getState().workspaces
+    ok(s.setCardDescription(alpha.id, alpha.cards[0].id, '# Goal\nFix the login bug'))
+    const text = serializeSavedState(s.getState())
+    const [first, second] = JSON.parse(text).state.workspaces[0].cards
+    expect(first.description).toBe('# Goal\nFix the login bug')
+    expect('description' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: s.getState() })
+  })
+
+  it('drops a bad description only, keeping the card and the rest of the file', () => {
+    const read = parseSavedState(
+      fileWith((f) => {
+        f.workspaces[0].cards[0].description = 42
+        f.workspaces[0].cards[1].description = 'trailing \n'
+        f.workspaces[0].cards[2].description = 'x'.repeat(100_001)
+        f.workspaces[1].cards[0].description = ''
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+})

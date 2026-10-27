@@ -67,6 +67,8 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         id: c.id,
         columnId: c.columnId,
         title: c.title,
+        // The description travels like the title (#69 D1).
+        ...(c.description !== undefined && { description: c.description }),
         directory: dir(c.directory, c.host),
         ...(c.host !== undefined && { host: c.host }),
         // A worktree is on the machine that made it; another machine's card won't find it.

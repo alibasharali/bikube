@@ -1,36 +1,32 @@
 import { Plus } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { editKeyAction } from '../../core/inline-edit'
+import { useEffect, useId, useState } from 'react'
+import { dialogEnterAction, dialogKeyTarget } from '../../core/dialog-keys'
 import type { StartupCommand } from '../../core/startup-command'
-import {
-  draftStartup,
-  parseChoice,
-  sameDraft,
-  startupDraft,
-  type StartupDraft
-} from '../../core/startup-form'
-import { ICON } from './icons'
-import { StartupOptions } from './StartupField'
-import { workspaceStore } from './store'
+import { draftStartup, startupDraft, type StartupDraft } from '../../core/startup-form'
 import { branchProblem, suggestBranch } from '../../core/worktree-names'
 import type { NewCardWorktree } from '../../core/workspace-store'
 import type { WorktreeInfo } from '../../shared/api'
+import DescriptionField from './DescriptionField'
+import { ICON } from './icons'
+import Modal from './Modal'
+import StartupField from './StartupField'
+import { workspaceStore } from './store'
 
 interface NewCardProps {
   workspaceId: string
   columnId: string
+  /** The column's name, which the dialog says it adds to (#69 D3). */
+  columnName: string
   /** The workspace's default startup command, the preset for the select (#5 D10). */
   defaultStartup: StartupCommand
   onCreated: (cardId: string) => void
-  /** A request to open the form (the command palette's New card, #40 D9): each new id opens it. */
+  /** A request to open the dialog (the command palette's New card, #40 D9): each new id opens it. */
   openRequest?: number
 }
 
 /**
- * `+ New card` at the end of a column (#4 D4, #5 D9): an inline title with a startup command
- * select next to it, and a `Command` field below for Custom…. Enter in the title, the select or the
- * command creates the card at the bottom and opens it, which starts it (D3, D6, #5 D7). Esc cancels;
- * leaving the form cancels while the title is empty and the command is the default.
+ * `+ New card` at the end of a column or in the grid (#4 D4, #5 D9): opens the New card dialog
+ * (#69 D3), which creates the card at the bottom of the column and opens it, which starts it.
  */
 function NewCard(props: NewCardProps): React.JSX.Element {
   const [adding, setAdding] = useState(false)
@@ -39,8 +35,8 @@ function NewCard(props: NewCardProps): React.JSX.Element {
     setOpenedFor(props.openRequest)
     setAdding(true)
   }
-  if (!adding) {
-    return (
+  return (
+    <>
       <button
         type="button"
         className="new-card"
@@ -50,25 +46,34 @@ function NewCard(props: NewCardProps): React.JSX.Element {
         <Plus {...ICON} />
         New card
       </button>
-    )
-  }
-  return <NewCardForm {...props} onDone={() => setAdding(false)} />
+      {adding && <NewCardDialog {...props} onDone={() => setAdding(false)} />}
+    </>
+  )
 }
 
-function NewCardForm({
+/**
+ * The New card dialog (#69 D3): Title (optional, `Terminal N` when empty), Description, Agent
+ * (the startup select, on the workspace's default) and, for a local workspace in a git
+ * repository, Own worktree with its branch, made by main before the card is created. Create,
+ * Enter in a one-line field and Mod+Enter anywhere create it; Esc and Cancel create nothing.
+ */
+function NewCardDialog({
   workspaceId,
   columnId,
+  columnName,
   defaultStartup,
   onCreated,
   onDone
 }: NewCardProps & { onDone: () => void }): React.JSX.Element {
-  const [initial] = useState(() => startupDraft(defaultStartup))
-  const [draft, setDraft] = useState<StartupDraft>(initial)
+  const id = useId()
+  const [draft, setDraft] = useState<StartupDraft>(() => startupDraft(defaultStartup))
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [titleError, setTitleError] = useState<string | null>(null)
-  const [commandError, setCommandError] = useState<string | null>(null)
-  const titleRef = useRef<HTMLInputElement>(null)
+  const [descriptionError, setDescriptionError] = useState<string | null>(null)
+  const [commandError, setCommandError] = useState<string | undefined>(undefined)
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+  const remote = workspace?.host !== undefined
 
   // A local workspace in a git repository offers the card its own worktree.
   const [repo, setRepo] = useState<WorktreeInfo | null>(null)
@@ -77,12 +82,10 @@ function NewCardForm({
   const [typedBranch, setTypedBranch] = useState<string | null>(null)
   const [branchError, setBranchError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const cardTitle = title.trim() || `Terminal ${workspace?.nextCardNumber ?? 1}`
+  const placeholder = `Terminal ${workspace?.nextCardNumber ?? 1}`
+  const cardTitle = title.trim() || placeholder
   const branch = typedBranch ?? suggestBranch(cardTitle, new Set(repo?.branches ?? []))
 
-  useEffect(() => {
-    titleRef.current?.focus()
-  }, [])
   useEffect(() => {
     if (!workspace || workspace.host !== undefined) return
     let live = true
@@ -90,7 +93,7 @@ function NewCardForm({
     return () => {
       live = false
     }
-    // The workspace's folder is fixed while the form is open.
+    // The workspace's folder is fixed while the dialog is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
@@ -126,163 +129,175 @@ function NewCardForm({
       columnId,
       title,
       draftStartup(draft),
-      worktree
+      worktree,
+      description
     )
     if (created.ok) {
       onCreated(created.value.id)
       onDone()
     } else if (created.error.field === 'command') {
       setCommandError(created.error.message)
+    } else if (created.error.field === 'description') {
+      setDescriptionError(created.error.message)
     } else {
       setTitleError(created.error.message)
     }
   }
 
-  /** Enter submits and Esc cancels from anywhere in the form. */
   const onKeyDown = (e: React.KeyboardEvent): void => {
-    const action = editKeyAction(e.key)
+    const action = dialogEnterAction(
+      {
+        key: e.key,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+        isComposing: e.nativeEvent.isComposing,
+        target: dialogKeyTarget(e.target)
+      },
+      window.bikube.platform
+    )
     if (!action) return
     e.preventDefault()
     e.stopPropagation()
-    if (action === 'submit') submit()
-    else onDone()
+    submit()
   }
 
   return (
-    <div
-      className="inline-edit new-card-form"
-      data-testid="new-card-form"
-      // A press on the form's text (the Own worktree label) keeps the focus where it is, so it
-      // never counts as leaving the form; the label's click still toggles its checkbox.
-      onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest('input, select, button, textarea'))
-          e.preventDefault()
-      }}
-      onBlur={(e) => {
-        if (e.currentTarget.contains(e.relatedTarget)) return
-        if (title.trim() === '' && sameDraft(draft, initial) && !ownWorktree && !creating) onDone()
-      }}
+    <Modal
+      title="New card"
+      onClose={onDone}
+      testId="new-card-dialog"
+      initialFocus='[data-testid="new-card-input"]'
     >
-      <div className="inline-edit-row">
-        <input
-          ref={titleRef}
-          className="inline-input"
-          data-testid="new-card-input"
-          aria-label="Card title"
-          aria-invalid={titleError ? true : undefined}
-          aria-describedby={titleError ? 'new-card-input-err' : undefined}
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value)
-            setTitleError(null)
-          }}
-          onKeyDown={onKeyDown}
-        />
-        <select
-          className="inline-select"
-          data-testid="new-card-startup"
-          aria-label="Startup command"
-          value={draft.choice}
-          onChange={(e) => {
-            setDraft({ ...draft, choice: parseChoice(e.target.value) })
-            setCommandError(null)
-          }}
-          // An open dropdown takes Enter to pick; once picked, Enter here creates the card.
-          onKeyDown={onKeyDown}
-        >
-          <StartupOptions remote={workspace?.host !== undefined} />
-        </select>
-      </div>
-      {titleError && (
-        <p className="field-error" id="new-card-input-err" role="alert" data-testid="card-error">
-          {titleError}
+      <form
+        data-testid="new-card-form"
+        noValidate
+        onKeyDown={onKeyDown}
+        onSubmit={(e) => {
+          e.preventDefault()
+          submit()
+        }}
+      >
+        <p className="modal-hint new-card-column" data-testid="new-card-column">
+          Add to <strong>{columnName}</strong>
         </p>
-      )}
-      {repo && (
-        <div className="new-card-worktree">
-          <label className="new-card-check">
-            <input
-              type="checkbox"
-              data-testid="new-card-worktree"
-              checked={ownWorktree}
-              disabled={creating}
-              onChange={(e) => {
-                setOwnWorktree(e.target.checked)
-                setBranchError(null)
-              }}
-              onKeyDown={onKeyDown}
-            />
-            Own worktree
-          </label>
-          {ownWorktree && (
-            <input
-              className="inline-input new-card-branch"
-              data-testid="new-card-branch"
-              aria-label="Branch"
-              value={branch}
-              disabled={creating}
-              spellCheck={false}
-              autoComplete="off"
-              aria-invalid={branchError ? true : undefined}
-              aria-describedby={branchError ? 'new-card-branch-err' : undefined}
-              onChange={(e) => {
-                setTypedBranch(e.target.value)
-                setBranchError(null)
-              }}
-              onKeyDown={onKeyDown}
-            />
-          )}
-          {ownWorktree && !branchError && (
-            <p className="field-hint" data-testid="new-card-worktree-hint">
-              {creating
-                ? 'Creating worktree…'
-                : `A new branch from ${repo.branch ?? 'HEAD'}, with ignored files copied.${
-                    // The workspace's setup runs before the agent starts (#39 D9).
-                    workspace?.worktreeSetup ? ` Runs ${workspace.worktreeSetup} first.` : ''
-                  }`}
-            </p>
-          )}
-          {branchError && (
-            <p
-              className="field-error"
-              id="new-card-branch-err"
-              role="alert"
-              data-testid="new-card-error-branch"
-            >
-              {branchError}
+        <div className="field">
+          <label htmlFor={`${id}-title`}>Title</label>
+          <input
+            id={`${id}-title`}
+            data-testid="new-card-input"
+            placeholder={placeholder}
+            autoComplete="off"
+            aria-invalid={titleError ? true : undefined}
+            aria-describedby={titleError ? `${id}-title-err` : undefined}
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value)
+              setTitleError(null)
+            }}
+          />
+          {titleError && (
+            <p className="field-error" id={`${id}-title-err`} role="alert" data-testid="card-error">
+              {titleError}
             </p>
           )}
         </div>
-      )}{' '}
-      {draft.choice === 'custom' && (
-        <input
-          className="inline-input new-card-command"
-          data-testid="new-card-command"
-          aria-label="Command"
-          placeholder="Command"
-          spellCheck={false}
-          autoComplete="off"
-          aria-invalid={commandError ? true : undefined}
-          aria-describedby={commandError ? 'new-card-command-err' : undefined}
-          value={draft.command}
-          onChange={(e) => {
-            setDraft({ ...draft, command: e.target.value })
-            setCommandError(null)
+        <DescriptionField
+          value={description}
+          onChange={(value) => {
+            setDescription(value)
+            setDescriptionError(null)
           }}
-          onKeyDown={onKeyDown}
+          error={descriptionError}
+          testId="new-card-description"
         />
-      )}
-      {commandError && (
-        <p
-          className="field-error"
-          id="new-card-command-err"
-          role="alert"
-          data-testid="new-card-error-command"
-        >
-          {commandError}
-        </p>
-      )}
-    </div>
+        <StartupField
+          draft={draft}
+          onChange={(next) => {
+            setDraft(next)
+            setCommandError(undefined)
+          }}
+          error={commandError}
+          testIdPrefix="new-card"
+          remote={remote}
+          label="Agent"
+        />
+        {repo && (
+          <div className="new-card-worktree">
+            <label className="new-card-check">
+              <input
+                type="checkbox"
+                data-testid="new-card-worktree"
+                checked={ownWorktree}
+                disabled={creating}
+                onChange={(e) => {
+                  setOwnWorktree(e.target.checked)
+                  setBranchError(null)
+                }}
+              />
+              Own worktree
+            </label>
+            {ownWorktree && (
+              <div className="field new-card-branch-field">
+                <label htmlFor={`${id}-branch`}>Branch</label>
+                <input
+                  id={`${id}-branch`}
+                  className="new-card-branch"
+                  data-testid="new-card-branch"
+                  value={branch}
+                  disabled={creating}
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-invalid={branchError ? true : undefined}
+                  aria-describedby={`${id}-branch-hint`}
+                  onChange={(e) => {
+                    setTypedBranch(e.target.value)
+                    setBranchError(null)
+                  }}
+                />
+                {branchError ? (
+                  <p
+                    className="field-error"
+                    id={`${id}-branch-hint`}
+                    role="alert"
+                    data-testid="new-card-error-branch"
+                  >
+                    {branchError}
+                  </p>
+                ) : (
+                  <p
+                    className="field-hint"
+                    id={`${id}-branch-hint`}
+                    data-testid="new-card-worktree-hint"
+                  >
+                    {creating
+                      ? 'Creating worktree…'
+                      : `A new branch from ${repo.branch ?? 'HEAD'}, with ignored files copied.${
+                          // The workspace's setup runs before the agent starts (#39 D9).
+                          workspace?.worktreeSetup ? ` Runs ${workspace.worktreeSetup} first.` : ''
+                        }`}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn" data-testid="new-card-cancel" onClick={onDone}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            data-testid="new-card-create"
+            disabled={creating}
+          >
+            {creating ? 'Creating worktree…' : 'Create'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

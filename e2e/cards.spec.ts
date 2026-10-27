@@ -1,5 +1,6 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -19,6 +20,7 @@ import { plainCards } from './plain-cards'
 let app: ElectronApplication
 let page: Page
 let root: string
+let dataDir: string
 
 function makeDir(name: string): string {
   const dir = join(root, name)
@@ -28,7 +30,7 @@ function makeDir(name: string): string {
 
 test.beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), 'bikube-cards-'))
-  ;({ app, page } = await launchApp())
+  ;({ app, page, dataDir } = await launchApp())
 })
 
 test.afterEach(async () => {
@@ -134,6 +136,146 @@ test('AC1: + New card creates the card, opens it focused, shell in the workspace
 
   await run('pwd')
   await expect.poll(bufferLines).toContain(dir)
+})
+
+interface SavedCard {
+  title: string
+  columnId: string
+  description?: string
+}
+
+/** The saved state's first workspace's cards, or none while the first save hasn't come. */
+function savedCards(): SavedCard[] {
+  const file = join(dataDir, 'bikube-state.json')
+  if (!existsSync(file)) return []
+  return JSON.parse(readFileSync(file, 'utf8')).state.workspaces[0]?.cards ?? []
+}
+
+const PALETTE = process.platform === 'darwin' ? 'Meta+K' : 'Control+Shift+P'
+
+/** Makes `dir` a git repository with one commit. */
+function gitInit(dir: string): void {
+  const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'test@example.com')
+  git('config', 'user.name', 'Test')
+  writeFileSync(join(dir, 'README.md'), '# repo\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'first')
+}
+
+test('#69 AC1: + New card opens the New card dialog; Mod+Enter creates, opens and saves the description', async () => {
+  const dir = makeDir('alpha')
+  gitInit(dir)
+  await createWorkspace(dir, 'alpha')
+  await newCard('Backlog', 'first')
+  await back()
+
+  const dialog = page.getByTestId('new-card-dialog')
+  await column('Backlog').getByTestId('new-card').click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'New card' })).toBeVisible()
+  await expect(dialog).toContainText('Add to Backlog')
+  await expect(page.getByTestId('new-card-input')).toBeFocused()
+  await expect(page.getByTestId('new-card-input')).toHaveAttribute('placeholder', 'Terminal 1')
+  await expect(page.getByTestId('new-card-description')).toBeVisible()
+  // The workspace's default: a Custom command `:` (plainCards).
+  await expect(page.getByTestId('new-card-startup')).toHaveValue('custom')
+  await expect(page.getByTestId('new-card-command')).toHaveValue(':')
+  await expect(page.getByTestId('new-card-worktree')).toBeVisible()
+
+  // Esc closes it with no card.
+  await page.getByTestId('new-card-input').fill('nope')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('card')).toHaveCount(1)
+
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Fix login')
+  await page.getByTestId('new-card-description').fill('# Goal\nFix the login bug')
+  await page.getByTestId('new-card-startup').selectOption({ label: 'Custom…' })
+  await page.getByTestId('new-card-command').fill(':')
+  await page.getByTestId('new-card-description').press(`${MOD}+Enter`)
+  await expect(dialog).toHaveCount(0)
+  await expectCardOpen(page, 'Fix login')
+  await expectStatusOnBoard(page, 'Fix login', 'Running')
+  await back()
+  await expect(column('Backlog').getByTestId('card-title')).toHaveText(['first', 'Fix login'])
+  await expect
+    .poll(() => savedCards().find((c) => c.title === 'Fix login')?.description)
+    .toBe('# Goal\nFix the login bug')
+  expect(savedCards().find((c) => c.title === 'first')).not.toHaveProperty('description')
+
+  // The palette's New card opens the same dialog, for the first column.
+  await page.keyboard.press(PALETTE)
+  await page.getByTestId('palette-input').fill('New card')
+  await page.keyboard.press('Enter')
+  await expect(dialog).toContainText('Add to Backlog')
+  await expect(page.getByTestId('new-card-input')).toBeFocused()
+  await page.getByTestId('new-card-cancel').click()
+  await expect(dialog).toHaveCount(0)
+
+  // So does the grid's New card.
+  await page.keyboard.press(PALETTE)
+  await page.getByTestId('palette-input').fill('View: Grid')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('grid-view')).toBeVisible()
+  await page.getByTestId('grid-view').getByTestId('new-card').click()
+  await expect(dialog).toContainText('Add to Backlog')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  expect(savedCards().map((c) => c.title)).toEqual(['first', 'Fix login'])
+})
+
+test('#69 AC3: Edit description… saves the description and its icon tooltip, empty removes it', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'api')
+  await back()
+  const icon = card('api').getByTestId('card-description')
+  await expect(icon).toHaveCount(0)
+
+  const dialog = page.getByTestId('description-dialog')
+  const field = page.getByTestId('description-dialog-input')
+  await card('api').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-description').click()
+  await expect(dialog).toBeVisible()
+  await expect(field).toBeFocused()
+  await field.fill('Step one\nStep two')
+  await page.getByTestId('description-dialog-save').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(icon).toHaveAttribute('title', 'Step one\nStep two')
+  await expect.poll(() => savedCards()[0]?.description).toBe('Step one\nStep two')
+
+  // Cancel and Esc change nothing.
+  await card('api').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-description').click()
+  await expect(field).toHaveValue('Step one\nStep two')
+  await field.fill('changed')
+  await page.getByTestId('description-dialog-cancel').click()
+  await card('api').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-description').click()
+  await field.fill('changed')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(icon).toHaveAttribute('title', 'Step one\nStep two')
+
+  // Saving it empty removes the icon and the key.
+  await card('api').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-description').click()
+  await field.fill('')
+  await page.getByTestId('description-dialog-save').click()
+  await expect(icon).toHaveCount(0)
+  await expect.poll(() => 'description' in (savedCards()[0] ?? {})).toBe(false)
+  expect(savedCards()[0]?.title).toBe('api')
+
+  // The running card's shell received none of it.
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+  await openCard('api')
+  await run('echo marker-69')
+  await expect.poll(bufferLines).toContain('marker-69')
+  const lines = await bufferLines()
+  expect(lines.some((l) => l.includes('Step') || l.includes('changed'))).toBe(false)
 })
 
 test('#31 AC1: the open card has no bar; its terminal starts at the top of the main area', async () => {
@@ -372,17 +514,17 @@ test('AC8: each card keeps the directory it was created in', async () => {
   await expect.poll(bufferLines).toContain(alphaDir)
 })
 
-test('D4/D5/D7: inline creation cancels, defaults the title, Enter opens a focused card', async () => {
+test('D4/D5/D7: creation cancels, defaults the title, Enter opens a focused card', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   const running = column('In Progress')
 
-  // Esc cancels; blur with nothing typed cancels.
+  // Esc cancels; so does the New card dialog's Cancel (#69 D3).
   await running.getByTestId('new-card').click()
   await page.getByTestId('new-card-input').fill('nope')
   await page.getByTestId('new-card-input').press('Escape')
   await expect(page.getByTestId('new-card-input')).toHaveCount(0)
   await running.getByTestId('new-card').click()
-  await page.getByTestId('board-title').click()
+  await page.getByTestId('new-card-cancel').click()
   await expect(page.getByTestId('new-card-input')).toHaveCount(0)
   await expect(page.getByTestId('card')).toHaveCount(0)
 

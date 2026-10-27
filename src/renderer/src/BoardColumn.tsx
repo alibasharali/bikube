@@ -21,7 +21,7 @@ interface BoardColumnProps {
   index: number
   total: number
   onOpenCard: (cardId: string) => void
-  /** A request to open this column's New card form (#40 D9), see `NewCard`. */
+  /** A request to open this column's New card dialog (#40 D9), see `NewCard`. */
   openNewCard?: number
 }
 
@@ -205,6 +205,7 @@ function BoardColumn({
       <NewCard
         workspaceId={workspaceId}
         columnId={column.id}
+        columnName={column.name}
         defaultStartup={workspace.defaultStartup}
         onCreated={(cardId) => {
           // A new card goes to the bottom: past the fold, the column unfolds to show it on Back.

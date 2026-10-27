@@ -509,3 +509,27 @@ describe('temporary shells never reach the sync file (#66 D2, AC4)', () => {
     expect(board.workspaces[0]!.shells).toEqual([named])
   })
 })
+
+describe('card descriptions in the sync file (#69 D1)', () => {
+  it('writes a description only on a card with one, reads it back, and drops a bad one', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('a', 'w-backlog', { description: '# Port\nDo X' }), card('b', 'w-backlog')]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.description).toBe('# Port\nDo X')
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('description')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.description).toBe('# Port\nDo X')
+    expect(read.ok && read.workspaces[0]!.cards[1]!).not.toHaveProperty('description')
+    file.board.workspaces[0].cards[0].description = ['not', 'text']
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('description')
+  })
+})

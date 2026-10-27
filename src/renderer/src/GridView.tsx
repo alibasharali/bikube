@@ -61,7 +61,7 @@ function GridView({
       : counts[f].length
   const shown = sections.waiting.length + sections.running.length + sections.stopped.length
   const firstColumn = workspace.columns[0]
-  // The command palette's New card opens the form here, as on the board (#40 D9).
+  // The command palette's New card opens the dialog here, as on the board (#40 D9, #69 D3).
   const newCardRequest = useNewCardRequest(workspace.id, firstColumn !== undefined)
 
   const toggleStopped = (): void => {
@@ -159,6 +159,7 @@ function GridView({
             <NewCard
               workspaceId={workspace.id}
               columnId={firstColumn.id}
+              columnName={firstColumn.name}
               defaultStartup={workspace.defaultStartup}
               onCreated={onOpenCard}
               openRequest={newCardRequest}

@@ -20,5 +20,5 @@ Decisions the developer made during implementation, with the date. A ruling that
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: the 16 `#69` Playwright-Electron tests on the built app, all pass
+- UX review: running

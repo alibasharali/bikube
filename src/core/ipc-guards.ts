@@ -1,6 +1,7 @@
 /** Runtime checks for IPC arguments: the renderer is not trusted, types alone do not hold at runtime. */
 
 import { isDirectory, isPathArg, type StatFs } from './directories'
+import { SPAWN_REFUSAL } from './spawn-refusals'
 
 export const MAX_DIMENSION = 1000
 export const MAX_WRITE_BYTES = 1024 * 1024
@@ -64,13 +65,7 @@ export function isCurrentMainFrame(
 /** Clipboard text shares the write cap: it ends up in a PTY when pasted. */
 export const isClipboardText = isWriteData
 
-/** Why main refused `terminal:spawn`; the renderer shows it after "Couldn't start: " (#4 D3). */
-export const SPAWN_REFUSAL = {
-  invalidSize: 'invalid terminal size',
-  invalidDirectory: 'invalid working directory',
-  directoryNotFound: 'working directory not found',
-  invalidCard: 'invalid card id'
-} as const
+export { SPAWN_REFUSAL } from './spawn-refusals'
 
 /** Null when `cwd` is an absolute path to an existing directory, else the refusal reason. */
 export async function workingDirectoryProblem(

@@ -363,6 +363,12 @@ export interface WorkspaceStore {
    */
   moveCardToWorktree(workspaceId: string, cardId: string, worktree: NewCardWorktree): Result<Card>
   /**
+   * The reverse, once its worktree is removed or gone: the card runs in the workspace folder, on
+   * whatever branch is checked out there, with a new agent session (agents keep conversations per
+   * folder) and no pending setup. A shell set to run in its worktree runs in the folder again.
+   */
+  moveCardOutOfWorktree(workspaceId: string, cardId: string): Result<Card>
+  /**
    * Replaces every workspace with `workspaces` (a board from the sync folder, #13 D7, D14): the
    * active workspace stays active when it is still there, else the first one is (or none).
    */
@@ -871,6 +877,24 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
         startedAgents: []
       }
       if (ws.worktreeSetup) moved.setup = ws.worktreeSetup
+      return { ok: true, value: moved }
+    })
+  }
+
+  moveCardOutOfWorktree(workspaceId: string, cardId: string): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    return this.updateCard(workspaceId, cardId, (card) => {
+      if (!card.worktree) return fail('card', 'The card has no worktree of its own')
+      const moved: Card = {
+        ...card,
+        directory: ws.directory,
+        agentSessionId: this.generateSessionId(),
+        claudeStarted: false,
+        startedAgents: []
+      }
+      delete moved.worktree
+      delete moved.setup
       return { ok: true, value: moved }
     })
   }

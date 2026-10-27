@@ -1368,6 +1368,40 @@ describe('moveCardToWorktree', () => {
   })
 })
 
+describe('moveCardOutOfWorktree', () => {
+  const worktree = {
+    directory: '/data/worktrees/repo-abc123/fix',
+    worktree: { path: '/data/worktrees/repo-abc123/fix', branch: 'bikube/fix', repo: '/tmp/repo' }
+  }
+
+  it('runs a worktree card in the workspace folder, with a fresh agent session and no setup', () => {
+    let sessions = 0
+    const s = new InMemoryWorkspaceStore({ generateSessionId: () => `session-${++sessions}` })
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo', worktreeSetup: 'npm ci' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'fix'))
+    ok(s.moveCardToWorktree(w.id, c.id, worktree))
+    ok(s.markAgentStarted(w.id, c.id, 'codex'))
+    const moved = ok(s.moveCardOutOfWorktree(w.id, c.id))
+    expect(moved).toEqual({
+      ...c,
+      directory: '/tmp/repo',
+      agentSessionId: 'session-3',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(s.getState().workspaces[0].cards[0]).toEqual(moved)
+  })
+
+  it('refuses a card without a worktree, changing nothing', () => {
+    const s = make()
+    const w = ok(s.createWorkspace({ name: 'a', directory: '/tmp/repo' }))
+    const c = ok(s.createCard(w.id, w.columns[0].id, 'plain'))
+    const before = s.getState()
+    expect(s.moveCardOutOfWorktree(w.id, c.id)).toMatchObject({ ok: false })
+    expect(s.getState()).toBe(before)
+  })
+})
+
 describe('setShellRunIn', () => {
   const worktree = {
     directory: '/data/worktrees/repo-abc123/fix',

@@ -1,11 +1,13 @@
 import { X } from 'lucide-react'
 import { markOpened } from './background-shells'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { SPAWN_REFUSAL } from '../../core/spawn-refusals'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
 import { requestCloseCard } from './card-actions'
 import CloseCardDialog from './CloseCardDialog'
+import RemoveWorktreeDialog from './RemoveWorktreeDialog'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
 import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
@@ -202,6 +204,14 @@ function CardView({
   // A card that stops or fails while its Close dialog is open has nothing left to close.
   if (closing && runState.kind !== 'running') setClosing(false)
   const layout = usePaneLayout(card.id)
+  // A worktree card whose folder is gone can't start: offer to run it in the workspace folder.
+  const worktreeGone =
+    runState.kind === 'failed' &&
+    runState.reason === SPAWN_REFUSAL.directoryNotFound &&
+    card.worktree !== undefined &&
+    card.host === undefined
+  const [goneDismissed, setGoneDismissed] = useState(false)
+  if (goneDismissed && !worktreeGone) setGoneDismissed(false)
 
   // When the shell exits the card is Stopped and the view goes back to the board (#5 D6).
   const stopped = runState.kind === 'stopped'
@@ -314,6 +324,14 @@ function CardView({
         </div>
         {closing && (
           <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
+        )}
+        {worktreeGone && !goneDismissed && card.worktree && (
+          <RemoveWorktreeDialog
+            workspaceId={workspaceId}
+            card={{ ...card, worktree: card.worktree }}
+            gone
+            onDone={() => setGoneDismissed(true)}
+          />
         )}
       </section>
       {sidePanelOpen && (

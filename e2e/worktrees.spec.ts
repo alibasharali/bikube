@@ -331,3 +331,70 @@ test("a shell runs in a worktree card's worktree from Run in this worktree, back
   await expect(card('Add search')).toHaveCount(0)
   await expect(runsIn).toHaveText('/repo')
 })
+
+/** Stops the running card `title` from the board, confirming the Close. */
+async function stopOnBoard(title: string): Promise<void> {
+  await card(title).getByTestId('card-stop').click()
+  await page.getByTestId('confirm-close').click()
+  await expect(card(title).getByTestId('card-status-label')).toHaveText('Stopped')
+}
+
+test('Remove worktree keeps the card, which runs in the workspace folder from its next start', async () => {
+  const branch = await worktreeCard('Done work')
+  const path = worktreePath('done-work')
+  await run('echo change > new-file.txt')
+  await expect.poll(() => existsSync(join(path, 'new-file.txt'))).toBe(true)
+  await backToBoard(page)
+
+  // Not offered while it runs.
+  await card('Done work').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-remove-worktree')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await stopOnBoard('Done work')
+
+  // Cancel changes nothing; uncommitted changes are warned about.
+  await card('Done work').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-remove-worktree').click()
+  const dialog = page.getByTestId('remove-worktree-dialog')
+  await expect(dialog.getByTestId('remove-worktree-dirty')).toBeVisible()
+  await dialog.getByTestId('remove-worktree-cancel').click()
+  await expect(dialog).toHaveCount(0)
+  expect(existsSync(path)).toBe(true)
+
+  await card('Done work').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-remove-worktree').click()
+  await dialog.getByTestId('remove-worktree-submit').click()
+  await expect(dialog).toHaveCount(0)
+  await expect.poll(() => existsSync(path)).toBe(false)
+  expect(git('branch', '--list', branch)).toContain(branch)
+  await expect(card('Done work')).toHaveCount(1)
+  await expect(card('Done work').getByTestId('card-status-label')).toHaveText('Stopped')
+  await expect(card('Done work').locator('[data-worktree]')).toHaveCount(0)
+  await card('Done work').getByTestId('card-menu').click()
+  await expect(page.getByTestId('card-menu-remove-worktree')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await card('Done work').getByTestId('card-open').click()
+  await expectCardOpen(page, 'Done work')
+  await run('echo "at=$(git branch --show-current) in=$(basename "$PWD")"')
+  await expect.poll(async () => (await lines()).includes('at=main in=repo')).toBe(true)
+})
+
+test('a worktree card whose folder is gone offers to run in the workspace folder', async () => {
+  await worktreeCard('Gone')
+  const path = worktreePath('gone')
+  await backToBoard(page)
+  await stopOnBoard('Gone')
+  rmSync(path, { recursive: true, force: true })
+
+  await card('Gone').getByTestId('card-open').click()
+  const dialog = page.getByTestId('remove-worktree-dialog')
+  await expect(dialog).toContainText('is gone')
+  await dialog.getByTestId('remove-worktree-submit').click()
+  await expect(dialog).toHaveCount(0)
+  await expectCardOpen(page, 'Gone')
+  await run('echo "at=$(git branch --show-current) in=$(basename "$PWD")"')
+  await expect.poll(async () => (await lines()).includes('at=main in=repo')).toBe(true)
+  // git's entry for the missing folder is pruned.
+  expect(git('worktree', 'list')).not.toContain(path)
+})

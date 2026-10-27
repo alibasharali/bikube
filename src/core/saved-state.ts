@@ -4,6 +4,8 @@
  */
 import { isAgentKind, type AgentKind } from './agent-presets'
 import { readAutoMove } from './auto-move'
+import { cleanAgentStatus } from './board-commands'
+import { asUsage } from './board-protocol'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
 import { isWorkspaceLogo } from './workspace-logos'
@@ -197,7 +199,22 @@ function readCard(raw: unknown): Card | string {
     startedAgents,
     ...setup,
     ...(isTime(raw.createdAt) && { createdAt: raw.createdAt }),
-    ...(isTime(raw.lastOpenedAt) && { lastOpenedAt: raw.lastOpenedAt })
+    ...(isTime(raw.lastOpenedAt) && { lastOpenedAt: raw.lastOpenedAt }),
+    ...readLastSeen(raw)
+  }
+}
+
+/** A card's last status and usage; anything malformed is dropped, as if the card had none. */
+function readLastSeen(raw: Record<string, unknown>): Pick<Card, 'lastStatus' | 'lastUsage'> {
+  const { lastStatus } = raw
+  const status =
+    typeof lastStatus === 'string' && lastStatus && cleanAgentStatus(lastStatus) === lastStatus
+      ? lastStatus
+      : undefined
+  const usage = asUsage(raw.lastUsage)
+  return {
+    ...(status !== undefined && { lastStatus: status }),
+    ...(usage && usage.tokens > 0 && { lastUsage: usage })
   }
 }
 

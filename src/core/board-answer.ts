@@ -23,11 +23,13 @@ import type { Card, WorkspaceStore } from './workspace-store'
 /**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
- * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it;
+ * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it, and keeps
+ * it in the store as the card's last status, shown once it stops;
  * `activity` likewise hands its value to `setActivity`, null for `none` (#31 D12). `setup` acts
  * only on the calling card, which must be running with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
  * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it. `usage`
- * needs a running card and hands the usage to `setUsage`, which keeps it runtime only (#50 D5, D7).
+ * needs a running card and hands the usage to `setUsage`, also keeping it in the store as the
+ * card's last usage, so it is there after a restart (#50 D5, D7).
  * `list` answers with the workspace's columns and cards (`runtime` gives each card's state);
  * `create` adds a card, not started, at the bottom of a column and answers with its id; `rename`
  * renames one. Both save through the store like any board change.
@@ -35,7 +37,14 @@ import type { Card, WorkspaceStore } from './workspace-store'
 export function answerBoardCommand(
   store: Pick<
     WorkspaceStore,
-    'getState' | 'moveCard' | 'setAgentSession' | 'clearCardSetup' | 'createCard' | 'renameCard'
+    | 'getState'
+    | 'moveCard'
+    | 'setAgentSession'
+    | 'clearCardSetup'
+    | 'createCard'
+    | 'renameCard'
+    | 'setCardLastStatus'
+    | 'setCardLastUsage'
   >,
   callingCardId: string,
   command: BoardCommand,
@@ -70,7 +79,9 @@ export function answerBoardCommand(
   if (!card.ok) return card
   if (command.command === 'status') {
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
-    setAgentStatus(card.value.id, cleanAgentStatus(command.text))
+    const text = cleanAgentStatus(command.text)
+    setAgentStatus(card.value.id, text)
+    store.setCardLastStatus(ws.id, card.value.id, text)
     return { ok: true }
   }
   if (command.command === 'rename') {
@@ -101,6 +112,7 @@ export function answerBoardCommand(
   if (command.command === 'usage') {
     if (!isRunning(card.value.id)) return { ok: false, error: notRunningError(card.value) }
     setUsage(card.value.id, command.usage)
+    store.setCardLastUsage(ws.id, card.value.id, command.usage)
     return { ok: true }
   }
   if (command.command === 'activity') {

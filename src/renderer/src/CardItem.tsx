@@ -438,7 +438,12 @@ function CardItem({
             onCommit={(title) => workspaceStore.renameCard(workspaceId, card.id, title)}
             onDone={() => setRenaming(false)}
           />
-          <CardLines status={status} usage={usage} inWindow={inWindow} />
+          <CardLines
+            status={status}
+            usage={usage}
+            lastStatus={card.lastStatus}
+            inWindow={inWindow}
+          />
         </div>
       ) : (
         <button
@@ -468,7 +473,12 @@ function CardItem({
             </span>
             {card.worktree && <WorktreeBranch branch={card.worktree.branch} worktree />}
           </span>
-          <CardLines status={status} usage={usage} inWindow={inWindow} />
+          <CardLines
+            status={status}
+            usage={usage}
+            lastStatus={card.lastStatus}
+            inWindow={inWindow}
+          />
         </button>
       )}
       {card.worktree && <PullRequestChip worktree={card.worktree} />}

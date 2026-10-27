@@ -6,7 +6,7 @@ import { contextLabel, contextUse, hasUsage, usageTooltip } from '../../core/usa
 /**
  * A card's lines under its title (#31 D11): the status row with its label, or the setup's pill
  * (#39 D5), then, while running, the agent status (#9 D8) on up to 2 lines with its full text as
- * tooltip and the last output line in the terminal font, and last the Claude Code context bar
+ * tooltip (once stopped, its last one, dimmed) and the last output line in the terminal font, and last the Claude Code context bar
  * when it has usage, running or not: how full its window is, its token breakdown as tooltip. While running, its
  * status and activity (D13) are the icon before the title, as in the sidebar; Running and the
  * activity stay here for screen readers. The stop button (D10) sits beside the status row,
@@ -16,10 +16,13 @@ import { contextLabel, contextUse, hasUsage, usageTooltip } from '../../core/usa
 function CardLines({
   status,
   usage,
+  lastStatus,
   inWindow = false
 }: {
   status: CardStatus
   usage?: ClaudeUsage
+  /** The card's saved last status text, shown dimmed while it isn't running. */
+  lastStatus?: string
   inWindow?: boolean
 }): React.JSX.Element {
   const pill = cardPill(status)
@@ -66,6 +69,15 @@ function CardLines({
           title={status.agentStatus}
         >
           {status.agentStatus}
+        </span>
+      )}
+      {!running && lastStatus && (
+        <span
+          className="card-agent-status card-last-status"
+          data-testid="card-last-status"
+          title={lastStatus}
+        >
+          {lastStatus}
         </span>
       )}
       {status.lastLine && (

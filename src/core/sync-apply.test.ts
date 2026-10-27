@@ -219,4 +219,22 @@ describe('keeping when this machine last opened each card', () => {
       ['fresh', 70, undefined]
     ])
   })
+
+  it("keeps this machine's last status and usage of the cards it has", () => {
+    const usage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      tokens: 10,
+      context: 7,
+      model: 'claude-opus-5-5'
+    }
+    const local = workspace('api', {
+      cards: [card('known', 'api-backlog', { lastStatus: 'Tests green', lastUsage: usage })]
+    })
+    const incoming = workspace('api', { cards: [card('known', 'api-backlog')] })
+    const [applied] = applySyncBoard([incoming], [local], none)
+    expect(applied!.cards[0]).toMatchObject({ lastStatus: 'Tests green', lastUsage: usage })
+  })
 })

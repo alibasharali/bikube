@@ -163,6 +163,8 @@ export function parseSyncFile(text: string, home: string): SyncFileResult {
         const read: Card = { ...c }
         delete read.setup
         delete read.lastOpenedAt
+        delete read.lastStatus
+        delete read.lastUsage
         return c.host === undefined ? { ...read, claudeStarted: false, startedAgents: [] } : read
       })
     }))

@@ -1487,4 +1487,34 @@ describe('workspace views and card open times', () => {
     expect(s.getState()).toBe(state)
     expect(s.markCardOpened(w.id, 'nope', 5)).toMatchObject({ ok: false, error: { field: 'card' } })
   })
+
+  it("keeps a card's last status and usage, '' and no tokens forgetting them, the same saving nothing", () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const api = card(s, w, 'api')
+    const usage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      tokens: 10,
+      context: 7,
+      model: 'claude-opus-5-5'
+    }
+    expect(ok(s.setCardLastStatus(w.id, api.id, 'Tests green'))).toEqual({
+      ...api,
+      lastStatus: 'Tests green'
+    })
+    expect(ok(s.setCardLastUsage(w.id, api.id, usage)).lastUsage).toEqual(usage)
+    const state = s.getState()
+    ok(s.setCardLastStatus(w.id, api.id, 'Tests green'))
+    ok(s.setCardLastUsage(w.id, api.id, { ...usage }))
+    expect(s.getState()).toBe(state)
+    expect('lastStatus' in ok(s.setCardLastStatus(w.id, api.id, ''))).toBe(false)
+    expect('lastUsage' in ok(s.setCardLastUsage(w.id, api.id, { ...usage, tokens: 0 }))).toBe(false)
+    expect(s.setCardLastStatus(w.id, 'nope', 'x')).toMatchObject({
+      ok: false,
+      error: { field: 'card' }
+    })
+  })
 })

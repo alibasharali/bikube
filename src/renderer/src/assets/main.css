@@ -1993,6 +1993,11 @@ button.dev-server-chip:focus-visible {
   color: var(--text);
 }
 
+/* A stopped card's last status: what its agent last said, quieter than a live one. */
+.card-last-status {
+  color: var(--text-muted);
+}
+
 .card-status-line {
   /* The bundled symbols font (loaded in symbols-font.ts) shows prompt icons in the status too. */
   font-family: var(--font-mono), 'Symbols Nerd Font Mono';

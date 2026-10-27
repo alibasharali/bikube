@@ -2,9 +2,10 @@ import { useSyncExternalStore } from 'react'
 import type { ClaudeUsage } from '../../core/claude-usage-types'
 
 /**
- * Each card's Claude Code usage (#50 D7), as its last `board usage` report gave it: runtime only,
- * never saved, synced or kept with its output. Replaced by each report, kept across a stop or a
- * start, gone when a zero report arrives, when the card is deleted (`disposeCard`) or at quit.
+ * Each card's Claude Code usage (#50 D7), as its last `board usage` report gave it: seeded at
+ * launch from the card's saved `lastUsage` (this machine's, never synced or kept with its output).
+ * Replaced by each report, kept across a stop or a start, gone when a zero report arrives or when
+ * the card is deleted (`disposeCard`).
  */
 const usages = new Map<string, ClaudeUsage>()
 const listeners = new Set<() => void>()

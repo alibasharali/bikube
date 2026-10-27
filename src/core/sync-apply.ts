@@ -11,7 +11,7 @@ import type { Card, Workspace } from './workspace-store'
  * order, with this machine's `claudeStarted`, `startedAgents` (#21 D7) and pending setup (#39 D8) for local cards it
  * already has, else false and empty (D6), where each shell runs (`runIn`, never in the file), its
  * temporary shells (#66 D2, never in the file either), when each card was last opened here
- * (`lastOpenedAt`, never in the file), and every card running here (`isRunning`) kept (D8): a
+ * (`lastOpenedAt`), its last status and usage (never in the file either), and every card running here (`isRunning`) kept (D8): a
  * running card the file lacks goes to the bottom of its column, or of its workspace's first column
  * when that column is gone; a workspace the file lacks that has a running card stays as this
  * machine has it, after the file's workspaces. A running card the file has takes the file's values.
@@ -22,11 +22,17 @@ export function applySyncBoard(
   isRunning: (cardId: string) => boolean
 ): Workspace[] {
   const localStarted = new Map<string, Pick<Card, 'claudeStarted' | 'startedAgents' | 'setup'>>()
-  // When each card was last opened is this machine's, local or SSH: the file never has it.
-  const localOpened = new Map<string, number>()
+  // When each card was last opened, and its last status and usage, are this machine's, local or
+  // SSH: the file never has them.
+  const localSeen = new Map<string, Pick<Card, 'lastOpenedAt' | 'lastStatus' | 'lastUsage'>>()
   for (const w of local)
     for (const c of w.cards) {
-      if (c.lastOpenedAt !== undefined) localOpened.set(c.id, c.lastOpenedAt)
+      const seen = {
+        ...(c.lastOpenedAt !== undefined && { lastOpenedAt: c.lastOpenedAt }),
+        ...(c.lastStatus !== undefined && { lastStatus: c.lastStatus }),
+        ...(c.lastUsage !== undefined && { lastUsage: c.lastUsage })
+      }
+      if (Object.keys(seen).length > 0) localSeen.set(c.id, seen)
       if (c.host === undefined)
         localStarted.set(c.id, {
           claudeStarted: c.claudeStarted,
@@ -55,8 +61,8 @@ export function applySyncBoard(
     const mine = localById.get(w.id)
     for (const s of mine?.shells ?? []) if (s.temporary) shells.push(s)
     const cards = w.cards.map((c) => {
-      const opened = localOpened.get(c.id)
-      const card = opened === undefined ? c : { ...c, lastOpenedAt: opened }
+      const seen = localSeen.get(c.id)
+      const card = seen === undefined ? c : { ...c, ...seen }
       return c.host === undefined
         ? { ...card, ...(localStarted.get(c.id) ?? { claudeStarted: false, startedAgents: [] }) }
         : card

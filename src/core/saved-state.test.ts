@@ -535,6 +535,36 @@ describe('workspace views and card open times in the saved state', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 
+  it("saves a card's last status and usage, dropping malformed ones", () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    const [alpha] = s.getState().workspaces
+    const usage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      tokens: 10,
+      context: 7,
+      model: 'claude-opus-5-5'
+    }
+    ok(s.setCardLastStatus(alpha.id, alpha.cards[0].id, 'Tests green'))
+    ok(s.setCardLastUsage(alpha.id, alpha.cards[0].id, usage))
+    const text = serializeSavedState(s.getState())
+    expect(JSON.parse(text).state.workspaces[0].cards[0]).toMatchObject({
+      lastStatus: 'Tests green',
+      lastUsage: usage
+    })
+    expect(parseSavedState(text)).toEqual({ ok: true, value: s.getState() })
+    const read = parseSavedState(
+      fileWith((f) => {
+        f.workspaces[0].cards[0].lastStatus = 'two\nlines'
+        f.workspaces[0].cards[0].lastUsage = { ...usage, tokens: -1 }
+        f.workspaces[0].cards[1].lastStatus = 42
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+
   it('keeps a Kanban view of its own, as written', () => {
     const s = new InMemoryWorkspaceStore({ initialState: fullState() })
     ok(s.updateWorkspace(s.getState().workspaces[0].id, { view: 'kanban' }))

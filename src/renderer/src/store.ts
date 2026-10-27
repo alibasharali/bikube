@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { InMemoryWorkspaceStore, type WorkspaceState } from '../../core/workspace-store'
+import { setCardUsage } from './usage'
 
 /**
  * A store that starts from `initialState` (#8 D5), sends the whole state to `save` on every
@@ -31,6 +32,9 @@ export let workspaceStore: InMemoryWorkspaceStore
 export async function loadWorkspaceStore(): Promise<void> {
   const state = await window.bikube.state.load()
   workspaceStore = createWorkspaceStore(state, (next) => window.bikube.state.save(next))
+  // Each card's last usage report, saved, shows again until a new one replaces it.
+  for (const w of state.workspaces)
+    for (const c of w.cards) if (c.lastUsage) setCardUsage(c.id, c.lastUsage)
 }
 
 export function useWorkspaceState(): WorkspaceState {

@@ -181,7 +181,11 @@ describe('answerBoardCommand', () => {
         () => {}
       )
     ).toEqual({ ok: false, error: 'board: "old" is not running' })
-    expect(store.getState()).toBe(before)
+    // Kept as the card's last status, shown once it stops; a refused one changes nothing.
+    const cards = store.getState().workspaces.flatMap((w) => w.cards)
+    expect(cards.find((c) => c.id === 'c-api')?.lastStatus).toBe('hi')
+    expect(cards.filter((c) => c.lastStatus !== undefined)).toHaveLength(1)
+    expect(store.getState()).not.toBe(before)
   })
   it("sets the card's agent status to the cleaned text (#9 D8, AC5)", () => {
     const store = setup()
@@ -254,7 +258,7 @@ describe('answerBoardCommand', () => {
     expect(store.getState()).toBe(before)
   })
 
-  it("hands the card's usage on, only for a running card, and saves nothing (#50 D5, D7)", () => {
+  it("hands the card's usage on, only for a running card, and keeps it as the card's last", () => {
     const store = setup()
     const before = store.getState()
     const set: [string, ClaudeUsage][] = []
@@ -291,7 +295,9 @@ describe('answerBoardCommand', () => {
       ['c-api', usage],
       ['c-web', usage]
     ])
-    expect(store.getState()).toBe(before)
+    const cards = store.getState().workspaces.flatMap((w) => w.cards)
+    expect(cards.filter((c) => c.lastUsage).map((c) => c.id)).toEqual(['c-api', 'c-web'])
+    expect(store.getState()).not.toBe(before)
   })
 
   describe('setup (#39 D4)', () => {

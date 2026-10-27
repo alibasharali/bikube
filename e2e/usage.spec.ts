@@ -275,25 +275,31 @@ test("AC5: an unreadable transcript, a missing one and help; usage isn't in help
   await expect(usageOf('api')).toHaveCount(0)
 })
 
-test('AC8: usage is not kept across a restart nor saved', async () => {
+test("AC8: a card's usage and last status are kept across a Close and a restart, never synced", async () => {
   await launch()
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('api')
   ac1Transcript(alpha)
   expect(await board('board usage . t.jsonl')).toEqual(ok)
-  await backToBoard(page)
+  expect(await board("board status . 'Tests green'")).toEqual(ok)
+  await closeCard(page)
+  await page.getByTestId('confirm-close').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  // Stopped: its last status shows dimmed, under the label, with its usage.
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
+  await expect(card('api').getByTestId('card-last-status')).toHaveText('Tests green')
   await expect(usageOf('api')).toHaveText('2% context')
 
   await app?.close()
   await launch()
-  await expect(card('api')).toHaveCount(1)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
-  await expect(usageOf('api')).toHaveCount(0)
-  const saved = readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')
-  expect(saved).toContain('"api"')
-  // No usage key anywhere (the temp folder's name has `usage` in it, so keys are matched).
-  expect(saved).not.toMatch(/"(usage|tokens|context|cost|cacheRead|cacheWrite)":/i)
+  await expect(card('api').getByTestId('card-last-status')).toHaveText('Tests green')
+  await expect(usageOf('api')).toHaveText('2% context')
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+  const api = saved.state.workspaces[0].cards[0]
+  expect(api.lastStatus).toBe('Tests green')
+  expect(api.lastUsage).toMatchObject({ context: expect.any(Number), tokens: expect.any(Number) })
 })
 
 test("AC9: an SSH card's board doesn't know usage, and the card shows none", async () => {

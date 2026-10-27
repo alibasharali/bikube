@@ -64,7 +64,7 @@ const USAGE_COUNTS = ['input', 'output', 'cacheWrite', 'cacheRead', 'tokens', 'c
  * A usage as `board usage` sends it (#50 D5): exactly the six counts as non-negative safe
  * integers and the model as a string of at most 200 characters or null. Null for anything else.
  */
-function asUsage(value: unknown): ClaudeUsage | null {
+export function asUsage(value: unknown): ClaudeUsage | null {
   if (!isRecord(value)) return null
   const keys = Object.keys(value)
   if (keys.length !== USAGE_COUNTS.length + 1) return null

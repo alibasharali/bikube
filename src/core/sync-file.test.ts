@@ -433,6 +433,35 @@ describe('workspace views and card times in the sync file', () => {
     expect(read.ok && read.workspaces[0]!.cards[0]!.createdAt).toBe(42)
     expect(read.ok && read.workspaces[0]!.cards[0]!).not.toHaveProperty('lastOpenedAt')
   })
+
+  it("never writes or reads a card's last status and usage", () => {
+    const usage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 3,
+      cacheRead: 4,
+      tokens: 10,
+      context: 7,
+      model: 'claude-opus-5-5'
+    }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('a', 'w-backlog', { lastStatus: 'Tests green', lastUsage: usage })]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!).not.toHaveProperty('lastStatus')
+    expect(board.workspaces[0]!.cards[0]!).not.toHaveProperty('lastUsage')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    file.board.workspaces[0].cards[0].lastStatus = 'from elsewhere'
+    file.board.workspaces[0].cards[0].lastUsage = usage
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!).not.toHaveProperty('lastStatus')
+    expect(read.ok && read.workspaces[0]!.cards[0]!).not.toHaveProperty('lastUsage')
+  })
 })
 
 describe('automatic move rules in the sync file (#42 D7, AC11)', () => {

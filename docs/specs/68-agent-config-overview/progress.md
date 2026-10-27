@@ -23,4 +23,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - done (verifier ALL PASS: AC1–AC19, 21/21 in e2e/agent-setup.spec.ts, plus a hand drive of AC1 and AC18's strip)
-- UX review: 4 must-fix (round 1)
+- UX review: done (4 contrast must-fix fixed in round 1, re-check CLEAN)

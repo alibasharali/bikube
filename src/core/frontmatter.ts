@@ -79,15 +79,23 @@ export function fieldText(
   return text.trim() === '' ? undefined : text.trim()
 }
 
-/** A field as a list: a list as it is, a string split on commas; undefined when absent or empty. */
+/**
+ * A field as a list: a list as it is, a string (or a `[a, b]` flow list) split on commas, each item
+ * unquoted; undefined when absent or empty.
+ */
 export function fieldList(
   fields: Record<string, FrontmatterValue>,
   key: string
 ): string[] | undefined {
   const value = fields[key]
   if (value === undefined) return undefined
-  const items = (Array.isArray(value) ? value : value.split(','))
-    .map((s) => s.trim())
-    .filter(Boolean)
+  // A flow list (`[Read, "Grep"]`) reads as its items.
+  const text = Array.isArray(value)
+    ? value
+    : value
+        .trim()
+        .replace(/^\[(.*)\]$/, '$1')
+        .split(',')
+  const items = text.map(unquote).filter(Boolean)
   return items.length > 0 ? items : undefined
 }

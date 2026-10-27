@@ -240,4 +240,32 @@ describe('readAgentSetup', () => {
     expect(claudeJson.oauthAccount).toEqual({ emailAddress: 'a@b.c', organizationName: 'Org' })
     expect(claudeJson.preferences).toEqual({ autoUpdates: false })
   })
+
+  it('D17: follows imports at most 5 hops deep', async () => {
+    write(inFolder('CLAUDE.md'), '@a1.md\n')
+    for (let i = 1; i <= 6; i++) write(inFolder(`a${i}.md`), `@a${i + 1}.md\n`)
+    const [top] = (await read()).memory
+    const labels: string[] = []
+    for (let at = top!.imports[0]; at; at = at.imports[0]) labels.push(at.label)
+    expect(labels).toEqual(['a1.md', 'a2.md', 'a3.md', 'a4.md', 'a5.md'])
+  })
+
+  it("D17: ancestor folders' CLAUDE.local.md is Project; the workspace folder's own is Local", async () => {
+    write(join(dirname(folder), 'CLAUDE.local.md'), 'parent\n')
+    write(inFolder('CLAUDE.local.md'), 'mine\n')
+    const snapshot = await read()
+    expect(snapshot.memory.map((e) => [e.file, e.source.kind])).toEqual([
+      [join(dirname(folder), 'CLAUDE.local.md'), 'project'],
+      [inFolder('CLAUDE.local.md'), 'local']
+    ])
+  })
+
+  it('D18: reads a flow list of tools as chips', async () => {
+    write(
+      inFolder('.claude/agents/flow.md'),
+      `---\nname: flow\ndescription: d\ntools: [Read, "Grep"]\n---\n`
+    )
+    const [agent] = (await read()).agents
+    expect(agent!.tools).toEqual(['Read', 'Grep'])
+  })
 })

@@ -478,7 +478,8 @@ async function memoryEntry(
   if (text.kind !== 'ok') return entry
   entry.lines = lineCount(text.text)
   entry.head = text.text.split('\n').slice(0, MEMORY_HEAD_LINES).join('\n')
-  if (chain.length > MAX_IMPORT_HOPS) return entry
+  // A file 5 hops from the memory file lists no imports of its own (D17).
+  if (chain.length >= MAX_IMPORT_HOPS) return entry
   for (const path of memoryImports(text.text)) {
     const target = path.startsWith('~/')
       ? join(reader.home, path.slice(2))
@@ -517,7 +518,8 @@ async function readMemory(reader: Reader): Promise<MemoryEntry[]> {
   for (const at of ancestors) {
     files.push(
       [join(at, 'CLAUDE.md'), { kind: 'project' }],
-      [join(at, 'CLAUDE.local.md'), { kind: 'local' }]
+      // Above the workspace folder both are Project (D17); only its own CLAUDE.local.md is Local.
+      [join(at, 'CLAUDE.local.md'), { kind: 'project' }]
     )
   }
   files.push(

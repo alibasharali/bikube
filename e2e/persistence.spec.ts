@@ -397,7 +397,10 @@ test('AC4: opening restored cards starts them; Claude Code resumes its session',
   // readline wraps it at the width the PTY had before the view was fitted.
   await page.keyboard.press('Enter')
   await run('fc -ln -1')
-  await expect.poll(bufferLines).toContain(claudeResumeLine(u))
+  // After the screen clear typed before it (`typedStartLine`).
+  await expect
+    .poll(async () => (await bufferLines()).some((l) => l.endsWith(claudeResumeLine(u))))
+    .toBe(true)
 })
 
 test('AC5: default titles continue and new items work alongside restored ones', async () => {

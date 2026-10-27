@@ -143,6 +143,8 @@ afterEach(() => {
 })
 
 const UUID = '0b6f2c1e-4a5d-4e8f-9a1b-2c3d4e5f6a7b'
+/** Typed before an agent's start line (`typedStartLine`). */
+const CLEAR = "printf '\\033[H\\033[2J'; "
 
 /** A Shell card unless `startup` says otherwise. */
 function card(
@@ -280,7 +282,7 @@ describe('CardSessions', () => {
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
+        `${CLEAR}claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
       ],
       ['s1', 'x'],
       ['s1', 'y']
@@ -297,7 +299,7 @@ describe('CardSessions', () => {
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID} || ` +
+        `${CLEAR}claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID} || ` +
           `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID}\r`
       ]
     ])
@@ -309,7 +311,7 @@ describe('CardSessions', () => {
     sessions.start(card('c1', '/tmp/a', { kind: 'codex' }), firstStart)
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(api.writes).toEqual([['s1', 'codex\r']])
+    expect(api.writes).toEqual([['s1', `${CLEAR}codex\r`]])
     expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
   })
 
@@ -321,7 +323,7 @@ describe('CardSessions', () => {
     )
     api.spawns[0].resolve({ ok: true, id: 's1' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(api.writes).toEqual([['s1', 'gemini --resume latest || gemini\r']])
+    expect(api.writes).toEqual([['s1', `${CLEAR}gemini --resume latest || gemini\r`]])
     expect(firstStart).not.toHaveBeenCalled()
   })
 
@@ -789,7 +791,7 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     expect(api.writes).toEqual([
       [
         's1',
-        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
+        `${CLEAR}claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${UUID} || claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${UUID}\r`
       ]
     ])
     expect(claudeStarted).not.toHaveBeenCalled()
@@ -805,7 +807,7 @@ describe('SSH cards (#12 D5, D6, D7)', () => {
     expect(api.writes).toEqual([])
     expect(firstStart).not.toHaveBeenCalled()
     api.emitData('s1', READY_MARKER)
-    expect(api.writes).toEqual([['s1', 'codex\r']])
+    expect(api.writes).toEqual([['s1', `${CLEAR}codex\r`]])
     expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
   })
 
@@ -1112,7 +1114,7 @@ describe('pending setup (#39 D3, D4)', () => {
     )
     expect(api.writes).toEqual([
       ['s1', SETUP_LINE],
-      ['s1', 'codex\r']
+      ['s1', `${CLEAR}codex\r`]
     ])
     expect(firstStart).toHaveBeenCalledExactlyOnceWith('codex')
     expect(sessions.status('c1')?.setup).toBeUndefined()

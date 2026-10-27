@@ -237,6 +237,8 @@ export class XtermScreen implements CardScreen {
       // commands (#45 D6) show in it.
       overviewRuler: { width: 14 },
       linkHandler: { activate: openLink },
+      // A clear (an agent's start, Ctrl+L) keeps the screen in the scrollback, as Ghostty does.
+      scrollOnEraseInDisplay: true,
       // The search addon's match highlights are decorations (#35 D8).
       allowProposedApi: true
     })

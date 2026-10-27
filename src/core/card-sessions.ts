@@ -21,7 +21,7 @@ import { readyWatcher } from './ready-marker'
 import {
   firstStart,
   setupLine,
-  startLine,
+  typedStartLine,
   type FirstStart,
   type StartupState
 } from './startup-command'
@@ -225,7 +225,7 @@ export class CardSessions<S extends CardScreen> {
       if (entry.screen === screen && entry.sessionId) this.api.resize(entry.sessionId, cols, rows)
     })
     const setup = card.host === undefined && card.setup ? card.setup : null
-    const line = setup !== null ? setupLine(setup) : startLine(card)
+    const line = setup !== null ? setupLine(setup) : typedStartLine(card)
     const first = setup !== null ? null : firstStart(card)
     // Each start owns its screen; a reply for an older start, or after dispose, is stale.
     const current = (): boolean => !entry.disposed && entry.screen === screen
@@ -394,7 +394,7 @@ export class CardSessions<S extends CardScreen> {
     const entry = this.entries.get(card.id)
     if (entry?.state.kind !== 'running' || !entry.sessionId) return false
     this.setSetup(entry, null)
-    const line = startLine(card)
+    const line = typedStartLine(card)
     if (line === null) return true
     this.api.write(entry.sessionId, `${line}\r`)
     const first = firstStart(card)

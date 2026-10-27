@@ -99,6 +99,18 @@ export function startLine(card: StartupState): string | null {
   }
 }
 
+/** Clears the screen; terminals scroll it into the scrollback (`scrollOnEraseInDisplay`). */
+const CLEAR_SCREEN = "printf '\\033[H\\033[2J'; "
+
+/**
+ * `startLine` as it is typed: an agent's (Claude Code or a preset) clears the screen first, so it
+ * starts at the top with the shell's greeting and the typed line in the scrollback.
+ */
+export function typedStartLine(card: StartupState): string | null {
+  const line = startLine(card)
+  return line !== null && card.startup.kind !== 'custom' ? CLEAR_SCREEN + line : line
+}
+
 /** What a first start records: Claude Code's `claudeStarted` or a preset in `startedAgents`. */
 export type FirstStart = 'claude' | AgentKind
 

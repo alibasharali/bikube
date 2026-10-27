@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkStartup, startLine } from './startup-command'
+import { checkStartup, startLine, typedStartLine } from './startup-command'
 
 const U = '3f0e4c1a-8b2d-4c6e-9a7f-1b2c3d4e5f60'
 
@@ -138,5 +138,28 @@ describe('agent presets (#21 D1, D2)', () => {
   it('passes the presets through checkStartup', () => {
     for (const [kind] of presets)
       expect(checkStartup({ kind })).toEqual({ ok: true, value: { kind } })
+  })
+})
+
+describe('typedStartLine', () => {
+  const clear = "printf '\\033[H\\033[2J'; "
+
+  it("clears the screen before an agent's start line", () => {
+    const claude = { startup: { kind: 'claude' }, agentSessionId: U, claudeStarted: false } as const
+    expect(typedStartLine(claude)).toBe(clear + startLine(claude))
+    const codex = { startup: { kind: 'codex' }, agentSessionId: U, claudeStarted: false } as const
+    expect(typedStartLine(codex)).toBe(`${clear}codex`)
+  })
+
+  it('types a Custom command as written, and nothing for a Shell card', () => {
+    const custom = {
+      startup: { kind: 'custom', command: 'make' },
+      agentSessionId: U,
+      claudeStarted: false
+    } as const
+    expect(typedStartLine(custom)).toBe('make')
+    expect(
+      typedStartLine({ startup: { kind: 'shell' }, agentSessionId: U, claudeStarted: false })
+    ).toBeNull()
   })
 })

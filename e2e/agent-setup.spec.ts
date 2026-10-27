@@ -631,8 +631,10 @@ test("AC13: Status reads Claude Code's version and path, the account and each fi
     'Bikube'
   )
 
-  // Without claude on the login PATH, Refresh reads it Not installed.
+  // With only the fake bin on the login PATH and no claude there (a runner may have one in
+  // /usr/bin), Refresh reads it Not installed; the check needs nothing but the shell's builtins.
   rmSync(join(root, 'bin', 'claude'))
+  writeFileSync(join(home, '.profile'), `PATH='${join(root, 'bin')}'; export PATH\n`)
   await page.getByTestId('agent-setup-refresh').click()
   await expect(status('claude')).toContainText('Not installed')
 })

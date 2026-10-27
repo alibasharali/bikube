@@ -75,6 +75,30 @@ describe('readClaudeVersion', () => {
     })
   }
 
+  it('AC13: reads the version and path under fish, where it is installed', async () => {
+    const fish = ['/opt/homebrew/bin/fish', '/usr/local/bin/fish', '/usr/bin/fish'].find(
+      (path) => spawnSync(path, ['-c', 'exit 0']).status === 0
+    )
+    if (!fish) return
+    mkdirSync(join(home, '.config', 'fish'), { recursive: true })
+    writeFileSync(
+      join(home, '.config', 'fish', 'config.fish'),
+      `set -gx PATH '${bin}' /usr/bin /bin\n`
+    )
+    writeFileSync(join(bin, 'claude'), "#!/bin/sh\necho '2.1.0 (Claude Code)'\n")
+    chmodSync(join(bin, 'claude'), 0o755)
+    const fishEnv = { ...env, XDG_CONFIG_HOME: join(home, '.config') }
+    expect(await readClaudeVersion({ spawn, shell: fish, env: fishEnv })).toEqual({
+      installed: true,
+      path: join(bin, 'claude'),
+      version: '2.1.0 (Claude Code)'
+    })
+    rmSync(join(bin, 'claude'))
+    expect(await readClaudeVersion({ spawn, shell: fish, env: fishEnv })).toEqual({
+      installed: false
+    })
+  })
+
   it('AC13: Not installed without claude; null when the check fails', async () => {
     expect(await readClaudeVersion({ spawn, shell: '/bin/sh', env })).toEqual({ installed: false })
     expect(await readClaudeVersion({ spawn, shell: join(dir, 'missing', 'zsh'), env })).toBeNull()

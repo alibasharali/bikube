@@ -2,7 +2,7 @@
 item: 68
 type: feature
 title: 'Skills/hooks/agents etc. overview'
-status: draft
+status: approved
 branch: claude/68-agent-config-overview
 ---
 

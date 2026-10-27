@@ -16,6 +16,8 @@ import {
   parseConfigEdit,
   parseSwitchRequest
 } from '../core/agent-setup-writes'
+import { localDateOf, readClaudeStats, statsFolders } from '../core/claude-stats'
+import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import { readClaudeVersion, type ClaudeVersion } from '../core/claude-version'
 import { isDirectory } from '../core/directories'
 import { editorShell, type OpenResult } from '../core/editor'
@@ -33,6 +35,9 @@ const listed = new ListedPaths()
 export function agentSetupListed(folder: string, path: string): boolean {
   return listed.has(folder, path)
 }
+
+/** Each Stats request's running read (D14), by its folders: a request during it shares it. */
+const statsReading = new Map<string, Promise<ClaudeStatsRead>>()
 
 /** Each folder's last write, the next one queued behind it (D23: every write re-reads the file). */
 const writing = new Map<string, Promise<SettingsWriteResult>>()
@@ -56,7 +61,8 @@ const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
  * sets a boolean or number setting there, or removes one it sets (D22, `agentSetupConfigWrite`);
  * one write at a time per folder across both; `agentSetup:open` and `agentSetup:reveal` open a file
  * with Settings > Editor `editorSettings()` (its own folder the project folder) or show it in the
- * file manager (D27), only a file the folder's last read listed. Requests come from the main frame only and must name an absolute, existing
+ * file manager (D27), only a file the folder's last read listed; `agentSetup:stats` reads the
+ * Claude Code transcripts of the folder and its worktree folders (D14, `statsFolders`). Requests come from the main frame only and must name an absolute, existing
  * directory; nothing a file names is run.
  */
 export function registerAgentSetup(
@@ -95,6 +101,29 @@ export function registerAgentSetup(
     }
     return read
   })
+
+  ipcMain.handle(
+    IPC.agentSetupStats,
+    async (event, requested: unknown, extra: unknown): Promise<ClaudeStatsRead> => {
+      fromMainFrame(event, IPC.agentSetupStats)
+      const folders = await statsFolders(requested, extra)
+      if (!folders) return { ok: false }
+      const key = folders.join('\0')
+      let read = statsReading.get(key)
+      if (!read) {
+        read = readClaudeStats({
+          home: userHome(),
+          folders,
+          now: Date.now(),
+          localDate: localDateOf
+        })
+          .then((stats): ClaudeStatsRead => ({ ok: true, stats }))
+          .finally(() => statsReading.delete(key))
+        statsReading.set(key, read)
+      }
+      return read
+    }
+  )
 
   /**
    * Runs `write` after the folder's earlier writes; refused when the request named no folder or

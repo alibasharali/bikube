@@ -1,15 +1,18 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { pickAppTheme } from './app-theme'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -22,7 +25,8 @@ import { plainCards } from './plain-cards'
 // (#68 S3) Hooks with Bikube's own, Permissions, and Status with `claude --version` read through
 // the login shell (a fake `claude` on a fake login PATH); (#68 S4) Plugins and MCP servers with
 // their switches, written to the workspace's `.claude/settings.local.json` and read from the test;
-// (#68 S5) Config with its switch, number field and Reset, written there too.
+// (#68 S5) Config with its switch, number field and Reset, written there too; (#68 S7) Stats from
+// transcripts in the fake home, a worktree card's folder among them, and the page in each theme.
 
 const darwin = process.platform === 'darwin'
 /** The command palette's default shortcut (#40 D1) as a Playwright press. */
@@ -991,4 +995,225 @@ test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal s
   await expect(actions('~/.claude/settings.json')).toHaveCount(1)
   await expect(actions('claude-settings.json')).toHaveCount(0)
   await expect(actions('.claude/settings.local.json')).toHaveCount(0)
+})
+
+// #68 S7: Stats from transcripts written into the fake home's `.claude/projects`.
+
+/** A Claude Code project folder's name (D14): every character outside A-Z a-z 0-9 a dash. */
+const encoded = (folder: string): string => folder.replace(/[^A-Za-z0-9]/g, '-')
+
+/** The local date (`YYYY-MM-DD`) of `date`, as main reads it. */
+const localDate = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+/** An assistant entry at `at` with `tokens` input tokens, model `claude-x` and `tools` used. */
+const assistantLine = (
+  at: Date,
+  id: string,
+  tokens: number,
+  tools: { name: string; input?: Record<string, unknown> }[] = []
+): string =>
+  JSON.stringify({
+    type: 'assistant',
+    timestamp: at.toISOString(),
+    requestId: `req-${id}`,
+    message: {
+      id: `msg-${id}`,
+      model: 'claude-x',
+      content: tools.map((tool, i) => ({
+        type: 'tool_use',
+        id: `tool-${id}-${i}`,
+        name: tool.name,
+        input: tool.input ?? {}
+      })),
+      usage: { input_tokens: tokens, output_tokens: 0 }
+    }
+  })
+
+/** Writes session `name`'s transcript for `folder` in the fake home. */
+function writeTranscript(folder: string, name: string, lines: string[]): void {
+  const dir = join(home, '.claude', 'projects', encoded(folder))
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, `${name}.jsonl`), lines.map((l) => l + '\n').join(''))
+}
+
+const statsView = (): Locator => page.getByTestId('agent-setup-stats')
+
+test('AC14: Stats count the workspace and its worktree card, by day, model and use, with no cost', async () => {
+  await launch()
+  // A repository, so a card can get its own worktree.
+  const folder = mkdtempSync(join(root, 'Proj-'))
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: folder })
+  }
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 'test@example.com')
+  git('config', 'user.name', 'Test')
+  writeFileSync(join(folder, 'README.md'), '# proj\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'first')
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  await page.getByTestId('workspace-directory').fill(folder)
+  await page.getByTestId('workspace-name').fill('Proj')
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+
+  await page.getByTestId('column').first().getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Fix')
+  await page.getByTestId('new-card-worktree').check()
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'Fix')
+  await backToBoard(page)
+  const worktrees = join(dataDir, 'worktrees')
+  const [repoFolder] = readdirSync(worktrees)
+  const worktree = join(worktrees, repoFolder!, 'fix')
+  expect(existsSync(worktree)).toBe(true)
+
+  // With no transcripts yet.
+  await setupButton().click()
+  await page.getByRole('tab', { name: 'Stats' }).click()
+  await expect(statsView()).toContainText('No Claude Code sessions in the last 30 days')
+
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 1)
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12)
+  writeTranscript(folder, 'one', [
+    JSON.stringify({ type: 'user', timestamp: yesterday.toISOString(), message: {} }),
+    assistantLine(yesterday, 'a', 4000, [{ name: 'Skill', input: { skill: 'review' } }])
+  ])
+  writeTranscript(folder, 'two', [
+    assistantLine(today, 'b', 1000, [{ name: 'Bash' }, { name: 'Bash' }])
+  ])
+  writeTranscript(worktree, 'three', [assistantLine(today, 'c', 500)])
+  // Stats aren't read on the periodic refresh (D26), only on Refresh.
+  await page.waitForTimeout(3500)
+  await expect(statsView()).toContainText('No Claude Code sessions in the last 30 days')
+  await page.getByTestId('agent-setup-refresh').click()
+
+  await expect(page.getByTestId('agent-setup-stats-sessions')).toHaveText('3 sessions')
+  await expect(page.getByTestId('agent-setup-stats-tokens')).toHaveText('5,500 tokens')
+  await expect(page.getByTestId('agent-setup-stats-folders')).toHaveText('2 folders')
+  await expect(page.getByTestId('agent-setup-stats-folders')).toHaveAttribute(
+    'title',
+    `${folder}\n${worktree}`
+  )
+  const dayRow = (date: Date): Locator =>
+    page.locator(`[data-testid=agent-setup-stats-day][data-date="${localDate(date)}"]`)
+  await expect(page.getByTestId('agent-setup-stats-day')).toHaveCount(30)
+  await expect(dayRow(yesterday).locator('td').nth(0)).toHaveText('4,000')
+  await expect(dayRow(yesterday).locator('td').nth(1)).toHaveText('1')
+  await expect(dayRow(today).locator('td').nth(0)).toHaveText('1,500')
+  await expect(dayRow(today).locator('td').nth(1)).toHaveText('2')
+
+  const model = page.getByTestId('agent-setup-stats-model')
+  await expect(model).toHaveCount(1)
+  await expect(model.getByTestId('agent-setup-stats-name')).toHaveText('claude-x')
+  await expect(model.getByTestId('agent-setup-stats-value')).toHaveText('5,500')
+  const used = (list: string, name: string): Locator =>
+    page
+      .getByTestId(`agent-setup-stats-${list}`)
+      .getByTestId('agent-setup-stats-used')
+      .filter({ has: page.getByTestId('agent-setup-stats-name').getByText(name, { exact: true }) })
+      .getByTestId('agent-setup-stats-value')
+  await expect(used('tools', 'Bash')).toHaveText('2')
+  await expect(used('tools', 'Skill')).toHaveText('1')
+  await expect(used('skills', 'review')).toHaveText('1')
+  await expect(page.getByTestId('agent-setup-stats-subagents')).toContainText('None')
+
+  // The chart's hover tooltip gives the day's numbers.
+  const bars = page.getByTestId('agent-setup-stats-bar')
+  await expect(bars).toHaveCount(30)
+  await bars.last().hover()
+  await expect(page.getByTestId('agent-setup-stats-tooltip')).toContainText('1,500 tokens')
+  await expect(page.getByTestId('agent-setup-stats-tooltip')).toContainText('2 sessions')
+
+  // No cost anywhere.
+  const text = await page.getByTestId('agent-setup-panel').innerText()
+  expect(text).not.toContain('$')
+  expect(text.toLowerCase()).not.toContain('cost')
+  // Stats are not filtered by the search (D25).
+  await page.getByTestId('agent-setup-search').fill('zzz-nothing')
+  await expect(page.getByTestId('agent-setup-stats-tokens')).toHaveText('5,500 tokens')
+})
+
+/** The page's background and `--bg` resolved in the page, with a Stats bar's and `--accent`. */
+const themeColours = (): Promise<{ page: string; bg: string; bar: string; accent: string }> =>
+  page.evaluate(() => {
+    const resolve = (token: string): string => {
+      const probe = document.createElement('div')
+      probe.style.background = `var(${token})`
+      document.body.append(probe)
+      const colour = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return colour
+    }
+    const bar = document.querySelector('.agent-setup-chart-tokens > span')
+    return {
+      page: getComputedStyle(document.querySelector('[data-testid=agent-setup]')!).backgroundColor,
+      bg: resolve('--bg'),
+      bar: bar ? getComputedStyle(bar).backgroundColor : '',
+      accent: resolve('--accent')
+    }
+  })
+
+test("AC18: in Dark, Light and Nord the page and its Stats use the theme's colours", async () => {
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+  )
+  await launch()
+  // Follow the app's Theme setting, not Playwright's pinned light scheme.
+  await page.emulateMedia({ colorScheme: null })
+  const folder = await createWorkspace('Proj')
+  writeTranscript(folder, 'one', [assistantLine(new Date(), 'a', 1200, [{ name: 'Read' }])])
+  await setupButton().click()
+  await page.getByRole('tab', { name: 'Stats' }).click()
+  await expect(page.getByTestId('agent-setup-stats-tokens')).toHaveText('1,200 tokens')
+
+  // Default's dark version.
+  await expect.poll(themeColours).toMatchObject({ page: 'rgb(20, 21, 26)', bg: 'rgb(20, 21, 26)' })
+  let colours = await themeColours()
+  expect(colours.bar).toBe(colours.accent)
+
+  const settings = page.getByTestId('settings-dialog')
+  await page.keyboard.press(darwin ? 'Meta+Comma' : 'Control+Comma')
+  await settings.getByRole('radio', { name: 'Light' }).check()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expect
+    .poll(themeColours)
+    .toMatchObject({ page: 'rgb(246, 247, 249)', bg: 'rgb(246, 247, 249)' })
+  colours = await themeColours()
+  expect(colours.bar).toBe(colours.accent)
+
+  // Nord's light version (nord6).
+  await pickAppTheme(page, 'Nord')
+  await expect
+    .poll(themeColours)
+    .toMatchObject({ page: 'rgb(236, 239, 244)', bg: 'rgb(236, 239, 244)' })
+  colours = await themeColours()
+  expect(colours.bar).toBe(colours.accent)
+  await expect(agentSetup()).toBeVisible()
+
+  // At 320 px the chart and lists fit: no sideways scroll in the page or the panel.
+  await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(320, 700))
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(page.getByTestId('agent-setup-sections')).toHaveAttribute(
+    'aria-orientation',
+    'horizontal'
+  )
+  const panel = page.getByTestId('agent-setup-panel')
+  // With the tooltip shown at either end of the chart too.
+  for (const bar of [
+    page.getByTestId('agent-setup-stats-bar').last(),
+    page.getByTestId('agent-setup-stats-bar').first()
+  ]) {
+    await bar.hover()
+    await expect(page.getByTestId('agent-setup-stats-tooltip')).toBeVisible()
+    await expect.poll(() => panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      await page.evaluate(() => window.innerWidth)
+    )
+  }
 })

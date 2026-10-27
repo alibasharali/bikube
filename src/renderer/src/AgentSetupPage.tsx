@@ -13,6 +13,7 @@ import type { Workspace } from '../../core/workspace-store'
 import {
   refreshAgentSetup,
   refreshClaudeVersion,
+  refreshStatsIfShown,
   useAgentSetupData,
   useAgentSetupRefresh
 } from './agent-setup-data'
@@ -31,6 +32,7 @@ import {
   SkillsSection,
   StatusSection
 } from './AgentSetupSections'
+import { StatsSection } from './AgentSetupStats'
 import { registerCardViewActions } from './card-view-actions'
 import { SMALL_ICON } from './icons'
 import { currentKeymap } from './settings'
@@ -259,6 +261,8 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
             onClick={() => {
               void refreshAgentSetup(folder)
               void refreshClaudeVersion()
+              // Stats, once shown in this run: never on the periodic refresh (D14, D26).
+              refreshStatsIfShown(workspace)
             }}
           >
             <RefreshCw {...SMALL_ICON} />
@@ -286,7 +290,10 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
         data-section={section}
       >
         <h3 className="agent-setup-panel-title">{current.label}</h3>
-        {SectionView && snapshot ? (
+        {section === 'stats' ? (
+          // Stats read the transcripts on their own, not the snapshot (D14).
+          <StatsSection workspace={workspace} />
+        ) : SectionView && snapshot ? (
           <FileActionsProvider key={folder} folder={folder} snapshot={snapshot}>
             <SectionView
               workspace={workspace}

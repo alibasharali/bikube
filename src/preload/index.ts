@@ -137,7 +137,8 @@ const api: BikubeApi = {
     setSwitch: (folder, change) => ipcRenderer.invoke(IPC.agentSetupSwitch, folder, change),
     editConfig: (folder, edit) => ipcRenderer.invoke(IPC.agentSetupConfig, folder, edit),
     openFile: (folder, path) => ipcRenderer.invoke(IPC.agentSetupOpen, folder, path),
-    reveal: (folder, path) => ipcRenderer.invoke(IPC.agentSetupReveal, folder, path)
+    reveal: (folder, path) => ipcRenderer.invoke(IPC.agentSetupReveal, folder, path),
+    stats: (folder, extra) => ipcRenderer.invoke(IPC.agentSetupStats, folder, extra)
   },
   update: {
     state: () => ipcRenderer.invoke(IPC.updateState),

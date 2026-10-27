@@ -4925,6 +4925,271 @@ button.dev-server-chip:focus-visible {
   flex: none;
 }
 
+/*
+ * Stats (#68 D14): the totals, tokens per day as bars with sessions per day under them on their
+ * own scale, a hover tooltip kept inside the chart, the daily table, then the model share bars and
+ * the Most used lists. Only theme tokens, so every app theme and Light and Dark apply.
+ */
+.agent-setup-stats-status:empty {
+  display: none;
+}
+
+.agent-setup-stats-status {
+  margin-bottom: var(--space-3);
+}
+
+.agent-setup-stats-totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-6);
+  margin-bottom: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.agent-setup-stats-total strong {
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-setup-stats-total[title] {
+  cursor: default;
+}
+
+.agent-setup-stats-period {
+  margin-left: auto;
+  font-size: var(--text-xs);
+}
+
+.agent-setup-chart {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.agent-setup-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.agent-setup-chart-key::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-1);
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.agent-setup-chart-key-sessions::before {
+  background: var(--text-muted);
+}
+
+.agent-setup-chart-plot {
+  position: relative;
+  min-width: 0;
+}
+
+.agent-setup-chart-peak {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.agent-setup-chart-days {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-setup-chart-day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border-radius: 2px;
+}
+
+.agent-setup-chart-day[data-hovered='true'] {
+  background: var(--surface-hover);
+}
+
+.agent-setup-chart-tokens,
+.agent-setup-chart-sessions {
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-setup-chart-tokens {
+  height: 120px;
+}
+
+.agent-setup-chart-sessions {
+  height: 32px;
+}
+
+.agent-setup-chart-tokens > span,
+.agent-setup-chart-sessions > span {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.agent-setup-chart-sessions > span {
+  background: var(--text-muted);
+}
+
+.agent-setup-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.agent-setup-chart-tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-menu);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.agent-setup-chart-tooltip strong {
+  color: var(--text);
+}
+
+.agent-setup-chart-table {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.agent-setup-chart-table summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.agent-setup-chart-table summary:hover {
+  color: var(--text);
+}
+
+.agent-setup-chart-table table {
+  width: 100%;
+  margin-top: var(--space-2);
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-setup-chart-table th,
+.agent-setup-chart-table td {
+  padding: 2px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.agent-setup-chart-table th:first-child {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-align: left;
+}
+
+.agent-setup-chart-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.agent-setup-stats-share-head,
+.agent-setup-stats-used {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.agent-setup-stats-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-setup-stats-share {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-setup-stats-value {
+  flex: none;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-setup-stats-bar-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--chip);
+}
+
+.agent-setup-stats-bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.agent-setup-stats-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: var(--space-3);
+}
+
+.agent-setup-stats-list {
+  min-width: 0;
+}
+
+.agent-setup-stats-list-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-setup-stats-used {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
 /* Under the header (D23): changes apply from now on, or why a switch couldn't be saved. */
 .agent-setup-notice-slot {
   display: contents;

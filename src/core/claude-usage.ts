@@ -1,7 +1,8 @@
 /**
  * Reading a Claude Code session transcript (#50 D2, D3): the local `board` CLI streams the JSONL
  * file a hook names, line by line, plus its session's subagent transcripts, and sums the tokens.
- * Never run by main or the renderer.
+ * Never run by the renderer; main reads transcripts only for the Agent setup page's Stats
+ * (`claude-stats.ts`, #68 D14), with these same counts.
  */
 import { createReadStream } from 'node:fs'
 import { readdir } from 'node:fs/promises'
@@ -12,13 +13,15 @@ import type { ClaudeUsage, TokenCounts } from './claude-usage-types'
 export type { ClaudeUsage } from './claude-usage-types'
 
 /** A counted transcript entry (D2). */
-interface Entry {
+export interface UsageEntry {
   counts: TokenCounts
   model: string | null
   sidechain: boolean
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+type Entry = UsageEntry
+
+export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** Longest model name kept (D2, D5): longer ones are cut, so main's check always passes. */
@@ -28,7 +31,8 @@ export const MAX_MODEL_LENGTH = 200
 const count = (value: unknown): number =>
   Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : 0
 
-const parse = (line: string): unknown => {
+/** One transcript line as JSON; undefined when it isn't JSON. */
+export const parseLine = (line: string): unknown => {
   try {
     return JSON.parse(line)
   } catch {
@@ -37,11 +41,11 @@ const parse = (line: string): unknown => {
 }
 
 /**
- * One line as an entry with its streaming key (D2), or null when it isn't an assistant entry with
- * a usage object or its four counts are all 0. The key is null for an entry lacking both ids.
+ * One parsed line as an entry with its streaming key (D2), or null when it isn't an assistant
+ * entry with a usage object or its four counts are all 0. The key is null for an entry lacking
+ * both ids: a streamed message's copies share one, so the last copy read replaces the others.
  */
-function readEntry(line: string): { key: string | null; entry: Entry } | null {
-  const value = parse(line)
+export function usageEntry(value: unknown): { key: string | null; entry: Entry } | null {
   if (!isObject(value) || value.type !== 'assistant') return null
   const message = value.message
   if (!isObject(message) || !isObject(message.usage)) return null
@@ -65,8 +69,12 @@ function readEntry(line: string): { key: string | null; entry: Entry } | null {
   }
 }
 
+/** One line as an entry with its streaming key (D2): `usageEntry` of the parsed line. */
+const readEntry = (line: string): { key: string | null; entry: Entry } | null =>
+  usageEntry(parseLine(line))
+
 /** Calls `onLine` for every line of the file, streamed; rejects when it can't be read. */
-async function eachLine(path: string, onLine: (line: string) => void): Promise<void> {
+export async function eachLine(path: string, onLine: (line: string) => void): Promise<void> {
   const stream = createReadStream(path, { encoding: 'utf8' })
   const lines = createInterface({ input: stream, crlfDelay: Infinity })
   let failure: unknown
@@ -79,7 +87,7 @@ async function eachLine(path: string, onLine: (line: string) => void): Promise<v
 }
 
 /** The `*.jsonl` files of `<transcript folder>/<session id>/subagents/`; none when it's missing. */
-async function subagentFiles(transcriptPath: string): Promise<string[]> {
+export async function subagentFiles(transcriptPath: string): Promise<string[]> {
   const folder = join(dirname(transcriptPath), basename(transcriptPath, '.jsonl'), 'subagents')
   let names: string[]
   try {

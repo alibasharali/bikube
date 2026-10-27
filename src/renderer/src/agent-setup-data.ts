@@ -5,7 +5,9 @@ import type {
   AgentSetupSwitch,
   SettingsWriteResult
 } from '../../core/agent-setup-snapshot'
+import { worktreeFolders, type ClaudeStats } from '../../core/claude-stats-types'
 import type { ClaudeVersion } from '../../core/claude-version'
+import type { Workspace } from '../../core/workspace-store'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
@@ -289,4 +291,86 @@ export function useClaudeVersion(): ClaudeVersionState {
     }
   }, [])
   return useSyncExternalStore(subscribe, () => claudeVersion)
+}
+
+/**
+ * Stats (#68 D14), kept per workspace folder for the run: read when the section is first shown
+ * and on Refresh only, never on the periodic refresh (D26). `stats` is undefined until a read
+ * ends and null when main refused it or it failed; a read keeps the last stats shown meanwhile.
+ */
+export interface StatsState {
+  reading: boolean
+  stats: ClaudeStats | null | undefined
+}
+
+const stats = new Map<string, StatsState>()
+const statsReads = new Map<string, Promise<void>>()
+/** Folders asked to read Stats again while a read ran: exactly one more read follows it. */
+const statsPending = new Map<string, readonly string[]>()
+const NO_STATS: StatsState = { reading: false, stats: undefined }
+
+const setStats = (folder: string, next: StatsState): void => {
+  stats.set(folder, next)
+  for (const listener of [...listeners]) listener()
+}
+
+/**
+ * Reads `folder`'s Stats with the worktree folders `extra`; asked for while a read runs, it reads
+ * once more when that one ends, never two at once.
+ */
+export function refreshStats(folder: string, extra: readonly string[]): Promise<void> {
+  const running = statsReads.get(folder)
+  if (running) {
+    statsPending.set(folder, extra)
+    return running
+  }
+  const run = (async () => {
+    let folders: readonly string[] | undefined = extra
+    try {
+      while (folders) {
+        statsPending.delete(folder)
+        setStats(folder, { ...(stats.get(folder) ?? NO_STATS), reading: true })
+        let result: ClaudeStats | null = null
+        try {
+          const read = await window.bikube.agentSetup.stats(folder, [...folders])
+          if (read.ok) result = read.stats
+        } catch {
+          // Shown as failed below.
+        }
+        // A failed read keeps the stats read before it.
+        setStats(folder, { reading: false, stats: result ?? stats.get(folder)?.stats ?? null })
+        folders = statsPending.get(folder)
+      }
+    } finally {
+      statsPending.delete(folder)
+      statsReads.delete(folder)
+    }
+  })()
+  statsReads.set(folder, run)
+  return run
+}
+
+/** Whether Stats were asked for `folder` in this run: Refresh reads them again only then. */
+export const statsRequested = (folder: string): boolean => stats.has(folder)
+
+/** `folder`'s Stats as last read, re-rendered on every change. */
+export function useStats(folder: string): StatsState {
+  const subscribe = useCallback((listener: () => void) => {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }, [])
+  return useSyncExternalStore(subscribe, () => stats.get(folder) ?? NO_STATS)
+}
+
+/** The folders Stats count for `workspace` besides its own: its worktree cards' (D14). */
+export const statsExtraFolders = (workspace: Workspace): string[] =>
+  worktreeFolders(workspace.cards)
+
+/** Reads `workspace`'s Stats again on Refresh, once they were shown in this run (D26). */
+export function refreshStatsIfShown(workspace: Workspace): void {
+  if (statsRequested(workspace.directory)) {
+    void refreshStats(workspace.directory, statsExtraFolders(workspace))
+  }
 }

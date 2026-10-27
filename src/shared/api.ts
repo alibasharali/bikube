@@ -5,6 +5,7 @@ import type {
   SettingsWriteResult
 } from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
+import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -92,6 +93,7 @@ export const IPC = {
   agentSetupConfig: 'agentSetup:config',
   agentSetupOpen: 'agentSetup:open',
   agentSetupReveal: 'agentSetup:reveal',
+  agentSetupStats: 'agentSetup:stats',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -383,6 +385,13 @@ export interface AgentSetupApi {
    * read of `folder` didn't list (D28).
    */
   reveal(folder: string, path: string): Promise<boolean>
+  /**
+   * Stats (#68 D14) from the Claude Code transcripts of the workspace folder `folder` and the
+   * worktree folders `extra`, over the last 30 days. Main refuses (`ok: false`) unless `folder` is
+   * an absolute existing directory and `extra` at most 100 absolute paths (D28); an extra folder
+   * that no longer exists is left out. Asked for when Stats is first shown and on Refresh only.
+   */
+  stats(folder: string, extra: string[]): Promise<ClaudeStatsRead>
 }
 
 export interface AgentsApi {

@@ -225,3 +225,10 @@ export type SettingsWriteResult =
 export type AgentSetupSwitch =
   | { kind: 'plugin'; key: string; enabled: boolean }
   | { kind: 'mcpServer'; name: string; enabled: boolean }
+
+/**
+ * An in-place Config edit (#68 D22): a settings key set to a boolean or a finite number, or (Reset)
+ * removed from `<folder>/.claude/settings.local.json`.
+ */
+export type AgentSetupConfigEdit =
+  { kind: 'set'; key: string; value: boolean | number } | { kind: 'remove'; key: string }

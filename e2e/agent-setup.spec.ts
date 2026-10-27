@@ -1,5 +1,13 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
@@ -13,7 +21,8 @@ import { plainCards } from './plain-cards'
 // Skills, Agents, Commands and Memory with their sources, counts, warnings, search and refresh;
 // (#68 S3) Hooks with Bikube's own, Permissions, and Status with `claude --version` read through
 // the login shell (a fake `claude` on a fake login PATH); (#68 S4) Plugins and MCP servers with
-// their switches, written to the workspace's `.claude/settings.local.json` and read from the test.
+// their switches, written to the workspace's `.claude/settings.local.json` and read from the test;
+// (#68 S5) Config with its switch, number field and Reset, written there too.
 
 const darwin = process.platform === 'darwin'
 /** The command palette's default shortcut (#40 D1) as a Playwright press. */
@@ -780,4 +789,91 @@ test('AC12: an invalid settings.local.json is left as it is and the switch goes 
   await expect(pluginSwitch()).toBeChecked()
   expect(localSettings(folder)).toBe(invalid)
   await expect(page.getByTestId('agent-setup-saved-note')).toHaveCount(0)
+})
+
+/** Config's row for settings key `key`. */
+const configRow = (key: string): Locator =>
+  panel().locator(`[data-testid="agent-setup-config-row"][data-key="${key}"]`)
+
+test('AC11: Config edits booleans and numbers in settings.local.json, and Reset removes them', async () => {
+  const userSettings = join(home, '.claude/settings.json')
+  const folder = await openWith(() => {
+    write(
+      userSettings,
+      JSON.stringify({ includeCoAuthoredBy: true, cleanupPeriodDays: 30, model: 'opus' })
+    )
+    write(
+      join(home, '.claude.json'),
+      JSON.stringify({ autoUpdates: false, numStartups: 4, userID: 'x', tipsShownAt: 2 })
+    )
+  })
+  const before = readFileSync(userSettings, 'utf8')
+  await expect(count('config')).toHaveText('4')
+  await tab('Config').click()
+  const coAuthored = configRow('includeCoAuthoredBy')
+  const days = configRow('cleanupPeriodDays')
+  const model = configRow('model')
+  const toggle = coAuthored.getByTestId('agent-setup-config-switch')
+  const field = days.getByTestId('agent-setup-config-number')
+  await expect(toggle).toBeChecked()
+  await expect(field).toHaveValue('30')
+  await expect(model.getByTestId('agent-setup-config-value')).toHaveText('opus')
+  await expect(model.getByTestId('agent-setup-config-switch')).toHaveCount(0)
+  await expect(model.getByTestId('agent-setup-config-number')).toHaveCount(0)
+  for (const row of [coAuthored, days, model]) {
+    await expect(row.getByTestId('agent-setup-source')).toHaveText('User')
+    await expect(row.getByTestId('agent-setup-config-reset')).toHaveCount(0)
+  }
+  // Preferences from ~/.claude.json: read-only, runtime counters left out.
+  const preferences = panel().getByTestId('agent-setup-preference')
+  await expect(preferences).toHaveCount(1)
+  await expect(preferences).toContainText('autoUpdates')
+  await expect(preferences).toContainText('false')
+  await expect(preferences.locator('input')).toHaveCount(0)
+
+  // The switch writes settings.local.json; the row reads Local, the User value struck through.
+  await toggle.click()
+  await expect
+    .poll(() =>
+      existsSync(join(folder, '.claude/settings.local.json')) ? localSettings(folder) : ''
+    )
+    .toBe('{\n  "includeCoAuthoredBy": false\n}\n')
+  await expect(toggle).not.toBeChecked()
+  await expect(coAuthored.getByTestId('agent-setup-source')).toHaveText('Local')
+  const overridden = coAuthored.getByTestId('agent-setup-config-overridden')
+  await expect(overridden).toHaveText('User: true')
+  await expect(overridden).toHaveCSS('text-decoration-line', 'line-through')
+  await expect(page.getByTestId('agent-setup-saved-note')).toHaveText(
+    'Changes apply to Claude Code sessions started from now on'
+  )
+  expect(readFileSync(userSettings, 'utf8')).toBe(before)
+
+  // Anything but a finite number is refused and nothing is written.
+  await field.fill('abc')
+  await field.press('Enter')
+  await expect(days.getByTestId('agent-setup-config-error')).toHaveText('Enter a number')
+  await expect(field).toHaveAttribute('aria-invalid', 'true')
+  await field.blur()
+  await expect(days.getByTestId('agent-setup-config-error')).toHaveText('Enter a number')
+  expect(localSettings(folder)).toBe('{\n  "includeCoAuthoredBy": false\n}\n')
+  // A number is saved on Enter.
+  await field.fill('7')
+  await field.press('Enter')
+  await expect(days.getByTestId('agent-setup-config-error')).toHaveCount(0)
+  await expect
+    .poll(() => JSON.parse(localSettings(folder)) as unknown)
+    .toEqual({ includeCoAuthoredBy: false, cleanupPeriodDays: 7 })
+  await expect(days.getByTestId('agent-setup-source')).toHaveText('Local')
+  await expect(field).toHaveValue('7')
+
+  // Reset removes the key; the row reads User again.
+  await coAuthored.getByTestId('agent-setup-config-reset').click()
+  await expect
+    .poll(() => JSON.parse(localSettings(folder)) as unknown)
+    .toEqual({ cleanupPeriodDays: 7 })
+  await expect(coAuthored.getByTestId('agent-setup-source')).toHaveText('User')
+  await expect(toggle).toBeChecked()
+  await expect(coAuthored.getByTestId('agent-setup-config-overridden')).toHaveCount(0)
+  await expect(coAuthored.getByTestId('agent-setup-config-reset')).toHaveCount(0)
+  expect(readFileSync(userSettings, 'utf8')).toBe(before)
 })

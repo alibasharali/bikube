@@ -3,9 +3,10 @@
  * rows and count split by source, the search, the warnings list and a plugin entry's off state.
  * Plain TS with no Node or DOM imports: the renderer runs it.
  *
- * Sections with rows are those `sectionSummaries` returns; a later slice adds its own (Config)
- * there, and its warnings to `setupWarnings`. Hooks (D19), Permissions (D20), Status' rows (D13),
- * Plugins and their marketplaces (D15) and MCP servers (D16) are read here too.
+ * Sections with rows are those `sectionSummaries` returns; a later slice adds its own there, and
+ * its warnings to `setupWarnings`. Hooks (D19), Permissions (D20), Status' rows (D13), Plugins and
+ * their marketplaces (D15), MCP servers (D16) and Config with its preferences (D21, D22) are read
+ * here too.
  */
 
 import type { AgentSetupSectionId } from './agent-setup-sections'
@@ -276,7 +277,11 @@ export function sectionSummaries(
     ),
     permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source)),
     plugins: summary(filterPlugins(snapshot.plugins, query).map(pluginSource)),
-    mcp: summary(mcpServerRows(snapshot, query).map((r) => r.source))
+    mcp: summary(mcpServerRows(snapshot, query).map((r) => r.source)),
+    config: summary([
+      ...configRows(snapshot, query).map((r) => r.source),
+      ...preferenceRows(snapshot, query).map((): EntrySource => ({ kind: 'user' }))
+    ])
   }
 }
 
@@ -580,4 +585,124 @@ export function mcpServerRows(snapshot: AgentSetupSnapshot, query: string): McpS
       sourceLabel(row.source)
     ])
   )
+}
+
+/** Settings keys Config leaves to the sections that show them (D21). */
+export const CONFIG_EXCLUDED_KEYS: readonly string[] = [
+  'hooks',
+  'permissions',
+  'enabledPlugins',
+  'enabledMcpjsonServers',
+  'disabledMcpjsonServers',
+  'enableAllProjectMcpServers'
+]
+
+/** How a Config row's value can be changed (D22): a switch, a number field, or not at all. */
+export type ConfigControl = 'switch' | 'number' | null
+
+/** The control a settings value gets (D22): booleans a switch, finite numbers a number field. */
+export function configControl(value: unknown): ConfigControl {
+  if (typeof value === 'boolean') return 'switch'
+  if (typeof value === 'number' && Number.isFinite(value)) return 'number'
+  return null
+}
+
+/** A settings value as Config shows it: a string as it is, `env` as its names, else JSON. */
+function configText(key: string, value: unknown): string {
+  if (typeof value === 'string') return value
+  // The reader reduced each file's `env` to its variables' names (D21, D28).
+  if (key === 'env' && Array.isArray(value)) return value.join(', ')
+  return JSON.stringify(value) ?? String(value)
+}
+
+/** A settings file that sets a Config key. */
+export interface ConfigSetter {
+  source: EntrySource
+  file: string
+  value: unknown
+  /** The value as shown. */
+  text: string
+}
+
+/** One Config row (D21): a settings key, its effective value and where it comes from. */
+export interface ConfigRow extends ConfigSetter {
+  key: string
+  /** The lower files that set it too, by precedence: shown struck through. */
+  overridden: ConfigSetter[]
+  /** D22's control for the effective value. */
+  control: ConfigControl
+  /** The value comes from settings.local.json: Reset removes it there (D22). */
+  resettable: boolean
+}
+
+const byKey = (a: { key: string }, b: { key: string }): number =>
+  a.key < b.key ? -1 : a.key > b.key ? 1 : 0
+
+/**
+ * Config's rows matching `query` (D21, D25: key, value or source), by key: every top-level key the
+ * settings files set but those other sections show, its value the first file's by precedence (D10).
+ */
+export function configRows(snapshot: AgentSetupSnapshot, query: string): ConfigRow[] {
+  const setters = new Map<string, ConfigSetter[]>()
+  for (const file of snapshot.settings) {
+    if (!file.value) continue
+    for (const [key, value] of Object.entries(file.value)) {
+      if (CONFIG_EXCLUDED_KEYS.includes(key)) continue
+      const setter: ConfigSetter = {
+        source: settingsSource(file),
+        file: file.file,
+        value,
+        text: configText(key, value)
+      }
+      const list = setters.get(key)
+      if (list) list.push(setter)
+      else setters.set(key, [setter])
+    }
+  }
+  const rows: ConfigRow[] = []
+  for (const [key, [winner, ...overridden]] of setters) {
+    const row: ConfigRow = {
+      key,
+      ...winner,
+      overridden,
+      control: key === 'env' ? null : configControl(winner.value),
+      resettable: winner.source.kind === 'local'
+    }
+    if (matchesQuery(query, [key, row.text, sourceLabel(row.source)])) rows.push(row)
+  }
+  return rows.sort(byKey)
+}
+
+/**
+ * Whether a `~/.claude.json` key is a preference (D21), not a runtime counter or cache: none that
+ * starts with `num`, `has`, `last`, `cached` or `first`, or ends with `At`, `Id`, `ID`, `Count` or
+ * `Cache`.
+ */
+export const isPreferenceKey = (key: string): boolean =>
+  !/^(num|has|last|cached|first)/.test(key) && !/(At|Id|ID|Count|Cache)$/.test(key)
+
+/** One of Config's Preferences (D21): a `~/.claude.json` boolean or number, read-only. */
+export interface PreferenceRow {
+  key: string
+  value: boolean | number
+  text: string
+  file: string
+}
+
+/** The Preferences matching `query` (D21, D25), by key. */
+export function preferenceRows(snapshot: AgentSetupSnapshot, query: string): PreferenceRow[] {
+  const { claudeJson } = snapshot
+  return Object.entries(claudeJson.preferences)
+    .filter(([key]) => isPreferenceKey(key))
+    .map(([key, value]) => ({ key, value, text: String(value), file: claudeJson.file }))
+    .filter((row) => matchesQuery(query, [row.key, row.text, 'User']))
+    .sort(byKey)
+}
+
+/** A number as typed in a Config field (D22): a finite decimal number, else null. */
+export function parseConfigNumber(text: string): number | null {
+  const trimmed = text.trim()
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(trimmed)) return null
+  const value = Number(trimmed)
+  return Number.isFinite(value) ? value : null
 }

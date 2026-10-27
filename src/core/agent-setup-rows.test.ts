@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   accountText,
+  configRows,
+  parseConfigNumber,
+  preferenceRows,
   effectiveSetting,
   fileLabel,
   filterDefinitions,
@@ -608,5 +611,146 @@ describe('MCP servers', () => {
     expect(mcpServerRows(mcp, 'docs.example').map((r) => r.name)).toEqual(['docs'])
     expect(mcpServerRows(mcp, 'plugin kit').map((r) => r.name)).toEqual(['search'])
     expect(mcpServerRows(mcp, 's3cret')).toEqual([])
+  })
+})
+
+describe('configRows', () => {
+  it('D21: one row per key, the first file by precedence winning, the others overridden', () => {
+    const rows = configRows(
+      snapshot({
+        settings: [
+          settingsFile('local', { includeCoAuthoredBy: false }),
+          settingsFile('project', { model: 'sonnet' }),
+          settingsFile('user', { includeCoAuthoredBy: true, cleanupPeriodDays: 30, model: 'opus' })
+        ]
+      }),
+      ''
+    )
+    expect(rows.map((r) => r.key)).toEqual(['cleanupPeriodDays', 'includeCoAuthoredBy', 'model'])
+    const [days, coAuthored, model] = rows
+    expect(days).toMatchObject({
+      text: '30',
+      source: { kind: 'user' },
+      file: '/user.json',
+      overridden: [],
+      control: 'number',
+      resettable: false
+    })
+    expect(coAuthored).toMatchObject({
+      value: false,
+      text: 'false',
+      source: { kind: 'local' },
+      file: '/local.json',
+      overridden: [{ source: { kind: 'user' }, file: '/user.json', text: 'true' }],
+      control: 'switch',
+      resettable: true
+    })
+    expect(model).toMatchObject({
+      text: 'sonnet',
+      source: { kind: 'project' },
+      overridden: [{ source: { kind: 'user' }, text: 'opus' }],
+      control: null,
+      resettable: false
+    })
+  })
+
+  it("D21: leaves out the keys other sections show, and shows env's names only", () => {
+    const rows = configRows(
+      snapshot({
+        settings: [
+          settingsFile('project', {
+            hooks: {},
+            permissions: { allow: [] },
+            enabledPlugins: {},
+            enabledMcpjsonServers: [],
+            disabledMcpjsonServers: [],
+            enableAllProjectMcpServers: true,
+            // The reader keeps the variables' names only (D28).
+            env: ['TOKEN', 'DEBUG']
+          })
+        ]
+      }),
+      ''
+    )
+    expect(rows.map((r) => [r.key, r.text, r.control])).toEqual([['env', 'TOKEN, DEBUG', null]])
+  })
+
+  it('D22: only a boolean or a finite number gets a control; objects and lists read as JSON', () => {
+    const rows = configRows(
+      snapshot({
+        settings: [settingsFile('user', { a: 1.5, b: [1, 'x'], c: { d: true }, e: null })]
+      }),
+      ''
+    )
+    expect(rows.map((r) => [r.key, r.text, r.control])).toEqual([
+      ['a', '1.5', 'number'],
+      ['b', '[1,"x"]', null],
+      ['c', '{"d":true}', null],
+      ['e', 'null', null]
+    ])
+  })
+
+  it('D25: matches the key, the value and the source', () => {
+    const s = snapshot({
+      settings: [
+        settingsFile('local', { verbose: true }),
+        settingsFile('user', { model: 'opus', cleanupPeriodDays: 30 })
+      ]
+    })
+    expect(configRows(s, 'MODEL').map((r) => r.key)).toEqual(['model'])
+    expect(configRows(s, '30').map((r) => r.key)).toEqual(['cleanupPeriodDays'])
+    expect(configRows(s, 'local').map((r) => r.key)).toEqual(['verbose'])
+  })
+})
+
+describe('preferenceRows', () => {
+  it("D21: ~/.claude.json's booleans and numbers but runtime counters and caches, read-only", () => {
+    const s = snapshot({
+      claudeJson: {
+        ...snapshot().claudeJson,
+        state: 'found',
+        preferences: {
+          autoUpdates: true,
+          verbose: false,
+          editorWidth: 80,
+          numStartups: 12,
+          hasCompletedOnboarding: true,
+          lastReleaseNotesSeen: 3,
+          cachedThing: 1,
+          firstStartTime: 9,
+          tipsShownAt: 5,
+          sessionId: 1,
+          orgID: 2,
+          promptCount: 4,
+          statsigCache: 6
+        }
+      }
+    })
+    expect(preferenceRows(s, '').map((r) => [r.key, r.text])).toEqual([
+      ['autoUpdates', 'true'],
+      ['editorWidth', '80'],
+      ['verbose', 'false']
+    ])
+    expect(preferenceRows(s, 'width').map((r) => r.key)).toEqual(['editorWidth'])
+  })
+
+  it('counts the Config rows and the preferences as the Config section', () => {
+    const s = snapshot({
+      settings: [settingsFile('user', { model: 'opus', verbose: true })],
+      claudeJson: { ...snapshot().claudeJson, preferences: { autoUpdates: true } }
+    })
+    expect(sectionSummaries(s, '').config?.count).toBe(3)
+    expect(sectionSummaries(s, 'opus').config?.count).toBe(1)
+  })
+})
+
+describe('parseConfigNumber', () => {
+  it('D22: a finite decimal number, else null (`Enter a number`)', () => {
+    expect(parseConfigNumber('30')).toBe(30)
+    expect(parseConfigNumber(' -1.5 ')).toBe(-1.5)
+    expect(parseConfigNumber('2e3')).toBe(2000)
+    for (const bad of ['', ' ', 'abc', '1e400', 'Infinity', 'NaN', '0x10', '1,5', '3 4']) {
+      expect(parseConfigNumber(bad)).toBeNull()
+    }
   })
 })

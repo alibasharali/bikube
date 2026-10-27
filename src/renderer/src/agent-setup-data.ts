@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import type { AgentSetupSnapshot, AgentSetupSwitch } from '../../core/agent-setup-snapshot'
+import type {
+  AgentSetupConfigEdit,
+  AgentSetupSnapshot,
+  AgentSetupSwitch,
+  SettingsWriteResult
+} from '../../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../../core/claude-version'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
  * The Agent setup page's data (#68 D26), kept per workspace folder for the run of the app (never
  * saved): the last snapshot main read, the last read's error, the expanded memory rows, and the
- * switches being saved with the last save's outcome (D23). A
+ * switches being saved with the last save's outcome (D23, D22's Config edits too). A
  * read replaces only the parts of the snapshot that changed, so rows that read as before keep
  * their objects; never two reads at a time for one folder.
  */
@@ -154,24 +159,37 @@ export function useAgentSetupData(folder: string): AgentSetupData {
   }
 }
 
-/** The key of a switch in `saving`: `plugin:<key>` or `mcp:<name>`. */
+/** The key of a switch in `saving`: `plugin:<key>`, `mcp:<name>` or a Config key's `config:<key>`. */
 export const switchKey = (
-  change: { kind: 'plugin'; key: string } | { kind: 'mcpServer'; name: string }
-): string => (change.kind === 'plugin' ? `plugin:${change.key}` : `mcp:${change.name}`)
+  change:
+    | { kind: 'plugin'; key: string }
+    | { kind: 'mcpServer'; name: string }
+    | { kind: 'config'; key: string }
+): string =>
+  change.kind === 'plugin'
+    ? `plugin:${change.key}`
+    : change.kind === 'config'
+      ? `config:${change.key}`
+      : `mcp:${change.name}`
 
 /**
- * Turns a plugin or a project MCP server on or off for `folder` (D15, D16, D23): the switch shows
- * the state asked for at once, main writes settings.local.json, and the page reads again; on a
- * failure the switch goes back to the state read and the error line shows.
+ * Saves a change through `write` (D23): a switch (`key` in `saving`) shows `asked` at once, main
+ * writes settings.local.json, and the page reads again; on a failure the switch goes back to the
+ * state read and the error line shows.
  */
-export async function saveSwitch(folder: string, change: AgentSetupSwitch): Promise<void> {
+async function save(
+  folder: string,
+  asked: { key: string; state: boolean } | null,
+  write: () => Promise<SettingsWriteResult>
+): Promise<boolean> {
   const data = dataOf(folder)
-  const key = switchKey(change)
-  data.saving.set(key, change.enabled)
-  changed(data)
+  if (asked) {
+    data.saving.set(asked.key, asked.state)
+    changed(data)
+  }
   let message: string | null = null
   try {
-    const result = await window.bikube.agentSetup.setSwitch(folder, change)
+    const result = await write()
     if (!result.ok) message = result.message
   } catch {
     message = "Couldn't save settings.local.json"
@@ -183,8 +201,29 @@ export async function saveSwitch(folder: string, change: AgentSetupSwitch): Prom
     await refreshAgentSetup(folder)
   } else data.saveError = message
   // A later click on the same switch owns it now.
-  if (data.saving.get(key) === change.enabled) data.saving.delete(key)
+  if (asked && data.saving.get(asked.key) === asked.state) data.saving.delete(asked.key)
   changed(data)
+  return message === null
+}
+
+/** Turns a plugin or a project MCP server on or off for `folder` (D15, D16, D23). */
+export async function saveSwitch(folder: string, change: AgentSetupSwitch): Promise<void> {
+  await save(folder, { key: switchKey(change), state: change.enabled }, () =>
+    window.bikube.agentSetup.setSwitch(folder, change)
+  )
+}
+
+/**
+ * Changes a Config setting for `folder` (D22, D23): a boolean's switch shows the state asked for
+ * at once, as `saveSwitch`'s does; a number or a Reset shows once read again. Resolves whether it
+ * was saved.
+ */
+export function saveConfig(folder: string, edit: AgentSetupConfigEdit): Promise<boolean> {
+  const asked =
+    edit.kind === 'set' && typeof edit.value === 'boolean'
+      ? { key: switchKey({ kind: 'config', key: edit.key }), state: edit.value }
+      : null
+  return save(folder, asked, () => window.bikube.agentSetup.editConfig(folder, edit))
 }
 
 /**

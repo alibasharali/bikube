@@ -5,13 +5,26 @@
  * lists, both files read again for each request. Anything else is refused and nothing is written.
  * A server switch also gets the lists in effect in the lower settings files (D10), which the
  * writer copies into settings.local.json when it lacks them, so the change holds.
- * D22's edits (S5) add their own check beside these.
+ * D22's Config edits have their own check (`agentSetupConfigWrite`): a set only for a key whose
+ * effective value (D10, the three settings files read again) is a boolean or a finite number, with
+ * a new value of the same kind; a remove only for a key settings.local.json sets; never a key
+ * another section shows (`CONFIG_EXCLUDED_KEYS`), and no new keys.
  */
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { AgentSetupSwitch, SettingsWriteResult } from './agent-setup-snapshot'
-import { writeSettingsLocal, type McpListKey, type SettingsFs } from './settings-local-writer'
+import { CONFIG_EXCLUDED_KEYS, configControl } from './agent-setup-rows'
+import type {
+  AgentSetupConfigEdit,
+  AgentSetupSwitch,
+  SettingsWriteResult
+} from './agent-setup-snapshot'
+import {
+  settingsLocalPath,
+  writeSettingsLocal,
+  type McpListKey,
+  type SettingsFs
+} from './settings-local-writer'
 
 /** The longest plugin key or server name taken. */
 const MAX_NAME = 512
@@ -118,4 +131,84 @@ async function lowerLists(
     if (Array.isArray(value)) lists[key] = value.filter((n): n is string => typeof n === 'string')
   }
   return lists
+}
+
+/** A Config edit request from the renderer (D22), or null when it isn't one. */
+export function parseConfigEdit(value: unknown): AgentSetupConfigEdit | null {
+  if (!isRecord(value)) return null
+  const key = value['key']
+  if (!isName(key) || key === '__proto__') return null
+  if (value['kind'] === 'remove') return { kind: 'remove', key }
+  if (value['kind'] !== 'set') return null
+  const v = value['value']
+  if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+    return { kind: 'set', key, value: v }
+  }
+  return null
+}
+
+export interface AgentSetupConfigWriteOptions {
+  /** The workspace folder (absolute, an existing directory: the caller checked it). */
+  folder: string
+  /** The user's home (main's `BIKUBE_HOME_DIR`, else the OS home). */
+  home: string
+  edit: AgentSetupConfigEdit
+  fs?: SettingsFs
+}
+
+/** What a Config edit main turns down reads (D28). */
+const CONFIG_REFUSED: SettingsWriteResult = {
+  ok: false,
+  reason: 'refused',
+  message: "Couldn't save: only a boolean or number setting can be changed here"
+}
+
+/** The parsed object of JSON file `path`; `invalid` when it is there but not an object of JSON. */
+async function readSettingsObject(
+  path: string,
+  read: (path: string, encoding: 'utf8') => Promise<string>
+): Promise<Record<string, unknown> | 'missing' | 'invalid'> {
+  let text: string
+  try {
+    text = await read(path, 'utf8')
+  } catch {
+    return 'missing'
+  }
+  try {
+    const value = JSON.parse(text) as unknown
+    return isRecord(value) ? value : 'invalid'
+  } catch {
+    return 'invalid'
+  }
+}
+
+/** Writes Config edit `edit` to settings.local.json when D28 allows it. */
+export async function agentSetupConfigWrite({
+  folder,
+  home,
+  edit,
+  fs
+}: AgentSetupConfigWriteOptions): Promise<SettingsWriteResult> {
+  if (CONFIG_EXCLUDED_KEYS.includes(edit.key)) return CONFIG_REFUSED
+  const read = fs?.readFile.bind(fs) ?? readFile
+  const local = await readSettingsObject(settingsLocalPath(folder), read)
+  if (edit.kind === 'remove') {
+    // An invalid file gets the writer's own message, and is left as it is.
+    if (local === 'invalid') return writeSettingsLocal(folder, edit, fs)
+    if (local === 'missing' || !Object.hasOwn(local, edit.key)) return CONFIG_REFUSED
+    return writeSettingsLocal(folder, edit, fs)
+  }
+  // The effective value (D10), every file read again now.
+  const files = [
+    local,
+    await readSettingsObject(join(folder, '.claude', 'settings.json'), read),
+    await readSettingsObject(join(home, '.claude', 'settings.json'), read)
+  ]
+  const setter = files.find(
+    (file): file is Record<string, unknown> => isRecord(file) && Object.hasOwn(file, edit.key)
+  )
+  const control = setter ? configControl(setter[edit.key]) : null
+  const wanted = typeof edit.value === 'boolean' ? 'switch' : 'number'
+  if (control !== wanted) return CONFIG_REFUSED
+  return writeSettingsLocal(folder, edit, fs)
 }

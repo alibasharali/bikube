@@ -4862,6 +4862,38 @@ button.dev-server-chip:focus-visible {
   color: var(--pill-question-text);
 }
 
+/* Config (D21, D22): a read-only value after its key, a lower file's value struck through. */
+.agent-setup-config-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-setup-chip-overridden {
+  text-decoration: line-through;
+}
+
+/* A Config number (D22): Settings' field, narrow, at the row's end like a switch. */
+.agent-setup-config-number {
+  flex: none;
+  width: 10ch;
+  padding: 2px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.agent-setup-config-number[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.agent-setup-config-reset {
+  flex: none;
+}
+
 /* Under the header (D23): changes apply from now on, or why a switch couldn't be saved. */
 .agent-setup-notice-slot {
   display: contents;

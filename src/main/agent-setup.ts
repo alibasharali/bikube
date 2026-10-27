@@ -4,7 +4,12 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { readAgentSetup } from '../core/agent-setup-reader'
 import type { AgentSetupRead, SettingsWriteResult } from '../core/agent-setup-snapshot'
-import { agentSetupWrite, parseSwitchRequest } from '../core/agent-setup-writes'
+import {
+  agentSetupConfigWrite,
+  agentSetupWrite,
+  parseConfigEdit,
+  parseSwitchRequest
+} from '../core/agent-setup-writes'
 import { readClaudeVersion, type ClaudeVersion } from '../core/claude-version'
 import { isDirectory } from '../core/directories'
 import { editorShell } from '../core/editor'
@@ -42,8 +47,9 @@ const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
  * `claude --version` through the login shell the Shell setting `shellSetting()` names (else
  * `$SHELL`), as the installed-agents check does, one at a time; `agentSetup:switch` turns a
  * plugin or a project MCP server on or off in `<folder>/.claude/settings.local.json` (D23), only for
- * a plugin key `installed_plugins.json` lists or a server name `.mcp.json` lists, one write at a
- * time per folder. Requests come from the main frame only and must name an absolute, existing
+ * a plugin key `installed_plugins.json` lists or a server name `.mcp.json` lists; `agentSetup:config`
+ * sets a boolean or number setting there, or removes one it sets (D22, `agentSetupConfigWrite`);
+ * one write at a time per folder across both. Requests come from the main frame only and must name an absolute, existing
  * directory; nothing a file names is run.
  */
 export function registerAgentSetup(shellSetting: () => string): void {
@@ -80,27 +86,51 @@ export function registerAgentSetup(shellSetting: () => string): void {
     return read
   })
 
+  /**
+   * Runs `write` after the folder's earlier writes; refused when the request named no folder or
+   * no edit main takes (`write` null).
+   */
+  const queueWrite = async (
+    requested: unknown,
+    write: ((folder: string) => Promise<SettingsWriteResult>) | null
+  ): Promise<SettingsWriteResult> => {
+    if (typeof requested !== 'string' || !write || !(await isDirectory(requested))) {
+      return { ok: false, reason: 'refused', message: "Couldn't save: the request was refused" }
+    }
+    // One write per folder however it is spelled (`/a` and `/a/`).
+    const folder = resolve(requested)
+    const before = writing.get(folder) ?? Promise.resolve<SettingsWriteResult>({ ok: true })
+    const next = before.catch(() => undefined).then(() => write(folder))
+    writing.set(folder, next)
+    next
+      .finally(() => {
+        if (writing.get(folder) === next) writing.delete(folder)
+      })
+      .catch(() => {})
+    return next
+  }
+
   ipcMain.handle(
     IPC.agentSetupSwitch,
-    async (event, requested: unknown, change: unknown): Promise<SettingsWriteResult> => {
+    (event, requested: unknown, change: unknown): Promise<SettingsWriteResult> => {
       fromMainFrame(event, IPC.agentSetupSwitch)
       const edit = parseSwitchRequest(change)
-      if (typeof requested !== 'string' || edit === null || !(await isDirectory(requested))) {
-        return { ok: false, reason: 'refused', message: "Couldn't save: the request was refused" }
-      }
-      // One write per folder however it is spelled (`/a` and `/a/`).
-      const folder = resolve(requested)
-      const before = writing.get(folder) ?? Promise.resolve<SettingsWriteResult>({ ok: true })
-      const write = before
-        .catch(() => undefined)
-        .then(() => agentSetupWrite({ folder, home: userHome(), edit }))
-      writing.set(folder, write)
-      write
-        .finally(() => {
-          if (writing.get(folder) === write) writing.delete(folder)
-        })
-        .catch(() => {})
-      return write
+      return queueWrite(
+        requested,
+        edit && ((folder) => agentSetupWrite({ folder, home: userHome(), edit }))
+      )
+    }
+  )
+
+  ipcMain.handle(
+    IPC.agentSetupConfig,
+    (event, requested: unknown, change: unknown): Promise<SettingsWriteResult> => {
+      fromMainFrame(event, IPC.agentSetupConfig)
+      const edit = parseConfigEdit(change)
+      return queueWrite(
+        requested,
+        edit && ((folder) => agentSetupConfigWrite({ folder, home: userHome(), edit }))
+      )
     }
   )
 }

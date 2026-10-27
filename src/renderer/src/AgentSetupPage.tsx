@@ -20,6 +20,7 @@ import { useAgentSetupMemory } from './agent-setup-memory'
 import {
   AgentsSection,
   CommandsSection,
+  ConfigSection,
   HooksSection,
   McpServersSection,
   MemorySection,
@@ -68,7 +69,8 @@ const SECTION_VIEWS: Partial<
   commands: CommandsSection,
   hooks: HooksSection,
   memory: MemorySection,
-  permissions: PermissionsSection
+  permissions: PermissionsSection,
+  config: ConfigSection
 }
 
 /**

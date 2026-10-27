@@ -1,8 +1,10 @@
 import { ChevronRight } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
 import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
 import {
   accountText,
+  configRows,
   effectiveSetting,
   fileLabel,
   filterDefinitions,
@@ -13,10 +15,12 @@ import {
   marketplaceRows,
   mcpServerRows,
   mcpStateLabel,
+  parseConfigNumber,
   permissionsView,
   pluginProvides,
   pluginQuery,
   pluginSource,
+  preferenceRows,
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
@@ -32,9 +36,10 @@ import {
   type MemoryEntry,
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
-import type { McpServerRow } from '../../core/agent-setup-rows'
+import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
 import type { Workspace } from '../../core/workspace-store'
 import {
+  saveConfig,
   saveSwitch,
   switchKey,
   toggleExpanded,
@@ -45,8 +50,8 @@ import { SMALL_ICON } from './icons'
 import { useSettings } from './settings'
 
 /**
- * The Agent setup page's sections built so far (#68 D12, D13, D15–D20, D24): Overview, Status,
- * Plugins, MCP servers, Skills, Agents, Commands, Hooks, Memory and Permissions, each showing the
+ * The Agent setup page's sections built so far (#68 D12, D13, D15–D22, D24): Overview, Status,
+ * Plugins, MCP servers, Skills, Agents, Commands, Hooks, Memory, Permissions and Config, each showing the
  * rows of the snapshot that match the search (D25; Status is not filtered).
  */
 
@@ -971,5 +976,257 @@ export function McpServersSection({
         />
       ))}
     </ul>
+  )
+}
+
+/** What a Config number field reads for anything but a finite number (D22). */
+const NUMBER_ERROR = 'Enter a number'
+
+/**
+ * A Config number (D22): saved on Enter or blur when it changed; anything but a finite number is
+ * refused (`invalid`, the row shows `Enter a number`) and nothing is written. Esc puts the value
+ * read back.
+ */
+function ConfigNumber({
+  folder,
+  settingKey,
+  value,
+  draft,
+  onDraft,
+  invalid,
+  onInvalid,
+  errorId
+}: {
+  folder: string
+  settingKey: string
+  value: number
+  /** What the field holds: the row keeps it, replaced when a read brings a new value. */
+  draft: string
+  onDraft: (draft: string) => void
+  invalid: boolean
+  onInvalid: (invalid: boolean) => void
+  errorId: string
+}): React.JSX.Element {
+  // The number being saved, so a blur right after Enter saves it once.
+  const pending = useRef<number | null>(null)
+  const commit = (): void => {
+    const next = parseConfigNumber(draft)
+    if (next === null) {
+      onInvalid(true)
+      return
+    }
+    onInvalid(false)
+    if (next === value || next === pending.current) return
+    pending.current = next
+    void saveConfig(folder, { kind: 'set', key: settingKey, value: next }).then((saved) => {
+      pending.current = null
+      // A failed save puts the value read back; its error line is under the header.
+      if (!saved) onDraft(String(value))
+    })
+  }
+  return (
+    <input
+      className="settings-input agent-setup-config-number"
+      data-testid="agent-setup-config-number"
+      inputMode="decimal"
+      autoComplete="off"
+      spellCheck={false}
+      aria-label={settingKey}
+      aria-invalid={invalid ? true : undefined}
+      aria-describedby={invalid ? errorId : undefined}
+      value={draft}
+      onChange={(e) => {
+        onDraft(e.target.value)
+        onInvalid(false)
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+        } else if (e.key === 'Escape' && (draft !== String(value) || invalid)) {
+          e.preventDefault()
+          e.stopPropagation()
+          onDraft(String(value))
+          onInvalid(false)
+        }
+      }}
+    />
+  )
+}
+
+/**
+ * One Config row (D21, D22): the key, its effective value (a switch for a boolean, a number field
+ * for a number, else the value read-only), the file it comes from, the lower files that set it
+ * struck through, and Reset when settings.local.json sets it.
+ */
+function ConfigItem({
+  folder,
+  row,
+  snapshot
+}: {
+  /** The workspace folder, as the page's data is kept by. */
+  folder: string
+  row: ConfigRow
+  snapshot: AgentSetupSnapshot
+}): React.JSX.Element {
+  const { saving } = useAgentSetupData(folder)
+  const asked = saving.get(switchKey({ kind: 'config', key: row.key }))
+  const errorId = useId()
+  const [draft, setDraft] = useState(String(row.value))
+  const [invalid, setInvalid] = useState(false)
+  // A read with a new value replaces what the number field shows.
+  const [seen, setSeen] = useState(row.value)
+  if (!Object.is(seen, row.value)) {
+    setSeen(row.value)
+    setDraft(String(row.value))
+    setInvalid(false)
+  }
+  return (
+    <li className="agent-setup-row" data-testid="agent-setup-config-row" data-key={row.key}>
+      <div className="agent-setup-row-main">
+        <span
+          className="agent-setup-row-name agent-setup-row-mono"
+          title={row.key}
+          data-testid="agent-setup-row-name"
+        >
+          {row.key}
+        </span>
+        {row.control === null && (
+          <code
+            className="agent-setup-config-value"
+            title={row.text}
+            data-testid="agent-setup-config-value"
+          >
+            {row.text}
+          </code>
+        )}
+        <span className="agent-setup-row-chips">
+          <SourceChip source={row.source} />
+          {row.overridden.map((setter) => (
+            <s
+              key={setter.file}
+              className="agent-setup-chip agent-setup-chip-overridden"
+              title={`Overridden by ${sourceLabel(row.source)}: ${fileLabel(snapshot, setter.file)}`}
+              data-testid="agent-setup-config-overridden"
+            >
+              {sourceLabel(setter.source)}: {setter.text}
+            </s>
+          ))}
+        </span>
+        {row.resettable && (
+          <button
+            type="button"
+            className="btn btn-small agent-setup-config-reset"
+            data-testid="agent-setup-config-reset"
+            title="Remove it from settings.local.json"
+            aria-label={`Reset ${row.key}`}
+            onClick={() => void saveConfig(folder, { kind: 'remove', key: row.key })}
+          >
+            Reset
+          </button>
+        )}
+        {row.control === 'switch' && (
+          <Switch
+            label={row.key}
+            checked={asked ?? row.value === true}
+            testId="agent-setup-config-switch"
+            onChange={(value) => void saveConfig(folder, { kind: 'set', key: row.key, value })}
+          />
+        )}
+        {row.control === 'number' && typeof row.value === 'number' && (
+          <ConfigNumber
+            folder={folder}
+            settingKey={row.key}
+            value={row.value}
+            draft={draft}
+            onDraft={setDraft}
+            invalid={invalid}
+            onInvalid={setInvalid}
+            errorId={errorId}
+          />
+        )}
+        <FileActions file={row.file} />
+      </div>
+      {invalid && (
+        <p className="field-error" id={errorId} role="alert" data-testid="agent-setup-config-error">
+          {NUMBER_ERROR}
+        </p>
+      )}
+    </li>
+  )
+}
+
+/**
+ * Config (D21, D22): every top-level settings key other sections don't show, with its effective
+ * value and where it comes from, booleans and numbers changed in place in settings.local.json;
+ * then `~/.claude.json`'s Preferences, read-only.
+ */
+export function ConfigSection({ workspace, snapshot, query }: SectionViewProps): React.JSX.Element {
+  const all = configRows(snapshot, '')
+  const rows = configRows(snapshot, query)
+  const allPreferences = preferenceRows(snapshot, '')
+  const preferences = preferenceRows(snapshot, query)
+  const searching = query.trim() !== ''
+  return (
+    <div className="agent-setup-groups" data-testid="agent-setup-config">
+      <section className="agent-setup-group">
+        <h4 className="agent-setup-subheading">Settings</h4>
+        {all.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-empty">
+            No settings set. Claude Code reads them from .claude/settings.json and
+            .claude/settings.local.json in the workspace folder, and ~/.claude/settings.json.
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-no-match">
+            No settings match “{query.trim()}”.
+          </p>
+        ) : (
+          <ul className="agent-setup-rows">
+            {rows.map((row) => (
+              <ConfigItem
+                key={row.key}
+                folder={workspace.directory}
+                row={row}
+                snapshot={snapshot}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className="agent-setup-group">
+        <h4 className="agent-setup-subheading">Preferences</h4>
+        {preferences.length === 0 ? (
+          <p className="agent-setup-empty" data-testid="agent-setup-preferences-empty">
+            {searching && allPreferences.length > 0
+              ? `No preferences match “${query.trim()}”.`
+              : 'No preferences in ~/.claude.json. Claude Code saves them there from /config.'}
+          </p>
+        ) : (
+          <ul className="agent-setup-rows" data-testid="agent-setup-preferences">
+            {preferences.map((row) => (
+              <li key={row.key} className="agent-setup-row" data-testid="agent-setup-preference">
+                <div className="agent-setup-row-main">
+                  <span
+                    className="agent-setup-row-name agent-setup-row-mono"
+                    title={row.key}
+                    data-testid="agent-setup-row-name"
+                  >
+                    {row.key}
+                  </span>
+                  <code className="agent-setup-config-value" data-testid="agent-setup-config-value">
+                    {row.text}
+                  </code>
+                  <span className="agent-setup-row-chips">
+                    <SourceChip source={{ kind: 'user' }} />
+                  </span>
+                  <FileActions file={row.file} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 import type {
+  AgentSetupConfigEdit,
   AgentSetupRead,
   AgentSetupSwitch,
   SettingsWriteResult
@@ -88,6 +89,7 @@ export const IPC = {
   agentSetupRead: 'agentSetup:read',
   agentSetupClaudeVersion: 'agentSetup:claudeVersion',
   agentSetupSwitch: 'agentSetup:switch',
+  agentSetupConfig: 'agentSetup:config',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -360,6 +362,14 @@ export interface AgentSetupApi {
    * settings.local.json that isn't valid JSON is left as it is (`invalid-json`).
    */
   setSwitch(folder: string, change: AgentSetupSwitch): Promise<SettingsWriteResult>
+  /**
+   * Changes a Config setting in place for the workspace folder `folder` (#68 D22, D23): sets it to
+   * a boolean or a finite number, or (Reset) removes it, in `<folder>/.claude/settings.local.json`
+   * only. Main refuses (`refused`) a key whose effective value, read again, isn't of the new
+   * value's kind, a remove of a key settings.local.json doesn't set, and the keys other sections
+   * show (D28).
+   */
+  editConfig(folder: string, edit: AgentSetupConfigEdit): Promise<SettingsWriteResult>
 }
 
 export interface AgentsApi {

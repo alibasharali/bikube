@@ -36,7 +36,8 @@ const findCard = (workspaceId: string, cardId: string): Card | undefined =>
  * queued, a new agent session, the pending worktree cleared in the same change), then `start`
  * starts it. A failure keeps the card pending and shows git's reason in the card view. A card
  * whose worktree another machine made meanwhile (synced), or whose pending one was dropped, gets
- * this one removed again and starts as it now is; a deleted card starts nothing.
+ * this one removed again (unless the synced worktree is at this same path) and starts as it now
+ * is; a deleted card starts nothing.
  */
 export function makePendingWorktree(
   workspaceId: string,
@@ -63,7 +64,8 @@ export function makePendingWorktree(
         return
       }
       if (!current.pendingWorktree || current.worktree) {
-        discard(made.path)
+        // The synced worktree can be this very folder (the same home layout): it stays.
+        if (current.worktree?.path !== made.path) discard(made.path)
         start(current)
         set(card.id, null)
         return

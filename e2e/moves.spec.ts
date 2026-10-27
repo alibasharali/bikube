@@ -651,12 +651,20 @@ test('#69 AC12: Recently opened first sorts every column without changing the bo
   await expect(page.getByTestId('menu-sort-manual')).toHaveAttribute('aria-checked', 'false')
   await page.keyboard.press('Escape')
 
-  // Alt+Up and Alt+Down change nothing; dropping within the column changes nothing either.
+  // Alt+Up and Alt+Down change nothing, nor does a drop within the column: each of these would
+  // reorder the stored A, B, C under the manual order (C up, B down, C above B, A below C).
   await card('A').getByTestId('card-open').focus()
   await page.keyboard.press('Alt+ArrowUp')
+  await card('C').getByTestId('card-open').focus()
+  await page.keyboard.press('Alt+ArrowUp')
+  await card('B').getByTestId('card-open').focus()
   await page.keyboard.press('Alt+ArrowDown')
-  await drag('A', card('B'), 0.25)
+  await drag('C', card('B'), 0.25)
+  await drag('A', card('C'), 0.75)
   await expect(titles('Backlog')).toHaveText(['B', 'C', 'A'])
+  await expect
+    .poll(async () => (await savedState()).state.workspaces[0]!.cards.map((c) => c.title))
+    .toEqual(['A', 'B', 'C'])
 
   // Manual shows the stored order, unchanged.
   await pickSort('In Progress', 'manual')

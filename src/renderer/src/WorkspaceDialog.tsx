@@ -39,13 +39,13 @@ interface WorkspaceDialogProps {
   onClose: () => void
 }
 
-/** The automatic move rules' selects (#42 D6), in the fieldset's order. */
 /** The Kanban sorts, as the column menu names them without its `Sort:` (#69 D12). */
 const SORTS: [WorkspaceSort, string][] = [
   ['manual', 'Manual order'],
   ['recent', 'Recently opened first']
 ]
 
+/** The automatic move rules' selects (#42 D6), in the fieldset's order. */
 const AUTO_MOVE_RULES: [AutoMoveTrigger, string][] = [
   ['working', 'When working'],
   ['waiting', 'When waiting for you'],

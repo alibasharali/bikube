@@ -52,6 +52,10 @@ interface SidebarProps {
   openId: string | null
   /** Opens a running card or shell from its workspace's tree. */
   onOpenTerminal: (workspaceId: string, cardId: string) => void
+  /** The workspaces whose view is their Agent setup page, each with its row (#68 D3). */
+  agentSetupIds: readonly string[]
+  /** Shows workspace `id`'s Agent setup page, from its row. */
+  onOpenAgentSetup: (id: string) => void
   /** The numbers a held modifier would pick with a digit, shown on the rows. */
   heldNumbers: HeldNumbers
 }
@@ -74,6 +78,8 @@ function Sidebar({
   syncStatus,
   openId,
   onOpenTerminal,
+  agentSetupIds,
+  onOpenAgentSetup,
   heldNumbers
 }: SidebarProps): React.JSX.Element {
   // Where a workspace dragged over the list would land (#32 D4), or null.
@@ -301,6 +307,11 @@ function Sidebar({
                   terminals={terminals.get(w.id) ?? []}
                   currentId={active ? openId : null}
                   onOpen={onOpenTerminal}
+                  agentSetup={
+                    agentSetupIds.includes(w.id)
+                      ? { current: active, onOpen: () => onOpenAgentSetup(w.id) }
+                      : null
+                  }
                   showNumbers={active && heldNumbers === 'terminal'}
                 />
               )}

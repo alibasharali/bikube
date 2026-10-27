@@ -1,3 +1,11 @@
+import type {
+  AgentSetupConfigEdit,
+  AgentSetupRead,
+  AgentSetupSwitch,
+  SettingsWriteResult
+} from '../core/agent-setup-snapshot'
+import type { ClaudeVersion } from '../core/claude-version'
+import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -79,6 +87,13 @@ export const IPC = {
   filesStatus: 'files:status',
   filesOpen: 'files:open',
   agentsInstalled: 'agents:installed',
+  agentSetupRead: 'agentSetup:read',
+  agentSetupClaudeVersion: 'agentSetup:claudeVersion',
+  agentSetupSwitch: 'agentSetup:switch',
+  agentSetupConfig: 'agentSetup:config',
+  agentSetupOpen: 'agentSetup:open',
+  agentSetupReveal: 'agentSetup:reveal',
+  agentSetupStats: 'agentSetup:stats',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -331,6 +346,54 @@ export interface GitApi {
   merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
+export interface AgentSetupApi {
+  /**
+   * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
+   * main from the folder and the user's home; `not-directory` unless `folder` is an absolute,
+   * existing directory. One read at a time per folder: a request during one shares its answer.
+   */
+  read(folder: string): Promise<AgentSetupRead>
+  /**
+   * Claude Code's version and path (#68 D13), read through the user's login shell as the installed
+   * agents are; null when the check failed. Asked for on the page's open and Refresh only (D26).
+   */
+  claudeVersion(): Promise<ClaudeVersion | null>
+  /**
+   * Turns a plugin or a project MCP server on or off for the workspace folder `folder` (#68 D15,
+   * D16, D23): written to `<folder>/.claude/settings.local.json` only, re-read just before. Main
+   * refuses (`refused`) a folder that isn't an absolute existing directory, a plugin key
+   * `installed_plugins.json` doesn't list and a server name `.mcp.json` doesn't list (D28); a
+   * settings.local.json that isn't valid JSON is left as it is (`invalid-json`).
+   */
+  setSwitch(folder: string, change: AgentSetupSwitch): Promise<SettingsWriteResult>
+  /**
+   * Changes a Config setting in place for the workspace folder `folder` (#68 D22, D23): sets it to
+   * a boolean or a finite number, or (Reset) removes it, in `<folder>/.claude/settings.local.json`
+   * only. Main refuses (`refused`) a key whose effective value, read again, isn't of the new
+   * value's kind, a remove of a key settings.local.json doesn't set, and the keys other sections
+   * show (D28).
+   */
+  editConfig(folder: string, edit: AgentSetupConfigEdit): Promise<SettingsWriteResult>
+  /**
+   * Opens `path` with Settings > Editor, the file's own folder as the project folder (#68 D27), as
+   * the Files tab opens a file. Main refuses (`refused`, nothing run) a path its last read of
+   * `folder` didn't list (D28), Bikube's own Claude Code settings among them.
+   */
+  openFile(folder: string, path: string): Promise<OpenResult>
+  /**
+   * Shows `path` in the OS file manager (#68 D27); false, nothing shown, for a path main's last
+   * read of `folder` didn't list (D28).
+   */
+  reveal(folder: string, path: string): Promise<boolean>
+  /**
+   * Stats (#68 D14) from the Claude Code transcripts of the workspace folder `folder` and the
+   * worktree folders `extra`, over the last 30 days. Main refuses (`ok: false`) unless `folder` is
+   * an absolute existing directory and `extra` at most 100 absolute paths (D28); an extra folder
+   * that no longer exists is left out. Asked for when Stats is first shown and on Refresh only.
+   */
+  stats(folder: string, extra: string[]): Promise<ClaudeStatsRead>
+}
+
 export interface AgentsApi {
   /**
    * The agents whose CLI the user's login shell finds (`claude`, `codex`, `gemini`, `opencode`, `pi`),
@@ -463,5 +526,6 @@ export interface BikubeApi {
   git: GitApi
   files: FilesApi
   agents: AgentsApi
+  agentSetup: AgentSetupApi
   update: UpdateApi
 }

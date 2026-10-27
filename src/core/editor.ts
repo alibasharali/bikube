@@ -221,7 +221,18 @@ export async function openFile(
   if (real === null || typeof path !== 'string' || !(await isFile(real))) {
     return { ok: false, reason: 'refused' }
   }
-  const file = resolve(folder, path)
+  return openInFolder(folder, resolve(folder, path), deps)
+}
+
+/**
+ * Opens the absolute `file` with the editor setting, `folder` as the project folder and the
+ * shell's working directory; the caller has checked both (`openFile`, or #68's listed paths).
+ */
+export async function openInFolder(
+  folder: string,
+  file: string,
+  deps: OpenDeps
+): Promise<OpenResult> {
   const plan = editorPlan(deps.editor, deps.editorCommand, deps.shell, folder, file)
   if (plan.kind === 'no-command') return { ok: false, reason: 'no-command' }
   if (plan.kind === 'system') {
@@ -237,7 +248,8 @@ export async function openFile(
   return run.ok ? run : { ok: false, reason: 'failed', message: run.reason }
 }
 
-async function isFile(path: string): Promise<boolean> {
+/** Whether `path` is a regular file (a symlink to one counts). */
+export async function isFile(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile()
   } catch {

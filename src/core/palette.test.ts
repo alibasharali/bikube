@@ -196,6 +196,7 @@ describe('paletteItems actions (#40 D6)', () => {
     'New shell',
     'View: Grid',
     'New workspace',
+    'Agent setup',
     'Open Settings',
     'Theme: Dark',
     'Theme: Light',
@@ -354,6 +355,22 @@ describe('paletteItems actions (#40 D6)', () => {
       'Open in new window'
     )
     expect(labels(input(state))).not.toContain('Open in new window')
+  })
+
+  it('offers Agent setup from the board and an open card, never while it shows (#68 D2)', () => {
+    const rows = paletteItems(input(state)).actions
+    expect(rows.find((r) => r.label === 'Agent setup')).toEqual({
+      kind: 'action',
+      action: { id: 'agentSetup' },
+      label: 'Agent setup'
+    })
+    expect(labels(input(state, { view: cardView }))).toContain('Agent setup')
+    // In front: Back goes to the board, and no panel shows to toggle.
+    const shown = labels(input(state, { agentSetup: true }))
+    expect(shown).not.toContain('Agent setup')
+    expect(shown).not.toContain('Toggle panel')
+    expect(shown[0]).toBe('Back to board')
+    expect(labels(input({ workspaces: [], activeId: null }))).not.toContain('Agent setup')
   })
 
   it('offers only the app rows without workspaces, every theme but the current one', () => {

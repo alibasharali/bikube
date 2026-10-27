@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { editorPlan, editorShell, openFile, runEditor, type OpenDeps } from './editor'
-import { openErrorLine } from './open-result'
+import { listedFileErrorLine, openErrorLine } from './open-result'
 
 describe('editorShell (#55 D15)', () => {
   it('is the Shell setting, else $SHELL, else /bin/sh', () => {
@@ -275,5 +275,17 @@ describe('openErrorLine (#55 D13, D14)', () => {
   it('shows nothing once opened, or for a path main refused (nothing ran)', () => {
     expect(openErrorLine('a.ts', { ok: true })).toBeNull()
     expect(openErrorLine('sub', { ok: false, reason: 'refused' })).toBeNull()
+  })
+})
+
+describe('listedFileErrorLine (#68 D27)', () => {
+  it("reads a refused Open file or Reveal as the file not found, else as the Files tab's line", () => {
+    expect(
+      listedFileErrorLine('/w/.claude/skills/x/SKILL.md', { ok: false, reason: 'refused' })
+    ).toBe("Couldn't open SKILL.md: file not found")
+    expect(
+      listedFileErrorLine('/w/a.md', { ok: false, reason: 'failed', message: 'code not found' })
+    ).toBe("Couldn't open a.md: code not found")
+    expect(listedFileErrorLine('/w/a.md', { ok: true })).toBeNull()
   })
 })

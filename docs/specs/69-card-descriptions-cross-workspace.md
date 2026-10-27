@@ -2,7 +2,7 @@
 item: 69
 type: feature
 title: More detailed cards and Cross-Workspace collab
-status: draft
+status: approved
 branch: claude/69-card-descriptions-cross-workspace
 ---
 

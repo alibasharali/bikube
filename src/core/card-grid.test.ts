@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gridSections, latestFirst, matchesSearch } from './card-grid'
+import { columnOrder, gridSections, latestFirst, matchesSearch } from './card-grid'
 import type { Card } from './workspace-store'
 
 function card(id: string, over: Partial<Card> = {}): Card {
@@ -16,7 +16,7 @@ function card(id: string, over: Partial<Card> = {}): Card {
   }
 }
 
-const ids = (cards: Card[]): string[] => cards.map((c) => c.id)
+const ids = (cards: readonly Card[]): string[] => cards.map((c) => c.id)
 
 describe('latestFirst', () => {
   it('puts the latest created or opened first, then cards without a time, the last on the board first', () => {
@@ -34,6 +34,27 @@ describe('latestFirst', () => {
   it('keeps the later card first on a tie', () => {
     const cards = [card('a', { lastOpenedAt: 5 }), card('b', { lastOpenedAt: 5 })]
     expect(ids(latestFirst(cards))).toEqual(['b', 'a'])
+  })
+})
+
+describe('columnOrder (#69 D12)', () => {
+  const cards = [
+    card('old'),
+    card('A', { createdAt: 10 }),
+    card('newer'),
+    card('B', { createdAt: 11, lastOpenedAt: 30 }),
+    card('C', { createdAt: 12, lastOpenedAt: 20 })
+  ]
+
+  it('keeps the board order for the manual sort', () => {
+    expect(columnOrder(cards, 'manual')).toBe(cards)
+  })
+
+  it('sorts recent as the grid does, then cards without a time in board order', () => {
+    expect(ids(columnOrder(cards, 'recent'))).toEqual(['B', 'C', 'A', 'old', 'newer'])
+    expect(
+      ids(columnOrder([card('a', { lastOpenedAt: 5 }), card('b', { lastOpenedAt: 5 })], 'recent'))
+    ).toEqual(['b', 'a'])
   })
 })
 

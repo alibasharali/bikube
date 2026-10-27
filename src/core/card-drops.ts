@@ -25,6 +25,18 @@ export function dropIndex(
   return over.half === 'top' ? at : at + 1
 }
 
+/**
+ * The drop position on a column sorted recently opened first (#69 D12), which shows no stored
+ * order to drop into: a card from another column goes to the bottom of it, and a card already in
+ * the column stays where it is (null: no move).
+ */
+export function sortedDropIndex(
+  columnCardIds: readonly string[],
+  draggedId: string
+): number | null {
+  return columnCardIds.includes(draggedId) ? null : columnCardIds.length
+}
+
 /** Which half of a card the pointer is in, from its vertical position and the card's box. */
 export function hoverHalf(pointerY: number, top: number, height: number): CardHover['half'] {
   return pointerY < top + height / 2 ? 'top' : 'bottom'

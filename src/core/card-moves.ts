@@ -1,6 +1,6 @@
 /** Keyboard moves of a card on the board (#6 D7). Plain TS, no DOM imports. */
 import type { KeyLike } from './clipboard'
-import { cardsInColumn, type Workspace } from './workspace-store'
+import { cardsInColumn, workspaceSort, type Workspace } from './workspace-store'
 
 export type CardMoveDirection = 'up' | 'down' | 'left' | 'right'
 
@@ -25,7 +25,8 @@ export function cardMoveKey(event: KeyLike): CardMoveDirection | null {
 
 /**
  * Where the card goes: up or down one place in its column, or the bottom of the previous or
- * next column. Null at an end (top, bottom, first or last column) or for an unknown card.
+ * next column. Null at an end (top, bottom, first or last column) or for an unknown card, and
+ * up or down while the board is sorted recently opened first, which shows no stored order (#69 D12).
  */
 export function keyMoveTarget(
   workspace: Workspace,
@@ -35,6 +36,7 @@ export function keyMoveTarget(
   const card = workspace.cards.find((c) => c.id === cardId)
   if (!card) return null
   if (direction === 'up' || direction === 'down') {
+    if (workspaceSort(workspace) === 'recent') return null
     const cards = cardsInColumn(workspace, card.columnId)
     const at = cards.findIndex((c) => c.id === cardId)
     const index = direction === 'up' ? at - 1 : at + 1

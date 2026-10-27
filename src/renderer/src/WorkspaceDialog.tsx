@@ -20,6 +20,7 @@ import {
   defaultWorkspaceName,
   workspaceViewChoice,
   type Workspace,
+  type WorkspaceSort,
   type WorkspaceViewChoice
 } from '../../core/workspace-store'
 import { SMALL_ICON } from './icons'
@@ -39,6 +40,12 @@ interface WorkspaceDialogProps {
 }
 
 /** The automatic move rules' selects (#42 D6), in the fieldset's order. */
+/** The Kanban sorts, as the column menu names them without its `Sort:` (#69 D12). */
+const SORTS: [WorkspaceSort, string][] = [
+  ['manual', 'Manual order'],
+  ['recent', 'Recently opened first']
+]
+
 const AUTO_MOVE_RULES: [AutoMoveTrigger, string][] = [
   ['working', 'When working'],
   ['waiting', 'When waiting for you'],
@@ -86,6 +93,8 @@ function WorkspaceDialog({
   )
   const { defaultView } = useSettings()
   const defaultLabel = VIEWS.find(([v]) => v === defaultView)?.[1] ?? ''
+  // How its Kanban columns order their cards (#69 D12): edited here, stored only on Save.
+  const [sort, setSort] = useState<WorkspaceSort>(workspace?.sort ?? 'manual')
   // The automatic move rules (#42 D6): edited here, stored only on Save.
   const [autoMove, setAutoMove] = useState<AutoMove>(workspace?.autoMove ?? {})
   // The board's columns as they are now, so a rename or delete while the dialog is open shows.
@@ -130,6 +139,7 @@ function WorkspaceDialog({
         view,
         // A rule whose column went while the dialog was open is off (#42 D2).
         ...(workspace && {
+          sort,
           autoMove:
             keepKnownRules(
               autoMove,
@@ -412,6 +422,27 @@ function WorkspaceDialog({
               </p>
             )}
           </div>
+        )}
+        {/* Grid shows no columns: its sort stays saved for Kanban but is hidden (#69 D12). */}
+        {workspace && (view === 'default' ? defaultView : view) === 'kanban' && (
+          <fieldset className="field radio-group">
+            <legend>Sort cards</legend>
+            <div className="segmented segmented-fit">
+              {SORTS.map(([value, label]) => (
+                <label key={value} className="radio">
+                  <input
+                    type="radio"
+                    name={`${id}-sort`}
+                    value={value}
+                    data-testid={`workspace-sort-${value}`}
+                    checked={sort === value}
+                    onChange={() => setSort(value)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         )}
         {/* Grid shows no columns: its rules stay saved for Kanban but are hidden and not run. */}
         {workspace && (view === 'default' ? defaultView : view) === 'kanban' && (

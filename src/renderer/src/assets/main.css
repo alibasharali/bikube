@@ -1625,6 +1625,12 @@ fieldset.field .segmented .radio {
   border-style: solid;
 }
 
+/* A column sorted recently opened first takes a card without a place in it (#69 D12). */
+.board-column[data-drop='into'] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .card-body {
   grid-column: 1 / -1;
   grid-row: 1 / -1;

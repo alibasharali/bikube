@@ -45,7 +45,7 @@ function MenuButton({
     // The document the menu is in: the main window's, or a card window's (#53 D5).
     const doc = root.current?.ownerDocument ?? document
     doc.addEventListener('mousedown', onDown)
-    root.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
+    root.current?.querySelector<HTMLElement>('[role^="menuitem"]:not(:disabled)')?.focus()
     return () => doc.removeEventListener('mousedown', onDown)
   }, [open])
 
@@ -77,7 +77,7 @@ function MenuButton({
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const items = Array.from(
-        root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []
+        root.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)') ?? []
       )
       if (items.length === 0) return
       const at = items.indexOf(root.current?.ownerDocument.activeElement as HTMLElement)

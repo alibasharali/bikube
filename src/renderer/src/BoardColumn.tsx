@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react'
 import { columnDeleteHint } from '../../core/card-deletes'
-import { dropIndex, hoverHalf, nearestCardHover, type CardHover } from '../../core/card-drops'
+import { columnOrder } from '../../core/card-grid'
+import {
+  dropIndex,
+  hoverHalf,
+  nearestCardHover,
+  sortedDropIndex,
+  type CardHover
+} from '../../core/card-drops'
 import { shownCards, showAllLabel } from '../../core/column-limit'
-import { cardsInColumn, type Column, type Workspace } from '../../core/workspace-store'
+import {
+  cardsInColumn,
+  workspaceSort,
+  type Column,
+  type Workspace
+} from '../../core/workspace-store'
 import { movedCard } from './card-actions'
 import CardItem from './CardItem'
 import { draggedCard, endCardDrag } from './card-drag'
@@ -37,7 +49,9 @@ function BoardColumn({
   // Where a card dragged over this column would land (#6 D5, D6), or null.
   const [dropAt, setDropAt] = useState<{ cardId: string; index: number } | null>(null)
   const workspaceId = workspace.id
-  const cards = cardsInColumn(workspace, column.id)
+  // Under the Recently opened first sort, shown newest first; the stored order stays (#69 D12).
+  const sort = workspaceSort(workspace)
+  const cards = columnOrder(cardsInColumn(workspace, column.id), sort)
   const deletable = columnDeleteHint(workspace, column.id)
   // Card display limit: a folded column shows its first this many.
   const limit = useSettings().columnCardLimit
@@ -74,6 +88,14 @@ function BoardColumn({
   const dropTarget = (e: React.DragEvent): { cardId: string; index: number } | null => {
     const drag = draggedCard(workspaceId, e.dataTransfer)
     if (!drag) return null
+    // A sorted column has no place to drop into: a card from another column joins it (#69 D12).
+    if (sort === 'recent') {
+      const index = sortedDropIndex(
+        cards.map((c) => c.id),
+        drag.cardId
+      )
+      return index === null ? null : { cardId: drag.cardId, index }
+    }
     // The cards shown are the column's first, so a place among them is its place in the column.
     const ids = shown.map((c) => c.id)
     const el = (e.target as Element).closest<HTMLElement>('[data-card-id]')
@@ -113,20 +135,28 @@ function BoardColumn({
     setDropAt(null)
     endCardDrag()
     // Dropped after the last card shown, it would be folded away: the column unfolds.
-    if (target.index >= limit) setExpanded(true)
+    if (sort === 'manual' && target.index >= limit) setExpanded(true)
+    // Sorted, its place among the column's cards decides.
+    const dropped = workspace.cards.find((c) => c.id === target.cardId)
+    if (sort === 'recent' && dropped) {
+      const after = columnOrder([...cards, dropped], sort)
+      if (after.indexOf(dropped) >= limit) setExpanded(true)
+    }
     workspaceStore.moveCard(workspaceId, target.cardId, column.id, target.index)
   }
 
   // The line goes above the card at the drop position, counted without the dragged card,
-  // or below the column's last card.
-  const others = dropAt ? shown.filter((c) => c.id !== dropAt.cardId) : shown
-  const lineBefore = dropAt && others[dropAt.index]?.id
-  const lineAfter = dropAt && !lineBefore ? shown[shown.length - 1]?.id : undefined
+  // or below the column's last card. A sorted column shows none: it is outlined instead.
+  const lineAt = sort === 'manual' ? dropAt : null
+  const others = lineAt ? shown.filter((c) => c.id !== lineAt.cardId) : shown
+  const lineBefore = lineAt && others[lineAt.index]?.id
+  const lineAfter = lineAt && !lineBefore ? shown[shown.length - 1]?.id : undefined
 
   return (
     <li
       className="board-column"
       data-testid="column"
+      data-drop={dropAt && sort === 'recent' && cards.length > 0 ? 'into' : undefined}
       onDragEnter={onDragOver}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -169,6 +199,8 @@ function BoardColumn({
               onRename={() => setRenaming(true)}
               onMove={(d) => workspaceStore.moveColumn(workspaceId, column.id, d)}
               onDelete={() => workspaceStore.deleteColumn(workspaceId, column.id)}
+              sort={sort}
+              onSort={(next) => workspaceStore.updateWorkspace(workspaceId, { sort: next })}
             />
           </>
         )}

@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
@@ -601,4 +601,156 @@ test('Settings sets how many cards a column shows, live, refusing a number out o
 
   await expect(titles('Backlog')).toHaveText(cs(1, 3))
   await expect(column('Backlog').getByTestId('column-show-all')).toHaveText('Show all 5 cards')
+})
+
+/** The saved state file of the running app, parsed once it has one. */
+async function savedState(): Promise<{
+  state: {
+    workspaces: {
+      sort?: string
+      cards: { title: string; createdAt?: number; lastOpenedAt?: number }[]
+    }[]
+  }
+}> {
+  const dir = await app.evaluate(({ app }) => app.getPath('userData'))
+  return JSON.parse(readFileSync(join(dir, 'bikube-state.json'), 'utf8'))
+}
+
+/** Picks a sort in a column's ⋯ menu (#69 D12). */
+async function pickSort(columnName: string, sort: 'manual' | 'recent'): Promise<void> {
+  await column(columnName).getByTestId('column-menu').click()
+  const item = page.getByTestId(`menu-sort-${sort}`)
+  await expect(item).toHaveText(
+    sort === 'recent' ? 'Sort: Recently opened first' : 'Sort: Manual order'
+  )
+  await item.click()
+}
+
+test('#69 AC12: Recently opened first sorts every column without changing the board order', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await showAllColumns()
+  // Each is opened as it is created; then C, then B, so B is the latest and A the earliest.
+  for (const t of ['A', 'B', 'C']) {
+    await newCard('Backlog', t)
+    await back()
+  }
+  await openCard('C')
+  await back()
+  await openCard('B')
+  await back()
+  await expect(titles('Backlog')).toHaveText(['A', 'B', 'C'])
+
+  await pickSort('Backlog', 'recent')
+  await expect(titles('Backlog')).toHaveText(['B', 'C', 'A'])
+  await expect
+    .poll(async () => (await savedState()).state.workspaces[0]?.sort, { timeout: 5000 })
+    .toBe('recent')
+  // Every column's menu shows the one choice for the board.
+  await column('Done').getByTestId('column-menu').click()
+  await expect(page.getByTestId('menu-sort-recent')).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByTestId('menu-sort-manual')).toHaveAttribute('aria-checked', 'false')
+  await page.keyboard.press('Escape')
+
+  // Alt+Up and Alt+Down change nothing; dropping within the column changes nothing either.
+  await card('A').getByTestId('card-open').focus()
+  await page.keyboard.press('Alt+ArrowUp')
+  await page.keyboard.press('Alt+ArrowDown')
+  await drag('A', card('B'), 0.25)
+  await expect(titles('Backlog')).toHaveText(['B', 'C', 'A'])
+
+  // Manual shows the stored order, unchanged.
+  await pickSort('In Progress', 'manual')
+  await expect(titles('Backlog')).toHaveText(['A', 'B', 'C'])
+  await expect.poll(async () => 'sort' in (await savedState()).state.workspaces[0]!).toBe(false)
+
+  // The Edit dialog shows the same choice and sets it.
+  const row = page.locator('.workspace-row').first()
+  await row.hover()
+  await row.getByTestId('workspace-edit').click()
+  await expect(page.getByTestId('workspace-sort-manual')).toBeChecked()
+  await page.getByTestId('workspace-sort-recent').check()
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+  await expect(titles('Backlog')).toHaveText(['B', 'C', 'A'])
+
+  // Dragging to another column moves it there.
+  await drag('A', column('In Progress').getByTestId('column-name'))
+  await expect(titles('In Progress')).toHaveText(['A'])
+  await expect(titles('Backlog')).toHaveText(['B', 'C'])
+  // Over a column with cards, no line shows inside it: the column is outlined.
+  await dragOver('C', card('A'), 0.25)
+  await expect(column('In Progress')).toHaveAttribute('data-drop', 'into')
+  await expect(page.locator('.card[data-drop]')).toHaveCount(0)
+  await page.mouse.up()
+  await expect(titles('In Progress')).toHaveText(['C', 'A'])
+  // Alt+Left still moves between columns, the card taking its sorted place.
+  await card('A').getByTestId('card-open').focus()
+  await page.keyboard.press('Alt+ArrowLeft')
+  await expect(titles('Backlog')).toHaveText(['B', 'A'])
+  await expect.poll(focusedCard).toBe('A')
+
+  // Opening A puts it first.
+  await openCard('A')
+  await back()
+  await expect(titles('Backlog')).toHaveText(['A', 'B'])
+  await row.hover()
+  await row.getByTestId('workspace-edit').click()
+  await expect(page.getByTestId('workspace-sort-recent')).toBeChecked()
+  // Hidden for Grid, as the move rules are.
+  await page.getByTestId('workspace-view-grid').check()
+  await expect(page.getByTestId('workspace-sort-recent')).toHaveCount(0)
+  await page.getByTestId('workspace-cancel').click()
+})
+
+/** The date and time as the card's tooltip writes it, in the page's (the system's) locale. */
+const pageDateTime = (ms: number): Promise<string> =>
+  page.evaluate(
+    (at) =>
+      new Intl.DateTimeFormat(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(at),
+    ms
+  )
+
+test('#69 AC13: the board card tells when it was created and last opened here', async () => {
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  await newCard('Backlog', 'a')
+  await back()
+  await newCard('Backlog', 'b')
+  await back()
+  const dataDir = await app.evaluate(({ app }) => app.getPath('userData'))
+  await card('a').getByTestId('card-open').hover()
+  const first = (await savedState()).state.workspaces[0]!.cards[0]!
+  await expect(card('a').getByTestId('card-open')).toHaveAttribute(
+    'title',
+    `Created ${await pageDateTime(first.createdAt!)} · Opened just now`
+  )
+
+  // Created at a known time and opened 3 minutes ago; `b` never opened on this machine.
+  await app.close()
+  const statePath = join(dataDir, 'bikube-state.json')
+  const file = JSON.parse(readFileSync(statePath, 'utf8'))
+  const created = Date.UTC(2026, 0, 2, 9, 30)
+  const [a, b] = file.state.workspaces[0].cards
+  a.createdAt = created
+  a.lastOpenedAt = Date.now() - 3 * 60_000 - 5_000
+  b.createdAt = created
+  delete b.lastOpenedAt
+  writeFileSync(statePath, JSON.stringify(file))
+  ;({ app, page } = await launchApp({ dataDir }))
+
+  await card('a').getByTestId('card-open').hover()
+  await expect(card('a').getByTestId('card-open')).toHaveAttribute(
+    'title',
+    `Created ${await pageDateTime(created)} · Opened 3 min ago`
+  )
+  await card('b').getByTestId('card-open').hover()
+  await expect(card('b').getByTestId('card-open')).toHaveAttribute(
+    'title',
+    `Created ${await pageDateTime(created)} · Opened never`
+  )
 })

@@ -58,6 +58,13 @@ describe('keyMoveTarget', () => {
     expect(keyMoveTarget(w, 'd', 'right')).toBeNull()
   })
 
+  it('moves only between columns while the board is sorted recently opened first (#69 D12)', () => {
+    const w = { ...ws({ backlog: ['a', 'b', 'c'], running: ['x'] }), sort: 'recent' as const }
+    expect(keyMoveTarget(w, 'b', 'up')).toBeNull()
+    expect(keyMoveTarget(w, 'b', 'down')).toBeNull()
+    expect(keyMoveTarget(w, 'b', 'right')).toEqual({ columnId: 'running', index: 1 })
+  })
+
   it('does nothing for an unknown card', () => {
     expect(keyMoveTarget(ws({ backlog: ['a'] }), 'nope', 'down')).toBeNull()
   })

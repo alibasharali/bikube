@@ -139,7 +139,9 @@ function readWorkspace(raw: unknown): Workspace | string {
     shells,
     worktreeSetup: setup.value,
     ...(autoMove !== null && { autoMove }),
-    ...(isWorkspaceView(raw.view) && { view: raw.view })
+    ...(isWorkspaceView(raw.view) && { view: raw.view }),
+    // Missing is the manual order; anything but `recent` is too, dropping only the key (#69 D12).
+    ...(raw.sort === 'recent' && { sort: 'recent' as const })
   }
 }
 

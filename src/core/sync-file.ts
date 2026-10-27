@@ -109,7 +109,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
       // are ordinary moves.
       ...(w.autoMove !== undefined && { autoMove: autoMoveCopy(w.autoMove) }),
       // The view is the workspace's setting, as its logo is.
-      ...(w.view !== undefined && { view: w.view })
+      ...(w.view !== undefined && { view: w.view }),
+      // So is its Kanban sort (#69 D12); `lastOpenedAt`, which it reads, stays on each machine.
+      ...(w.sort !== undefined && { sort: w.sort })
     }))
   }
 }

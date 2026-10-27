@@ -1,5 +1,6 @@
-import { ArrowLeft, ArrowRight, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Pencil, Trash2 } from 'lucide-react'
 import { useId } from 'react'
+import type { WorkspaceSort } from '../../core/workspace-store'
 import { MENU_ICON } from './icons'
 import MenuButton from './MenuButton'
 
@@ -13,6 +14,14 @@ interface ColumnMenuProps {
   onRename: () => void
   onMove: (direction: 'left' | 'right') => void
   onDelete: () => void
+  /** The board's sort (#69 D12), for the whole board: every column's menu shows and sets it. */
+  sort: WorkspaceSort
+  onSort: (sort: WorkspaceSort) => void
+}
+
+const SORT_LABELS: Record<WorkspaceSort, string> = {
+  manual: 'Sort: Manual order',
+  recent: 'Sort: Recently opened first'
 }
 
 /** The ⋯ menu on a column header. Esc closes and returns focus; click outside closes. */
@@ -59,6 +68,27 @@ function ColumnMenu(props: ColumnMenuProps): React.JSX.Element {
             <ArrowRight {...MENU_ICON} />
             Move right
           </button>
+          {/* One sort for the whole board, the same in every column's menu (#69 D12). */}
+          <div className="menu-group" role="group" aria-label="Sort">
+            {(['manual', 'recent'] as const).map((sort) => (
+              <button
+                key={sort}
+                type="button"
+                role="menuitemradio"
+                aria-checked={props.sort === sort}
+                className="menu-item menu-item-checkable"
+                data-testid={`menu-sort-${sort}`}
+                onClick={run(() => props.onSort(sort))}
+              >
+                {props.sort === sort ? (
+                  <Check {...MENU_ICON} />
+                ) : (
+                  <span className="branch-menu-spacer" aria-hidden="true" />
+                )}
+                {SORT_LABELS[sort]}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             role="menuitem"

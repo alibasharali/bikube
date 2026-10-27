@@ -1501,6 +1501,20 @@ describe('workspace views and card open times', () => {
     expect(s.updateWorkspace(w.id, { view: 'list' as never })).toMatchObject({ ok: false })
   })
 
+  it('sorts a workspace recently opened first, or back to manual with no sort key (#69 D12)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    card(s, w, 'api', 1)
+    const before = s.getState().workspaces[0].cards
+    expect('sort' in w).toBe(false)
+    expect(ok(s.updateWorkspace(w.id, { sort: 'recent' })).sort).toBe('recent')
+    // Other patches keep it.
+    expect(ok(s.updateWorkspace(w.id, { name: 'beta' })).sort).toBe('recent')
+    expect('sort' in ok(s.updateWorkspace(w.id, { sort: 'manual' }))).toBe(false)
+    expect(s.getState().workspaces[0].cards).toBe(before)
+    expect(s.updateWorkspace(w.id, { sort: 'oldest' as never })).toMatchObject({ ok: false })
+  })
+
   it("stamps a new card's creation with the store's clock, and none without one", () => {
     const plain = make()
     expect('createdAt' in card(plain, create(plain, 'x'), 'api')).toBe(false)

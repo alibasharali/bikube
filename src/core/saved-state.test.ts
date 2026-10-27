@@ -573,6 +573,21 @@ describe('workspace views and card open times in the saved state', () => {
     expect(parseSavedState(text)).toEqual({ ok: true, value: s.getState() })
   })
 
+  it('saves a recent sort and reads a bad one as manual, loading the rest (#69 D12)', () => {
+    const s = new InMemoryWorkspaceStore({ initialState: fullState() })
+    ok(s.updateWorkspace(s.getState().workspaces[0].id, { sort: 'recent' }))
+    const text = serializeSavedState(s.getState())
+    const [first, second] = JSON.parse(text).state.workspaces
+    expect(first.sort).toBe('recent')
+    expect('sort' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: s.getState() })
+    for (const bad of ['manual', 'oldest', 1, null, {}])
+      expect(parseSavedState(fileWith((f) => (f.workspaces[0].sort = bad)))).toEqual({
+        ok: true,
+        value: fullState()
+      })
+  })
+
   it('rejects a view that is not a string', () => {
     expectRejected(fileWith((s) => (s.workspaces[0].view = 1)))
   })

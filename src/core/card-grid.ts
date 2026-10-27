@@ -4,7 +4,7 @@
  * search and a filter. Plain TS, no DOM: the renderer passes which cards run and wait.
  */
 import { AGENT_PRESETS } from './agent-presets'
-import type { Card } from './workspace-store'
+import type { Card, WorkspaceSort } from './workspace-store'
 
 /** The grid's filter: every card, or one section's. */
 export const GRID_FILTERS = ['all', 'waiting', 'running', 'stopped'] as const
@@ -33,6 +33,19 @@ function latest(card: Card): number | undefined {
 }
 
 /**
+ * Orders `a` and `b` (their board indexes beside them) by when each was created or last opened
+ * here, newest first; 0 when neither is later, including when either has no time.
+ */
+function byLatest(a: Card, b: Card): number {
+  const at = latest(a)
+  const bt = latest(b)
+  if (at !== undefined && bt !== undefined && at !== bt) return bt - at
+  if (at === undefined && bt !== undefined) return 1
+  if (at !== undefined && bt === undefined) return -1
+  return 0
+}
+
+/**
  * The cards latest first: by when each was created or last opened on this machine, newest first,
  * then the cards with neither (from before them), the last on the board first. Ties keep the
  * later card first.
@@ -40,13 +53,24 @@ function latest(card: Card): number | undefined {
 export function latestFirst(cards: readonly Card[]): Card[] {
   return cards
     .map((card, index) => ({ card, index }))
+    .sort((a, b) => byLatest(a.card, b.card) || b.index - a.index)
+    .map(({ card }) => card)
+}
+
+/**
+ * A Kanban column's cards as its workspace's sort shows them (#69 D12): `manual`, the board order
+ * as given; `recent`, the grid's latest first, but the cards with no time after the others in
+ * board order. Never changes the stored order.
+ */
+export function columnOrder(cards: readonly Card[], sort: WorkspaceSort): readonly Card[] {
+  if (sort === 'manual') return cards
+  return cards
+    .map((card, index) => ({ card, index }))
     .sort((a, b) => {
-      const at = latest(a.card)
-      const bt = latest(b.card)
-      if (at !== undefined && bt !== undefined && at !== bt) return bt - at
-      if (at === undefined && bt !== undefined) return 1
-      if (at !== undefined && bt === undefined) return -1
-      return b.index - a.index
+      const order = byLatest(a.card, b.card)
+      if (order !== 0) return order
+      // Ties of two times keep the later card first, as the grid does.
+      return latest(a.card) === undefined ? a.index - b.index : b.index - a.index
     })
     .map(({ card }) => card)
 }

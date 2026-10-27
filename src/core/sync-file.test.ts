@@ -434,6 +434,21 @@ describe('workspace views and card times in the sync file', () => {
     expect(read.ok && read.workspaces[0]!.cards[0]!).not.toHaveProperty('lastOpenedAt')
   })
 
+  it('writes and reads a recent sort like the view (#69 D12)', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [workspace('w', 'alpha', { sort: 'recent' }), workspace('v', 'beta')]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.sort).toBe('recent')
+    expect(board.workspaces[1]!).not.toHaveProperty('sort')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    file.board.workspaces[1].sort = 'sideways'
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.sort).toBe('recent')
+    expect(read.ok && read.workspaces[1]!).not.toHaveProperty('sort')
+  })
+
   it("never writes or reads a card's last status and usage", () => {
     const usage = {
       input: 1,

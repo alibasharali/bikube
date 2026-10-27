@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dropIndex, hoverHalf, nearestCardHover } from './card-drops'
+import { dropIndex, hoverHalf, nearestCardHover, sortedDropIndex } from './card-drops'
 
 describe('dropIndex', () => {
   const column = ['a', 'b', 'c']
@@ -31,6 +31,17 @@ describe('dropIndex', () => {
 
   it('treats an unknown hovered card as the bottom', () => {
     expect(dropIndex(column, 'a', { cardId: 'zz', half: 'top' })).toBe(2)
+  })
+})
+
+describe('sortedDropIndex (#69 D12)', () => {
+  it('puts a card from another column at the bottom of the stored order', () => {
+    expect(sortedDropIndex(['x', 'y'], 'a')).toBe(2)
+    expect(sortedDropIndex([], 'a')).toBe(0)
+  })
+
+  it('changes nothing for a card already in the column', () => {
+    expect(sortedDropIndex(['x', 'a', 'y'], 'a')).toBeNull()
   })
 })
 

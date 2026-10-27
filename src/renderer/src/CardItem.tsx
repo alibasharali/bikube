@@ -19,6 +19,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { compactStatus, type CardStatus } from '../../core/card-status'
+import { cardDatesTooltip } from '../../core/card-dates'
 import { cardMoveKey } from '../../core/card-moves'
 import { cardDeleteConfirmation } from '../../core/card-deletes'
 import { descriptionTooltip } from '../../core/card-description'
@@ -335,6 +336,7 @@ function CardItem({
   // A card that stops by itself while its Close dialog is open has nothing left to close.
   if (closing && !running) setClosing(false)
   const [dragging, setDragging] = useState(false)
+  const [datesNow, setDatesNow] = useState(Date.now)
   const dragActive = useRef(false)
   const titleRef = useRef<HTMLSpanElement>(null)
   const openRef = useRef<HTMLButtonElement>(null)
@@ -459,6 +461,9 @@ function CardItem({
           className="card-body card-open"
           data-testid="card-open"
           aria-label={`Open ${card.title}`}
+          // When it was created and last opened here (#69 D13), as of the pointer coming to rest.
+          title={cardDatesTooltip(card, datesNow)}
+          onPointerEnter={() => setDatesNow(Date.now())}
           draggable={movable}
           onDragStart={movable ? onDragStart : undefined}
           onDragEnd={movable ? onDragEnd : undefined}

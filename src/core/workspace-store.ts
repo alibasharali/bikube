@@ -31,6 +31,20 @@ export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number]
 export const isWorkspaceView = (value: unknown): value is WorkspaceView =>
   (WORKSPACE_VIEWS as readonly unknown[]).includes(value)
 
+/**
+ * How a Kanban board orders each column's cards (#69 D12): `manual`, the stored board order, or
+ * `recent`, recently created or opened first. Saved as the workspace's `sort` only when `recent`.
+ */
+export const WORKSPACE_SORTS = ['manual', 'recent'] as const
+export type WorkspaceSort = (typeof WORKSPACE_SORTS)[number]
+
+export const isWorkspaceSort = (value: unknown): value is WorkspaceSort =>
+  (WORKSPACE_SORTS as readonly unknown[]).includes(value)
+
+/** The workspace's Kanban sort: its own, or manual without a `sort` key. */
+export const workspaceSort = (workspace: Pick<Workspace, 'sort'>): WorkspaceSort =>
+  workspace.sort ?? 'manual'
+
 /** A workspace's View setting: `default` follows Settings' Default view, else its own. */
 export type WorkspaceViewChoice = 'default' | WorkspaceView
 
@@ -195,6 +209,11 @@ export interface Workspace {
   autoMove?: AutoMove
   /** Its own view; absent when it follows Settings' Default view (on each machine). */
   view?: WorkspaceView
+  /**
+   * Its Kanban columns recently opened first (#69 D12); absent for the manual board order. Saved
+   * and synced like `view`; the stored order is never changed by it.
+   */
+  sort?: 'recent'
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -317,6 +336,8 @@ export interface WorkspacePatch {
   autoMove?: AutoMove
   /** How it shows its cards, `default` to follow Settings; no card changes. */
   view?: WorkspaceViewChoice
+  /** How its Kanban columns order their cards (#69 D12); no card changes. */
+  sort?: WorkspaceSort
 }
 
 export type MoveDirection = 'left' | 'right'
@@ -577,6 +598,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     }
     const view = patch.view === undefined ? workspaceViewChoice(current) : patch.view
     if (!isWorkspaceViewChoice(view)) return fail('workspace', 'Unknown view')
+    const sort = patch.sort === undefined ? workspaceSort(current) : patch.sort
+    if (!isWorkspaceSort(sort)) return fail('workspace', 'Unknown sort')
     let autoMove = current.autoMove ?? null
     if (patch.autoMove !== undefined) {
       const columnIds = current.columns.map((c) => c.id)
@@ -596,6 +619,9 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     // And no `view` key for one following the default.
     if (view === 'default') delete updated.view
     else updated.view = view
+    // And no `sort` key for the manual order (#69 D12).
+    if (sort === 'manual') delete updated.sort
+    else updated.sort = sort
     this.replace(updated)
     return { ok: true, value: updated }
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BOARD_PROTOCOL_VERSION,
   INVALID_REQUEST,
+  MAX_FIELD_BYTES,
   MAX_REQUEST_LINE_BYTES,
   parseReplyLine,
   parseRequestLine,
@@ -247,19 +248,73 @@ describe('serializeRequest / parseRequestLine', () => {
   })
 
   it('rejects a line over 512 KiB, counted in UTF-8 bytes', () => {
-    const fits = { ...status, text: '' }
+    // Only a description may fill the line (#69 D5); other fields stop at 8 KiB.
+    const describe = { v: 1, cardId: 'c1', command: 'describe', card: '.' }
+    const fits = { ...describe, description: '' }
     const room = MAX_REQUEST_LINE_BYTES - line(fits).length
-    expect(parseRequestLine(line({ ...status, text: 'a'.repeat(room) })).ok).toBe(true)
-    expect(parseRequestLine(line({ ...status, text: 'a'.repeat(room + 1) }))).toEqual({
+    expect(parseRequestLine(line({ ...describe, description: 'a'.repeat(room) })).ok).toBe(true)
+    expect(parseRequestLine(line({ ...describe, description: 'a'.repeat(room + 1) }))).toEqual({
       ok: false,
       error: 'board: request too long'
     })
     // 'é' is two bytes: half as many characters already go over.
-    expect(parseRequestLine(line({ ...status, text: 'é'.repeat(room / 2 + 1) })).ok).toBe(false)
+    expect(
+      parseRequestLine(line({ ...describe, description: 'é'.repeat(Math.floor(room / 2) + 1) })).ok
+    ).toBe(false)
     expect(parseRequestLine('x'.repeat(513 * 1024))).toEqual({
       ok: false,
       error: 'board: request too long'
     })
+  })
+
+  it('refuses any field but a description over 8 KiB in UTF-8 bytes, as before #69', () => {
+    const limit = MAX_FIELD_BYTES
+    expect(limit).toBe(8 * 1024)
+    const at = 'a'.repeat(limit)
+    const over = 'a'.repeat(limit + 1)
+    // 'é' is two bytes: half the characters plus one go over.
+    const overWide = 'é'.repeat(limit / 2 + 1)
+    const requests = (value: string): Record<string, unknown>[] => [
+      { v: 1, cardId: 'c1', command: 'rename', card: '.', title: value },
+      { v: 1, cardId: 'c1', command: 'create', column: 'Todo', title: value },
+      { v: 1, cardId: 'c1', command: 'create', column: value, title: 'x' },
+      { v: 1, cardId: 'c1', command: 'create', column: 'Todo', title: 'x', workspace: value },
+      {
+        v: 1,
+        cardId: 'c1',
+        command: 'create',
+        column: 'T',
+        title: 'x',
+        worktree: true,
+        branch: value
+      },
+      { ...move, column: value },
+      { ...move, card: value },
+      { ...move, cardId: value },
+      { ...status, text: value },
+      { v: 1, cardId: 'c1', command: 'describe', card: '.', description: 'd', workspace: value }
+    ]
+    for (const value of requests(at)) expect(parseRequestLine(line(value)).ok).toBe(true)
+    for (const bad of [over, overWide]) {
+      for (const value of requests(bad)) {
+        expect(parseRequestLine(line(value))).toEqual({
+          ok: false,
+          error: 'board: request too long'
+        })
+      }
+    }
+    // A description alone may be longer, in describe and create.
+    const long = 'a'.repeat(100_000)
+    expect(
+      parseRequestLine(
+        line({ v: 1, cardId: 'c1', command: 'describe', card: '.', description: long })
+      ).ok
+    ).toBe(true)
+    expect(
+      parseRequestLine(
+        line({ v: 1, cardId: 'c1', command: 'create', column: 'T', title: 'x', description: long })
+      ).ok
+    ).toBe(true)
   })
 })
 

@@ -8,7 +8,7 @@ import { chmodSync, lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import {
-  isOverLineLimit,
+  MAX_REQUEST_LINE_BYTES,
   parseRequestLine,
   REQUEST_TOO_LONG,
   serializeReply,
@@ -128,6 +128,9 @@ function serveConnection(
   drainMs: number
 ): void {
   let buffered = ''
+  // The line's UTF-8 bytes so far, counted per chunk so a writer of many tiny chunks never makes
+  // main re-encode the whole buffer each time.
+  let bufferedBytes = 0
   let answered = false
   socket.setEncoding('utf8')
   socket.on('error', () => socket.destroy())
@@ -145,9 +148,10 @@ function serveConnection(
   socket.on('data', (chunk: string) => {
     if (answered) return
     buffered += chunk
+    bufferedBytes += Buffer.byteLength(chunk, 'utf8')
     const newline = buffered.indexOf('\n')
     if (newline < 0) {
-      if (isOverLineLimit(buffered)) {
+      if (bufferedBytes > MAX_REQUEST_LINE_BYTES) {
         answered = true
         clearTimeout(timer)
         reply({ ok: false, error: REQUEST_TOO_LONG })

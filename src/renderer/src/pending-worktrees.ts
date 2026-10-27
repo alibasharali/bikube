@@ -20,8 +20,13 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** The card's pending worktree being made or failed in this run; undefined otherwise. */
+export function pendingWorktreeRun(cardId: string): PendingWorktreeRun | undefined {
+  return runs.get(cardId)
+}
+
+/** `pendingWorktreeRun`, for a component. */
 export function usePendingWorktree(cardId: string): PendingWorktreeRun | undefined {
-  return useSyncExternalStore(subscribe, () => runs.get(cardId))
+  return useSyncExternalStore(subscribe, () => pendingWorktreeRun(cardId))
 }
 
 const findCard = (workspaceId: string, cardId: string): Card | undefined =>
@@ -87,7 +92,10 @@ export function makePendingWorktree(
   )
 }
 
-/** Forgets the card's failed run, once it runs another way (Run in workspace folder). */
+/**
+ * Forgets the card's failed run, once it runs another way (Run in workspace folder, or a start
+ * after it got a worktree or lost its pending one).
+ */
 export function forgetPendingWorktree(cardId: string): void {
   if (runs.has(cardId)) set(cardId, null)
 }

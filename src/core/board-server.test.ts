@@ -185,6 +185,35 @@ describe('startBoardServer', () => {
     )
   })
 
+  it('counts UTF-8 bytes across many small chunks, characters split between them (#9 D6)', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    /** Writes `data` in 4,097-byte pieces, so two-byte characters are cut in half. */
+    const chunked = (data: Buffer): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const socket = createConnection(socketPath)
+        let received = ''
+        socket.setEncoding('utf8')
+        socket.on('data', (chunk: string) => (received += chunk))
+        socket.on('error', (error: NodeJS.ErrnoException) =>
+          error.code === 'ECONNRESET' || error.code === 'EPIPE' ? resolve(received) : reject(error)
+        )
+        socket.on('close', () => resolve(received))
+        for (let at = 0; at < data.length; at += 4097) socket.write(data.subarray(at, at + 4097))
+      })
+    // 'é' is two bytes: just over the limit in bytes, though under it in characters.
+    const over = Buffer.from('é'.repeat(MAX_REQUEST_LINE_BYTES / 2 + 1))
+    expect(await chunked(over)).toBe('{"ok":false,"error":"board: request too long"}\n')
+    expect(handler).not.toHaveBeenCalled()
+    // A describe at the limit, sent the same way, reaches the handler whole.
+    const empty = serializeRequest('c1', { command: 'describe', card: '.', description: '' })
+    const room = MAX_REQUEST_LINE_BYTES - (Buffer.byteLength(empty) - 1)
+    const description = 'é'.repeat(Math.floor(room / 2))
+    const line = serializeRequest('c1', { command: 'describe', card: '.', description })
+    expect(await chunked(Buffer.from(line))).toBe('{"ok":true}\n')
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ description }))
+  })
+
   it('closes a connection that sends no full line in time (#9 D6)', async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler, { lineTimeoutMs: 100 })

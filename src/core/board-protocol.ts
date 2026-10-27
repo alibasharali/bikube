@@ -14,6 +14,11 @@ export const BOARD_PROTOCOL_VERSION = 1
  * `describe` carrying a whole description (#69 D5).
  */
 export const MAX_REQUEST_LINE_BYTES = 512 * 1024
+/**
+ * Longest string field a request may carry besides a description, in UTF-8 bytes: the old 8 KiB
+ * line limit, so titles, column refs, workspaces and texts stay bounded as before #69.
+ */
+export const MAX_FIELD_BYTES = 8 * 1024
 
 export const INVALID_REQUEST = 'board: invalid request'
 export const REQUEST_TOO_LONG = 'board: request too long'
@@ -41,12 +46,17 @@ export function serializeRequest(cardId: string, command: BoardCommand): string 
   return `${JSON.stringify({ v: BOARD_PROTOCOL_VERSION, cardId, ...command })}\n`
 }
 
+/** Whether `text` is over `limit` bytes in UTF-8. */
+function isOverBytes(text: string, limit: number): boolean {
+  // Every UTF-16 code unit is 1 to 3 UTF-8 bytes, so length decides most texts unencoded.
+  if (text.length > limit) return true
+  if (text.length * 3 <= limit) return false
+  return new TextEncoder().encode(text).length > limit
+}
+
 /** Whether `line` is over `MAX_REQUEST_LINE_BYTES` in UTF-8. */
 export function isOverLineLimit(line: string): boolean {
-  // Every UTF-16 code unit is 1 to 3 UTF-8 bytes, so length decides most lines unencoded.
-  if (line.length > MAX_REQUEST_LINE_BYTES) return true
-  if (line.length * 3 <= MAX_REQUEST_LINE_BYTES) return false
-  return new TextEncoder().encode(line).length > MAX_REQUEST_LINE_BYTES
+  return isOverBytes(line, MAX_REQUEST_LINE_BYTES)
 }
 
 /** Each command's required fields besides `v`, `cardId` and `command`. */
@@ -122,7 +132,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * The request in one received line (a trailing newline is ignored), or the error reason to
  * reply with: anything but exactly a version-1 workspaces or list (format `text` or `json`, #69
  * D6), create, rename, move, status, activity (#31 D12), session, setup (#39 D4), usage (#50 D5),
- * description or describe (#69 D5) with string fields, a `workspace` only on the commands D6
+ * description or describe (#69 D5) with string fields (each but a description at most
+ * `MAX_FIELD_BYTES`, else `request too long`), a `workspace` only on the commands D6
  * names, create's `agent` one `board` takes (#69 D8), create's `worktree` true with an optional `branch`
  * (D10), an activity's or a setup's value being one
  * `board` takes and a usage shaped as `asUsage` checks, is refused.
@@ -160,6 +171,12 @@ export function parseRequestLine(line: string): ParsedRequest {
     required.every((f) => f in value && (f === 'usage' || typeof value[f] === 'string')) &&
     optional.every((f) => value[f] === undefined || typeof value[f] === 'string')
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
+  // Only a description gets the 512 KiB line's room (#69 D5); every other string keeps 8 KiB.
+  const overLong = keys.some((key) => {
+    const field = (value as Record<string, unknown>)[key]
+    return key !== 'description' && typeof field === 'string' && isOverBytes(field, MAX_FIELD_BYTES)
+  })
+  if (overLong) return { ok: false, error: REQUEST_TOO_LONG }
   const request = asRequest(name, value as Record<string, unknown>)
   return request ? { ok: true, request } : { ok: false, error: INVALID_REQUEST }
 }

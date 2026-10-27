@@ -30,6 +30,9 @@ export function startCard(workspaceId: string, cardId: string): void {
     makePendingWorktree(workspaceId, card, start)
     return
   }
+  // A failed first open is over once the card has a worktree (moved or synced) or lost its
+  // pending one: the view must not keep its error and Retry.
+  if (!card.pendingWorktree || card.worktree) forgetPendingWorktree(cardId)
   start(card)
 }
 

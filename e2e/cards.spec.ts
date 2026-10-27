@@ -232,6 +232,10 @@ test('#69 AC3: Edit description… saves the description and its icon tooltip, e
   await createWorkspace(makeDir('alpha'), 'alpha')
   await newCard('Backlog', 'api')
   await back()
+  // A card after it and a narrow window, where cards and the side panel would cover the dialog.
+  await newCard('Backlog', 'web')
+  await back()
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(768, 700))
   const icon = card('api').getByTestId('card-description')
   await expect(icon).toHaveCount(0)
 
@@ -241,6 +245,17 @@ test('#69 AC3: Edit description… saves the description and its icon tooltip, e
   await page.getByTestId('card-menu-description').click()
   await expect(dialog).toBeVisible()
   await expect(field).toBeFocused()
+  // Drawn over the board: no card or panel covers it (it is outside the card's stacking context).
+  const covered = (): Promise<boolean> =>
+    dialog.evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      return [
+        [r.left + 8, r.top + 8],
+        [r.left + r.width / 2, r.top + r.height / 2],
+        [r.right - 8, r.bottom - 8]
+      ].some(([x, y]) => !el.contains(el.ownerDocument.elementFromPoint(x!, y!)))
+    })
+  expect(await covered()).toBe(false)
   await field.fill('Step one\nStep two')
   await page.getByTestId('description-dialog-save').click()
   await expect(dialog).toHaveCount(0)

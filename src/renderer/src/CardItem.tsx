@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS } from '../../core/agent-presets'
 import { compactStatus, type CardStatus } from '../../core/card-status'
@@ -56,6 +57,7 @@ import { CARD_DRAG_TYPE, endCardDrag, startCardDrag } from './card-drag'
 import { cardTerminals, useCardRunState, useCardStatus } from './card-terminals'
 import { openCardWindow, useInWindow } from './card-windows'
 import { workspaceStore } from './store'
+import { useViewWindow } from './view-window'
 import { useCardUsage } from './usage'
 
 /**
@@ -324,6 +326,7 @@ function CardItem({
   movable = true,
   onOpen
 }: CardItemProps): React.JSX.Element {
+  const view = useViewWindow()
   const status = useCardStatus(card.id)
   const running = useCardRunState(card.id).kind === 'running'
   const usage = useCardUsage(card.id)
@@ -718,68 +721,81 @@ function CardItem({
           </>
         )}
       </MenuButton>
-      {editingStartup && (
-        <StartupDialog
-          workspaceId={workspaceId}
-          card={card}
-          onClose={() => setEditingStartup(false)}
-        />
-      )}
-      {editingDescription && (
-        <DescriptionDialog
-          workspaceId={workspaceId}
-          card={card}
-          onClose={() => setEditingDescription(false)}
-        />
-      )}
-      {closing && (
-        <CloseCardDialog cardId={card.id} title={card.title} onDone={() => setClosing(false)} />
-      )}
-      {confirm && (
-        <ConfirmDialog
-          title="Delete card"
-          message={confirm}
-          confirmLabel="Delete"
-          onCancel={() => setConfirm(null)}
-          onConfirm={() => {
-            setConfirm(null)
-            removeCard(workspaceId, card.id)
-          }}
-        />
-      )}
-      {movingToWorktree && (
-        <MoveToWorktreeDialog
-          workspaceId={workspaceId}
-          card={card}
-          onDone={() => setMovingToWorktree(false)}
-        />
-      )}
-      {removingWorktree && card.worktree && (
-        <RemoveWorktreeDialog
-          workspaceId={workspaceId}
-          card={{ ...card, worktree: card.worktree }}
-          onDone={() => setRemovingWorktree(false)}
-        />
-      )}
-      {merging && card.worktree && (
-        <MergeCardDialog
-          worktree={card.worktree}
-          choice={merging}
-          onMerge={() => merge(merging)}
-          onCancel={() => setMerging(null)}
-        />
-      )}
-      {deletingWorktree && card.worktree && (
-        <DeleteWorktreeCardDialog
-          card={{ ...card, worktree: card.worktree }}
-          running={running}
-          onCancel={() => setDeletingWorktree(false)}
-          onDelete={(remove, force) => {
-            setDeletingWorktree(false)
-            removeWorktreeCard(workspaceId, card, remove, force)
-          }}
-        />
-      )}
+      {
+        // The card's dialogs go to the view's body: inside the card, its stacking context
+        // (`isolation: isolate`) would draw the cards after it over them.
+        createPortal(
+          <>
+            {editingStartup && (
+              <StartupDialog
+                workspaceId={workspaceId}
+                card={card}
+                onClose={() => setEditingStartup(false)}
+              />
+            )}
+            {editingDescription && (
+              <DescriptionDialog
+                workspaceId={workspaceId}
+                card={card}
+                onClose={() => setEditingDescription(false)}
+              />
+            )}
+            {closing && (
+              <CloseCardDialog
+                cardId={card.id}
+                title={card.title}
+                onDone={() => setClosing(false)}
+              />
+            )}
+            {confirm && (
+              <ConfirmDialog
+                title="Delete card"
+                message={confirm}
+                confirmLabel="Delete"
+                onCancel={() => setConfirm(null)}
+                onConfirm={() => {
+                  setConfirm(null)
+                  removeCard(workspaceId, card.id)
+                }}
+              />
+            )}
+            {movingToWorktree && (
+              <MoveToWorktreeDialog
+                workspaceId={workspaceId}
+                card={card}
+                onDone={() => setMovingToWorktree(false)}
+              />
+            )}
+            {removingWorktree && card.worktree && (
+              <RemoveWorktreeDialog
+                workspaceId={workspaceId}
+                card={{ ...card, worktree: card.worktree }}
+                onDone={() => setRemovingWorktree(false)}
+              />
+            )}
+            {merging && card.worktree && (
+              <MergeCardDialog
+                worktree={card.worktree}
+                choice={merging}
+                onMerge={() => merge(merging)}
+                onCancel={() => setMerging(null)}
+              />
+            )}
+            {deletingWorktree && card.worktree && (
+              <DeleteWorktreeCardDialog
+                card={{ ...card, worktree: card.worktree }}
+                running={running}
+                onCancel={() => setDeletingWorktree(false)}
+                onDelete={(remove, force) => {
+                  setDeletingWorktree(false)
+                  removeWorktreeCard(workspaceId, card, remove, force)
+                }}
+              />
+            )}
+          </>,
+          view.document.body
+        )
+      }
     </li>
   )
 }

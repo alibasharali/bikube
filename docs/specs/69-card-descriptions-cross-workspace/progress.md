@@ -21,4 +21,4 @@ Decisions the developer made during implementation, with the date. A ruling that
 ## Verification
 
 - done: the 16 `#69` Playwright-Electron tests on the built app, all pass
-- UX review: 1 must-fix
+- UX review: done (1 must-fix fixed in 9e0b631: card dialogs portalled out of `.card`; polish listed in the PR)

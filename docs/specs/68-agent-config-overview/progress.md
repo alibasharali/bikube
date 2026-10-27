@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 – The page and its navigation | running | | | |
-| S2 – Reading the sources | todo | | | |
+| S1 – The page and its navigation | done | `8c5526e..abaaddc` | CLEAN | View memory `{kind:'card',cardId}\|{kind:'agentSetup'}` (`rememberAgentSetup`, `showsAgentSetup`, `agentSetupWorkspaces`); palette action `{id:'agentSetup'}`; sections in `src/core/agent-setup-sections.ts`; section views in `SECTION_VIEWS` (`AgentSetupPage.tsx`) with `AgentSetupSectionProps {workspace, query, onShowSection}`; `SectionList` takes `counts`, `warnings`; Refresh `agent-setup-refresh` has no handler; `useAgentSetupMemory` (section, query per workspace) |
+| S2 – Reading the sources | running | | | |
 | S3 – Hooks, Permissions, Status | todo | | | |
 | S4 – Plugins and MCP servers with switches | todo | | | |
 | S5 – Config and in-place edits | todo | | | |

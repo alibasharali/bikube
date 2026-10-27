@@ -1551,17 +1551,6 @@ describe('workspace views and card open times', () => {
     expect('unopened' in opened).toBe(false)
   })
 
-  it('creates a plain shell card only when asked for one (#69 D8)', () => {
-    const s = make()
-    const w = create(s, 'alpha')
-    const shell = ok(
-      s.createCard(w.id, w.columns[0].id, 'sh', { kind: 'shell' }, undefined, undefined, {
-        allowShell: true
-      })
-    )
-    expect(shell.startup).toEqual({ kind: 'shell' })
-  })
-
   it("keeps a card's last status and usage, '' and no tokens forgetting them, the same saving nothing", () => {
     const s = make()
     const w = create(s, 'alpha')

@@ -45,7 +45,7 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
                (its id, or its name in any case) whose card and column titles to use; this
                card's workspace when left out
   --agent <agent>
-               claude, codex, gemini, opencode, pi or shell; this card's agent when left out
+               claude, codex, gemini, opencode or pi; this card's agent when left out
                (the workspace's default when this card runs a custom command or a shell)
   --description-file <file>|-
                the new card's task description (- reads stdin)
@@ -62,8 +62,8 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
   describe     replaces it with the file's text (- reads stdin); an empty file removes it
 `
 
-/** What `board create --agent` takes (#69 D8): Claude Code, a preset, or a plain shell. */
-export const BOARD_AGENTS = ['claude', 'codex', 'gemini', 'opencode', 'pi', 'shell'] as const
+/** What `board create --agent` takes (#69 D8): Claude Code or a preset, never a plain shell. */
+export const BOARD_AGENTS = ['claude', 'codex', 'gemini', 'opencode', 'pi'] as const
 export type BoardAgent = (typeof BOARD_AGENTS)[number]
 
 export const isBoardAgent = (value: unknown): value is BoardAgent =>

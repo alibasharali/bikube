@@ -772,7 +772,7 @@ describe('answerBoardCommand across workspaces (#69 D6–D9, D11)', () => {
 
   it("gives the card the calling card's agent, else the workspace's default, or the one --agent names (AC8)", () => {
     const store = crossSetup()
-    const create = (calling: string, agent?: 'gemini' | 'shell' | 'claude'): Card | undefined => {
+    const create = (calling: string, agent?: 'gemini' | 'claude'): Card | undefined => {
       answer(store, calling, {
         command: 'create',
         workspace: 'Beta',
@@ -788,7 +788,6 @@ describe('answerBoardCommand across workspaces (#69 D6–D9, D11)', () => {
     expect(create('a-shell')?.startup).toEqual({ kind: 'opencode' })
     expect(create('a-codex', 'gemini')?.startup).toEqual({ kind: 'gemini' })
     expect(create('a-codex', 'claude')?.startup).toEqual({ kind: 'claude' })
-    expect(create('a-claude', 'shell')?.startup).toEqual({ kind: 'shell' })
   })
 
   it("acts on another workspace's card by its id; the column is the card's workspace's (AC7)", () => {

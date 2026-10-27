@@ -361,7 +361,7 @@ describe('requests across workspaces (#69 D6–D8)', () => {
         column: 'Todo',
         title: 'Port X',
         workspace: 'beta',
-        agent: 'shell',
+        agent: 'pi',
         description: '# Port\nDo X'
       }
     ] as const) {
@@ -382,6 +382,7 @@ describe('requests across workspaces (#69 D6–D8)', () => {
       { ...base, command: 'session', card: '.', session: 'x', workspace: 'b' },
       { ...base, command: 'list', format: 'text', workspace: 3 },
       { ...base, command: 'create', column: 'T', title: 'x', agent: 'vim' },
+      { ...base, command: 'create', column: 'T', title: 'x', agent: 'shell' },
       { ...base, command: 'create', column: 'T', title: 'x', description: 1 }
     ]) {
       expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })

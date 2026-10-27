@@ -163,8 +163,6 @@ export interface NewCardWorktree {
 export interface NewCardOptions {
   /** Marks it `unopened`: made from a card in another workspace. */
   unopened?: boolean
-  /** Takes a plain shell startup (`--agent shell`), which a card made by hand never has. */
-  allowShell?: boolean
   /** Its own worktree at its first open (#69 D10): a local workspace's card only. */
   pendingWorktree?: PendingWorktree
 }
@@ -725,10 +723,7 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
     if (!ws.columns.some((c) => c.id === columnId)) return unknownColumn()
-    const checked =
-      options.allowShell && startup?.kind === 'shell'
-        ? checkStartup(startup)
-        : checkCardStartup(startup ?? ws.defaultStartup)
+    const checked = checkCardStartup(startup ?? ws.defaultStartup)
     if (!checked.ok) return checked
     const described = checkDescription(description ?? '')
     if (!described.ok) return described

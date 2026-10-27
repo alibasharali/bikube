@@ -263,7 +263,7 @@ describe('parseBoardArgs across workspaces (#69 D6–D8)', () => {
         agent: 'gemini'
       }
     })
-    for (const agent of ['claude', 'codex', 'gemini', 'opencode', 'pi', 'shell']) {
+    for (const agent of ['claude', 'codex', 'gemini', 'opencode', 'pi']) {
       expect(parseBoardArgs(['create', '--agent', agent, 'Todo', 'T1'])).toEqual({
         kind: 'command',
         command: { command: 'create', column: 'Todo', title: 'T1', agent }
@@ -271,6 +271,7 @@ describe('parseBoardArgs across workspaces (#69 D6–D8)', () => {
     }
     for (const argv of [
       ['create', '--agent', 'vim', 'Todo', 'T1'],
+      ['create', '--agent', 'shell', 'Todo', 'T1'],
       ['create', '--agent', 'Todo', 'T1'],
       ['create', '--description-file', 'Todo', 'T1'],
       ['rename', '--agent', 'codex', '.', 'T1']

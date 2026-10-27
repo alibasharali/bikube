@@ -167,7 +167,6 @@ export function answerBoardCommand(
       command.description,
       {
         unopened: titles.id !== calling.id,
-        allowShell: command.agent === 'shell',
         ...(command.worktree &&
           command.branch !== undefined && { pendingWorktree: { branch: command.branch } })
       }

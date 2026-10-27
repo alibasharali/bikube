@@ -3,13 +3,15 @@
  * (`settings-local-writer.ts`, D23): a plugin switch only for a key `~/.claude/plugins/
  * installed_plugins.json` lists, a project MCP server switch only for a name `<folder>/.mcp.json`
  * lists, both files read again for each request. Anything else is refused and nothing is written.
+ * A server switch also gets the lists in effect in the lower settings files (D10), which the
+ * writer copies into settings.local.json when it lacks them, so the change holds.
  * D22's edits (S5) add their own check beside these.
  */
 
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AgentSetupSwitch, SettingsWriteResult } from './agent-setup-snapshot'
-import { writeSettingsLocal, type SettingsFs } from './settings-local-writer'
+import { writeSettingsLocal, type McpListKey, type SettingsFs } from './settings-local-writer'
 
 /** The longest plugin key or server name taken. */
 const MAX_NAME = 512
@@ -80,5 +82,40 @@ export async function agentSetupWrite({
       message: "Couldn't save: not listed in this workspace's setup"
     }
   }
-  return writeSettingsLocal(folder, edit, fs)
+  if (edit.kind === 'plugin') return writeSettingsLocal(folder, edit, fs)
+  return writeSettingsLocal(
+    folder,
+    { ...edit, inherited: await lowerLists(folder, home, read) },
+    fs
+  )
+}
+
+/**
+ * The project MCP server lists in effect below settings.local.json (D10): each the first of
+ * `<folder>/.claude/settings.json` and `~/.claude/settings.json` that sets it, read again now.
+ */
+async function lowerLists(
+  folder: string,
+  home: string,
+  read: (path: string, encoding: 'utf8') => Promise<string>
+): Promise<Partial<Record<McpListKey, string[]>>> {
+  const files: Record<string, unknown>[] = []
+  for (const path of [
+    join(folder, '.claude', 'settings.json'),
+    join(home, '.claude', 'settings.json')
+  ]) {
+    try {
+      const value = JSON.parse(await read(path, 'utf8')) as unknown
+      if (isRecord(value)) files.push(value)
+    } catch {
+      // A missing or invalid file sets nothing.
+    }
+  }
+  const lists: Partial<Record<McpListKey, string[]>> = {}
+  for (const key of ['enabledMcpjsonServers', 'disabledMcpjsonServers'] as const) {
+    const setter = files.find((file) => Object.hasOwn(file, key))
+    const value = setter?.[key]
+    if (Array.isArray(value)) lists[key] = value.filter((n): n is string => typeof n === 'string')
+  }
+  return lists
 }

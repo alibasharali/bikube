@@ -33,6 +33,7 @@ import {
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
 import type { McpServerRow } from '../../core/agent-setup-rows'
+import type { Workspace } from '../../core/workspace-store'
 import {
   saveSwitch,
   switchKey,
@@ -51,6 +52,8 @@ import { useSettings } from './settings'
 
 /** What every section's view gets. */
 export interface SectionViewProps {
+  /** The workspace shown: its `directory` keys the page's data, as the renderer asked main for it. */
+  workspace: Workspace
   snapshot: AgentSetupSnapshot
   /** The search box's text; a section shows only its rows matching it. */
   query: string
@@ -362,7 +365,12 @@ function MemoryRow({
 }
 
 /** Memory (D17): the memory files in load order, their imports nested, expandable. */
-export function MemorySection({ snapshot, query, expanded }: SectionViewProps): React.JSX.Element {
+export function MemorySection({
+  workspace,
+  snapshot,
+  query,
+  expanded
+}: SectionViewProps): React.JSX.Element {
   const rows = filterMemory(snapshot.memory, query)
   if (snapshot.memory.length === 0) {
     return (
@@ -386,7 +394,7 @@ export function MemorySection({ snapshot, query, expanded }: SectionViewProps): 
           key={entry.file}
           entry={entry}
           rowKey={entry.file}
-          folder={snapshot.folder}
+          folder={workspace.directory}
           expanded={expanded}
         />
       ))}
@@ -691,17 +699,20 @@ function Switch({
 }
 
 function PluginRow({
+  folder,
   plugin,
   snapshot,
   onShowSection,
   onSearch
 }: {
+  /** The workspace folder, as the page's data is kept by. */
+  folder: string
   plugin: PluginEntry
   snapshot: AgentSetupSnapshot
   onShowSection: SectionViewProps['onShowSection']
   onSearch: SectionViewProps['onSearch']
 }): React.JSX.Element {
-  const { saving } = useAgentSetupData(snapshot.folder)
+  const { saving } = useAgentSetupData(folder)
   const asked = saving.get(switchKey({ kind: 'plugin', key: plugin.key }))
   const provides = pluginProvides(snapshot, plugin)
   const manifest = `${plugin.installPath}/.claude-plugin/plugin.json`
@@ -723,7 +734,7 @@ function PluginRow({
           checked={asked ?? plugin.enabled}
           testId="agent-setup-plugin-switch"
           onChange={(enabled) =>
-            void saveSwitch(snapshot.folder, { kind: 'plugin', key: plugin.key, enabled })
+            void saveSwitch(folder, { kind: 'plugin', key: plugin.key, enabled })
           }
         />
         {snapshot.paths.includes(manifest) && <FileActions file={manifest} />}
@@ -774,6 +785,7 @@ const updatedText = (value: string): string => {
  * workspace and what it provides, then the known marketplaces, read-only.
  */
 export function PluginsSection({
+  workspace,
   snapshot,
   query,
   onShowSection,
@@ -799,6 +811,7 @@ export function PluginsSection({
             {plugins.map((plugin) => (
               <PluginRow
                 key={plugin.key}
+                folder={workspace.directory}
                 plugin={plugin}
                 snapshot={snapshot}
                 onShowSection={onShowSection}
@@ -847,13 +860,16 @@ export function PluginsSection({
 }
 
 function McpServerItem({
+  folder,
   server,
   snapshot
 }: {
+  /** The workspace folder, as the page's data is kept by. */
+  folder: string
   server: McpServerRow
   snapshot: AgentSetupSnapshot
 }): React.JSX.Element {
-  const { saving } = useAgentSetupData(snapshot.folder)
+  const { saving } = useAgentSetupData(folder)
   const project = server.source.kind === 'project'
   const asked = project
     ? saving.get(switchKey({ kind: 'mcpServer', name: server.name }))
@@ -891,7 +907,7 @@ function McpServerItem({
             checked={state === 'on'}
             testId="agent-setup-mcp-switch"
             onChange={(enabled) =>
-              void saveSwitch(snapshot.folder, { kind: 'mcpServer', name: server.name, enabled })
+              void saveSwitch(folder, { kind: 'mcpServer', name: server.name, enabled })
             }
           />
         )}
@@ -923,7 +939,11 @@ function McpServerItem({
  * with a switch for each project server. No server is started or connected to; environment and
  * header values are never shown.
  */
-export function McpServersSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
+export function McpServersSection({
+  workspace,
+  snapshot,
+  query
+}: SectionViewProps): React.JSX.Element {
   const all = mcpServerRows(snapshot, '')
   const rows = mcpServerRows(snapshot, query)
   if (all.length === 0) {
@@ -945,6 +965,7 @@ export function McpServersSection({ snapshot, query }: SectionViewProps): React.
       {rows.map((server) => (
         <McpServerItem
           key={`${server.source.kind}\n${server.file}\n${server.name}`}
+          folder={workspace.directory}
           server={server}
           snapshot={snapshot}
         />

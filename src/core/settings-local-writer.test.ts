@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { rename, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -176,5 +184,78 @@ describe('writeSettingsLocal', () => {
     })
     expect(text()).toBe('{"a":1}')
     expect(readdirSync(join(folder, '.claude'))).toEqual(['settings.local.json'])
+  })
+
+  it('writes nothing through a link: settings.local.json or .claude', async () => {
+    const elsewhere = join(dir, 'elsewhere.json')
+    writeFileSync(elsewhere, '{"a":1}')
+    mkdirSync(join(folder, '.claude'))
+    symlinkSync(elsewhere, file)
+    expect(await writeSettingsLocal(folder, { kind: 'set', key: 'b', value: true })).toEqual({
+      ok: false,
+      reason: 'link',
+      message: "Couldn't save: settings.local.json is a link"
+    })
+    expect(readFileSync(elsewhere, 'utf8')).toBe('{"a":1}')
+
+    rmSync(join(folder, '.claude'), { recursive: true })
+    const other = join(dir, 'other-claude')
+    mkdirSync(other)
+    symlinkSync(other, join(folder, '.claude'))
+    expect(await writeSettingsLocal(folder, { kind: 'set', key: 'b', value: true })).toEqual({
+      ok: false,
+      reason: 'link',
+      message: "Couldn't save: .claude is a link"
+    })
+    expect(readdirSync(other)).toEqual([])
+  })
+
+  it('writes nothing over a settings.local.json that is not a regular file', async () => {
+    mkdirSync(file, { recursive: true })
+    expect(await writeSettingsLocal(folder, { kind: 'set', key: 'b', value: true })).toEqual({
+      ok: false,
+      reason: 'link',
+      message: "Couldn't save: settings.local.json is not a regular file"
+    })
+  })
+
+  it('D10: seeds a missing list from the lower files so another server keeps its state', async () => {
+    // A lower file approves api; switching db on or off leaves api approved.
+    const inherited = { enabledMcpjsonServers: ['api'] }
+    await writeSettingsLocal(folder, { kind: 'mcpServer', name: 'db', enabled: true, inherited })
+    expect(JSON.parse(text())).toEqual({ enabledMcpjsonServers: ['api', 'db'] })
+    rmSync(file)
+    await writeSettingsLocal(folder, { kind: 'mcpServer', name: 'db', enabled: false, inherited })
+    expect(JSON.parse(text())).toEqual({
+      disabledMcpjsonServers: ['db'],
+      enabledMcpjsonServers: ['api']
+    })
+  })
+
+  it('D10: turning on a server a lower file disables sticks', async () => {
+    put('{"model":"opus"}')
+    await writeSettingsLocal(folder, {
+      kind: 'mcpServer',
+      name: 'db',
+      enabled: true,
+      inherited: { disabledMcpjsonServers: ['db', 'old'] }
+    })
+    expect(JSON.parse(text())).toEqual({
+      model: 'opus',
+      enabledMcpjsonServers: ['db'],
+      disabledMcpjsonServers: ['old']
+    })
+    // A list settings.local.json holds is its own: nothing is seeded into it.
+    await writeSettingsLocal(folder, {
+      kind: 'mcpServer',
+      name: 'api',
+      enabled: true,
+      inherited: { enabledMcpjsonServers: ['x'], disabledMcpjsonServers: ['y'] }
+    })
+    expect(JSON.parse(text())).toEqual({
+      model: 'opus',
+      enabledMcpjsonServers: ['db', 'api'],
+      disabledMcpjsonServers: ['old']
+    })
   })
 })

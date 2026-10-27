@@ -88,8 +88,8 @@ export interface PluginEntry {
   enabled: boolean
   /** Its `hooks/hooks.json`, parsed (S3 reads it); null when missing or invalid. */
   hooks: unknown
-  /** Its `.mcp.json`'s servers (its `mcpServers`, else the file itself), parsed (S4); null when missing or invalid. */
-  mcpServers: Record<string, unknown> | null
+  /** Its `.mcp.json`'s servers (its `mcpServers`, else the file itself), without secrets; null when missing or invalid. */
+  mcpServers: Record<string, McpServerConfig> | null
   warnings: string[]
 }
 
@@ -113,6 +113,22 @@ export interface HookEntry {
 /** A JSON file's state (D13's Found, Missing or Invalid). */
 export type JsonFileState = 'found' | 'missing' | 'invalid'
 
+/**
+ * An MCP server as the snapshot keeps it (D16, D28): only what the page shows, so no secret ever
+ * crosses to the renderer. Environment variables and headers are their names only; a URL has no
+ * user name or password, and its query values read `…`; every other field is left out.
+ */
+export interface McpServerConfig {
+  type?: string
+  command?: string
+  args?: string[]
+  url?: string
+  /** Its `env`'s variable names. */
+  env?: string[]
+  /** Its `headers`' names. */
+  headers?: string[]
+}
+
 /** One settings file (D10), in precedence order in `AgentSetupSnapshot.settings`. */
 export interface SettingsFile {
   scope: 'local' | 'project' | 'user'
@@ -120,7 +136,7 @@ export interface SettingsFile {
   state: JsonFileState
   /** The parser's message (or D11's) when `invalid`. */
   error?: string
-  /** Its top-level object when `found`. */
+  /** Its top-level object when `found`, its `env` reduced to the variables' names (D21, D28). */
   value?: Record<string, unknown>
 }
 
@@ -129,10 +145,10 @@ export interface ClaudeJson {
   file: string
   state: JsonFileState
   error?: string
-  /** Its `mcpServers` (User scope). */
-  mcpServers: Record<string, unknown>
-  /** Its `projects[<folder>].mcpServers` (Local scope). */
-  localMcpServers: Record<string, unknown>
+  /** Its `mcpServers` (User scope), without secrets. */
+  mcpServers: Record<string, McpServerConfig>
+  /** Its `projects[<folder>].mcpServers` (Local scope), without secrets. */
+  localMcpServers: Record<string, McpServerConfig>
   oauthAccount: { emailAddress?: string; organizationName?: string } | null
   /** Its top-level booleans and numbers (D21 filters them). */
   preferences: Record<string, boolean | number>
@@ -193,14 +209,15 @@ export type AgentSetupRead =
 
 /**
  * Outcome of a change to `<folder>/.claude/settings.local.json` (#68 D23): `message` is the error
- * line the page shows (`Couldn't save: settings.local.json is not valid JSON`). `refused`: main's
+ * line the page shows (`Couldn't save: settings.local.json is not valid JSON`). `link`: the file or
+ * `.claude` is a link, or the file isn't a regular file, and nothing was written. `refused`: main's
  * check (D28) turned the request down and nothing was read or written.
  */
 export type SettingsWriteResult =
   | { ok: true }
   | {
       ok: false
-      reason: 'invalid-json' | 'not-object' | 'unexpected-value' | 'refused' | 'failed'
+      reason: 'invalid-json' | 'not-object' | 'unexpected-value' | 'link' | 'refused' | 'failed'
       message: string
     }
 

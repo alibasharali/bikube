@@ -123,4 +123,23 @@ describe('agentSetupWrite', () => {
     ).toEqual(refused)
     expect(existsSync(local())).toBe(false)
   })
+
+  it("D10: seeds settings.local.json's missing lists from the first lower file that sets them", async () => {
+    write(join(folder, '.claude/settings.json'), JSON.stringify({ disabledMcpjsonServers: ['db'] }))
+    write(
+      join(home, '.claude/settings.json'),
+      JSON.stringify({ disabledMcpjsonServers: ['user-only'], enabledMcpjsonServers: ['api'] })
+    )
+    expect(
+      await agentSetupWrite({
+        folder,
+        home,
+        edit: { kind: 'mcpServer', name: 'db', enabled: true }
+      })
+    ).toEqual({ ok: true })
+    expect(JSON.parse(readFileSync(local(), 'utf8'))).toEqual({
+      enabledMcpjsonServers: ['api', 'db'],
+      disabledMcpjsonServers: []
+    })
+  })
 })

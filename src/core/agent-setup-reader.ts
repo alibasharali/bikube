@@ -18,6 +18,7 @@ import type {
   FileWarningSection,
   HookEntry,
   JsonFile,
+  McpServerConfig,
   MemoryEntry,
   PluginEntry,
   SettingsFile
@@ -75,6 +76,52 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const byName = (a: string, b: string): number =>
   a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) ||
   (a < b ? -1 : a > b ? 1 : 0)
+
+/** `url` with no user name or password, its query values `…` and no fragment (D28). */
+export function safeUrl(url: string): string {
+  const [beforeHash = ''] = url.split('#', 1)
+  const at = beforeHash.indexOf('?')
+  const base = (at === -1 ? beforeHash : beforeHash.slice(0, at)).replace(
+    /^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i,
+    '$1'
+  )
+  if (at === -1) return base
+  const query = beforeHash
+    .slice(at + 1)
+    .split('&')
+    .map((pair) => (pair.includes('=') ? `${pair.slice(0, pair.indexOf('='))}=…` : pair))
+    .join('&')
+  return `${base}?${query}`
+}
+
+/** An MCP server's fields the page shows, without any value that could be a secret (D16, D28). */
+export function mcpServerConfig(value: unknown): McpServerConfig {
+  if (!isRecord(value)) return {}
+  const config: McpServerConfig = {}
+  const text = (key: string): string | undefined =>
+    typeof value[key] === 'string' ? value[key] : undefined
+  const type = text('type')
+  if (type !== undefined) config.type = type
+  const command = text('command')
+  if (command !== undefined) config.command = command
+  if (Array.isArray(value['args'])) {
+    config.args = value['args'].filter((a): a is string => typeof a === 'string')
+  }
+  const url = text('url')
+  if (url !== undefined) config.url = safeUrl(url)
+  if (isRecord(value['env'])) config.env = Object.keys(value['env'])
+  if (isRecord(value['headers'])) config.headers = Object.keys(value['headers'])
+  return config
+}
+
+/** A server map with each server reduced to `mcpServerConfig`. */
+const mcpServerConfigs = (value: unknown): Record<string, McpServerConfig> => {
+  const servers: Record<string, McpServerConfig> = {}
+  if (isRecord(value)) {
+    for (const [name, server] of Object.entries(value)) servers[name] = mcpServerConfig(server)
+  }
+  return servers
+}
 
 /** One read's state: the file system, what it found, and its warnings. */
 class Reader {
@@ -287,7 +334,10 @@ async function readSettings(
     reader.fileWarnings.push({ section: 'status', entry: reader.label(file), file, message: error })
     return { scope, file, state: 'invalid', error }
   }
-  return { scope, file, state: 'found', value: json.value }
+  // Variable values never leave main (D28); Config shows the names (D21).
+  const value = { ...json.value }
+  if (isRecord(value['env'])) value['env'] = Object.keys(value['env'])
+  return { scope, file, state: 'found', value }
 }
 
 async function readClaudeJson(reader: Reader): Promise<ClaudeJson> {
@@ -314,9 +364,8 @@ async function readClaudeJson(reader: Reader): Promise<ClaudeJson> {
   const text = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
   return {
     ...empty,
-    mcpServers: isRecord(value['mcpServers']) ? value['mcpServers'] : {},
-    localMcpServers:
-      isRecord(project) && isRecord(project['mcpServers']) ? project['mcpServers'] : {},
+    mcpServers: mcpServerConfigs(value['mcpServers']),
+    localMcpServers: mcpServerConfigs(isRecord(project) ? project['mcpServers'] : undefined),
     oauthAccount: isRecord(account)
       ? {
           ...(text(account['emailAddress']) ? { emailAddress: text(account['emailAddress']) } : {}),
@@ -429,7 +478,9 @@ async function readPlugins(
       if (hooks.state === 'found') entry.hooks = hooks.value
       const mcp = await reader.json(join(install.installPath, '.mcp.json'), 'mcp', key)
       if (isRecord(mcp.value)) {
-        entry.mcpServers = isRecord(mcp.value['mcpServers']) ? mcp.value['mcpServers'] : mcp.value
+        entry.mcpServers = mcpServerConfigs(
+          isRecord(mcp.value['mcpServers']) ? mcp.value['mcpServers'] : mcp.value
+        )
       }
     }
     found.push({ entry, present, source: { kind: 'plugin', plugin: entry.name, key } })
@@ -659,7 +710,19 @@ export async function readAgentSetup({
     await readSettings(reader, 'user', join(user, 'settings.json'))
   ]
   const claudeJson = await readClaudeJson(reader)
-  const mcpJson = await reader.json(join(folder, '.mcp.json'), 'mcp')
+  const mcpRead = await reader.json(join(folder, '.mcp.json'), 'mcp')
+  // Only its servers, without secrets (D28).
+  const mcpJson: JsonFile =
+    mcpRead.state === 'found'
+      ? {
+          ...mcpRead,
+          value: {
+            mcpServers: mcpServerConfigs(
+              isRecord(mcpRead.value) ? mcpRead.value['mcpServers'] : undefined
+            )
+          }
+        }
+      : mcpRead
   const pluginsFolder = join(user, 'plugins')
   const installedPlugins = await reader.json(
     join(pluginsFolder, 'installed_plugins.json'),

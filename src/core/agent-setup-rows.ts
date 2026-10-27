@@ -487,7 +487,12 @@ function mcpServer(
   const server = isObject(value) ? value : {}
   const text = (key: string): string | undefined =>
     typeof server[key] === 'string' ? server[key] : undefined
-  const names = (key: string): string[] => (isObject(server[key]) ? Object.keys(server[key]) : [])
+  // The reader keeps only the names (D28); an object's keys are its names too.
+  const names = (key: string): string[] => {
+    const value = server[key]
+    if (Array.isArray(value)) return value.filter((n): n is string => typeof n === 'string')
+    return isObject(value) ? Object.keys(value) : []
+  }
   const url = text('url')
   const command = text('command')
   const args = Array.isArray(server['args'])

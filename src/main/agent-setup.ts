@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { spawn } from 'node:child_process'
 import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { readAgentSetup } from '../core/agent-setup-reader'
 import type { AgentSetupRead, SettingsWriteResult } from '../core/agent-setup-snapshot'
 import { agentSetupWrite, parseSwitchRequest } from '../core/agent-setup-writes'
@@ -20,7 +21,7 @@ const listed = new Map<string, ReadonlySet<string>>()
 
 /** Whether the last read of workspace folder `folder` listed `path`. */
 export function agentSetupListed(folder: string, path: string): boolean {
-  return listed.get(folder)?.has(path) === true
+  return listed.get(resolve(folder))?.has(path) === true
 }
 
 /** Each folder's last write, the next one queued behind it (D23: every write re-reads the file). */
@@ -59,11 +60,13 @@ export function registerAgentSetup(shellSetting: () => string): void {
     return version
   })
 
-  ipcMain.handle(IPC.agentSetupRead, async (event, folder: unknown): Promise<AgentSetupRead> => {
+  ipcMain.handle(IPC.agentSetupRead, async (event, requested: unknown): Promise<AgentSetupRead> => {
     fromMainFrame(event, IPC.agentSetupRead)
-    if (typeof folder !== 'string' || !(await isDirectory(folder))) {
+    if (typeof requested !== 'string' || !(await isDirectory(requested))) {
       return { ok: false, reason: 'not-directory' }
     }
+    // One read per folder however it is spelled (`/a` and `/a/`).
+    const folder = resolve(requested)
     let read = reading.get(folder)
     if (!read) {
       read = readAgentSetup({ folder, home: userHome(), bikubeSettings: claudeSettingsPath() })
@@ -79,12 +82,14 @@ export function registerAgentSetup(shellSetting: () => string): void {
 
   ipcMain.handle(
     IPC.agentSetupSwitch,
-    async (event, folder: unknown, change: unknown): Promise<SettingsWriteResult> => {
+    async (event, requested: unknown, change: unknown): Promise<SettingsWriteResult> => {
       fromMainFrame(event, IPC.agentSetupSwitch)
       const edit = parseSwitchRequest(change)
-      if (typeof folder !== 'string' || edit === null || !(await isDirectory(folder))) {
+      if (typeof requested !== 'string' || edit === null || !(await isDirectory(requested))) {
         return { ok: false, reason: 'refused', message: "Couldn't save: the request was refused" }
       }
+      // One write per folder however it is spelled (`/a` and `/a/`).
+      const folder = resolve(requested)
       const before = writing.get(folder) ?? Promise.resolve<SettingsWriteResult>({ ok: true })
       const write = before
         .catch(() => undefined)

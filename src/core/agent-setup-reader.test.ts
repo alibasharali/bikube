@@ -365,4 +365,69 @@ describe('readAgentSetup hooks (#68 S3)', () => {
     ])
     expect(snapshot.hooks[4]!.file).toBe(join(installPath, 'hooks/hooks.json'))
   })
+
+  it('D16, D28: no environment, header or credential value leaves the reader', async () => {
+    const server = {
+      command: 'db-server',
+      args: ['--port', '5432'],
+      env: { TOKEN: 's3cret' },
+      headers: { Authorization: 'Bearer abc123' },
+      oauth: { clientSecret: 'oauth-hidden' }
+    }
+    const remote = {
+      type: 'http',
+      url: 'https://user:url-pass@api.example/mcp?key=query-hidden&v=1',
+      headers: { 'X-Api-Key': 'header-hidden' }
+    }
+    write(inFolder('.mcp.json'), JSON.stringify({ mcpServers: { db: server, api: remote } }))
+    write(
+      inHome('.claude.json'),
+      JSON.stringify({
+        mcpServers: { docs: server },
+        projects: { [folder]: { mcpServers: { mine: remote } } }
+      })
+    )
+    const installPath = ac4Fixtures()
+    write(
+      inHome('.claude/settings.json'),
+      JSON.stringify({ enabledPlugins: { 'kit@market': true }, env: { API_KEY: 'env-hidden' } })
+    )
+    write(inFolder('.claude/settings.json'), JSON.stringify({ env: { OTHER: 'env-hidden-2' } }))
+    write(join(installPath, '.mcp.json'), JSON.stringify({ mcpServers: { search: server } }))
+
+    const snapshot = await read()
+    const text = JSON.stringify(snapshot)
+    for (const secret of [
+      's3cret',
+      'abc123',
+      'oauth-hidden',
+      'url-pass',
+      'query-hidden',
+      'header-hidden',
+      'env-hidden'
+    ]) {
+      expect(text).not.toContain(secret)
+    }
+    // The names and what the page shows stay.
+    const mcp = (snapshot.mcpJson.value as { mcpServers: Record<string, unknown> }).mcpServers
+    expect(mcp['db']).toEqual({
+      command: 'db-server',
+      args: ['--port', '5432'],
+      env: ['TOKEN'],
+      headers: ['Authorization']
+    })
+    expect(mcp['api']).toEqual({
+      type: 'http',
+      url: 'https://api.example/mcp?key=…&v=…',
+      headers: ['X-Api-Key']
+    })
+    expect(snapshot.claudeJson.mcpServers['docs']).toEqual(mcp['db'])
+    expect(snapshot.claudeJson.localMcpServers['mine']).toEqual(mcp['api'])
+    expect(snapshot.plugins[0]!.mcpServers).toEqual({ search: mcp['db'] })
+    expect(snapshot.settings.map((f) => f.value?.['env'])).toEqual([
+      undefined,
+      ['OTHER'],
+      ['API_KEY']
+    ])
+  })
 })

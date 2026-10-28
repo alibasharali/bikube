@@ -1,5 +1,5 @@
 import { ChevronRight, FolderOpen, RotateCcw, SquarePen, X } from 'lucide-react'
-import { createContext, useContext, useId, useMemo, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useId, useMemo, useRef, useState } from 'react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
 import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
 import {
@@ -8,6 +8,7 @@ import {
   effectiveSetting,
   fileLabel,
   filterDefinitions,
+  filterLabel,
   filterMemory,
   filterPlugins,
   hookGroups,
@@ -19,13 +20,13 @@ import {
   parseConfigNumber,
   permissionsView,
   pluginProvides,
-  pluginQuery,
   pluginSource,
   preferenceRows,
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
-  sourceSplit,
+  OVERVIEW_SECTIONS,
+  sourceSplitParts,
   type SourceFilter
 } from '../../core/agent-setup-rows'
 import {
@@ -70,8 +71,8 @@ export interface SectionViewProps {
   filter: SourceFilter
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
-  /** Puts `query` in the search box (a plugin's provides-counts, D15). */
-  onSearch: (query: string) => void
+  /** Sets the page's source filter (Overview's split parts, a plugin's provides-counts; #71 D7, D8). */
+  onFilter: (filter: SourceFilter) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
 }
@@ -218,24 +219,18 @@ function Warnings({ warnings }: { warnings: readonly string[] }): React.JSX.Elem
 const label = (id: AgentSetupSectionId): string =>
   AGENT_SETUP_SECTIONS.find((s) => s.id === id)!.label
 
-/** The sections Overview has a card for, in D12's order; those with rows so far. */
-const OVERVIEW_CARDS: readonly AgentSetupSectionId[] = [
-  'plugins',
-  'mcp',
-  'skills',
-  'agents',
-  'commands',
-  'hooks',
-  'memory',
-  'permissions'
-]
-
-/** Overview (D12): a card per section with its count by source, then every warning. */
+/**
+ * Overview (D12): a card per section with its count by source, then every warning. A click on a
+ * card shows its section, the filter unchanged; each part of its split is its own button setting
+ * the filter to that source as well (#71 D7). The card's name and count are one button, so the
+ * split's buttons aren't nested in another.
+ */
 export function OverviewSection({
   snapshot,
   query,
   filter,
-  onShowSection
+  onShowSection,
+  onFilter
 }: SectionViewProps): React.JSX.Element {
   const summaries = sectionSummaries(snapshot, query, filter)
   const narrowed = query.trim() !== '' || filter.kind !== 'all'
@@ -243,28 +238,54 @@ export function OverviewSection({
   return (
     <div className="agent-setup-overview">
       <div className="agent-setup-cards">
-        {OVERVIEW_CARDS.map((id) => {
+        {OVERVIEW_SECTIONS.map((id) => {
           const summary = summaries[id]
           if (!summary) return null
-          const split = sourceSplit(summary)
+          const parts = sourceSplitParts(summary)
           return (
-            <button
+            <div
               key={id}
-              type="button"
               className="agent-setup-card"
               data-testid={`agent-setup-overview-${id}`}
               data-dimmed={narrowed && summary.count === 0}
               onClick={() => onShowSection(id)}
             >
-              <span className="agent-setup-card-head">
-                <SectionIcon id={id} />
-                <span className="agent-setup-card-label">{label(id)}</span>
-              </span>
-              <span className="agent-setup-card-count">{summary.count}</span>
+              <button
+                type="button"
+                className="agent-setup-card-main"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onShowSection(id)
+                }}
+              >
+                <span className="agent-setup-card-head">
+                  <SectionIcon id={id} />
+                  <span className="agent-setup-card-label">{label(id)}</span>
+                </span>
+                <span className="agent-setup-card-count">{summary.count}</span>
+              </button>
               <span className="agent-setup-card-split" data-testid="agent-setup-overview-split">
-                {split || 'None'}
+                {parts.length === 0
+                  ? 'None'
+                  : parts.map((part, i) => (
+                      <Fragment key={part.label}>
+                        {i > 0 && <span aria-hidden="true">{' · '}</span>}
+                        <button
+                          type="button"
+                          className="agent-setup-link agent-setup-link-quiet agent-setup-card-part"
+                          title={`Show ${label(id)} from ${filterLabel(snapshot, part.filter)}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onFilter(part.filter)
+                            onShowSection(id)
+                          }}
+                        >
+                          {part.label}
+                        </button>
+                      </Fragment>
+                    ))}
               </span>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -833,14 +854,14 @@ function PluginRow({
   plugin,
   snapshot,
   onShowSection,
-  onSearch
+  onFilter
 }: {
   /** The workspace folder, as the page's data is kept by. */
   folder: string
   plugin: PluginEntry
   snapshot: AgentSetupSnapshot
   onShowSection: SectionViewProps['onShowSection']
-  onSearch: SectionViewProps['onSearch']
+  onFilter: SectionViewProps['onFilter']
 }): React.JSX.Element {
   const { saving } = useAgentSetupData(folder)
   const asked = saving.get(switchKey({ kind: 'plugin', key: plugin.key }))
@@ -886,7 +907,8 @@ function PluginRow({
                 className="agent-setup-link agent-setup-link-quiet"
                 title={`Show ${label(item.section)} from ${plugin.name}`}
                 onClick={() => {
-                  onSearch(pluginQuery(plugin))
+                  // The section with the filter at this plugin, the search left as it is (#71 D8).
+                  onFilter({ kind: 'plugin', key: plugin.key })
                   onShowSection(item.section)
                 }}
               >
@@ -922,7 +944,7 @@ export function PluginsSection({
   query,
   filter,
   onShowSection,
-  onSearch
+  onFilter
 }: SectionViewProps): React.JSX.Element {
   const plugins = filterPlugins(snapshot.plugins, query, filter)
   const marketplaces = marketplaceRows(snapshot, query)
@@ -948,7 +970,7 @@ export function PluginsSection({
                 plugin={plugin}
                 snapshot={snapshot}
                 onShowSection={onShowSection}
-                onSearch={onSearch}
+                onFilter={onFilter}
               />
             ))}
           </ul>

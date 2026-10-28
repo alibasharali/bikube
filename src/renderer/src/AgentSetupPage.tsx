@@ -8,7 +8,7 @@ import {
   type AgentSetupSectionId
 } from '../../core/agent-setup-sections'
 import {
-  isFilterableSection,
+  showsSourceChips,
   sectionSummaries,
   setupWarnings,
   sourceChips,
@@ -62,8 +62,8 @@ export interface AgentSetupSectionProps {
   filter: SourceFilter
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
-  /** Puts `query` in the search box (a plugin's provides-counts, D15). */
-  onSearch: (query: string) => void
+  /** Sets the page's source filter (Overview's split parts, a plugin's provides-counts; #71 D7, D8). */
+  onFilter: (filter: SourceFilter) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
 }
@@ -262,12 +262,10 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
     }
     return result
   }, [summaries, query, filter])
-  // The chip row of a filterable section (#71 D3); Overview's comes with its split links (D7).
+  // The chip row of a filterable section and Overview (#71 D3).
   const chips = useMemo(
     () =>
-      snapshot && isFilterableSection(section)
-        ? sourceChips(snapshot, section, query, filter)
-        : null,
+      snapshot && showsSourceChips(section) ? sourceChips(snapshot, section, query, filter) : null,
     [snapshot, section, query, filter]
   )
   const warnings = useMemo(
@@ -366,7 +364,7 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
               query={query}
               filter={filter}
               onShowSection={setSection}
-              onSearch={setQuery}
+              onFilter={setFilter}
               expanded={expanded}
             />
           </FileActionsProvider>

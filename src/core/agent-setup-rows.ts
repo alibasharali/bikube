@@ -357,6 +357,40 @@ export function sourceSplit(summary: SectionSummary): string {
     .join(' · ')
 }
 
+/** One part of an Overview card's split (#71 D7): `3 User`, and the filter its button sets. */
+export interface SplitPart {
+  label: string
+  filter: SourceFilter
+}
+
+const GROUP_FILTERS: Record<SourceGroup, SourceFilter> = {
+  Project: { kind: 'project' },
+  Local: { kind: 'local' },
+  User: { kind: 'user' },
+  Plugin: { kind: 'plugins' },
+  Bikube: { kind: 'bikube' }
+}
+
+/** An Overview card's split as its parts (#71 D7), in `sourceSplit`'s order; `Plugin` sets All plugins. */
+export function sourceSplitParts(summary: SectionSummary): SplitPart[] {
+  return SOURCE_GROUPS.filter((group) => summary.bySource[group]).map((group) => ({
+    label: `${summary.bySource[group]} ${group}`,
+    filter: GROUP_FILTERS[group]
+  }))
+}
+
+/** The sections Overview has a card for, in D12's order. */
+export const OVERVIEW_SECTIONS: readonly FilterableSection[] = [
+  'plugins',
+  'mcp',
+  'skills',
+  'agents',
+  'commands',
+  'hooks',
+  'memory',
+  'permissions'
+]
+
 /** The sections the source filter applies to and that show its chip row (#71 D3). */
 export type FilterableSection =
   | 'plugins'
@@ -465,26 +499,41 @@ export interface SourceChips {
   plugin: { count: number; plugins: PluginChip[] } | null
 }
 
+/** The sections with a chip row (#71 D3): the filterable ones and Overview. */
+export type ChipSection = FilterableSection | 'overview'
+
+/** Whether section `id` shows the chip row (#71 D3). */
+export const showsSourceChips = (id: AgentSetupSectionId): id is ChipSection =>
+  id === 'overview' || isFilterableSection(id)
+
+/** Section `id`'s rows matching `query`, as where each comes from; Overview's are its cards' (#71 D3). */
+const chipOrigins = (snapshot: AgentSetupSnapshot, id: ChipSection, query: string): RowOrigin[] =>
+  id === 'overview'
+    ? OVERVIEW_SECTIONS.flatMap((section) => sectionOrigins(snapshot, section, query, ALL_SOURCES))
+    : sectionOrigins(snapshot, id, query, ALL_SOURCES)
+
 /**
  * Section `id`'s chip row (#71 D3, D4), or null when it shows none: All, then the sources with a
  * row in the section (the search not applied, so chips stay while typing), each with its rows
- * matching `query`. A section whose rows all come from one source shows none, unless the filter
- * isn't All: then its chip is always there (count 0 without rows), so it can be set back.
+ * matching `query`; Overview's are the sources across its cards' sections. A section whose rows
+ * all come from one source shows none, unless the filter isn't All: then its chip is always there
+ * (count 0 without rows), so it can be set back. The Plugin chip shows when a row belongs to a
+ * plugin, an installed plugin's own row included (#71 D2, D4).
  */
 export function sourceChips(
   snapshot: AgentSetupSnapshot,
-  id: FilterableSection,
+  id: ChipSection,
   query: string,
   filter: SourceFilter
 ): SourceChips | null {
-  const every = sectionOrigins(snapshot, id, '', ALL_SOURCES)
-  const matching = sectionOrigins(snapshot, id, query, ALL_SOURCES)
+  const every = chipOrigins(snapshot, id, '')
+  const matching = chipOrigins(snapshot, id, query)
   const count = (chip: SourceFilter): number =>
     matching.filter((row) => originMatches(chip, row)).length
   const kinds = SOURCE_CHIP_KINDS.filter(
     (kind) => filter.kind === kind || every.some((row) => row.source.kind === kind)
   )
-  const fromPlugins = every.some((row) => row.source.kind === 'plugin')
+  const fromPlugins = every.some((row) => row.plugin !== undefined)
   const pluginShown = fromPlugins || filter.kind === 'plugins' || filter.kind === 'plugin'
   if (filter.kind === 'all' && kinds.length + (fromPlugins ? 1 : 0) <= 1) return null
   let plugin: SourceChips['plugin'] = null
@@ -602,7 +651,7 @@ export function filterPlugins(
   )
 }
 
-/** One of a plugin's provides-counts (D15), linking to `section` filtered by the plugin. */
+/** One of a plugin's provides-counts (D15), linking to `section` with the filter at the plugin (#71 D8). */
 export interface PluginProvides {
   section: AgentSetupSectionId
   label: string
@@ -634,12 +683,6 @@ export function pluginProvides(
   }
   return provides
 }
-
-/**
- * The search a provides-count link puts in the search box (D15, D25): the plugin's source chip,
- * which every entry of the plugin, and no other entry's source, reads.
- */
-export const pluginQuery = (plugin: PluginEntry): string => `Plugin ${plugin.name}`
 
 /** A known marketplace (D15), read-only. */
 export interface MarketplaceRow {

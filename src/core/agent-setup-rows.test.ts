@@ -17,13 +17,13 @@ import {
   mcpStateLabel,
   permissionsView,
   pluginProvides,
-  pluginQuery,
   pluginSource,
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
   sourceSplit,
   sourceChips,
+  sourceSplitParts,
   ALL_SOURCES,
   type SourceFilter,
   filterLabel,
@@ -464,11 +464,9 @@ describe('Plugins', () => {
       { section: 'mcp', label: '1 MCP server' }
     ])
     expect(pluginProvides(s, s.plugins[1]!)).toEqual([])
-    // The link's search shows only that plugin's entries.
-    expect(filterDefinitions(s.skills, pluginQuery(s.plugins[0]!)).map((e) => e.name)).toEqual([
-      'kit:lint',
-      'kit:fmt'
-    ])
+    // The link's filter shows only that plugin's entries (#71 D8).
+    const own: SourceFilter = { kind: 'plugin', key: s.plugins[0]!.key }
+    expect(filterDefinitions(s.skills, '', own).map((e) => e.name)).toEqual(['kit:lint', 'kit:fmt'])
   })
 
   it('D15, D25: filters plugins by name, key, description and source, counted by scope', () => {
@@ -856,14 +854,21 @@ describe('sourceChips', () => {
     })
   })
 
-  it("AC7: Plugins' chips read the installs' scopes; the menu lists each plugin", () => {
+  it("AC7: Plugins' chips read the installs' scopes and Plugin; the menu lists each plugin", () => {
+    // Every installed plugin's row is a plugin's row too (#71 D2, D4): the Plugin chip shows at All.
     expect(sourceChips(ac71, 'plugins', '', ALL_SOURCES)).toEqual({
       all: 2,
       sources: [
         { kind: 'project', label: 'Project', count: 1 },
         { kind: 'user', label: 'User', count: 1 }
       ],
-      plugin: null
+      plugin: {
+        count: 2,
+        plugins: [
+          { key: 'kit@market', name: 'kit', count: 1 },
+          { key: 'tools@market', name: 'tools', count: 1 }
+        ]
+      }
     })
     expect(sourceChips(ac71, 'plugins', '', kitFilter)?.plugin).toEqual({
       count: 2,
@@ -872,6 +877,47 @@ describe('sourceChips', () => {
         { key: 'tools@market', name: 'tools', count: 1 }
       ]
     })
+  })
+})
+
+describe("Overview's chips and splits (#71 D3, D7)", () => {
+  it("D3: Overview's chips are the sources across its cards' sections", () => {
+    // Plugins 1P 1U (2 plugin rows), Skills 2P 3U 1 kit, Agents 1U, Commands 1P, Hooks 2 Bikube
+    // 2U, Memory 1U, Permissions 1 Local 1U; Config and Status have no card.
+    expect(sourceChips(ac71, 'overview', '', ALL_SOURCES)).toEqual({
+      all: 17,
+      sources: [
+        { kind: 'project', label: 'Project', count: 4 },
+        { kind: 'local', label: 'Local', count: 1 },
+        { kind: 'user', label: 'User', count: 9 },
+        { kind: 'bikube', label: 'Bikube', count: 2 }
+      ],
+      plugin: {
+        count: 3,
+        plugins: [
+          { key: 'kit@market', name: 'kit', count: 2 },
+          { key: 'tools@market', name: 'tools', count: 1 }
+        ]
+      }
+    })
+    expect(sourceChips(ac71, 'overview', 'bl', ALL_SOURCES)?.all).toBe(2)
+  })
+
+  it('D7: each part of a split is its count, label and the filter it sets', () => {
+    expect(sourceSplitParts(sectionSummaries(ac71, '').skills!)).toEqual([
+      { label: '2 Project', filter: { kind: 'project' } },
+      { label: '3 User', filter: { kind: 'user' } },
+      { label: '1 Plugin', filter: { kind: 'plugins' } }
+    ])
+    expect(sourceSplitParts(sectionSummaries(ac71, '').hooks!)).toEqual([
+      { label: '2 User', filter: { kind: 'user' } },
+      { label: '2 Bikube', filter: { kind: 'bikube' } }
+    ])
+    // AC9: under User, the Skills card reads 3 and its split `3 User`.
+    const user = sectionSummaries(ac71, '', userFilter).skills!
+    expect(user.count).toBe(3)
+    expect(sourceSplitParts(user).map((p) => p.label)).toEqual(['3 User'])
+    expect(sourceSplitParts(sectionSummaries(ac71, '', userFilter).commands!)).toEqual([])
   })
 })
 

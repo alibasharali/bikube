@@ -754,17 +754,18 @@ test("AC5: a plugin's switch writes settings.local.json only, and its entries re
     'Changes apply to Claude Code sessions started from now on'
   )
 
-  // The provides-count shows Skills filtered by the plugin; its entries read Plugin off.
+  // The provides-count shows Skills with the filter at the plugin (#71 D8); its entries read
+  // Plugin off.
   await plugin.getByRole('button', { name: '1 skill' }).click()
   await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByTestId('agent-setup-search')).toHaveValue('Plugin kit')
+  await expect(page.getByTestId('agent-setup-filter-plugin')).toHaveText('Plugin kit 1')
+  await expect(page.getByTestId('agent-setup-search')).toHaveValue('')
   await expect(rowNames()).toHaveText(['kit:lint'])
   await expect(row('kit:lint')).toHaveAttribute('data-plugin-off', 'true')
   await expect(row('kit:lint').getByTestId('agent-setup-plugin-off')).toHaveText('Plugin off')
   await tab('Agents').click()
   await expect(row('kit:fixer')).toHaveAttribute('data-plugin-off', 'true')
 
-  await page.getByTestId('agent-setup-search').press('Escape')
   await tab('Plugins').click()
   await pluginSwitch().click()
   await expect(pluginSwitch()).toBeChecked()
@@ -1513,6 +1514,62 @@ test("#71 AC6, AC7: the Plugin chip's menu picks a plugin; Plugins then shows on
   await expect(panel().getByTestId('agent-setup-plugin')).toHaveCount(2)
   await expect(panel().getByRole('heading', { name: 'Marketplaces' })).toBeVisible()
   await expect(panel().getByTestId('agent-setup-marketplace')).toHaveCount(1)
+})
+
+test("#71 AC8: a plugin's provides-count shows its section filtered by the plugin, the search unchanged", async () => {
+  await openWith(filterFixtures)
+  await tab('Plugins').click()
+  const kit = panel().getByTestId('agent-setup-plugin').filter({ hasText: 'kit' })
+  await kit.getByRole('button', { name: '1 skill' }).click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(pluginChip()).toHaveText('Plugin kit 1')
+  await expect(pluginChip()).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('agent-setup-search')).toHaveValue('')
+  await expect(rowNames()).toHaveText(['kit:lint'])
+})
+
+test("#71 AC9: Overview's split parts set the filter; its cards follow it; the card shows its section", async () => {
+  await openWith(filterFixtures)
+  const skills = page.getByTestId('agent-setup-overview-skills')
+  const split = skills.getByTestId('agent-setup-overview-split')
+  await expect(split).toHaveText('2 Project · 3 User · 1 Plugin')
+  // Overview's chips are the sources across its cards' sections (#71 D3).
+  await expect(chips()).toHaveText([
+    /^All \d+$/,
+    'Project 4',
+    /^User \d+$/,
+    /^Bikube \d+$/,
+    'Plugin 3'
+  ])
+
+  await split.getByRole('button', { name: '3 User' }).click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(chip('user')).toHaveAttribute('aria-pressed', 'true')
+  await expect(rowNames()).toHaveText(['blog', 'draft', 'notes'])
+
+  await tab('Overview').click()
+  await expect(chip('user')).toHaveAttribute('aria-pressed', 'true')
+  await expect(skills.locator('.agent-setup-card-count')).toHaveText('3')
+  await expect(split).toHaveText('3 User')
+  await expect(page.getByTestId('agent-setup-overview-commands')).toHaveAttribute(
+    'data-dimmed',
+    'true'
+  )
+  await expect(skills).toHaveAttribute('data-dimmed', 'false')
+
+  // The card's name shows Skills, the filter unchanged.
+  await skills.getByRole('button', { name: /Skills/ }).click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(chip('user')).toHaveAttribute('aria-pressed', 'true')
+
+  // Plugin sets All plugins.
+  await chip('all').click()
+  await tab('Overview').click()
+  await split.getByRole('button', { name: '1 Plugin' }).click()
+  await expect(tab('Skills')).toHaveAttribute('aria-selected', 'true')
+  await expect(pluginChip()).toHaveText('Plugin 1')
+  await expect(pluginChip()).toHaveAttribute('aria-pressed', 'true')
+  await expect(rowNames()).toHaveText(['kit:lint'])
 })
 
 test("#71 AC12: each workspace's page keeps its own filter for the run, none after a restart", async () => {

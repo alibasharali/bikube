@@ -1,14 +1,14 @@
 import { ipcMain } from 'electron'
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
 import { editorShell, type EditorLocation } from '../core/editor'
 import type { NamedEditor } from '../core/editor-candidates'
 import { readInstalledEditors } from '../core/installed-editors'
 import { IPC } from '../shared/api'
+import { userHome } from './home'
 
 /** Where Settings > Editor's named editors are looked for (#70 D1): this OS, `~` as #68 reads it. */
 export function editorLocation(): EditorLocation {
-  return { platform: process.platform, home: process.env['BIKUBE_HOME_DIR'] || homedir() }
+  return { platform: process.platform, home: userHome() }
 }
 
 /**

@@ -11,8 +11,12 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { editorCandidates, type NamedEditor } from '../src/core/editor-candidates'
 import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
+import {
+  installedOutsideHome,
+  openedPaths as openedPathsIn,
+  recordOpenPath as recordOpenPathIn
+} from './editors'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -755,29 +759,9 @@ function editorEnv(commands: string[]): Record<string, string> {
   return { ...inherited, SHELL: '/bin/sh', HOME: home, BIKUBE_HOME_DIR: home }
 }
 
-/**
- * Whether a real `editor` is installed at one of #70 D1's paths outside the fake home, which this
- * machine's tests can't hide: a test that needs it found nowhere is skipped there (CI has none).
- */
-const installedOutsideHome = (editor: NamedEditor): boolean =>
-  editorCandidates(editor, process.platform, '/nonexistent-home').some(
-    (path) => path.startsWith('/') && existsSync(path)
-  )
-
-/** Replaces `shell.openPath` in main with a recorder answering `error` ('' for opened, #70 D3). */
-async function recordOpenPath(error = ''): Promise<void> {
-  await app!.evaluate(({ shell }, error) => {
-    const opened: string[] = []
-    ;(globalThis as { openedPaths?: string[] }).openedPaths = opened
-    shell.openPath = async (path: string) => {
-      opened.push(path)
-      return error
-    }
-  }, error)
-}
-
-const openedPaths = (): Promise<string[]> =>
-  app!.evaluate(() => [...((globalThis as { openedPaths?: string[] }).openedPaths ?? [])])
+/** `recordOpenPath` (`e2e/editors.ts`) on this test's app. */
+const recordOpenPath = (error = ''): Promise<void> => recordOpenPathIn(app!, error)
+const openedPaths = (): Promise<string[]> => openedPathsIn(app!)
 
 const editorLog = (): string => join(root, 'editors.log')
 const editorRuns = (): string[] =>

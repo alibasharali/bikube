@@ -6,15 +6,17 @@
  * Plain TS: main injects the process spawner, so Vitest runs real shells on fake commands.
  */
 
-import { FISH_CANDIDATE_TEST, POSIX_CANDIDATE_TEST, type EditorLocation } from './editor'
+import {
+  FISH_CANDIDATE_TEST,
+  POSIX_CANDIDATE_TEST,
+  POSIX_SHELLS,
+  type EditorLocation
+} from './editor'
 import { editorCandidates, NAMED_EDITORS, type NamedEditor } from './editor-candidates'
 import { runLoginShell, type InstalledDeps } from './installed-agents'
 
 /** Each found editor's line, so whatever a login profile prints is never read as one. */
 const FOUND = 'bikube-found'
-
-/** Shells that take POSIX `sh -c 'text' $0 $1…`. */
-const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
 
 /** Per editor: its id, the number of its candidates, then the candidates. */
 const POSIX_CHECK =

@@ -1,6 +1,5 @@
 import { ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import {
   ListedPaths,
@@ -25,6 +24,7 @@ import type { Settings } from '../core/settings'
 import { IPC } from '../shared/api'
 import { claudeSettingsPath } from './board'
 import { editorLocation } from './editors'
+import { userHome } from './home'
 
 /** Each folder's running read, shared by requests made during it (#68 D26: never two at once). */
 const reading = new Map<string, Promise<AgentSetupRead>>()
@@ -37,8 +37,6 @@ const statsReading = new Map<string, Promise<ClaudeStatsRead>>()
 
 /** Each folder's last write, the next one queued behind it (D23: every write re-reads the file). */
 const writing = new Map<string, Promise<SettingsWriteResult>>()
-
-const userHome = (): string => process.env['BIKUBE_HOME_DIR'] || homedir()
 
 const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
   if (event.senderFrame === null || event.senderFrame !== event.sender.mainFrame) {

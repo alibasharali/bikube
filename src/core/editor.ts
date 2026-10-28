@@ -14,7 +14,7 @@ import type { spawn as nodeSpawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { isDirectory } from './directories'
-import { EDITOR_NAMES, editorCandidates, type NamedEditor } from './editor-candidates'
+import { EDITOR_NAMES, editorCandidates, isNamedEditor } from './editor-candidates'
 import { insideFolder } from './file-tree'
 import type { OpenResult } from './open-result'
 import type { Editor } from './settings'
@@ -22,7 +22,17 @@ import type { Editor } from './settings'
 export type { OpenResult }
 
 /** Shells that take POSIX `sh -c 'text' $0 $1…`. */
-const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
+export const POSIX_SHELLS = new Set([
+  'sh',
+  'bash',
+  'zsh',
+  'dash',
+  'ksh',
+  'mksh',
+  'oksh',
+  'yash',
+  'ash'
+])
 
 /** The `$0` a POSIX shell is given, shown in its own error messages. */
 const ARG0 = 'bikube'
@@ -40,18 +50,26 @@ export const FISH_CANDIDATE_TEST =
   "begin; if string match -q -- '/*' $c; test -f $c -a -x $c; else; command -q $c; end; end"
 
 /**
+ * The line D1's script writes to stderr when no candidate is found, before it exits 127 (#70 D3):
+ * only then does the file open with the default app; a found editor exiting 127 is an ordinary
+ * failure.
+ */
+export const EDITOR_NOT_FOUND = 'bikube-editor-not-found'
+
+/**
  * The named editors' script (D1): `$1` is the number of candidates that follow, then the folder
- * and the file; the first candidate found runs with them, none found exits 127.
+ * and the file; the first candidate found runs with them, none found writes `EDITOR_NOT_FOUND`
+ * to stderr and exits 127.
  */
 const POSIX_OPEN =
   'bikube_n=$1; shift; bikube_f=; while [ "$bikube_n" -gt 0 ]; do bikube_c=$1; shift; bikube_n=$((bikube_n - 1)); ' +
   `if [ -z "$bikube_f" ] && ${POSIX_CANDIDATE_TEST}; then bikube_f=$bikube_c; fi; done; ` +
-  '[ -n "$bikube_f" ] || exit 127; exec "$bikube_f" "$@"'
+  `[ -n "$bikube_f" ] || { echo ${EDITOR_NOT_FOUND} >&2; exit 127; }; exec "$bikube_f" "$@"`
 
 const FISH_OPEN =
   'set -l n $argv[1]; set -l f; for c in $argv[2..(math $n + 1)]; ' +
   `if test -z "$f"; and ${FISH_CANDIDATE_TEST}; set f $c; end; end; ` +
-  'test -n "$f"; or exit 127; exec $f $argv[(math $n + 2)..-1]'
+  `test -n "$f"; or begin; echo ${EDITOR_NOT_FOUND} >&2; exit 127; end; exec $f $argv[(math $n + 2)..-1]`
 
 /** Where the named editors are looked for (D1): `process.platform` and `~`. */
 export interface EditorLocation {
@@ -68,6 +86,8 @@ export type EditorPlan =
       name: string
       command: string
       args: string[]
+      /** D1's script: not found only when it says so (`EDITOR_NOT_FOUND`), not on any exit 127. */
+      marksNotFound?: true
     }
   | { kind: 'system' }
   | { kind: 'no-command' }
@@ -111,7 +131,8 @@ export function editorPlan(
     command,
     args: fish
       ? ['-l', '-c', FISH_OPEN, ...positional]
-      : ['-l', '-c', POSIX_OPEN, ARG0, ...positional]
+      : ['-l', '-c', POSIX_OPEN, ARG0, ...positional],
+    marksNotFound: true
   }
 }
 
@@ -121,7 +142,10 @@ export const EDITOR_WAIT_MS = 4000
 /** The longest error reason kept from an editor's stderr. */
 const REASON_MAX = 300
 
-/** `notFound` when the shell exited 127: the command (or none of an editor's candidates) found. */
+/**
+ * `notFound` when the command wasn't found: a custom command's shell exiting 127, or D1's script
+ * finding none of a named editor's candidates (`EDITOR_NOT_FOUND`, #70 D3).
+ */
 export type EditorRun = { ok: true } | { ok: false; reason: string; notFound?: true }
 
 export interface RunDeps {
@@ -178,7 +202,8 @@ export function runEditor(
     }, waitMs)
     child.on('error', (err) => finish({ ok: false, reason: spawnReason(plan.command, err) }))
     const failed = (code: number | null, signal: NodeJS.Signals | null): void => {
-      if (code === 127) {
+      const marked = plan.marksNotFound === true
+      if (marked ? stderr.split('\n').some((l) => l.trim() === EDITOR_NOT_FOUND) : code === 127) {
         return finish({ ok: false, reason: `${plan.name} not found`, notFound: true })
       }
       const last = stderr
@@ -268,14 +293,12 @@ export async function openInFolder(
     ...(deps.waitMs !== undefined && { waitMs: deps.waitMs })
   })
   if (run.ok) return run
-  if (run.notFound && isNamed(deps.editor)) {
+  if (run.notFound && isNamedEditor(deps.editor)) {
     const error = await deps.openPath(file)
     if (error === '') return { ok: true, reason: 'default-app', message: run.reason }
   }
   return { ok: false, reason: 'failed', message: run.reason }
 }
-
-const isNamed = (editor: Editor): editor is NamedEditor => editor in EDITOR_NAMES
 
 /** Whether `path` is a regular file (a symlink to one counts). */
 export async function isFile(path: string): Promise<boolean> {

@@ -459,3 +459,38 @@ describe('the fallback note (#70 D3, AC4)', () => {
     expect(isOpenNote({ ok: false, reason: 'failed', message: 'code not found' })).toBe(false)
   })
 })
+
+describe('a found editor exiting 127 (#70 D3)', () => {
+  it('is an ordinary failure with its own reason, and opens no default app', async () => {
+    const repo = join(dir, 'repo')
+    mkdirSync(repo)
+    writeFileSync(join(repo, 'a.ts'), '')
+    const opened: string[] = []
+    const deps = (): OpenDeps => ({
+      editor: 'vscode',
+      editorCommand: '',
+      shell: '/bin/sh',
+      env,
+      ...PATH_ONLY,
+      spawn,
+      openPath: async (path) => {
+        opened.push(path)
+        return ''
+      },
+      waitMs: 3000
+    })
+    fakeCommand('code', 'echo "electron: not found" >&2; exit 127')
+    expect(await openFile(repo, 'a.ts', deps())).toEqual({
+      ok: false,
+      reason: 'failed',
+      message: 'electron: not found'
+    })
+    fakeCommand('code', 'exit 127')
+    expect(await openFile(repo, 'a.ts', deps())).toEqual({
+      ok: false,
+      reason: 'failed',
+      message: 'exited with code 127'
+    })
+    expect(opened).toEqual([])
+  })
+})

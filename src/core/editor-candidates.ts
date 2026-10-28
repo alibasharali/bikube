@@ -90,7 +90,8 @@ export interface EditorChoice {
   disabled: boolean
 }
 
-const isNamed = (editor: Editor): editor is NamedEditor =>
+/** Whether `editor` is VS Code, Cursor or Zed. */
+export const isNamedEditor = (editor: Editor): editor is NamedEditor =>
   (NAMED_EDITORS as readonly string[]).includes(editor)
 
 /**
@@ -103,7 +104,8 @@ export function editorChoices(
   saved: Editor
 ): EditorChoice[] {
   return EDITORS.map((value) => {
-    const missing = installed !== null && isNamed(value) && value !== saved && !installed.has(value)
+    const missing =
+      installed !== null && isNamedEditor(value) && value !== saved && !installed.has(value)
     return {
       value,
       label: missing ? `${EDITOR_LABELS[value]} (not installed)` : EDITOR_LABELS[value],

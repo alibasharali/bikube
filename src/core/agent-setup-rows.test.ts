@@ -333,6 +333,24 @@ describe('permissionsView', () => {
   })
 })
 
+describe('Sandbox in the counts (#72 D6)', () => {
+  it("AC3, AC4: counts the sandbox lists' matching entries by source", () => {
+    const s = snapshot({
+      settings: [
+        settingsFile('project', {
+          sandbox: { network: { allowedDomains: ['registry.npmjs.org'] } }
+        }),
+        settingsFile('user', {
+          sandbox: { enabled: true, network: { allowedDomains: ['github.com', '*.github.com'] } }
+        })
+      ]
+    })
+    expect(sectionSummaries(s, '').sandbox).toEqual({ count: 3, bySource: { Project: 1, User: 2 } })
+    expect(sectionSummaries(s, 'github').sandbox?.count).toBe(2)
+    expect(sectionSummaries(snapshot(), '').sandbox?.count).toBe(0)
+  })
+})
+
 describe('hooks and permissions in counts and warnings', () => {
   const s = snapshot({
     hooks: [
@@ -665,6 +683,8 @@ describe('configRows', () => {
             enabledMcpjsonServers: [],
             disabledMcpjsonServers: [],
             enableAllProjectMcpServers: true,
+            // #72 D7: Sandbox shows it.
+            sandbox: { enabled: true },
             // The reader keeps the variables' names only (D28).
             env: ['TOKEN', 'DEBUG']
           })

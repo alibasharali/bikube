@@ -2,6 +2,7 @@ import {
   Activity,
   Bot,
   BookText,
+  Box,
   ChartColumn,
   LayoutDashboard,
   Puzzle,
@@ -28,6 +29,7 @@ const SECTION_ICONS: Record<AgentSetupSectionId, LucideIcon> = {
   hooks: Webhook,
   memory: BookText,
   permissions: ShieldCheck,
+  sandbox: Box,
   config: SlidersHorizontal
 }
 

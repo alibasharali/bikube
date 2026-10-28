@@ -9,6 +9,7 @@
  * here too.
  */
 
+import { sandboxEntries, sandboxView } from './agent-setup-sandbox'
 import type { AgentSetupSectionId } from './agent-setup-sections'
 import {
   sourceLabel,
@@ -276,6 +277,7 @@ export function sectionSummaries(
         .map((e) => e.source)
     ),
     permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source)),
+    sandbox: summary(sandboxEntries(sandboxView(snapshot, query)).map((e) => e.source)),
     plugins: summary(filterPlugins(snapshot.plugins, query).map(pluginSource)),
     mcp: summary(mcpServerRows(snapshot, query).map((r) => r.source)),
     config: summary([
@@ -591,6 +593,7 @@ export function mcpServerRows(snapshot: AgentSetupSnapshot, query: string): McpS
 export const CONFIG_EXCLUDED_KEYS: readonly string[] = [
   'hooks',
   'permissions',
+  'sandbox',
   'enabledPlugins',
   'enabledMcpjsonServers',
   'disabledMcpjsonServers',

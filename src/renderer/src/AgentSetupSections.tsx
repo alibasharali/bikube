@@ -160,7 +160,7 @@ export function FileActionsProvider({
  * A file-backed row's Open file and Reveal buttons (D27), shown on the row's hover and focus.
  * Nothing for a file main's last read didn't list (Bikube's own, a missing one, D28).
  */
-function FileActions({ file }: { file: string }): React.JSX.Element | null {
+export function FileActions({ file }: { file: string }): React.JSX.Element | null {
   const scope = useContext(FileActionsContext)
   if (!scope?.paths.has(file)) return null
   const name = file.slice(file.lastIndexOf('/') + 1)
@@ -190,7 +190,7 @@ function FileActions({ file }: { file: string }): React.JSX.Element | null {
   )
 }
 
-function SourceChip({ source }: { source: EntrySource }): React.JSX.Element {
+export function SourceChip({ source }: { source: EntrySource }): React.JSX.Element {
   return (
     <span className="agent-setup-chip" data-source={source.kind} data-testid="agent-setup-source">
       {sourceLabel(source)}
@@ -223,7 +223,8 @@ const OVERVIEW_CARDS: readonly AgentSetupSectionId[] = [
   'commands',
   'hooks',
   'memory',
-  'permissions'
+  'permissions',
+  'sandbox'
 ]
 
 /** Overview (D12): a card per section with its count by source, then every warning. */

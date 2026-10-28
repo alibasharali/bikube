@@ -34,6 +34,7 @@ import {
   SkillsSection,
   StatusSection
 } from './AgentSetupSections'
+import { SandboxSection } from './AgentSetupSandbox'
 import { StatsSection } from './AgentSetupStats'
 import { registerCardViewActions } from './card-view-actions'
 import { ICON, SMALL_ICON } from './icons'
@@ -76,6 +77,7 @@ const SECTION_VIEWS: Partial<
   hooks: HooksSection,
   memory: MemorySection,
   permissions: PermissionsSection,
+  sandbox: SandboxSection,
   config: ConfigSection
 }
 

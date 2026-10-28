@@ -4972,6 +4972,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-setup-row:hover > .agent-setup-row-main > .agent-setup-file-actions,
+.agent-setup-fact:hover .agent-setup-file-actions,
 .agent-setup-file-actions:focus-within {
   opacity: 1;
 }

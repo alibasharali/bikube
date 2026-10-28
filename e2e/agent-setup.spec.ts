@@ -1101,6 +1101,170 @@ test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Revea
   await expect(actions('.claude/settings.local.json')).toHaveCount(0)
 })
 
+// #72: the Sandbox section, from the three settings files.
+
+/** #72 AC2's and AC3's settings files: the fake home's, the workspace's and its local one. */
+function sandboxFixtures(folder: string): void {
+  write(
+    join(home, '.claude/settings.json'),
+    JSON.stringify({
+      sandbox: {
+        enabled: true,
+        failIfUnavailable: true,
+        allowUnsandboxedCommands: false,
+        network: {
+          strictAllowlist: true,
+          allowLocalBinding: true,
+          httpProxyPort: 8080,
+          allowedDomains: ['github.com', '*.github.com']
+        },
+        filesystem: { denyRead: ['~/.ssh'] },
+        excludedCommands: ['git push:*']
+      }
+    })
+  )
+  write(
+    join(folder, '.claude/settings.json'),
+    JSON.stringify({ sandbox: { network: { allowedDomains: ['registry.npmjs.org'] } } })
+  )
+  write(
+    join(folder, '.claude/settings.local.json'),
+    JSON.stringify({ sandbox: { enabled: false } })
+  )
+}
+
+/** The Sandbox section's fact for dotted key `key`. */
+const sandboxFact = (key: string): Locator =>
+  panel().locator(`[data-testid="agent-setup-sandbox-fact"][data-key="${key}"]`)
+/** The Sandbox section's list for dotted key `key`. */
+const sandboxList = (key: string): Locator =>
+  panel().getByTestId(`agent-setup-sandbox-${key.replaceAll('.', '-')}`)
+
+test('#72 AC1–AC5, AC7: Sandbox shows the facts by precedence and the lists merged, searched', async () => {
+  const shell = loginShell(false)
+  fakeCode()
+  const folder = await openWith(sandboxFixtures, shell)
+  await recordRevealed()
+
+  // AC1: the Context group reads Memory, Permissions, Sandbox, Config; Down from Permissions.
+  await expect(
+    page.getByTestId('agent-setup-sections').locator('.agent-setup-tab-label')
+  ).toHaveText([
+    'Overview',
+    'Status',
+    'Stats',
+    'Plugins',
+    'MCP servers',
+    'Skills',
+    'Agents',
+    'Commands',
+    'Hooks',
+    'Memory',
+    'Permissions',
+    'Sandbox',
+    'Config'
+  ])
+  await tab('Permissions').click()
+  await tab('Permissions').focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(tab('Sandbox')).toHaveAttribute('aria-selected', 'true')
+  await expect(panel()).toHaveAttribute('data-section', 'sandbox')
+
+  // AC2: facts by precedence, with their sources.
+  const fact = (key: string, value: string, source?: string): Promise<void>[] => [
+    expect(sandboxFact(key).getByTestId('agent-setup-sandbox-fact-value')).toHaveText(value),
+    expect(sandboxFact(key).getByTestId('agent-setup-source')).toHaveText(source ? [source] : [])
+  ]
+  await Promise.all([
+    ...fact('enabled', 'false', 'Local'),
+    ...fact('failIfUnavailable', 'true', 'User'),
+    ...fact('allowUnsandboxedCommands', 'false', 'User'),
+    ...fact('network.strictAllowlist', 'true', 'User'),
+    ...fact('network.allowLocalBinding', 'true', 'User'),
+    ...fact('autoAllowBashIfSandboxed', 'Not set'),
+    ...fact('network.httpProxyPort', '8080', 'User')
+  ])
+  await expect(sandboxFact('enabled').locator('dt')).toHaveText('Enabled')
+  await expect(sandboxFact('network.httpProxyPort').locator('dt')).toHaveText(
+    'network.httpProxyPort'
+  )
+  await expect(panel().getByTestId('agent-setup-sandbox-empty')).toHaveCount(0)
+
+  // AC3: lists merged by precedence, each entry with its source; the count reads 5.
+  const allowed = sandboxList('network.allowedDomains')
+  await expect(allowed.getByTestId('agent-setup-sandbox-entry')).toHaveText([
+    'registry.npmjs.org',
+    'github.com',
+    '*.github.com'
+  ])
+  await expect(allowed.getByTestId('agent-setup-source')).toHaveText(['Project', 'User', 'User'])
+  await expect(
+    sandboxList('filesystem.denyRead').getByTestId('agent-setup-sandbox-entry')
+  ).toHaveText(['~/.ssh'])
+  await expect(sandboxList('excludedCommands').getByTestId('agent-setup-sandbox-entry')).toHaveText(
+    ['git push:*']
+  )
+  await expect(sandboxList('network.deniedDomains')).toHaveText('None')
+  await expect(count('sandbox')).toHaveText('5')
+  // Read-only.
+  await expect(panel().locator('input, select, textarea, [role="switch"]')).toHaveCount(0)
+
+  // AC7: the Project entry's Open file and Reveal name the workspace's .claude/settings.json.
+  const projectFile = join(folder, '.claude', 'settings.json')
+  const npm = allowed.getByTestId('agent-setup-row').first()
+  await npm.hover()
+  await npm.getByRole('button', { name: 'Open file' }).click()
+  await expect.poll(editorRuns).toEqual(['run code', folder, projectFile])
+  await npm.getByRole('button', { name: 'Reveal' }).click()
+  await expect.poll(revealedPaths).toEqual([projectFile])
+
+  // AC4: the search keeps the matching entries; the facts all stay.
+  await page.getByTestId('agent-setup-search').fill('github')
+  await expect(allowed.getByTestId('agent-setup-sandbox-entry')).toHaveText([
+    'github.com',
+    '*.github.com'
+  ])
+  await expect(sandboxList('filesystem.denyRead')).toHaveText('None')
+  await expect(sandboxList('excludedCommands')).toHaveText('None')
+  await expect(panel().getByTestId('agent-setup-sandbox-fact')).toHaveCount(7)
+  await expect(count('sandbox')).toHaveText('2')
+
+  // AC5: Config has no sandbox row.
+  await page.getByTestId('agent-setup-search').fill('')
+  await tab('Config').click()
+  await expect(panel()).toHaveAttribute('data-section', 'config')
+  await expect(configRow('sandbox')).toHaveCount(0)
+})
+
+test('#72 AC6: with no sandbox in any settings file, Enabled reads Off and every list None', async () => {
+  await openWith(() => {})
+  await expect(
+    page.getByTestId('agent-setup-overview-sandbox').locator('.agent-setup-card-count')
+  ).toHaveText('0')
+  await tab('Sandbox').click()
+  await expect(sandboxFact('enabled').getByTestId('agent-setup-sandbox-fact-value')).toHaveText(
+    'Off'
+  )
+  await expect(
+    sandboxFact('failIfUnavailable').getByTestId('agent-setup-sandbox-fact-value')
+  ).toHaveText('Not set')
+  await expect(panel().getByTestId('agent-setup-row')).toHaveCount(0)
+  for (const key of [
+    'network.allowedDomains',
+    'network.deniedDomains',
+    'filesystem.allowWrite',
+    'filesystem.denyWrite',
+    'filesystem.allowRead',
+    'filesystem.denyRead',
+    'excludedCommands'
+  ]) {
+    await expect(sandboxList(key)).toHaveText('None')
+  }
+  await expect(panel().getByTestId('agent-setup-sandbox-empty')).toHaveText(
+    'No sandbox settings. Add a "sandbox" object to .claude/settings.json or ~/.claude/settings.json.'
+  )
+})
+
 // #68 S7: Stats from transcripts written into the fake home's `.claude/projects`.
 
 /** A Claude Code project folder's name (D14): every character outside A-Z a-z 0-9 a dash. */

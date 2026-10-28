@@ -7,7 +7,7 @@ describe('Agent setup sections (#68 D7)', () => {
       ['Overview', 'Status', 'Stats'],
       ['Plugins', 'MCP servers'],
       ['Skills', 'Agents', 'Commands', 'Hooks'],
-      ['Memory', 'Permissions', 'Config']
+      ['Memory', 'Permissions', 'Sandbox', 'Config']
     ])
     expect(AGENT_SETUP_SECTIONS.map((s) => s.id)).toEqual([
       'overview',
@@ -21,6 +21,7 @@ describe('Agent setup sections (#68 D7)', () => {
       'hooks',
       'memory',
       'permissions',
+      'sandbox',
       'config'
     ])
   })
@@ -30,6 +31,8 @@ describe('Agent setup sections (#68 D7)', () => {
     at = adjacentSection(at, 1)
     expect(adjacentSection(at, 1)).toBe('plugins')
     expect(adjacentSection('plugins', -1)).toBe('stats')
+    expect(adjacentSection('permissions', 1)).toBe('sandbox')
+    expect(adjacentSection('sandbox', 1)).toBe('config')
     expect(adjacentSection('config', 1)).toBe('overview')
     expect(adjacentSection('overview', -1)).toBe('config')
   })

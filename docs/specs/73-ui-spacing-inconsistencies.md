@@ -2,7 +2,7 @@
 item: 73
 type: bug
 title: UI interface inconsistencies
-status: draft
+status: approved
 branch: claude/73-ui-spacing-inconsistencies
 ---
 

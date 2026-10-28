@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, boardCard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
@@ -316,7 +317,8 @@ test('#35 AC8: what Find selects never reaches the clipboard, even with Copy on 
   await expect(dialog).toHaveCount(0)
   await page.locator(TERMINAL).click()
   await printAlphas()
-  await app.evaluate(({ clipboard }) => clipboard.writeText('before'))
+  // What this app writes, never the system clipboard every test on the display shares (#60).
+  await recordClipboardWrites(app)
 
   await find('alpha')
   await expect(result()).toHaveText('1 of 3')
@@ -329,7 +331,7 @@ test('#35 AC8: what Find selects never reaches the clipboard, even with Copy on 
   await page.getByRole('button', { name: 'Next match' }).click()
   await expect(result()).toHaveText('1 of 3')
   await page.waitForTimeout(500)
-  expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('before')
+  expect(await clipboardWrites(app)).toEqual([])
 
   // A selection the user makes with the mouse while the bar is open still is copied (D9).
   const rows = page.locator(`${TERMINAL} .xterm-screen`)
@@ -339,7 +341,8 @@ test('#35 AC8: what Find selects never reaches the clipboard, even with Copy on 
   await page.mouse.move(box.x + box.width / 2, box.y + 40, { steps: 5 })
   await page.mouse.up()
   await expect(bar()).toBeVisible()
-  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).not.toBe('before')
+  await expect.poll(() => clipboardWrites(app)).toHaveLength(1)
+  expect((await clipboardWrites(app))[0]).not.toBe('alpha')
 })
 
 test('#35 AC9: the query and toggles are remembered app-wide for the run, not after a restart', async () => {

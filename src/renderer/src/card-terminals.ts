@@ -190,6 +190,12 @@ export class XtermScreen implements CardScreen {
   private readonly endPointerSelection = (): void => {
     if (this.pointerSelecting) setTimeout(() => (this.pointerSelecting = false), 0)
   }
+  // The mouseup has reached the window last, after xterm's own handlers on the document reported
+  // the finished selection: the selection is over now, not at a timer that input events (a click
+  // on Find's Next match straight after) run ahead of under load.
+  private readonly pointerSelectionDone = (): void => {
+    this.pointerSelecting = false
+  }
   /** Removes the pointer listeners from the window the screen is attached in (`attach`). */
   private unlistenWindow: (() => void) | undefined
   /** The window the screen was last shown in (#53 D2). */
@@ -600,11 +606,15 @@ export class XtermScreen implements CardScreen {
   private listenTo(view: Window): void {
     this.unlistenWindow?.()
     const end = this.endPointerSelection
+    const done = this.pointerSelectionDone
+    // The capture listener's timer stays for a mouseup whose bubbling something stops.
     view.addEventListener('mouseup', end, true)
+    view.addEventListener('mouseup', done)
     view.addEventListener('pointercancel', end, true)
     view.addEventListener('blur', end)
     this.unlistenWindow = () => {
       view.removeEventListener('mouseup', end, true)
+      view.removeEventListener('mouseup', done)
       view.removeEventListener('pointercancel', end, true)
       view.removeEventListener('blur', end)
       this.pointerSelecting = false

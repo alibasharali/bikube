@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | running | | | |
+| S1 | done | `d099680..5cff68b` | CLEAN | `sandboxView(snapshot, query)`, `sandboxEntries(view)` in `src/core/agent-setup-sandbox.ts`; `SandboxSection` in `AgentSetupSandbox.tsx` |
 
 ## Rulings
 

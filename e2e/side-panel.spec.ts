@@ -18,8 +18,9 @@ import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
 
 // The side panel beside an open card (#55 S1) and beside the board (#57): shown by default,
-// toggled by its title bar button, its hide button and the Toggle panel shortcut, resized from its
-// left edge, saved app-wide in bikube-settings.json, and its Files tab's SSH message.
+// toggled by its title bar button and the Toggle panel shortcut (no hide button of its own),
+// resized from its left edge, saved app-wide in bikube-settings.json, and its Files tab's SSH
+// message.
 
 const darwin = process.platform === 'darwin'
 /** The Toggle panel default (#55 D2) as a Playwright press. */

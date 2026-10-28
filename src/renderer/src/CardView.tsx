@@ -454,7 +454,8 @@ function CardView({
           header={view !== window}
           onHide={() => {
             settingsStore.update({ sidePanelOpen: false })
-            // The hide button is gone: keyboard focus goes back to the focused pane's terminal.
+            // The panel's show/hide button (a card window's) is gone with it: keyboard focus goes
+            // back to the focused pane's terminal.
             focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
           }}
         />

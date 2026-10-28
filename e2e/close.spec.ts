@@ -361,8 +361,8 @@ test('AC6: a closed card is deleted without asking and not counted as running', 
   await expect(status('api')).toHaveText('Stopped')
 
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-delete').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-delete').click()
   await expect(page.getByTestId('confirm-dialog').locator('.modal-message')).toHaveText(
     'Delete "alpha"? This removes its board. 1 terminal is still running and will be stopped.'
   )

@@ -59,8 +59,8 @@ async function createWorkspace(name = 'alpha'): Promise<void> {
 
 async function openEdit(index = 0): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
 }
 

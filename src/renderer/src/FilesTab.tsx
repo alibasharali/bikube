@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw, X } fro
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeLetter } from '../../core/git-status'
 import { openErrorLine, type OpenResult } from '../../core/open-result'
+import FileIcon from './FileIcon'
 import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
 import { SMALL_ICON } from './icons'
@@ -101,6 +102,9 @@ function Row({
         {expandable &&
           (row.expanded ? <ChevronDown {...SMALL_ICON} /> : <ChevronRight {...SMALL_ICON} />)}
       </span>
+      {(row.kind === 'root' || row.kind === 'folder' || row.kind === 'file') && (
+        <FileIcon name={row.name} kind={row.kind} open={row.expanded === true} />
+      )}
       <span className="files-name">{row.name}</span>
       {row.entry?.symlink && (
         <span className="files-link" aria-label="Symbolic link" title="Symbolic link">

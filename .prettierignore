@@ -7,3 +7,5 @@ package-lock.json
 docs
 .github/workflows/claude-code-review.yml
 src/core/ghostty-themes.json
+src/core/vscode-icons.json
+src/renderer/public/file-icons

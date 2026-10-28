@@ -277,8 +277,8 @@ test("AC9: Stopped and Couldn't start cards move and keep their status", async (
   // A card created after the workspace's directory moved to one that is then removed.
   const gone = makeDir('gone')
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await page.getByTestId('workspace-directory').fill(gone)
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
@@ -673,8 +673,8 @@ test('#69 AC12: Recently opened first sorts every column without changing the bo
 
   // The Edit dialog shows the same choice and sets it.
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(page.getByTestId('workspace-sort-manual')).toBeChecked()
   await page.getByTestId('workspace-sort-recent').check()
   await page.getByTestId('workspace-submit').click()
@@ -701,8 +701,8 @@ test('#69 AC12: Recently opened first sorts every column without changing the bo
   await openCard('A')
   await back()
   await expect(titles('Backlog')).toHaveText(['A', 'B'])
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(page.getByTestId('workspace-sort-recent')).toBeChecked()
   // Hidden for Grid, as the move rules are.
   await page.getByTestId('workspace-view-grid').check()

@@ -1,6 +1,7 @@
-import { RefreshCw, Search } from 'lucide-react'
+import { Blocks, RefreshCw, Search, X } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
+  AGENT_SETUP_GROUP_NAMES,
   AGENT_SETUP_GROUPS,
   AGENT_SETUP_SECTIONS,
   adjacentSection,
@@ -17,6 +18,7 @@ import {
   useAgentSetupData,
   useAgentSetupRefresh
 } from './agent-setup-data'
+import { SectionIcon } from './agent-setup-icons'
 import { useAgentSetupMemory } from './agent-setup-memory'
 import {
   AgentsSection,
@@ -34,8 +36,9 @@ import {
 } from './AgentSetupSections'
 import { StatsSection } from './AgentSetupStats'
 import { registerCardViewActions } from './card-view-actions'
-import { SMALL_ICON } from './icons'
+import { ICON, SMALL_ICON } from './icons'
 import { currentKeymap } from './settings'
+import Tooltip from './Tooltip'
 import { dialogOpenIn, useViewWindow } from './view-window'
 
 /** Below this page width the section list is a horizontal strip above the content (#68 D7). */
@@ -79,31 +82,39 @@ const SECTION_VIEWS: Partial<
 /**
  * A workspace's Agent setup page (#68 D1, D5, D7): its header, a search box and Refresh above the
  * section list, and the section shown. Fills the main area in place of the board, as an open card
- * does; Back and the Back shortcut go back to the board (D3). An SSH workspace's shows only a
- * message (D6).
+ * does; Back and the Back shortcut go back to the board, the page staying open in the sidebar as
+ * a card does, until its close button closes it (D3). An SSH workspace's shows only a message (D6).
  */
 function AgentSetupPage({
   workspace,
-  onBack
+  onBack,
+  onClose
 }: {
   workspace: Workspace
+  /** To the board, the page staying open in the sidebar as a card does. */
   onBack: () => void
+  /** Its close button: out of the sidebar too. */
+  onClose: () => void
 }): React.JSX.Element {
   const view = useViewWindow()
-  // The Back shortcut and the palette's Back row, as in an open card (D3).
-  const back = useRef(onBack)
+  // The Back shortcut and the palette's Back row, as in an open card (D3); Close pane and Close
+  // card close the page, as they close an open card's last pane or the card.
+  const actions = useRef({ onBack, onClose })
   useEffect(() => {
-    back.current = onBack
+    actions.current = { onBack, onClose }
   })
   useEffect(() => {
     const run = (action: string): void => {
-      if (action === 'back') back.current()
+      if (action === 'back') actions.current.onBack()
+      else if (action === 'closePane' || action === 'closeCard') actions.current.onClose()
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (keymapAction(event, currentKeymap()) !== 'back' || dialogOpenIn(view)) return
+      const action = keymapAction(event, currentKeymap())
+      if (action !== 'back' && action !== 'closePane' && action !== 'closeCard') return
+      if (dialogOpenIn(view)) return
       event.preventDefault()
       event.stopPropagation()
-      if (!event.repeat) run('back')
+      if (!event.repeat) run(action)
     }
     view.addEventListener('keydown', onKeyDown, true)
     const unregister = registerCardViewActions(run)
@@ -117,17 +128,37 @@ function AgentSetupPage({
   return (
     <section className="agent-setup" data-testid="agent-setup" aria-label="Agent setup">
       <header className="agent-setup-header">
-        <h2 className="agent-setup-title">Agent setup</h2>
-        {!ssh && (
-          <p
-            className="agent-setup-subtitle"
-            data-testid="agent-setup-subtitle"
-            title={workspace.directory}
+        <span className="agent-setup-header-icon" aria-hidden="true">
+          <Blocks size={20} />
+        </span>
+        <div className="agent-setup-header-text">
+          <h2 className="agent-setup-title">Agent setup</h2>
+          {!ssh && (
+            <p
+              className="agent-setup-subtitle"
+              data-testid="agent-setup-subtitle"
+              title={workspace.directory}
+            >
+              Claude Code · <span className="agent-setup-folder">{workspace.directory}</span>
+            </p>
+          )}
+          {!ssh && <SaveNotice folder={workspace.directory} />}
+        </div>
+        <Tooltip
+          label="Close Agent setup"
+          description="Takes it out of the sidebar; the toolbar opens it again"
+          align="end"
+        >
+          <button
+            type="button"
+            className="icon-btn agent-setup-close"
+            data-testid="agent-setup-close"
+            aria-label="Close Agent setup"
+            onClick={onClose}
           >
-            Claude Code · {workspace.directory}
-          </p>
-        )}
-        {!ssh && <SaveNotice folder={workspace.directory} />}
+            <X {...ICON} />
+          </button>
+        </Tooltip>
       </header>
       {ssh ? (
         <p className="agent-setup-message" data-testid="agent-setup-ssh">
@@ -289,7 +320,13 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
         data-testid="agent-setup-panel"
         data-section={section}
       >
-        <h3 className="agent-setup-panel-title">{current.label}</h3>
+        <div className="agent-setup-panel-head">
+          <SectionIcon id={section} />
+          <div className="agent-setup-panel-head-text">
+            <h3 className="agent-setup-panel-title">{current.label}</h3>
+            <p className="agent-setup-panel-hint">{current.hint}</p>
+          </div>
+        </div>
         {section === 'stats' ? (
           // Stats read the transcripts on their own, not the snapshot (D14).
           <StatsSection workspace={workspace} />
@@ -371,7 +408,10 @@ export function SectionList({
       onKeyDown={onKeyDown}
     >
       {AGENT_SETUP_GROUPS.map((group, index) => [
-        index > 0 && <span key={`rule-${index}`} className="agent-setup-rule" aria-hidden="true" />,
+        // The group's name in the vertical list, a gap in the narrow strip.
+        <span key={`group-${index}`} className="agent-setup-group-name" aria-hidden="true">
+          {orientation === 'vertical' ? AGENT_SETUP_GROUP_NAMES[index] : null}
+        </span>,
         ...group.map(({ id, label }) => {
           const count = counts?.[id]
           const warning = warnings?.has(id) === true
@@ -390,6 +430,7 @@ export function SectionList({
               tabIndex={section === id ? 0 : -1}
               onClick={() => onSelect(id)}
             >
+              <SectionIcon id={id} small />
               <span className="agent-setup-tab-label">{label}</span>
               {warning && (
                 <span

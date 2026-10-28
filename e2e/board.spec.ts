@@ -45,14 +45,14 @@ async function createWorkspace(dir: string, name?: string): Promise<void> {
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
 }
 
-/** Row actions only appear while the row is hovered or focused. */
+/** Shows the board of the workspace row at `index`, then its toolbar's Edit or Delete. */
 async function rowAction(
   index: number,
   testId: 'workspace-edit' | 'workspace-delete'
 ): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId(testId).click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId(testId).click()
 }
 
 const columnNames = (): Promise<string[]> => page.getByTestId('column-name').allTextContents()
@@ -457,6 +457,33 @@ test('AC6: delete with cancel and confirm, then the empty state', async () => {
   await page.getByTestId('confirm-delete').click()
   await expect(items).toHaveCount(0)
   await expect(page.getByTestId('empty-state')).toBeVisible()
+})
+
+test("the workspace toolbar holds the active workspace's Agent setup, Edit and Delete, on its board only", async () => {
+  await createWorkspace(makeDir('alpha'))
+  await createWorkspace(makeDir('beta'))
+  const items = page.getByTestId('workspace-item')
+  const toolbar = page.getByTestId('workspace-toolbar')
+  await items.nth(0).click()
+  await expect(toolbar.getByRole('button')).toHaveText(['Agent setup', 'Edit', 'Delete', ''])
+  await expect(toolbar.getByRole('button').last()).toHaveAccessibleName('New terminal')
+  await expect(toolbar.getByTestId('workspace-edit')).toHaveAttribute('aria-label', 'Edit alpha')
+  // The sidebar no longer shows them over the workspace's name.
+  await items.nth(0).hover()
+  await expect(page.locator('.workspace-row').getByTestId('workspace-edit')).toHaveCount(0)
+  await expect(page.locator('.workspace-row').getByTestId('workspace-delete')).toHaveCount(0)
+
+  await items.nth(1).click()
+  await expect(toolbar.getByTestId('workspace-delete')).toHaveAttribute('aria-label', 'Delete beta')
+
+  // An open card fills the main area: no toolbar until Back.
+  await column('Backlog').getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('api')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'api')
+  await expect(toolbar).toHaveCount(0)
+  await backToBoard(page)
+  await expect(toolbar).toBeVisible()
 })
 
 test('AC7: column add, rename, move, delete and validation', async () => {

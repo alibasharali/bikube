@@ -142,11 +142,14 @@ test('#35 AC1: Find opens the bar in the pane and finds as you type, newest matc
   await page.keyboard.type('alpha')
   await expect(result()).toHaveText('1 of 3')
 
-  // The bar is in the pane's top-right corner.
+  // The bar is in the pane's top-right corner, just left of its Close card ×.
   const pane = (await page.getByTestId('pane').boundingBox())!
   const box = (await bar().boundingBox())!
+  const close = (await page.getByTestId('pane-close-card').boundingBox())!
   expect(box.y - pane.y).toBeLessThan(12)
-  expect(pane.x + pane.width - (box.x + box.width)).toBeLessThan(12)
+  expect(box.x + box.width).toBeLessThanOrEqual(close.x + 1)
+  expect(close.x - (box.x + box.width)).toBeLessThan(12)
+  expect(pane.x + pane.width - (close.x + close.width)).toBeLessThan(12)
 
   // The active match is the alpha on the last of those lines.
   const lines = await bufferLines()
@@ -288,7 +291,7 @@ test('#35 AC6: every match is highlighted, the active one filled; closing leaves
   expect(new Set(tops).size).toBe(3)
   // The doubled one is the newest match, the active one.
   expect(tops.at(-1)).toBe(tops.at(-2))
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(bar()).toHaveCount(0)
   await expect(decorations()).toHaveCount(0)
   expect(await selection()).toEqual({ text: '', row: -1 })

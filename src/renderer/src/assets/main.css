@@ -214,9 +214,47 @@ button {
   color: var(--text);
 }
 
-.titlebar-panel {
+.titlebar-panel-anchor {
   margin-left: auto;
   -webkit-app-region: no-drag;
+}
+
+/*
+ * Above the side panel and as wide, so the panel runs from the window's top as the sidebar does:
+ * its tabs, and the button that hides it at the end.
+ */
+.titlebar-panel-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.titlebar-panel-side .side-panel-tabs {
+  -webkit-app-region: no-drag;
+}
+
+/* New terminal, Split right and Split down while a card or shell is open. */
+.titlebar-terminal-buttons {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-shells + .titlebar-terminal-buttons {
+  margin-left: var(--space-1);
+}
+
+.titlebar-terminal-buttons + .titlebar-panel-anchor {
+  margin-left: var(--space-1);
 }
 
 /* Running shells while the panel is hidden, just before its button, which then follows it. */
@@ -241,18 +279,7 @@ button {
   color: var(--text);
 }
 
-.titlebar-shells + .titlebar-panel {
-  margin-left: var(--space-1);
-}
-
-/* Agent setup (#68 D2): left of the panel toggle, at the bar's right end on the board. */
-.titlebar-agent-setup {
-  margin-left: auto;
-  -webkit-app-region: no-drag;
-}
-
-.titlebar-shells + .titlebar-agent-setup,
-.titlebar-agent-setup + .titlebar-panel {
+.titlebar-shells + .titlebar-panel-anchor {
   margin-left: var(--space-1);
 }
 
@@ -1334,26 +1361,6 @@ button {
   align-items: center;
 }
 
-.workspace-actions {
-  position: absolute;
-  right: var(--space-1);
-  display: flex;
-  gap: var(--space-1);
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Anywhere over the workspace's group, its tree included. */
-.workspace-row:hover > .workspace-head .workspace-actions,
-.workspace-head:focus-within .workspace-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sidebar-collapsed .workspace-actions {
-  display: none;
-}
-
 /* Dragging a workspace (#32 D4): its row dims, and a line shows where it would land, as for
    cards (#6 D5). */
 .workspace-dragging {
@@ -1377,10 +1384,6 @@ button {
 
 .workspace-row[data-drop='after']::before {
   bottom: calc(-0.5 * var(--space-1) - 1px);
-}
-
-.workspace-actions .icon-btn {
-  background: var(--surface);
 }
 
 .modal-backdrop {
@@ -2084,6 +2087,55 @@ button.dev-server-chip:focus-visible {
   display: flex;
 }
 
+/* The toolbar and the board, in the column left of the side panel. */
+.board-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The workspace's buttons above its board: Agent setup, Edit and Delete, then New terminal. */
+.workspace-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workspace-toolbar-gap {
+  flex: 1;
+}
+
+.workspace-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.workspace-toolbar-danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* No room for the labels on a narrow window: the icons alone, named by their titles. */
+@media (max-width: 479.98px) {
+  .workspace-toolbar {
+    padding: var(--space-1) var(--space-3);
+  }
+
+  .workspace-toolbar-btn:not([data-testid='toolbar-agent-setup']) {
+    font-size: 0;
+    gap: 0;
+  }
+}
+
 .card-view {
   flex: 1;
   min-width: 0;
@@ -2242,6 +2294,18 @@ button.dev-server-chip:focus-visible {
   width: 16px;
   justify-content: center;
   color: var(--text-muted);
+}
+
+/* A row's vscode-icons icon (FileIcon.tsx), dimmed with an ignored row. */
+.files-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  user-select: none;
+}
+
+.files-row[data-ignored='true'] .files-icon {
+  opacity: 0.5;
 }
 
 .files-name {
@@ -4366,25 +4430,93 @@ button.dev-server-chip:focus-visible {
   background: var(--bg);
 }
 
+/* The header: the page's icon on the accent, over a faint wash of the theme's accent. */
 .agent-setup-header {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   min-width: 0;
   padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--accent) 10%, var(--surface)) 0%,
+    var(--surface) 45%
+  );
+}
+
+.agent-setup-header-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent-text);
+}
+
+.agent-setup-header-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .agent-setup-title {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .agent-setup-subtitle {
-  margin: var(--space-1) 0 0;
+  margin: 2px 0 0;
   overflow: hidden;
   color: var(--text-muted);
   font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-setup-folder {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* A section's icon (agent-setup-icons.tsx) on its group's theme colour. */
+.agent-setup-icon {
+  --tone: var(--accent);
+  --tone-bg: var(--accent-soft);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-lg);
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+
+.agent-setup-icon[data-tone='working'] {
+  --tone: var(--pill-working-text);
+  --tone-bg: var(--pill-working-bg);
+}
+
+.agent-setup-icon[data-tone='waiting'] {
+  --tone: var(--pill-waiting-text);
+  --tone-bg: var(--pill-waiting-bg);
+}
+
+.agent-setup-icon[data-tone='question'] {
+  --tone: var(--pill-question-text);
+  --tone-bg: var(--pill-question-bg);
+}
+
+.agent-setup-icon-small {
+  width: auto;
+  height: auto;
+  background: transparent;
 }
 
 .agent-setup-message {
@@ -4471,12 +4603,19 @@ button.dev-server-chip:focus-visible {
   gap: 2px;
 }
 
-/* The rule between the list's groups; a gap in the narrow strip. */
-.agent-setup-rule {
+/* A group's name above it; a gap in the narrow strip. */
+.agent-setup-group-name {
   flex: none;
-  height: 1px;
-  margin: var(--space-1) var(--space-2);
-  background: var(--border);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.agent-setup-group-name:first-child {
+  padding-top: 0;
 }
 
 .agent-setup-tab {
@@ -4484,8 +4623,8 @@ button.dev-server-chip:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 28px;
-  padding: var(--space-1) var(--space-3);
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -4502,16 +4641,17 @@ button.dev-server-chip:focus-visible {
   color: var(--text);
 }
 
+/* The selected section: the accent tint with an accent bar at its start. */
 .agent-setup-tab[aria-selected='true'] {
   background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
   color: var(--text);
   font-weight: 600;
 }
 
-/* Muted text falls short of 4.5:1 on the selected tint in some themes, so its count reads in the
-   text colour. */
 .agent-setup-tab[aria-selected='true'] .agent-setup-tab-count {
-  color: var(--text);
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .agent-setup-tab-label {
@@ -4523,8 +4663,15 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-tab-count {
   flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4543,9 +4690,28 @@ button.dev-server-chip:focus-visible {
   padding: var(--space-4) var(--space-6) var(--space-6);
 }
 
+.agent-setup-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-bottom: var(--space-6);
+}
+
+.agent-setup-panel-head-text {
+  min-width: 0;
+}
+
 .agent-setup-panel-title {
-  margin: 0 0 var(--space-4);
-  font-size: var(--text-md);
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 650;
+}
+
+.agent-setup-panel-hint {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .agent-setup-empty {
@@ -4563,8 +4729,8 @@ button.dev-server-chip:focus-visible {
 /* Overview's cards (D12), one per section with rows, then the Warnings list. */
 .agent-setup-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: var(--space-3);
 }
 
 .agent-setup-card {
@@ -4572,18 +4738,30 @@ button.dev-server-chip:focus-visible {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  padding: var(--space-3);
+  padding: 14px var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    transform var(--transition);
 }
 
 .agent-setup-card:hover {
-  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+
+.agent-setup-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .agent-setup-card[data-dimmed='true'] {
@@ -4596,18 +4774,26 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-card-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+  margin-bottom: var(--space-1);
 }
 
 .agent-setup-card-label {
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--text-sm);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-setup-card-count {
-  font-size: var(--text-lg);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4619,16 +4805,29 @@ button.dev-server-chip:focus-visible {
   white-space: nowrap;
 }
 
+/* A group's heading inside a section, with a rule running on after it. */
 .agent-setup-subheading {
-  margin: var(--space-6) 0 var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-3);
+  color: var(--text);
   font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.agent-setup-subheading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 /* A section's rows (D18, D17): on the panel surface, one per entry. */
 .agent-setup-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -4639,10 +4838,24 @@ button.dev-server-chip:focus-visible {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
   font-size: var(--text-sm);
+  transition: border-color var(--transition);
+}
+
+.agent-setup-row:hover {
+  border-color: var(--border-strong);
+}
+
+/* Overview's warnings: an amber bar at the row's start. */
+.agent-setup-row[data-testid='agent-setup-warning-item'] {
+  box-shadow:
+    inset 3px 0 0 var(--pill-question-text),
+    var(--shadow-card);
 }
 
 /* A plugin's entry while the plugin is off (D18): its text muted (a colour token, not opacity,
@@ -4697,14 +4910,50 @@ button.dev-server-chip:focus-visible {
 .agent-setup-chip {
   max-width: 100%;
   overflow: hidden;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
   background: var(--chip);
   color: var(--text-muted);
   font-size: var(--text-xs);
-  line-height: 18px;
+  font-weight: 500;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Sources (D9) in the theme's colours, so where an entry comes from reads at a glance. */
+.agent-setup-chip[data-source='project'] {
+  background: var(--pill-working-bg);
+  color: var(--pill-working-text);
+}
+
+.agent-setup-chip[data-source='user'] {
+  background: var(--pill-waiting-bg);
+  color: var(--pill-waiting-text);
+}
+
+.agent-setup-chip[data-source='local'] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.agent-setup-chip[data-source='plugin'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.agent-setup-chip[data-source='bikube'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* A file found or a server in use (D13, D16): the green of its theme. */
+.agent-setup-chip[data-state='found'],
+.agent-setup-chip[data-state='on'],
+.agent-setup-chip[data-state='enabled'],
+.agent-setup-chip[data-state='plugin-on'] {
+  background: var(--pill-waiting-bg);
+  color: var(--pill-waiting-text);
 }
 
 /* A file-backed row's Open file and Reveal (#68 D27): shown on the row's hover and focus, still in
@@ -4758,8 +5007,8 @@ button.dev-server-chip:focus-visible {
    amber text falls short of 4.5:1 in some light themes. */
 .agent-setup-warning {
   max-width: 100%;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--pill-question-text);
   color: var(--pill-question-text);
@@ -4827,8 +5076,11 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-imports > .agent-setup-row {
   padding-right: 0;
-  border-left: 1px solid var(--border);
+  border: 0;
+  border-left: 2px solid var(--border-strong);
   border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .agent-setup-preview {
@@ -4878,11 +5130,16 @@ button.dev-server-chip:focus-visible {
 }
 
 /* Status' and Permissions' label and value rows. */
+/* One card, its facts divided by rules. */
 .agent-setup-facts {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   margin: 0 0 var(--space-6);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 
 .agent-setup-fact {
@@ -4890,10 +5147,12 @@ button.dev-server-chip:focus-visible {
   grid-template-columns: 140px minmax(0, 1fr);
   gap: var(--space-2);
   align-items: baseline;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  padding: 10px 14px;
   font-size: var(--text-sm);
+}
+
+.agent-setup-fact + .agent-setup-fact {
+  border-top: 1px solid var(--border);
 }
 
 .agent-setup-fact dt {
@@ -4989,6 +5248,29 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-config-reset {
   flex: none;
+  width: 24px;
+  height: 24px;
+}
+
+/*
+ * A row's switch, number field or Reset, at its end. Rows without one keep the slot empty, so the
+ * chips before it line up in one column down the section.
+ */
+.agent-setup-control-slot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  width: 124px;
+}
+
+.agent-setup-control-slot-switch {
+  width: 36px;
+}
+
+.agent-setup-control-slot .agent-setup-config-number {
+  width: 92px;
 }
 
 /*
@@ -5004,19 +5286,41 @@ button.dev-server-chip:focus-visible {
   margin-bottom: var(--space-3);
 }
 
+/* The totals as tiles, each topped by one of the theme's colours. */
 .agent-setup-stats-totals {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2) var(--space-6);
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
 
+.agent-setup-stats-total {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.agent-setup-stats-total:nth-child(2) {
+  border-top-color: var(--pill-working-text);
+}
+
+.agent-setup-stats-total:nth-child(3) {
+  border-top-color: var(--pill-waiting-text);
+}
+
 .agent-setup-stats-total strong {
+  display: block;
   color: var(--text);
-  font-size: var(--text-lg);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -5025,16 +5329,22 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-setup-stats-period {
-  margin-left: auto;
+  flex-basis: 100%;
+  order: -1;
   font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .agent-setup-chart {
   min-width: 0;
   margin: 0;
-  padding: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 
 .agent-setup-chart-legend {
@@ -5057,7 +5367,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-setup-chart-key-sessions::before {
-  background: var(--text-muted);
+  background: var(--pill-waiting-text);
 }
 
 .agent-setup-chart-plot {
@@ -5106,12 +5416,16 @@ button.dev-server-chip:focus-visible {
 .agent-setup-chart-tokens > span,
 .agent-setup-chart-sessions > span {
   flex: 1;
-  border-radius: 2px 2px 0 0;
+  border-radius: 3px 3px 0 0;
   background: var(--accent);
 }
 
+.agent-setup-chart-day[data-hovered='true'] .agent-setup-chart-tokens > span {
+  box-shadow: 0 0 0 1px var(--text);
+}
+
 .agent-setup-chart-sessions > span {
-  background: var(--text-muted);
+  background: color-mix(in srgb, var(--pill-waiting-text) 60%, transparent);
 }
 
 .agent-setup-chart-axis {
@@ -5226,7 +5540,7 @@ button.dev-server-chip:focus-visible {
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--pill-working-text));
 }
 
 .agent-setup-stats-lists {
@@ -5237,6 +5551,15 @@ button.dev-server-chip:focus-visible {
 
 .agent-setup-stats-list {
   min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.agent-setup-stats-list .agent-setup-rows {
+  gap: 2px;
 }
 
 .agent-setup-stats-list-title {
@@ -5248,10 +5571,15 @@ button.dev-server-chip:focus-visible {
   letter-spacing: 0.04em;
 }
 
+/* A Most used row, tinted up to its share of the list's top count. */
 .agent-setup-stats-used {
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: linear-gradient(
+    90deg,
+    var(--accent-soft) var(--share, 0%),
+    transparent var(--share, 0%)
+  );
   font-size: var(--text-sm);
 }
 
@@ -5276,6 +5604,12 @@ button.dev-server-chip:focus-visible {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-1);
   }
+
+  /* No room for the header's and the section title's icons beside their text. */
+  .agent-setup-header-icon,
+  .agent-setup-panel-head > .agent-setup-icon {
+    display: none;
+  }
 }
 
 .agent-setup-narrow {
@@ -5296,11 +5630,17 @@ button.dev-server-chip:focus-visible {
   overflow-x: auto;
 }
 
-.agent-setup-narrow .agent-setup-rule {
+.agent-setup-narrow .agent-setup-group-name {
   width: var(--space-2);
-  height: auto;
-  margin: 0;
-  background: transparent;
+  padding: 0;
+}
+
+.agent-setup-narrow .agent-setup-group-name:first-child {
+  display: none;
+}
+
+.agent-setup-narrow .agent-setup-tab[aria-selected='true'] {
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .agent-setup-narrow .agent-setup-panel {
@@ -5316,4 +5656,68 @@ button.dev-server-chip:focus-visible {
   .agent-setup-message {
     padding: var(--space-3) var(--space-4);
   }
+}
+
+/*
+ * A button's tooltip (Tooltip.tsx): its name and shortcut, then what it does, below the button
+ * after the pointer rests on it or as keyboard focus reaches it.
+ */
+.tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 260px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-menu);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.tooltip[data-shown='true'] {
+  display: flex;
+}
+
+.tooltip[data-align='start'] {
+  left: 0;
+  transform: none;
+}
+
+.tooltip[data-align='end'] {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tooltip-label {
+  font-weight: 600;
+}
+
+.tooltip-description {
+  color: var(--text-muted);
 }

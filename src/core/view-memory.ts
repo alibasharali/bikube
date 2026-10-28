@@ -1,6 +1,7 @@
 /**
  * Each workspace's view for this run of the app (#31 D19): the card open at full size in it, its
- * Agent setup page (#68 D3), or none for its board. Runtime only: never saved or synced, so after
+ * Agent setup page (#68 D3), or none for its board. Which workspaces have Agent setup open (listed
+ * in the sidebar until closed) is App's `openSetups`, apart from what each shows. Runtime only: never saved or synced, so after
  * a restart every workspace shows its board.
  */
 export type WorkspaceViewEntry = { kind: 'card'; cardId: string } | { kind: 'agentSetup' }
@@ -20,11 +21,6 @@ export function openedCard(views: ViewMemory, workspaceId: string): string | nul
 /** Whether `workspaceId`'s view is its Agent setup page (#68 D3). */
 export function showsAgentSetup(views: ViewMemory, workspaceId: string): boolean {
   return Object.hasOwn(views, workspaceId) && views[workspaceId].kind === 'agentSetup'
-}
-
-/** The workspaces whose view is Agent setup, each listing its row in the sidebar tree (D3). */
-export function agentSetupWorkspaces(views: ViewMemory): string[] {
-  return Object.keys(views).filter((id) => views[id].kind === 'agentSetup')
 }
 
 /** Opening a card on a board replaces that workspace's remembered card or Agent setup. */

@@ -80,7 +80,7 @@ async function createWorkspace(name: string, host?: string): Promise<string> {
 }
 
 const agentSetup = (): Locator => page.getByTestId('agent-setup')
-const setupButton = (): Locator => page.getByTestId('titlebar-agent-setup')
+const setupButton = (): Locator => page.getByTestId('toolbar-agent-setup')
 /** The `Agent setup` row in the sidebar tree, under workspace `name`. */
 const setupRow = (name: string): Locator =>
   page
@@ -92,12 +92,12 @@ const workspaceItem = (name: string): Locator =>
   page.getByTestId('workspace-item').filter({ hasText: name })
 const board = (): Locator => page.getByTestId('board')
 
-test('AC1: the title bar button opens the page; Back and its shortcut go back to the board', async () => {
+test("AC1: the workspace toolbar's button opens the page; Back and its shortcut go back to the board", async () => {
   await launch()
   const folder = await createWorkspace('Proj')
   await expect(board()).toBeVisible()
-  await expect(setupButton()).toHaveAttribute('aria-label', 'Agent setup')
-  await expect(setupButton()).toHaveAttribute('title', 'Agent setup')
+  await expect(setupButton()).toHaveText('Agent setup')
+  await expect(page.getByTestId('workspace-toolbar')).toBeVisible()
   await setupButton().click()
 
   await expect(agentSetup()).toBeVisible()
@@ -116,19 +116,38 @@ test('AC1: the title bar button opens the page; Back and its shortcut go back to
   await expect(setupButton()).toHaveCount(0)
   expect(await page.title()).toBe('Agent setup — Proj')
 
-  // Back in the title bar.
+  // Back in the title bar: the board, the page still open in the sidebar as a card would be.
   await expect(page.getByTestId('titlebar-workspace')).toHaveAttribute('title', 'Back to Proj')
   await page.getByTestId('titlebar-workspace').click()
   await expect(board()).toBeVisible()
   await expect(agentSetup()).toHaveCount(0)
-  await expect(setupRow('Proj')).toHaveCount(0)
+  await expect(setupRow('Proj')).toHaveText('Agent setup')
+  await expect(setupRow('Proj')).not.toHaveAttribute('aria-current', 'true')
 
-  // The Back shortcut.
-  await setupButton().click()
+  // Its row shows it again; the Back shortcut goes back too.
+  await setupRow('Proj').click()
   await expect(agentSetup()).toBeVisible()
+  await expect(setupRow('Proj')).toHaveAttribute('aria-current', 'true')
   await page.keyboard.press(SHORTCUTS.back)
   await expect(board()).toBeVisible()
+  await expect(setupRow('Proj')).toBeVisible()
+
+  // Its close button closes it: the board, and no row.
+  await setupRow('Proj').click()
+  await expect(page.getByTestId('agent-setup-close')).toHaveAccessibleName('Close Agent setup')
+  await page.getByTestId('agent-setup-close').click()
+  await expect(board()).toBeVisible()
+  await expect(agentSetup()).toHaveCount(0)
   await expect(setupRow('Proj')).toHaveCount(0)
+
+  // Close pane (Cmd+W) and Close card close it as they close a card.
+  for (const shortcut of [SHORTCUTS.closePane, SHORTCUTS.closeCard]) {
+    await setupButton().click()
+    await expect(agentSetup()).toBeVisible()
+    await page.keyboard.press(shortcut)
+    await expect(board()).toBeVisible()
+    await expect(setupRow('Proj')).toHaveCount(0)
+  }
 })
 
 /** Creates card `title` in Backlog; its view opens, running. */
@@ -183,18 +202,25 @@ test('AC2: the palette opens it over a running card; it is remembered for the ru
   await expect(agentSetup()).toBeVisible()
   await expect(page.getByTestId('board-title')).toHaveCount(0)
 
-  // Proj's own row shows its board and forgets the page.
+  // Proj's own row shows its board; the page stays open in the sidebar.
   await workspaceItem('Proj').click()
   await expect(board()).toBeVisible()
-  await expect(setupRow('Proj')).toHaveCount(0)
+  await expect(setupRow('Proj')).toBeVisible()
+  await expect(setupRow('Proj')).not.toHaveAttribute('aria-current', 'true')
   await expect(boardCard(page, 'c1').getByTestId('card-status-label')).toHaveText('Running')
 
-  // Opening a card replaces it.
-  await setupButton().click()
+  // Opening a card shows it in the page's place; the page's row stays, and shows it again.
+  await setupRow('Proj').click()
   await expect(agentSetup()).toBeVisible()
   await page.getByTestId('workspace-terminal').click()
   await expectCardOpen(page, 'c1')
-  await expect(setupRow('Proj')).toHaveCount(0)
+  await expect(setupRow('Proj')).toBeVisible()
+  await expect(setupRow('Proj')).not.toHaveAttribute('aria-current', 'true')
+  await setupRow('Proj').click()
+  await expect(agentSetup()).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await page.getByTestId('workspace-terminal').click()
+  await expectCardOpen(page, 'c1')
   await backToBoard(page)
 
   // Never saved: after a restart Proj shows its board.
@@ -245,9 +271,10 @@ test('AC18: at 320 px the sections are a strip above the content, with no page s
     .toBe(true)
   // The strip scrolls inside itself; the page never does.
   await expect.poll(() => sections.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-    await page.evaluate(() => window.innerWidth)
-  )
+  // Polled too: a busy machine can still be laying out the collapsed sidebar.
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true)
   // Right moves along the strip.
   await page.getByRole('tab', { name: 'Overview' }).focus()
   await page.keyboard.press('ArrowRight')
@@ -683,9 +710,14 @@ test('the Toggle panel shortcut does nothing while the page is in front', async 
   await expect(sidePanel).toBeVisible()
 })
 
-/** The workspace's settings.local.json, as the page wrote it. */
-const localSettings = (folder: string): string =>
-  readFileSync(join(folder, '.claude/settings.local.json'), 'utf8')
+/**
+ * The workspace's settings.local.json, as the page wrote it; `null` until it exists, so a poll
+ * started before the first write keeps polling instead of throwing.
+ */
+const localSettings = (folder: string): string => {
+  const file = join(folder, '.claude/settings.local.json')
+  return existsSync(file) ? readFileSync(file, 'utf8') : 'null'
+}
 
 const pluginSwitch = (): Locator =>
   panel()
@@ -933,7 +965,7 @@ async function recordRevealed(): Promise<void> {
 const revealedPaths = (): Promise<string[]> =>
   app!.evaluate(() => [...((globalThis as { revealedPaths?: string[] }).revealedPaths ?? [])])
 
-test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal shows it; unlisted paths open nothing", async () => {
+test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Reveal shows it; unlisted paths open nothing", async () => {
   const shell = loginShell(false)
   fakeCode()
   const folder = await openWith(ac4Fixtures, shell)
@@ -946,11 +978,19 @@ test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal s
   const open = review.getByRole('button', { name: 'Open file' })
   const reveal = review.getByRole('button', { name: 'Reveal' })
   await expect(open).toBeVisible()
+  // A project skill opens with the workspace, as the Files tab opens its files.
   await open.click()
-  await expect.poll(editorRuns).toEqual(['run code', skillFolder, skill])
+  await expect.poll(editorRuns).toEqual(['run code', folder, skill])
   await expect(panel().getByTestId('agent-setup-open-error')).toHaveCount(0)
   await reveal.click()
   await expect.poll(revealedPaths).toEqual([skill])
+  // A user skill, outside the workspace, opens with its own folder.
+  const notesFolder = join(home, '.claude', 'skills', 'notes')
+  await row('notes').hover()
+  await row('notes').getByRole('button', { name: 'Open file' }).click()
+  await expect
+    .poll(editorRuns)
+    .toEqual(['run code', folder, skill, 'run code', notesFolder, join(notesFolder, 'SKILL.md')])
 
   // AC19: hidden until hovered or focused, the buttons are in the Tab order: from the control
   // before them, Tab shows and focuses Open file, then Reveal, then the next row's Open file.
@@ -1003,7 +1043,14 @@ test("AC17: a skill's Open file runs code with its folder and SKILL.md, Reveal s
     false
   ])
   await page.waitForTimeout(500)
-  expect(editorRuns()).toEqual(['run code', skillFolder, skill])
+  expect(editorRuns()).toEqual([
+    'run code',
+    folder,
+    skill,
+    'run code',
+    notesFolder,
+    join(notesFolder, 'SKILL.md')
+  ])
   expect(await revealedPaths()).toEqual([skill])
 
   // Bikube's own hooks and settings file have neither button, nor does a missing file (D27).

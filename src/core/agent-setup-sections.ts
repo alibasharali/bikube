@@ -20,9 +20,30 @@ export type AgentSetupSectionId =
 export interface AgentSetupSection {
   id: AgentSetupSectionId
   label: string
+  /** One line under the section's title saying what it lists. */
+  hint: string
 }
 
-const section = (id: AgentSetupSectionId, label: string): AgentSetupSection => ({ id, label })
+const HINTS: Record<AgentSetupSectionId, string> = {
+  overview: 'Everything Claude Code gets in this workspace, and what needs a look',
+  status: 'The Claude Code install, account and settings files',
+  stats: "This workspace's Claude Code sessions over the last 30 days",
+  plugins: 'Installed plugins, turned on or off for this workspace',
+  mcp: 'Servers Claude Code can connect to, never started from here',
+  skills: 'Skills Claude Code can load when a task calls for one',
+  agents: 'Subagents Claude Code can hand work to',
+  commands: 'Slash commands typed at the prompt',
+  hooks: 'Commands run on Claude Code events, by event',
+  memory: 'Instruction files loaded at the start of every session, in load order',
+  permissions: 'Tool rules: allowed, asked about and denied',
+  config: 'Settings keys and where each value comes from'
+}
+
+const section = (id: AgentSetupSectionId, label: string): AgentSetupSection => ({
+  id,
+  label,
+  hint: HINTS[id]
+})
 
 /** The four groups, separated by a rule in the list (a gap in the narrow strip). */
 export const AGENT_SETUP_GROUPS: readonly (readonly AgentSetupSection[])[] = [
@@ -35,6 +56,14 @@ export const AGENT_SETUP_GROUPS: readonly (readonly AgentSetupSection[])[] = [
     section('hooks', 'Hooks')
   ],
   [section('memory', 'Memory'), section('permissions', 'Permissions'), section('config', 'Config')]
+]
+
+/** Each group's name, shown above it in the vertical list. */
+export const AGENT_SETUP_GROUP_NAMES: readonly string[] = [
+  'Workspace',
+  'Extensions',
+  'Capabilities',
+  'Context'
 ]
 
 /** Every section in list order. */

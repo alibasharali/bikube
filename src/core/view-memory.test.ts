@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  agentSetupWorkspaces,
   enterWorkspace,
   forgetCards,
   forgetView,
@@ -78,12 +77,10 @@ describe('view memory (#31 D19, AC17, AC18)', () => {
     // It is no card: nothing is open at full size.
     expect(openedCard(views, 'alpha')).toBeNull()
     expect(showsAgentSetup(views, 'gamma')).toBe(false)
-    expect([...agentSetupWorkspaces(views)].sort()).toEqual(['alpha', 'beta'])
     // Opening a card replaces it.
     views = rememberCard(views, 'alpha', 'web')
     expect(showsAgentSetup(views, 'alpha')).toBe(false)
     expect(openedCard(views, 'alpha')).toBe('web')
-    expect(agentSetupWorkspaces(views)).toEqual(['beta'])
   })
 
   it('Agent setup stays while its workspace exists, and goes with Back or the workspace’s row', () => {

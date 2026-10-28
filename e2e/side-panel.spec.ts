@@ -149,7 +149,8 @@ test('#55 AC1: the panel shows by default at the right of the panes, 280 px, Fil
   expect(panelBox.x).toBeGreaterThanOrEqual(termBox.x + termBox.width - 1)
   // Full height of the content area, beside the panes.
   expect(Math.abs(panelBox.height - termBox.height)).toBeLessThanOrEqual(1)
-  const tabs = panel().getByRole('tab')
+  // Its tabs are in the title bar above it.
+  const tabs = page.getByTestId('titlebar-panel-side').getByRole('tab')
   await expect(tabs).toHaveText(['Files', 'Shells'])
   await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
   await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
@@ -177,9 +178,13 @@ test('#57 AC1: the panel shows at the right of the board, 280 px, with the works
   const boardBox = (await board.boundingBox())!
   expect(panelBox.width).toBe(280)
   expect(panelBox.x).toBeGreaterThanOrEqual(boardBox.x + boardBox.width - 1)
-  // Full height of the content area, beside the board.
-  expect(Math.abs(panelBox.height - boardBox.height)).toBeLessThanOrEqual(1)
-  await expect(panel().getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
+  // Full height of the content area, beside the toolbar and the board.
+  const toolbarBox = (await page.getByTestId('workspace-toolbar').boundingBox())!
+  expect(Math.abs(panelBox.y - toolbarBox.y)).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(panelBox.y + panelBox.height - (boardBox.y + boardBox.height))
+  ).toBeLessThanOrEqual(1)
+  await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true')
   await expect(row('')).toHaveText('repo')
   await expect(row('')).toHaveAttribute('title', repo)
   await expect(row('src')).toBeVisible()
@@ -227,8 +232,8 @@ test('#57 AC2: the shortcut, the button and the palette toggle it on the board, 
     await expect(panel()).toHaveCount(shown ? 1 : 0)
   }
 
-  // The hide button on the board hides it everywhere too.
-  await panel().getByTestId('side-panel-hide').click()
+  // The title bar's button over the panel on the board hides it everywhere too.
+  await panelButton().click()
   await expect(panel()).toHaveCount(0)
   await openCard('c1')
   await expect(panel()).toHaveCount(0)
@@ -276,10 +281,8 @@ test('#55 AC2: the shortcut, the button and the hide button toggle it, saved acr
   await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => 'sidePanelOpen' in savedSettings()).toBe(false)
 
-  await panel().getByTestId('side-panel-hide').click()
-  await expect(panel()).toHaveCount(0)
-  await panelButton().click()
-  await expect(panel()).toBeVisible()
+  // No close button of its own: the title bar's button is the one show/hide.
+  await expect(page.getByTestId('side-panel-hide')).toHaveCount(0)
 
   // Held down, it toggles once: the auto-repeats are swallowed.
   await terminalArea().click()
@@ -303,6 +306,48 @@ test('#55 AC2: the shortcut, the button and the hide button toggle it, saved acr
   await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
   await expect(panel()).toHaveCount(0)
   await expect(panelButton()).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('the panel runs from the window top: its tabs and button in the title bar, as wide as the panel', async () => {
+  await openC1()
+  const section = page.getByTestId('titlebar-panel-side')
+  await expect(section.getByRole('tab')).toHaveText(['Files', 'Shells'])
+  await expect(section.getByTestId('titlebar-panel')).toHaveAttribute('aria-pressed', 'true')
+  const above = (await section.boundingBox())!
+  const body = (await panel().boundingBox())!
+  expect(above.y).toBe(0)
+  expect(above.x).toBe(body.x)
+  expect(above.width).toBe(body.width)
+  expect(body.y).toBeCloseTo(above.y + above.height, 0)
+  // A drag of its edge widens both at once.
+  const edge = (await page.getByTestId('side-panel-resize').boundingBox())!
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(edge.x + edge.width / 2 - 60, edge.y + 200)
+  await expect.poll(async () => (await section.boundingBox())!.width).toBe(body.width + 60)
+  await page.mouse.up()
+  await expect.poll(async () => (await panel().boundingBox())!.width).toBe(body.width + 60)
+
+  // A tab picked in the title bar shows in the panel.
+  await section.getByRole('tab', { name: 'Shells' }).click()
+  await expect(panel().getByRole('tabpanel')).toHaveAttribute(
+    'aria-labelledby',
+    'side-panel-tab-shells'
+  )
+
+  // Hidden: the section is gone and the button sits at the title bar's end.
+  await section.getByTestId('titlebar-panel').click()
+  await expect(section).toHaveCount(0)
+  await expect(panel()).toHaveCount(0)
+  await expect(panelButton()).toHaveAttribute('aria-pressed', 'false')
+
+  // On the board, the toolbar ends where the panel starts.
+  await panelButton().click()
+  await backToBoard(page)
+  const toolbar = (await page.getByTestId('workspace-toolbar').boundingBox())!
+  const boardPanel = (await panel().boundingBox())!
+  expect(toolbar.x + toolbar.width).toBeLessThanOrEqual(boardPanel.x + 1)
+  expect(boardPanel.y).toBeLessThan(toolbar.y + 1)
 })
 
 test('#55 AC3: Toggle panel is listed in Settings and can be recorded', async () => {
@@ -469,6 +514,27 @@ test('#55 AC5: the tree lists folders, then files, without .git, ignored ones di
   // Double-clicking an expanded folder collapses it.
   await row('dist').dblclick()
   await expect(row('dist/out.js')).toHaveCount(0)
+})
+
+test("the tree's rows show vscode-icons by file type and folder name, open folders opened", async () => {
+  await openC1()
+  const icon = (path: string): Locator => row(path).getByTestId('files-icon')
+  await expect(icon('')).toHaveAttribute('data-icon', 'default_root_folder_opened.svg')
+  await expect(icon('src')).toHaveAttribute('data-icon', 'folder_type_src.svg')
+  await expect(icon('dist')).toHaveAttribute('data-icon', 'folder_type_dist.svg')
+  await expect(icon('.gitignore')).toHaveAttribute('data-icon', 'file_type_git.svg')
+  await expect(icon('README.md')).toHaveAttribute('data-icon', 'file_type_readme.svg')
+  await row('src').dblclick()
+  await expect(icon('src')).toHaveAttribute('data-icon', 'folder_type_src_opened.svg')
+  await expect(icon('src/a.ts')).toHaveAttribute('data-icon', 'file_type_typescript.svg')
+  // Every icon shown has loaded.
+  await expect
+    .poll(() =>
+      page
+        .getByTestId('files-icon')
+        .evaluateAll((imgs) => imgs.every((img) => (img as HTMLImageElement).naturalWidth > 0))
+    )
+    .toBe(true)
 })
 
 test('#55 AC6: expanded folders are remembered after going Back and reopening the card', async () => {

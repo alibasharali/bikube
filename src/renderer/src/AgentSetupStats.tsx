@@ -241,6 +241,7 @@ function UsedList({
   testId: string
   rows: StatsCount[]
 }): React.JSX.Element {
+  const top = Math.max(1, ...rows.map((row) => row.count))
   return (
     <section className="agent-setup-stats-list" data-testid={`agent-setup-stats-${testId}`}>
       <h5 className="agent-setup-stats-list-title">{title}</h5>
@@ -253,6 +254,7 @@ function UsedList({
               key={row.name}
               className="agent-setup-stats-used"
               data-testid="agent-setup-stats-used"
+              style={{ '--share': `${(row.count / top) * 100}%` } as React.CSSProperties}
             >
               <span
                 className="agent-setup-stats-name"

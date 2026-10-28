@@ -156,6 +156,55 @@ test('AC1: Split right shows two focused-right halves, the new one a shell in th
   expect(await bufferLines(0)).toContain('main-42')
 })
 
+test("the title bar's Split right and Split down split the focused pane as their shortcuts do", async () => {
+  await openApi()
+  const bar = page.getByTestId('titlebar-terminal-buttons')
+  for (const name of ['New terminal', 'Split right', 'Split down']) {
+    await expect(bar.getByRole('button', { name, exact: true })).toBeVisible()
+  }
+  await bar.getByTestId('titlebar-split-right').click()
+  await expect(panes()).toHaveCount(2)
+  const [left, right] = [await box(panes().nth(0)), await box(panes().nth(1))]
+  expect(right.x).toBeGreaterThan(left.x + left.width - 10)
+  await expect(panes().nth(1)).toHaveAttribute('data-focused', 'true')
+  await bar.getByTestId('titlebar-split-down').click()
+  await expect(panes()).toHaveCount(3)
+  const [upper, lower] = [await box(panes().nth(1)), await box(panes().nth(2))]
+  expect(lower.y).toBeGreaterThan(upper.y + upper.height - 10)
+  await expect(panes().nth(2)).toHaveAttribute('data-focused', 'true')
+})
+
+test("the title bar buttons' tooltips explain them and show the shortcut set in Settings", async () => {
+  await openApi()
+  const button = page.getByTestId('titlebar-split-right')
+  const tooltip = page.getByRole('tooltip').filter({ hasText: 'Split right' })
+  await expect(tooltip).toBeHidden()
+  await button.hover()
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('Opens a shell beside the focused pane')
+  await expect(tooltip.locator('.keys')).toHaveText(
+    process.platform === 'darwin' ? '⌘D' : 'Ctrl+Shift+D'
+  )
+  await expect(button).toHaveAttribute('aria-describedby', (await tooltip.getAttribute('id'))!)
+  await page.mouse.move(0, 300)
+  await expect(tooltip).toBeHidden()
+
+  // A shortcut recorded in Settings shows at once.
+  const settings = page.getByTestId('settings-dialog')
+  await page.getByTestId('settings-open').click()
+  await settings.getByTestId('settings-section-shortcuts').click()
+  await settings.getByTestId('settings-shortcut-splitRight').click()
+  await page.keyboard.press('Control+Alt+R')
+  await expect(settings.getByTestId('settings-shortcut-splitRight')).toHaveText(/R$/)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await button.hover()
+  await expect(tooltip.locator('.keys')).toHaveText(
+    process.platform === 'darwin' ? '⌃⌥R' : 'Ctrl+Alt+R'
+  )
+})
+
 test('AC4: clicking the main pane focuses it and typing goes there only', async () => {
   await openApi()
   await splitRight(page)
@@ -189,7 +238,7 @@ async function shellPid(index: number): Promise<number> {
   return Number(readFileSync(file, 'utf8').trim())
 }
 
-test('AC5: Close pane and exit remove extra panes; the main pane has no close', async () => {
+test('AC5: Close pane and exit remove extra panes; the main pane has no Close pane', async () => {
   await openApi()
   await splitRight(page)
   await expect(panes()).toHaveCount(2)
@@ -219,6 +268,29 @@ test('AC5: Close pane and exit remove extra panes; the main pane has no close', 
   await expect(panes().nth(0).getByRole('button', { name: 'Close pane' })).toHaveCount(0)
   await backToBoard(page)
   await expect(card('api').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test("the main pane's × closes the card as Close pane does there, asking first, alone or split", async () => {
+  await openApi()
+  const close = panes().nth(0).getByRole('button', { name: 'Close card' })
+  await page.mouse.move(0, 0)
+  await expect(close).toHaveCSS('opacity', '0')
+  await panes().nth(0).hover()
+  await expect(close).toHaveCSS('opacity', '1')
+  await close.click()
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await page.getByTestId('confirm-cancel').click()
+  await expect(page.getByTestId('card-view')).toBeVisible()
+
+  // Split, it still closes the whole card; the extra pane keeps its own Close pane.
+  await splitRight(page)
+  await expect(panes().nth(1).getByRole('button', { name: 'Close pane' })).toHaveCount(1)
+  await expect(panes().nth(1).getByRole('button', { name: 'Close card' })).toHaveCount(0)
+  await panes().nth(0).hover()
+  await close.click()
+  await page.getByTestId('confirm-close').click()
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('api').getByTestId('card-status-label')).toHaveText('Stopped')
 })
 
 test('AC5: closing a pane that is not focused leaves the focus where it was', async () => {
@@ -545,8 +617,8 @@ test('AC8: deleting the workspace counts the card once and ends all its panes', 
   await back()
 
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-delete').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-delete').click()
   await expect(page.getByTestId('confirm-dialog')).toContainText(
     'Delete "alpha"? This removes its board. 1 terminal is still running and will be stopped.'
   )

@@ -66,8 +66,8 @@ async function createWorkspace(name: string, view?: ViewChoice): Promise<void> {
 
 async function editView(view: ViewChoice): Promise<void> {
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await page.getByTestId(`workspace-view-${view}`).check()
   await page.getByTestId('workspace-submit').click()
   await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)

@@ -105,6 +105,26 @@ async function run(on: Page, command: string): Promise<void> {
   await on.keyboard.press('Enter')
 }
 
+test("the title bar's Open in new window moves the open card to its own window", async () => {
+  await newCard('Agent A')
+  const opened = app.waitForEvent('window')
+  await page.getByTestId('titlebar-open-in-window').click()
+  const window = await opened
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
+  // Its Files tab's icons load there too (absolute URLs from the main page).
+  await expect(window.getByTestId('files-icon').first()).toBeVisible()
+  await expect
+    .poll(() =>
+      window
+        .getByTestId('files-icon')
+        .evaluateAll((imgs) => imgs.every((img) => (img as HTMLImageElement).naturalWidth > 0))
+    )
+    .toBe(true)
+  // The main window shows the board again, the card marked as in its window.
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(card('Agent A')).toBeVisible()
+})
+
 test('AC1: Open in new window shows the card there, running, with an In window chip', async () => {
   await newCard('Agent A')
   await run(page, 'echo before-53')
@@ -361,8 +381,8 @@ test("AC6: deleting the card's workspace closes its window", async () => {
   const window = await openInWindow('Agent A')
   const gone = closed(window)
   const row = page.locator('.workspace-row').first()
-  await row.hover()
-  await row.getByTestId('workspace-delete').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-delete').click()
   await page.getByTestId('confirm-delete').click()
   await gone
 })

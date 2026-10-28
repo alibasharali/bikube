@@ -86,14 +86,14 @@ async function selectWorkspace(name: string): Promise<void> {
   await expect(page.getByTestId('board-title')).toHaveText(name)
 }
 
-/** Opens the edit dialog of the workspace row at `index`; row actions show on hover. */
+/** Opens the edit dialog of the workspace row at `index`; Edit and Delete are on its board's toolbar. */
 async function workspaceAction(
   index: number,
   action: 'workspace-edit' | 'workspace-delete'
 ): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId(action).click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId(action).click()
 }
 
 function column(name: string): Locator {

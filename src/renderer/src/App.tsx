@@ -4,7 +4,6 @@ import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/ke
 import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
 import {
-  agentSetupWorkspaces,
   enterWorkspace,
   forgetCards,
   forgetView,
@@ -48,6 +47,7 @@ import { useOpenTerminals } from './open-terminals'
 import { currentKeymap, settingsStore, useSettings } from './settings'
 import Sidebar from './Sidebar'
 import TitleBar from './TitleBar'
+import WorkspaceToolbar from './WorkspaceToolbar'
 import { useWorkspaceState, workspaceStore } from './store'
 import { useSyncStatus } from './sync'
 import SidePanel from './SidePanel'
@@ -109,10 +109,26 @@ function App(): React.JSX.Element {
   const openedId = activeId ? openedCard(views, activeId) : null
   // The active workspace shows its Agent setup page (#68 D1, D3), remembered as an open card is.
   const agentSetup = activeId !== null && showsAgentSetup(views, activeId)
-  const agentSetupIds = agentSetupWorkspaces(views)
-  // From the title bar's button or the palette (D2): replaces the card open in the workspace.
+  // Workspaces whose Agent setup page is open: listed in the sidebar tree, as a running card is,
+  // whatever the workspace shows, until its close button closes it. Runtime only.
+  const [openSetups, setOpenSetups] = useState<readonly string[]>([])
+  const agentSetupIds = openSetups.filter((id) => workspaces.some((w) => w.id === id))
+  const showAgentSetup = useCallback(
+    (workspaceId: string) => {
+      setOpenSetups((open) => (open.includes(workspaceId) ? open : [...open, workspaceId]))
+      setViews((v) => rememberAgentSetup(v, workspaceId))
+    },
+    [setViews]
+  )
+  // From the toolbar's button or the palette (D2): shown in place of the card open in the workspace.
   const openAgentSetup = useCallback(() => {
-    if (activeId) setViews((v) => rememberAgentSetup(v, activeId))
+    if (activeId) showAgentSetup(activeId)
+  }, [activeId, showAgentSetup])
+  // Its close button: no longer open, and the workspace shows its board.
+  const closeAgentSetup = useCallback(() => {
+    if (!activeId) return
+    setOpenSetups((open) => open.filter((id) => id !== activeId))
+    setViews((v) => forgetView(v, activeId))
   }, [activeId, setViews])
   // Agent setup has no side panel (D1): Toggle panel does nothing while it is in front.
   const agentSetupShown = useRef(false)
@@ -411,7 +427,7 @@ function App(): React.JSX.Element {
         card={active ? openCard : null}
         isShell={openIsShell}
         agentSetup={agentSetup}
-        onAgentSetup={openAgentSetup}
+        onNewShell={() => openNewShell.current()}
         onBack={closeCard}
       />
       <div className="app-body">
@@ -422,14 +438,14 @@ function App(): React.JSX.Element {
           onToggle={() => setCollapsed((c) => !c)}
           onSelect={onShowBoard}
           onAdd={onCreateWorkspace}
-          onEdit={(id) => setDialog({ kind: 'edit', id })}
-          onDelete={(id) => setDialog({ kind: 'delete', id })}
           onSettings={() => setSettingsOpen(true)}
           syncStatus={syncStatus}
           openId={openId}
           onOpenTerminal={onPaletteOpen}
           agentSetupIds={agentSetupIds}
+          agentSetupShown={agentSetup ? activeId : null}
           onOpenAgentSetup={(id) => {
+            showAgentSetup(id)
             if (id !== activeId) workspaceStore.selectWorkspace(id)
           }}
           heldNumbers={held}
@@ -446,22 +462,36 @@ function App(): React.JSX.Element {
             />
           ) : active && agentSetup ? (
             // A full page in the main area, with no side panel (#68 D1).
-            <AgentSetupPage key={active.id} workspace={active} onBack={closeCard} />
+            <AgentSetupPage
+              key={active.id}
+              workspace={active}
+              onBack={closeCard}
+              onClose={closeAgentSetup}
+            />
           ) : active ? (
-            // The side panel beside the board shows the workspace's folder (#57 D1, D2).
+            // The side panel beside the board shows the workspace's folder (#57 D1, D2), from the
+            // window's top; the toolbar and the board share the column left of it.
             <div className="board-layout">
-              {workspaceView(active, defaultView) === 'grid' ? (
-                <GridView key={active.id} workspace={active} onOpenCard={onOpenCard} />
-              ) : (
-                <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
-              )}
+              <div className="board-main">
+                <WorkspaceToolbar
+                  workspace={active}
+                  onAgentSetup={openAgentSetup}
+                  onEdit={() => setDialog({ kind: 'edit', id: active.id })}
+                  onDelete={() => setDialog({ kind: 'delete', id: active.id })}
+                  onNewShell={() => openNewShell.current()}
+                />
+                {workspaceView(active, defaultView) === 'grid' ? (
+                  <GridView key={active.id} workspace={active} onOpenCard={onOpenCard} />
+                ) : (
+                  <Board key={active.id} workspace={active} onOpenCard={onOpenCard} />
+                )}
+              </div>
               {sidePanelOpen && (
                 <SidePanel
                   folder={active.directory}
                   ssh={active.host !== undefined}
                   workspaceId={active.id}
                   onOpenShell={onOpenCard}
-                  onHide={() => settingsStore.update({ sidePanelOpen: false })}
                 />
               )}
             </div>

@@ -199,8 +199,8 @@ async function setStartup(title: string, startup: Choice): Promise<void> {
 
 async function editWorkspace(index: number): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
 }
 

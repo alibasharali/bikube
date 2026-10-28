@@ -57,6 +57,57 @@ describe('openListedFile', () => {
     expect(opened).toEqual([skill])
   })
 
+  /** The editor's working directory and arguments for opening `path` with VS Code. */
+  async function openedWith(
+    path: string,
+    listedIn = folder
+  ): Promise<{ cwd: unknown; args: string[] }> {
+    const listed = new ListedPaths()
+    listed.set(listedIn, [path])
+    let call: { cwd: unknown; args: string[] } | undefined
+    const recording: FileActionDeps = {
+      ...deps(listed),
+      open: {
+        ...deps(listed).open,
+        editor: 'vscode',
+        spawn: ((_command: string, args: string[], options: { cwd?: unknown }) => {
+          call = { cwd: options.cwd, args }
+          throw new Error('not run')
+        }) as unknown as FileActionDeps['open']['spawn']
+      }
+    }
+    await openListedFile(listedIn, path, recording)
+    return call!
+  }
+
+  it('opens a file inside the workspace with the workspace as the project folder, as the Files tab does', async () => {
+    const { cwd, args } = await openedWith(skill)
+    expect(cwd).toBe(folder)
+    expect(args.slice(-2)).toEqual([folder, skill])
+  })
+
+  it('opens a file outside the workspace with its own folder as the project folder', async () => {
+    const home = join(dir, 'home', '.claude', 'skills', 'notes')
+    mkdirSync(home, { recursive: true })
+    const notes = join(home, 'SKILL.md')
+    writeFileSync(notes, 'x')
+    const { cwd, args } = await openedWith(notes)
+    expect(cwd).toBe(home)
+    expect(args.slice(-2)).toEqual([home, notes])
+  })
+
+  it('opens a file named inside the workspace with the workspace, wherever its symlink points', async () => {
+    const elsewhere = join(dir, 'elsewhere')
+    mkdirSync(elsewhere)
+    writeFileSync(join(elsewhere, 'CLAUDE.md'), 'x')
+    mkdirSync(join(folder, 'docs'))
+    const link = join(folder, 'docs', 'CLAUDE.md')
+    symlinkSync(join(elsewhere, 'CLAUDE.md'), link)
+    const { cwd, args } = await openedWith(link)
+    expect(cwd).toBe(folder)
+    expect(args.slice(-2)).toEqual([folder, link])
+  })
+
   it('refuses a path the read didn’t list, running nothing', async () => {
     const other = join(folder, 'notes.md')
     writeFileSync(other, 'x')
@@ -122,7 +173,7 @@ describe('openListedFile', () => {
     expect(revealed).toEqual([])
   })
 
-  it('opens a listed file through a symlink as listed, its folder as the project folder', async () => {
+  it('opens a listed file through a symlink as listed, the workspace as the project folder', async () => {
     const real = join(dir, 'shared.md')
     writeFileSync(real, 'x')
     const link = join(folder, 'CLAUDE.md')

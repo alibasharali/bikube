@@ -20,3 +20,7 @@ export function shownPanelWidth(width: number, windowWidth: number): number {
 export function draggedPanelWidth(startWidth: number, leftBy: number, windowWidth: number): number {
   return shownPanelWidth(startWidth + leftBy, windowWidth)
 }
+
+/** A tab's element id and the body's, which the tabs and the panel's tabpanel name each other by. */
+export const panelTabId = (tab: string): string => `side-panel-tab-${tab}`
+export const PANEL_BODY_ID = 'side-panel-body'

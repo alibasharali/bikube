@@ -120,8 +120,8 @@ async function selectWorkspace(name: string): Promise<void> {
 
 async function openEditDialog(name: string): Promise<void> {
   const row = page.locator('.workspace-row').filter({ has: workspaceItem(name) })
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(dialog()).toBeVisible()
 }
 

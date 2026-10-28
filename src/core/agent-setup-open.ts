@@ -5,7 +5,7 @@
  * editor's dependencies and Electron's `shell.showItemInFolder`.
  */
 
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { isFile, openInFolder, type OpenDeps, type OpenResult } from './editor'
 
 /** The files each workspace folder's last read listed, keyed by the folder however it is spelled. */
@@ -34,8 +34,10 @@ export interface FileActionDeps {
 }
 
 /**
- * Opens `path` with Settings > Editor, its own folder as the project folder (D27), when
- * `folder`'s last read listed it and it is still a file; else `refused` and nothing runs.
+ * Opens `path` with Settings > Editor when `folder`'s last read listed it and it is still a file;
+ * else `refused` and nothing runs. A file named inside the workspace opens with the workspace as
+ * the project folder, as the Files tab opens one; any other (`~/.claude`, a plugin's) with its own
+ * folder (D27).
  */
 export async function openListedFile(
   folder: unknown,
@@ -45,7 +47,11 @@ export async function openListedFile(
   if (!deps.listed.has(folder, path) || !(await isFile(path))) {
     return { ok: false, reason: 'refused' }
   }
-  return openInFolder(dirname(path), path, deps.open)
+  // `has` checked `folder` is an absolute string; `resolve` drops a trailing slash.
+  const workspace = resolve(folder as string)
+  const inside = relative(workspace, path)
+  const project = inside !== '' && !inside.startsWith('..') && !isAbsolute(inside)
+  return openInFolder(project ? workspace : dirname(path), path, deps.open)
 }
 
 /**

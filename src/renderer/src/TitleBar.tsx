@@ -1,4 +1,14 @@
-import { Blocks, ChevronRight, Folder, PanelRight, Server } from 'lucide-react'
+import {
+  AppWindow,
+  Blocks,
+  ChevronRight,
+  Columns2,
+  Folder,
+  Rows2,
+  Server,
+  SquareTerminal,
+  type LucideIcon
+} from 'lucide-react'
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
@@ -10,17 +20,21 @@ import { StartupTag } from './CardItem'
 import { useBranch } from './branches'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import { homeDir } from './home'
+import { runCardViewAction } from './card-view-actions'
 import { ICON, SMALL_ICON } from './icons'
+import { PanelTabs, PanelToggle } from './PanelTabs'
+import { usePanelWidth } from './panel-width'
 import { settingsStore, useSettings } from './settings'
 import StatusIcon from './StatusIcon'
+import Tooltip from './Tooltip'
 
 /**
  * The app's own title bar, above the sidebar and the main area: it drags the window, leaves room
  * for the macOS window buttons over the sidebar, and names where the user is (the workspace, and
  * the open card with its startup tag). With a card open, the workspace name goes back to its board
  * and a button at the right end shows or hides the side panel (#55 D2).
- * On the board, a button left of it opens the Agent setup page (#68 D2), which then reads as an
- * open card does (D3). The window title follows it.
+ * The Agent setup page (#68 D2, opened from the workspace toolbar) reads as an open card does
+ * (D3). The window title follows it.
  */
 function TitleBar({
   collapsed,
@@ -28,13 +42,13 @@ function TitleBar({
   card,
   isShell = false,
   agentSetup = false,
-  onAgentSetup,
+  onNewShell,
   onBack
 }: {
+  /** New terminal: the New shell action (#66 D1), as its shortcut runs it. */
+  onNewShell: () => void
   /** The workspace shows its Agent setup page (#68 D3). */
   agentSetup?: boolean
-  /** Opens the workspace's Agent setup page (D2). */
-  onAgentSetup?: () => void
   /** The open terminal is one of the workspace's shells, not a card. */
   isShell?: boolean
   collapsed: boolean
@@ -121,34 +135,88 @@ function TitleBar({
         )}
         {/* Agent setup shows no side panel (#68 D1): nothing here opens or toggles one. */}
         {workspace && !agentSetup && !sidePanelOpen && <RunningShellsChip workspace={workspace} />}
-        {workspace && !away && (
-          <button
-            type="button"
-            className="icon-btn titlebar-agent-setup"
-            data-testid="titlebar-agent-setup"
-            aria-label={AGENT_SETUP}
-            title={AGENT_SETUP}
-            onClick={onAgentSetup}
-          >
-            <Blocks {...ICON} />
-          </button>
-        )}
-        {/* On the board as in a card (#57 D4). */}
-        {workspace && !agentSetup && (
-          <button
-            type="button"
-            className="icon-btn titlebar-panel"
-            data-testid="titlebar-panel"
-            aria-label="Side panel"
-            aria-pressed={sidePanelOpen}
-            title={sidePanelOpen ? 'Hide panel' : 'Show panel'}
-            onClick={() => settingsStore.update({ sidePanelOpen: !sidePanelOpen })}
-          >
-            <PanelRight {...ICON} />
-          </button>
-        )}
+        {card && <TerminalButtons onNewShell={onNewShell} />}
+        {/* On the board as in a card (#57 D4); in the panel's own section while it shows. */}
+        {workspace && !agentSetup && !sidePanelOpen && <PanelToggle />}
       </div>
+      {workspace && !agentSetup && sidePanelOpen && <PanelSection workspace={workspace} />}
     </header>
+  )
+}
+
+/**
+ * Above the side panel and as wide, from the window's top as the sidebar is: the panel's tabs and
+ * the button that hides it.
+ */
+function PanelSection({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const width = usePanelWidth(window)
+  return (
+    <div className="titlebar-panel-side" data-testid="titlebar-panel-side" style={{ width }}>
+      <PanelTabs workspace={workspace} />
+      <PanelToggle />
+    </div>
+  )
+}
+
+/** The title bar's buttons over an open card or shell: what each runs and its tooltip. */
+const TERMINAL_BUTTONS: readonly {
+  action: 'openShell' | 'splitRight' | 'splitDown' | 'openInWindow'
+  testId: string
+  label: string
+  description: string
+  icon: LucideIcon
+}[] = [
+  {
+    action: 'openShell',
+    testId: 'titlebar-new-shell',
+    label: 'New terminal',
+    description: "Opens the workspace's Default shell, or a new shell while that one runs",
+    icon: SquareTerminal
+  },
+  {
+    action: 'splitRight',
+    testId: 'titlebar-split-right',
+    label: 'Split right',
+    description: 'Opens a shell beside the focused pane',
+    icon: Columns2
+  },
+  {
+    action: 'splitDown',
+    testId: 'titlebar-split-down',
+    label: 'Split down',
+    description: 'Opens a shell below the focused pane',
+    icon: Rows2
+  },
+  {
+    action: 'openInWindow',
+    testId: 'titlebar-open-in-window',
+    label: 'Open in new window',
+    description: 'Moves this terminal to a window of its own; it keeps running',
+    icon: AppWindow
+  }
+]
+
+/**
+ * With a card or shell open: New terminal, Split right and Split down on its focused pane, and
+ * Open in new window, each as its shortcut runs it.
+ */
+function TerminalButtons({ onNewShell }: { onNewShell: () => void }): React.JSX.Element {
+  return (
+    <span className="titlebar-terminal-buttons" data-testid="titlebar-terminal-buttons">
+      {TERMINAL_BUTTONS.map(({ action, testId, label, description, icon: Icon }) => (
+        <Tooltip key={action} label={label} description={description} shortcut={action} align="end">
+          <button
+            type="button"
+            className="icon-btn"
+            data-testid={testId}
+            aria-label={label}
+            onClick={() => (action === 'openShell' ? onNewShell() : runCardViewAction(action))}
+          >
+            <Icon {...ICON} />
+          </button>
+        </Tooltip>
+      ))}
+    </span>
   )
 }
 

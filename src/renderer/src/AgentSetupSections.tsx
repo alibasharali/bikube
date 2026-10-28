@@ -1,4 +1,4 @@
-import { ChevronRight, FolderOpen, SquarePen, X } from 'lucide-react'
+import { ChevronRight, FolderOpen, RotateCcw, SquarePen, X } from 'lucide-react'
 import { createContext, useContext, useId, useMemo, useRef, useState } from 'react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
 import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
@@ -47,6 +47,7 @@ import {
   useAgentSetupData,
   useClaudeVersion
 } from './agent-setup-data'
+import { SectionIcon } from './agent-setup-icons'
 import { SMALL_ICON } from './icons'
 import { useSettings } from './settings'
 
@@ -182,7 +183,7 @@ function FileActions({ file }: { file: string }): React.JSX.Element | null {
 
 function SourceChip({ source }: { source: EntrySource }): React.JSX.Element {
   return (
-    <span className="agent-setup-chip" data-testid="agent-setup-source">
+    <span className="agent-setup-chip" data-source={source.kind} data-testid="agent-setup-source">
       {sourceLabel(source)}
     </span>
   )
@@ -241,9 +242,10 @@ export function OverviewSection({
               onClick={() => onShowSection(id)}
             >
               <span className="agent-setup-card-head">
+                <SectionIcon id={id} />
                 <span className="agent-setup-card-label">{label(id)}</span>
-                <span className="agent-setup-card-count">{summary.count}</span>
               </span>
+              <span className="agent-setup-card-count">{summary.count}</span>
               <span className="agent-setup-card-split" data-testid="agent-setup-overview-split">
                 {split || 'None'}
               </span>
@@ -326,6 +328,7 @@ function DefinitionRow({
             {entry.argumentHint}
           </span>
         )}
+        <FileActions file={entry.file} />
         <span className="agent-setup-row-chips">
           {entry.model && <span className="agent-setup-chip">{entry.model}</span>}
           {entry.tools?.map((tool) => (
@@ -340,7 +343,6 @@ function DefinitionRow({
             </span>
           )}
         </span>
-        <FileActions file={entry.file} />
       </div>
       {entry.description && (
         <p className="agent-setup-row-description" title={entry.description}>
@@ -442,10 +444,10 @@ function MemoryRow({
             {sizeText(entry.size)} · {entry.lines} {entry.lines === 1 ? 'line' : 'lines'}
           </span>
         )}
+        {!entry.missing && <FileActions file={entry.file} />}
         <span className="agent-setup-row-chips">
           <SourceChip source={entry.source} />
         </span>
-        {!entry.missing && <FileActions file={entry.file} />}
       </div>
       <Warnings warnings={entry.warnings} />
       {open && canExpand && (
@@ -571,6 +573,7 @@ function HookRow({
         {hook.timeout !== undefined && (
           <span className="agent-setup-row-meta">Timeout {hook.timeout} s</span>
         )}
+        {hook.file !== undefined && <FileActions file={hook.file} />}
         <span className="agent-setup-row-chips">
           <SourceChip source={hook.source} />
           {off && (
@@ -580,7 +583,6 @@ function HookRow({
           )}
         </span>
         {/* Bikube's own hooks have no file to open (D27). */}
-        {hook.file !== undefined && <FileActions file={hook.file} />}
       </div>
       <code
         className="agent-setup-row-command"
@@ -647,10 +649,10 @@ export function PermissionsSection({ snapshot, query }: SectionViewProps): React
                       >
                         {rule.rule}
                       </code>
+                      <FileActions file={rule.file} />
                       <span className="agent-setup-row-chips">
                         <SourceChip source={rule.source} />
                       </span>
-                      <FileActions file={rule.file} />
                     </div>
                   </li>
                 ))}
@@ -758,11 +760,11 @@ export function StatusSection({ snapshot }: SectionViewProps): React.JSX.Element
                   >
                     {STATE_LABELS[file.state]}
                   </span>
+                  {!bikube && file.state !== 'missing' && <FileActions file={file.file} />}
                   <span className="agent-setup-row-chips">
                     <SourceChip source={file.source} />
                   </span>
                   {/* Bikube's own file has no Open file (D27); a missing one has nothing to open. */}
-                  {!bikube && file.state !== 'missing' && <FileActions file={file.file} />}
                 </div>
                 {file.error !== undefined && <Warnings warnings={[file.error]} />}
               </li>
@@ -832,18 +834,20 @@ function PluginRow({
           @{plugin.marketplace}
         </span>
         {plugin.version && <span className="agent-setup-row-meta">v{plugin.version}</span>}
+        {snapshot.paths.includes(manifest) && <FileActions file={manifest} />}
         <span className="agent-setup-row-chips">
           <SourceChip source={pluginSource(plugin)} />
         </span>
-        <Switch
-          label={`Use ${plugin.key} in this workspace`}
-          checked={asked ?? plugin.enabled}
-          testId="agent-setup-plugin-switch"
-          onChange={(enabled) =>
-            void saveSwitch(folder, { kind: 'plugin', key: plugin.key, enabled })
-          }
-        />
-        {snapshot.paths.includes(manifest) && <FileActions file={manifest} />}
+        <span className="agent-setup-control-slot agent-setup-control-slot-switch">
+          <Switch
+            label={`Use ${plugin.key} in this workspace`}
+            checked={asked ?? plugin.enabled}
+            testId="agent-setup-plugin-switch"
+            onChange={(enabled) =>
+              void saveSwitch(folder, { kind: 'plugin', key: plugin.key, enabled })
+            }
+          />
+        </span>
       </div>
       {plugin.description && (
         <p className="agent-setup-row-description" title={plugin.description}>
@@ -1001,23 +1005,26 @@ function McpServerItem({
         <span className="agent-setup-chip" data-testid="agent-setup-mcp-type" title="Type">
           {server.type}
         </span>
+        {snapshot.paths.includes(server.file) && <FileActions file={server.file} />}
         <span className="agent-setup-row-chips">
           <SourceChip source={server.source} />
           <span className="agent-setup-chip" data-state={state} data-testid="agent-setup-mcp-state">
             {mcpStateLabel(state)}
           </span>
         </span>
-        {project && (
-          <Switch
-            label={`Use MCP server ${server.name} in this workspace`}
-            checked={state === 'on'}
-            testId="agent-setup-mcp-switch"
-            onChange={(enabled) =>
-              void saveSwitch(folder, { kind: 'mcpServer', name: server.name, enabled })
-            }
-          />
-        )}
-        {snapshot.paths.includes(server.file) && <FileActions file={server.file} />}
+        {/* Kept empty without a switch, so every row's chips line up. */}
+        <span className="agent-setup-control-slot agent-setup-control-slot-switch">
+          {project && (
+            <Switch
+              label={`Use MCP server ${server.name} in this workspace`}
+              checked={state === 'on'}
+              testId="agent-setup-mcp-switch"
+              onChange={(enabled) =>
+                void saveSwitch(folder, { kind: 'mcpServer', name: server.name, enabled })
+              }
+            />
+          )}
+        </span>
       </div>
       {server.target && (
         <code
@@ -1202,6 +1209,7 @@ function ConfigItem({
             {row.text}
           </code>
         )}
+        <FileActions file={row.file} />
         <span className="agent-setup-row-chips">
           <SourceChip source={row.source} />
           {row.overridden.map((setter) => (
@@ -1215,39 +1223,41 @@ function ConfigItem({
             </s>
           ))}
         </span>
-        {row.resettable && (
-          <button
-            type="button"
-            className="btn btn-small agent-setup-config-reset"
-            data-testid="agent-setup-config-reset"
-            title="Remove it from settings.local.json"
-            aria-label={`Reset ${row.key}`}
-            onClick={() => void saveConfig(folder, { kind: 'remove', key: row.key })}
-          >
-            Reset
-          </button>
-        )}
-        {row.control === 'switch' && (
-          <Switch
-            label={row.key}
-            checked={asked ?? row.value === true}
-            testId="agent-setup-config-switch"
-            onChange={(value) => void saveConfig(folder, { kind: 'set', key: row.key, value })}
-          />
-        )}
-        {row.control === 'number' && typeof row.value === 'number' && (
-          <ConfigNumber
-            folder={folder}
-            settingKey={row.key}
-            value={row.value}
-            draft={draft}
-            onDraft={setDraft}
-            invalid={invalid}
-            onInvalid={setInvalid}
-            errorId={errorId}
-          />
-        )}
-        <FileActions file={row.file} />
+        {/* Kept empty for a read-only key, so every row's chips line up. */}
+        <span className="agent-setup-control-slot">
+          {row.resettable && (
+            <button
+              type="button"
+              className="icon-btn agent-setup-config-reset"
+              data-testid="agent-setup-config-reset"
+              title="Reset: remove it from settings.local.json"
+              aria-label={`Reset ${row.key}`}
+              onClick={() => void saveConfig(folder, { kind: 'remove', key: row.key })}
+            >
+              <RotateCcw {...SMALL_ICON} />
+            </button>
+          )}
+          {row.control === 'switch' && (
+            <Switch
+              label={row.key}
+              checked={asked ?? row.value === true}
+              testId="agent-setup-config-switch"
+              onChange={(value) => void saveConfig(folder, { kind: 'set', key: row.key, value })}
+            />
+          )}
+          {row.control === 'number' && typeof row.value === 'number' && (
+            <ConfigNumber
+              folder={folder}
+              settingKey={row.key}
+              value={row.value}
+              draft={draft}
+              onDraft={setDraft}
+              invalid={invalid}
+              onInvalid={setInvalid}
+              errorId={errorId}
+            />
+          )}
+        </span>
       </div>
       {invalid && (
         <p className="field-error" id={errorId} role="alert" data-testid="agent-setup-config-error">
@@ -1318,10 +1328,11 @@ export function ConfigSection({ workspace, snapshot, query }: SectionViewProps):
                   <code className="agent-setup-config-value" data-testid="agent-setup-config-value">
                     {row.text}
                   </code>
+                  <FileActions file={row.file} />
                   <span className="agent-setup-row-chips">
                     <SourceChip source={{ kind: 'user' }} />
                   </span>
-                  <FileActions file={row.file} />
+                  <span className="agent-setup-control-slot" />
                 </div>
               </li>
             ))}

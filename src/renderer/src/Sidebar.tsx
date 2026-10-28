@@ -1,13 +1,4 @@
-import {
-  GitBranch,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Pencil,
-  Plus,
-  Server,
-  Settings,
-  Trash2
-} from 'lucide-react'
+import { GitBranch, PanelLeftClose, PanelLeftOpen, Plus, Server, Settings } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { hoverHalf } from '../../core/card-drops'
 import {
@@ -42,8 +33,6 @@ interface SidebarProps {
   onToggle: () => void
   onSelect: (id: string) => void
   onAdd: () => void
-  onEdit: (id: string) => void
-  onDelete: (id: string) => void
   /** Opens the Settings dialog (#10 D5). */
   onSettings: () => void
   /** The sync status line (#13 D13), or null when sync is off. */
@@ -54,6 +43,8 @@ interface SidebarProps {
   onOpenTerminal: (workspaceId: string, cardId: string) => void
   /** The workspaces whose view is their Agent setup page, each with its row (#68 D3). */
   agentSetupIds: readonly string[]
+  /** The workspace whose Agent setup page is on screen, its row marked current. */
+  agentSetupShown: string | null
   /** Shows workspace `id`'s Agent setup page, from its row. */
   onOpenAgentSetup: (id: string) => void
   /** The numbers a held modifier would pick with a digit, shown on the rows. */
@@ -72,13 +63,12 @@ function Sidebar({
   onToggle,
   onSelect,
   onAdd,
-  onEdit,
-  onDelete,
   onSettings,
   syncStatus,
   openId,
   onOpenTerminal,
   agentSetupIds,
+  agentSetupShown,
   onOpenAgentSetup,
   heldNumbers
 }: SidebarProps): React.JSX.Element {
@@ -277,30 +267,6 @@ function Sidebar({
                     <Server className="workspace-ssh" {...SMALL_ICON} />
                   )}
                 </button>
-                {!collapsed && (
-                  <span className="workspace-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      data-testid="workspace-edit"
-                      aria-label={`Edit ${w.name}`}
-                      title="Edit workspace"
-                      onClick={() => onEdit(w.id)}
-                    >
-                      <Pencil {...SMALL_ICON} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      data-testid="workspace-delete"
-                      aria-label={`Delete ${w.name}`}
-                      title="Delete workspace"
-                      onClick={() => onDelete(w.id)}
-                    >
-                      <Trash2 {...SMALL_ICON} />
-                    </button>
-                  </span>
-                )}
               </div>
               {!collapsed && (
                 <WorkspaceTerminals
@@ -309,7 +275,10 @@ function Sidebar({
                   onOpen={onOpenTerminal}
                   agentSetup={
                     agentSetupIds.includes(w.id)
-                      ? { current: active, onOpen: () => onOpenAgentSetup(w.id) }
+                      ? {
+                          current: agentSetupShown === w.id,
+                          onOpen: () => onOpenAgentSetup(w.id)
+                        }
                       : null
                   }
                   showNumbers={active && heldNumbers === 'terminal'}

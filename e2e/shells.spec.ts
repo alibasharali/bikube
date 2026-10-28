@@ -138,6 +138,20 @@ test('#66 AC1: New shell opens the Default shell while it is not running', async
   await expect(page.getByTestId('shell')).toHaveCount(1)
 })
 
+test('New terminal on the board toolbar and in the title bar runs New shell', async () => {
+  await page.getByTestId('toolbar-new-shell').click()
+  await expectCardOpen(page, 'Default')
+  await expect.poll(() => running('Default')).toBe('true')
+  // With a terminal open, the title bar's button: a new temporary shell.
+  await page.getByTestId('titlebar-new-shell').click()
+  await expectCardOpen(page, 'Terminal 1')
+  await expect(treeTerminal('Terminal 1')).toBeVisible()
+  // The board shows no split buttons: only New terminal.
+  await backToBoard(page)
+  await expect(page.getByTestId('titlebar-terminal-buttons')).toHaveCount(0)
+  await expect(page.getByTestId('titlebar-split-right')).toHaveCount(0)
+})
+
 test('#66 AC2, AC3: with the Default shell running, New shell opens Terminal 1, then Terminal 2', async () => {
   await page.keyboard.press(OPEN_SHELL)
   await expectCardOpen(page, 'Default')

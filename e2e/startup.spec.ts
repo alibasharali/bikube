@@ -499,11 +499,11 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
   expect(rows[at + 1].wrapped).toBe(false)
 })
 
-/** Opens the edit dialog of the workspace row at `index`; row actions show on hover. */
+/** Opens the edit dialog of the workspace row at `index`; Edit is on its board's toolbar. */
 async function editWorkspace(index: number): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
   await expect(page.getByTestId('workspace-dialog')).toBeVisible()
 }
 

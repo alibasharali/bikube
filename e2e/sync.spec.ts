@@ -94,11 +94,11 @@ async function createCard(page: Page): Promise<void> {
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 }
 
-/** Opens the workspace dialog for the row at `index` (row actions show on hover). */
+/** Opens the workspace dialog for the row at `index` (Edit is on its board's toolbar). */
 async function editWorkspace(page: Page, index: number): Promise<void> {
   const row = page.locator('.workspace-row').nth(index)
-  await row.hover()
-  await row.getByTestId('workspace-edit').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-edit').click()
 }
 
 const settings = (page: Page): Locator => page.getByTestId('settings-dialog')
@@ -708,8 +708,8 @@ test("AC7: the active workspace stays per machine; B's goes to the first when A 
   await expect(activeWorkspace(b.page)).toHaveText('web')
 
   const row = a.page.locator('.workspace-row').nth(1)
-  await row.hover()
-  await row.getByTestId('workspace-delete').click()
+  await row.getByTestId('workspace-item').click()
+  await row.page().getByTestId('workspace-delete').click()
   await a.page.getByTestId('confirm-delete').click()
   await expect.poll(() => workspaceNames(b.page), { timeout: 5000 }).toEqual(['api2'])
   await expect(activeWorkspace(b.page)).toHaveText('api2')

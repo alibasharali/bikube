@@ -125,14 +125,18 @@ function Pane({
   focused,
   find,
   onCloseFind,
-  zoomedPanes
+  zoomedPanes,
+  onCloseCard
 }: {
   cardId: string
   paneId: string
   screen: XtermScreen | undefined
   focused: boolean
 } & FindProps &
-  ZoomProps): React.JSX.Element {
+  ZoomProps &
+  CloseCardProps): React.JSX.Element {
+  // The main pane's close button closes the card, as Close pane does there; extra panes close.
+  const closeCard = paneId === MAIN_PANE ? onCloseCard : undefined
   const view = useViewWindow()
   const hostRef = useRef<HTMLDivElement>(null)
   useEffect(() => screen?.attach(hostRef.current!), [screen])
@@ -173,8 +177,20 @@ function Pane({
           screen={screen}
           focusRequest={find.request}
           onClose={onCloseFind}
-          besideClose={paneId !== MAIN_PANE}
+          besideClose={paneId !== MAIN_PANE || closeCard !== undefined}
         />
+      )}
+      {closeCard && (
+        <button
+          type="button"
+          className="pane-close"
+          data-testid="pane-close-card"
+          aria-label="Close card"
+          title="Close card"
+          onClick={closeCard}
+        >
+          <X {...SMALL_ICON} />
+        </button>
       )}
       {paneId !== MAIN_PANE && (
         <button
@@ -196,6 +212,11 @@ function Pane({
   )
 }
 
+/** The main pane's close button, which asks to close the card as Close pane does there. */
+interface CloseCardProps {
+  onCloseCard?: () => void
+}
+
 /** The split tree (#11 D2): every split is 50/50, right side by side, down stacked. */
 function PaneTree({
   cardId,
@@ -207,7 +228,8 @@ function PaneTree({
   tree: SplitTree
   focused: string
 } & FindProps &
-  ZoomProps): React.JSX.Element {
+  ZoomProps &
+  CloseCardProps): React.JSX.Element {
   if (tree.kind === 'leaf') {
     return (
       <Pane
@@ -396,6 +418,9 @@ function CardView({
               find={find}
               onCloseFind={closeFind}
               zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
+              // Close card, whichever pane is focused: Close pane in the main pane asks the same.
+              // Only while it runs, as both do nothing on a stopped card.
+              onCloseCard={running ? () => runAction.current('closeCard') : undefined}
             />
           )}
         </div>
@@ -425,6 +450,8 @@ function CardView({
           workspaceId={workspaceId}
           openCard={card}
           onOpenShell={onOpenShell}
+          // A card window has no title bar: the panel shows its own tabs and button.
+          header={view !== window}
           onHide={() => {
             settingsStore.update({ sidePanelOpen: false })
             // The hide button is gone: keyboard focus goes back to the focused pane's terminal.

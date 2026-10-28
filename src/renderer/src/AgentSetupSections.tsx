@@ -1,7 +1,7 @@
 import { ChevronRight, FolderOpen, RotateCcw, SquarePen, X } from 'lucide-react'
 import { createContext, Fragment, useContext, useId, useMemo, useRef, useState } from 'react'
 import type { AgentSetupSectionId } from '../../core/agent-setup-sections'
-import { AGENT_SETUP_SECTIONS } from '../../core/agent-setup-sections'
+import { AGENT_SETUP_SECTIONS, collapsedGroupKey } from '../../core/agent-setup-sections'
 import {
   accountText,
   configRows,
@@ -75,6 +75,61 @@ export interface SectionViewProps {
   onFilter: (filter: SourceFilter) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
+  /** The groups collapsed under their headings (#71 D9), `collapsedGroupKey`'s keys. */
+  collapsed: ReadonlySet<string>
+  /** Collapses section `section`'s group `name`, or opens it again (#71 D9). */
+  onToggleGroup: (section: AgentSetupSectionId, name: string) => void
+}
+
+/**
+ * A group of a section's rows under a heading button (#71 D9): a chevron, the group's name and
+ * the count of its rows shown; a click or Enter collapses the rows, kept in the page memory.
+ */
+function CollapsibleGroup({
+  section,
+  name,
+  count,
+  collapsed,
+  onToggleGroup,
+  testId,
+  children
+}: {
+  section: AgentSetupSectionId
+  name: string
+  /** The rows shown, search and filter applied. */
+  count: number
+  collapsed: ReadonlySet<string>
+  onToggleGroup: (section: AgentSetupSectionId, name: string) => void
+  testId?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  const id = useId()
+  const open = !collapsed.has(collapsedGroupKey(section, name))
+  return (
+    <section className="agent-setup-group" data-testid={testId}>
+      <h4 className="agent-setup-subheading">
+        <button
+          type="button"
+          className="agent-setup-group-toggle"
+          data-testid="agent-setup-group-toggle"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => onToggleGroup(section, name)}
+        >
+          <ChevronRight {...SMALL_ICON} className="agent-setup-expand-icon" />
+          <span className="agent-setup-group-title" data-testid="agent-setup-group-name">
+            {name}
+          </span>{' '}
+          <span className="agent-setup-group-count" data-testid="agent-setup-group-count">
+            {count}
+          </span>
+        </button>
+      </h4>
+      <div id={id} hidden={!open}>
+        {children}
+      </div>
+    </section>
+  )
 }
 
 /** What a row's Open file and Reveal need (D27, D28): the folder main read and what it listed. */
@@ -550,7 +605,13 @@ export function MemorySection({
 }
 
 /** Hooks (D19): every hook command by event, Bikube's with its chip and no Open file. */
-export function HooksSection({ snapshot, query, filter }: SectionViewProps): React.JSX.Element {
+export function HooksSection({
+  snapshot,
+  query,
+  filter,
+  collapsed,
+  onToggleGroup
+}: SectionViewProps): React.JSX.Element {
   const groups = hookGroups(snapshot.hooks, query, filter)
   if (snapshot.hooks.length === 0) {
     return (
@@ -570,12 +631,15 @@ export function HooksSection({ snapshot, query, filter }: SectionViewProps): Rea
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-hooks">
       {groups.map((group) => (
-        <section
+        <CollapsibleGroup
           key={group.event}
-          className="agent-setup-group"
-          data-testid="agent-setup-hook-group"
+          section="hooks"
+          name={group.event}
+          count={group.hooks.length}
+          collapsed={collapsed}
+          onToggleGroup={onToggleGroup}
+          testId="agent-setup-hook-group"
         >
-          <h4 className="agent-setup-subheading">{group.event}</h4>
           <ul className="agent-setup-rows">
             {group.hooks.map((hook, i) => (
               <HookRow
@@ -585,7 +649,7 @@ export function HooksSection({ snapshot, query, filter }: SectionViewProps): Rea
               />
             ))}
           </ul>
-        </section>
+        </CollapsibleGroup>
       ))}
     </div>
   )
@@ -646,7 +710,9 @@ const PERMISSION_LISTS = [
 export function PermissionsSection({
   snapshot,
   query,
-  filter
+  filter,
+  collapsed,
+  onToggleGroup
 }: SectionViewProps): React.JSX.Element {
   const view = permissionsView(snapshot, query, filter)
   return (
@@ -670,8 +736,14 @@ export function PermissionsSection({
         const testId = `agent-setup-permissions-${list === 'additionalDirectories' ? 'directories' : list}`
         const rules = view[list]
         return (
-          <section key={list} className="agent-setup-group">
-            <h4 className="agent-setup-subheading">{title}</h4>
+          <CollapsibleGroup
+            key={list}
+            section="permissions"
+            name={title}
+            count={rules.length}
+            collapsed={collapsed}
+            onToggleGroup={onToggleGroup}
+          >
             {rules.length === 0 ? (
               <p className="agent-setup-empty" data-testid={testId}>
                 None
@@ -701,7 +773,7 @@ export function PermissionsSection({
                 ))}
               </ul>
             )}
-          </section>
+          </CollapsibleGroup>
         )
       })}
     </div>
@@ -944,15 +1016,22 @@ export function PluginsSection({
   query,
   filter,
   onShowSection,
-  onFilter
+  onFilter,
+  collapsed,
+  onToggleGroup
 }: SectionViewProps): React.JSX.Element {
   const plugins = filterPlugins(snapshot.plugins, query, filter)
   const marketplaces = marketplaceRows(snapshot, query)
   const searching = query.trim() !== ''
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-plugins">
-      <section className="agent-setup-group">
-        <h4 className="agent-setup-subheading">Installed</h4>
+      <CollapsibleGroup
+        section="plugins"
+        name="Installed"
+        count={plugins.length}
+        collapsed={collapsed}
+        onToggleGroup={onToggleGroup}
+      >
         {snapshot.plugins.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-empty">
             No plugins installed. Install them in Claude Code with /plugin.
@@ -975,11 +1054,16 @@ export function PluginsSection({
             ))}
           </ul>
         )}
-      </section>
+      </CollapsibleGroup>
       {/* Marketplaces have no source: shown only with the filter at All (#71 D2). */}
       {filter.kind === 'all' && (
-        <section className="agent-setup-group">
-          <h4 className="agent-setup-subheading">Marketplaces</h4>
+        <CollapsibleGroup
+          section="plugins"
+          name="Marketplaces"
+          count={marketplaces.length}
+          collapsed={collapsed}
+          onToggleGroup={onToggleGroup}
+        >
           {marketplaces.length === 0 ? (
             <p className="agent-setup-empty" data-testid="agent-setup-marketplaces-empty">
               {searching
@@ -1011,7 +1095,7 @@ export function PluginsSection({
               ))}
             </ul>
           )}
-        </section>
+        </CollapsibleGroup>
       )}
     </div>
   )
@@ -1326,7 +1410,9 @@ export function ConfigSection({
   workspace,
   snapshot,
   query,
-  filter
+  filter,
+  collapsed,
+  onToggleGroup
 }: SectionViewProps): React.JSX.Element {
   const all = configRows(snapshot, '')
   const rows = configRows(snapshot, query, filter)
@@ -1335,8 +1421,13 @@ export function ConfigSection({
   const narrowed = query.trim() !== '' || filter.kind !== 'all'
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-config">
-      <section className="agent-setup-group">
-        <h4 className="agent-setup-subheading">Settings</h4>
+      <CollapsibleGroup
+        section="config"
+        name="Settings"
+        count={rows.length}
+        collapsed={collapsed}
+        onToggleGroup={onToggleGroup}
+      >
         {all.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-empty">
             No settings set. Claude Code reads them from .claude/settings.json and
@@ -1358,9 +1449,14 @@ export function ConfigSection({
             ))}
           </ul>
         )}
-      </section>
-      <section className="agent-setup-group">
-        <h4 className="agent-setup-subheading">Preferences</h4>
+      </CollapsibleGroup>
+      <CollapsibleGroup
+        section="config"
+        name="Preferences"
+        count={preferences.length}
+        collapsed={collapsed}
+        onToggleGroup={onToggleGroup}
+      >
         {preferences.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-preferences-empty">
             {narrowed && allPreferences.length > 0
@@ -1392,7 +1488,7 @@ export function ConfigSection({
             ))}
           </ul>
         )}
-      </section>
+      </CollapsibleGroup>
     </div>
   )
 }

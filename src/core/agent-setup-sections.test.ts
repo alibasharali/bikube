@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_SETUP_GROUPS, AGENT_SETUP_SECTIONS, adjacentSection } from './agent-setup-sections'
+import {
+  AGENT_SETUP_GROUPS,
+  AGENT_SETUP_SECTIONS,
+  adjacentSection,
+  toggleCollapsedGroup
+} from './agent-setup-sections'
 
 describe('Agent setup sections (#68 D7)', () => {
   it('lists the sections in four groups, in order', () => {
@@ -32,5 +37,18 @@ describe('Agent setup sections (#68 D7)', () => {
     expect(adjacentSection('plugins', -1)).toBe('stats')
     expect(adjacentSection('config', 1)).toBe('overview')
     expect(adjacentSection('overview', -1)).toBe('config')
+  })
+})
+
+describe('Collapsed groups (#71 D9)', () => {
+  it('collapses a group by section and name, and opens it again', () => {
+    const none = new Set<string>()
+    const hooks = toggleCollapsedGroup(none, 'hooks', 'PreToolUse')
+    expect(none.size).toBe(0)
+    expect(hooks.has('hooks\nPreToolUse')).toBe(true)
+    // The same name in another section is another group.
+    const both = toggleCollapsedGroup(hooks, 'config', 'PreToolUse')
+    expect([...both].sort()).toEqual(['config\nPreToolUse', 'hooks\nPreToolUse'])
+    expect([...toggleCollapsedGroup(both, 'hooks', 'PreToolUse')]).toEqual(['config\nPreToolUse'])
   })
 })

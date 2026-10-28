@@ -582,7 +582,7 @@ test("AC7: Hooks lists Bikube's hooks and a project hook whose file is missing, 
 
   await tab('Hooks').click()
   const groups = panel().getByTestId('agent-setup-hook-group')
-  await expect(groups.getByRole('heading')).toHaveText([
+  await expect(groups.getByTestId('agent-setup-group-name')).toHaveText([
     'PreToolUse',
     'Notification',
     'UserPromptSubmit',
@@ -1600,6 +1600,149 @@ test("#71 AC12: each workspace's page keeps its own filter for the run, none aft
   await tab('Skills').click()
   await expect(chip('all')).toHaveAttribute('aria-pressed', 'true')
   await expect(rowNames()).toHaveCount(6)
+})
+
+/** `filterFixtures` and a Project permission rule, so every group under a heading has a row. */
+function groupFixtures(folder: string): void {
+  filterFixtures(folder)
+  write(
+    join(folder, '.claude/settings.json'),
+    JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } })
+  )
+}
+
+/** The shown section's group heading button for group `name`, reading `<name> <count>`. */
+const groupToggle = (name: string): Locator =>
+  panel()
+    .getByTestId('agent-setup-group-toggle')
+    .filter({ has: page.getByTestId('agent-setup-group-name').getByText(name, { exact: true }) })
+/** The rows' container a group's heading button controls. */
+const groupBody = async (name: string): Promise<Locator> =>
+  page.locator(`[id="${await groupToggle(name).getAttribute('aria-controls')}"]`)
+
+test("#71 AC10: a group's heading shows its count and collapses it, kept across reads, sections and reopening", async () => {
+  await openWith(groupFixtures)
+  await tab('Hooks').click()
+  const pre = groupToggle('PreToolUse')
+  // Bikube's and the user's.
+  await expect(pre).toHaveText('PreToolUse 2')
+  await expect(pre).toHaveAttribute('aria-expanded', 'true')
+  await expect(groupToggle('SessionStart')).toHaveText('SessionStart 2')
+  const preRows = await groupBody('PreToolUse')
+  await expect(preRows.getByTestId('agent-setup-row')).toHaveCount(2)
+  await expect(preRows).toBeVisible()
+
+  await pre.click()
+  await expect(pre).toHaveAttribute('aria-expanded', 'false')
+  await expect(preRows).toBeHidden()
+  // The others stay open.
+  await expect(await groupBody('SessionStart')).toBeVisible()
+
+  // Enter on a focused heading too.
+  const stop = groupToggle('Stop')
+  await stop.focus()
+  await page.keyboard.press('Enter')
+  await expect(stop).toHaveAttribute('aria-expanded', 'false')
+  await page.keyboard.press('Enter')
+  await expect(stop).toHaveAttribute('aria-expanded', 'true')
+
+  // Kept after Refresh, a switch to Config and back, and Back to the board and reopening.
+  await page.getByTestId('agent-setup-refresh').click()
+  await expect(pre).toHaveAttribute('aria-expanded', 'false')
+  await tab('Config').click()
+  await tab('Hooks').click()
+  await expect(pre).toHaveAttribute('aria-expanded', 'false')
+  await expect(await groupBody('PreToolUse')).toBeHidden()
+  await page.getByTestId('titlebar-workspace').click()
+  await expect(board()).toBeVisible()
+  await setupButton().click()
+  await expect(tab('Hooks')).toHaveAttribute('aria-selected', 'true')
+  await expect(pre).toHaveAttribute('aria-expanded', 'false')
+  await expect(groupToggle('Stop')).toHaveAttribute('aria-expanded', 'true')
+
+  // Config's Preferences, Permissions' Allow and Plugins' Marketplaces collapse the same way.
+  await tab('Config').click()
+  await expect(groupToggle('Settings')).toHaveText('Settings 2')
+  await expect(groupToggle('Preferences')).toHaveText('Preferences 1')
+  const preferences = await groupBody('Preferences')
+  await expect(preferences.getByTestId('agent-setup-preference')).toHaveCount(1)
+  await groupToggle('Preferences').click()
+  await expect(groupToggle('Preferences')).toHaveAttribute('aria-expanded', 'false')
+  await expect(preferences).toBeHidden()
+  await expect(await groupBody('Settings')).toBeVisible()
+
+  await tab('Permissions').click()
+  await expect(groupToggle('Allow')).toHaveText('Allow 1')
+  await expect(groupToggle('Ask')).toHaveText('Ask 0')
+  const allow = await groupBody('Allow')
+  await groupToggle('Allow').click()
+  await expect(groupToggle('Allow')).toHaveAttribute('aria-expanded', 'false')
+  await expect(allow).toBeHidden()
+
+  await tab('Plugins').click()
+  await expect(groupToggle('Installed')).toHaveText('Installed 2')
+  await expect(groupToggle('Marketplaces')).toHaveText('Marketplaces 1')
+  const markets = await groupBody('Marketplaces')
+  await groupToggle('Marketplaces').click()
+  await expect(groupToggle('Marketplaces')).toHaveAttribute('aria-expanded', 'false')
+  await expect(markets).toBeHidden()
+  await expect(await groupBody('Installed')).toBeVisible()
+})
+
+test("#71 AC11: the headings' counts follow the filter", async () => {
+  await openWith(groupFixtures)
+  await tab('Hooks').click()
+  await expect(panel().getByTestId('agent-setup-group-toggle')).toHaveCount(5)
+  await chip('user').click()
+  // Only the events with a User hook, each counting its User hooks.
+  await expect(panel().getByTestId('agent-setup-group-toggle')).toHaveText([
+    'PreToolUse 1',
+    'SessionStart 1'
+  ])
+  await tab('Config').click()
+  // cleanupPeriodDays from ~/.claude/settings.json; settings.local.json's verbose is Local.
+  await expect(groupToggle('Settings')).toHaveText('Settings 1')
+  await expect(groupToggle('Preferences')).toHaveText('Preferences 1')
+})
+
+test("#71 AC12: each workspace's page keeps its own collapsed groups for the run, none after a restart", async () => {
+  await launch()
+  const a = await createWorkspace('A')
+  groupFixtures(a)
+  await setupButton().click()
+  await tab('Hooks').click()
+  await chip('user').click()
+  await groupToggle('PreToolUse').click()
+  await expect(groupToggle('PreToolUse')).toHaveAttribute('aria-expanded', 'false')
+
+  const b = await createWorkspace('B')
+  groupFixtures(b)
+  await setupButton().click()
+  await tab('Hooks').click()
+  await expect(chip('all')).toHaveAttribute('aria-pressed', 'true')
+  await expect(groupToggle('PreToolUse')).toHaveText('PreToolUse 2')
+  const toggles = (): Locator => panel().getByTestId('agent-setup-group-toggle')
+  await expect(toggles()).toHaveCount(5)
+  for (const toggle of await toggles().all()) {
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  }
+
+  await setupRow('A').click()
+  await expect(tab('Hooks')).toHaveAttribute('aria-selected', 'true')
+  await expect(chip('user')).toHaveAttribute('aria-pressed', 'true')
+  await expect(groupToggle('PreToolUse')).toHaveAttribute('aria-expanded', 'false')
+  await expect(groupToggle('SessionStart')).toHaveAttribute('aria-expanded', 'true')
+
+  await app!.close()
+  await launch()
+  await workspaceItem('A').click()
+  await setupButton().click()
+  await tab('Hooks').click()
+  await expect(chip('all')).toHaveAttribute('aria-pressed', 'true')
+  await expect(toggles()).toHaveCount(5)
+  for (const toggle of await toggles().all()) {
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  }
 })
 
 test("#71 AC13: at 320 px the chips wrap with no sideways scroll; the pressed chip takes the theme's accent", async () => {

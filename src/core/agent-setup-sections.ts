@@ -78,3 +78,22 @@ export function adjacentSection(id: AgentSetupSectionId, step: 1 | -1): AgentSet
   const at = AGENT_SETUP_SECTIONS.findIndex((s) => s.id === id)
   return AGENT_SETUP_SECTIONS[(at + step + count) % count]!.id
 }
+
+/** A collapsible group's key in the page memory (#71 D9): its section and its name. */
+export const collapsedGroupKey = (section: AgentSetupSectionId, name: string): string =>
+  `${section}\n${name}`
+
+/**
+ * `collapsed` with section `section`'s group `name` collapsed if it was open, opened if it was
+ * collapsed (#71 D9). A new set: the one given is left as it is.
+ */
+export function toggleCollapsedGroup(
+  collapsed: ReadonlySet<string>,
+  section: AgentSetupSectionId,
+  name: string
+): ReadonlySet<string> {
+  const key = collapsedGroupKey(section, name)
+  const next = new Set(collapsed)
+  if (!next.delete(key)) next.add(key)
+  return next
+}

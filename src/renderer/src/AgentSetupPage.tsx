@@ -66,6 +66,10 @@ export interface AgentSetupSectionProps {
   onFilter: (filter: SourceFilter) => void
   /** The memory rows expanded (D17), kept across reads. */
   expanded: ReadonlySet<string>
+  /** The groups collapsed under their headings (#71 D9), `collapsedGroupKey`'s keys. */
+  collapsed: ReadonlySet<string>
+  /** Collapses section `section`'s group `name`, or opens it again (#71 D9). */
+  onToggleGroup: (section: AgentSetupSectionId, name: string) => void
 }
 
 /**
@@ -223,9 +227,8 @@ function usePageWidth(ref: React.RefObject<HTMLElement | null>): number | null {
 
 function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const id = useId()
-  const { section, setSection, query, setQuery, filter, setFilter } = useAgentSetupMemory(
-    workspace.id
-  )
+  const { section, setSection, query, setQuery, filter, setFilter, collapsed, toggleGroup } =
+    useAgentSetupMemory(workspace.id)
   const body = useRef<HTMLDivElement>(null)
   const width = usePageWidth(body)
   const narrow = width !== null && width < NARROW_WIDTH
@@ -366,6 +369,8 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
               onShowSection={setSection}
               onFilter={setFilter}
               expanded={expanded}
+              collapsed={collapsed}
+              onToggleGroup={toggleGroup}
             />
           </FileActionsProvider>
         ) : SectionView && failed ? (

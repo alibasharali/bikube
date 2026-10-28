@@ -13,7 +13,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { editorPlan, editorShell, openFile, runEditor, type OpenDeps } from './editor'
-import { listedFileErrorLine, openErrorLine } from './open-result'
+import { editorCandidates } from './editor-candidates'
+import { isOpenNote, listedFileErrorLine, openErrorLine } from './open-result'
+
+/** Looks for the named editors on the login shell's PATH only (#70 D1 off macOS and Linux). */
+const PATH_ONLY = { platform: 'none', home: '/nowhere' }
 
 describe('editorShell (#55 D15)', () => {
   it('is the Shell setting, else $SHELL, else /bin/sh', () => {
@@ -29,31 +33,32 @@ describe('editorPlan (#55 D13, D14, D15, AC16)', () => {
   const folder = '/work/my repo'
   const file = "/work/my repo/src/it's a.ts"
 
-  it('gives VS Code, Cursor and Zed the folder and the file as positional arguments', () => {
+  it('gives VS Code, Cursor and Zed their candidates (#70 D1), the folder and the file as positional arguments', () => {
     for (const [editor, name] of [
       ['vscode', 'code'],
       ['cursor', 'cursor'],
       ['zed', 'zed']
     ] as const) {
-      expect(editorPlan(editor, '', '/bin/zsh', folder, file)).toEqual({
-        kind: 'run',
-        name,
-        command: '/bin/zsh',
-        args: [
-          '-l',
-          '-c',
-          'command -v "$1" >/dev/null 2>&1 || exit 127; exec "$@"',
-          'bikube',
-          name,
-          folder,
-          file
-        ]
+      const candidates = editorCandidates(editor, 'linux', '/h')
+      const plan = editorPlan(editor, '', '/bin/zsh', folder, file, {
+        platform: 'linux',
+        home: '/h'
       })
+      expect(plan).toMatchObject({ kind: 'run', name, command: '/bin/zsh' })
+      if (plan.kind !== 'run') throw new Error('not run')
+      expect(plan.args.slice(0, 2)).toEqual(['-l', '-c'])
+      expect(plan.args.slice(3)).toEqual([
+        'bikube',
+        String(candidates.length),
+        ...candidates,
+        folder,
+        file
+      ])
     }
   })
 
   it('runs a custom command as the only text the shell parses, the file as "$1"', () => {
-    expect(editorPlan('custom', '  subl -n ', '/bin/bash', folder, file)).toEqual({
+    expect(editorPlan('custom', '  subl -n ', '/bin/bash', folder, file, PATH_ONLY)).toEqual({
       kind: 'run',
       name: 'subl',
       command: '/bin/bash',
@@ -62,13 +67,12 @@ describe('editorPlan (#55 D13, D14, D15, AC16)', () => {
   })
 
   it("uses fish's own syntax under fish, where the arguments are $argv", () => {
-    expect(editorPlan('zed', '', '/opt/homebrew/bin/fish', folder, file)).toEqual({
-      kind: 'run',
-      name: 'zed',
-      command: '/opt/homebrew/bin/fish',
-      args: ['-l', '-c', 'command -q $argv[1]; or exit 127; exec $argv', 'zed', folder, file]
-    })
-    expect(editorPlan('custom', 'subl -n', '/usr/bin/fish', folder, file)).toEqual({
+    const plan = editorPlan('zed', '', '/opt/homebrew/bin/fish', folder, file, PATH_ONLY)
+    expect(plan).toMatchObject({ kind: 'run', name: 'zed', command: '/opt/homebrew/bin/fish' })
+    if (plan.kind !== 'run') throw new Error('not run')
+    expect(plan.args[2]).toContain('$argv')
+    expect(plan.args.slice(3)).toEqual(['2', 'zed', 'zeditor', folder, file])
+    expect(editorPlan('custom', 'subl -n', '/usr/bin/fish', folder, file, PATH_ONLY)).toEqual({
       kind: 'run',
       name: 'subl',
       command: '/usr/bin/fish',
@@ -77,13 +81,17 @@ describe('editorPlan (#55 D13, D14, D15, AC16)', () => {
   })
 
   it('falls back to /bin/sh as a login shell for a shell with neither syntax', () => {
-    const plan = editorPlan('vscode', '', '/usr/local/bin/nu', folder, file)
+    const plan = editorPlan('vscode', '', '/usr/local/bin/nu', folder, file, PATH_ONLY)
     expect(plan).toMatchObject({ kind: 'run', command: '/bin/sh' })
   })
 
   it('opens with the system default, and nothing for an empty custom command', () => {
-    expect(editorPlan('system', 'ignored', '/bin/sh', folder, file)).toEqual({ kind: 'system' })
-    expect(editorPlan('custom', '   ', '/bin/sh', folder, file)).toEqual({ kind: 'no-command' })
+    expect(editorPlan('system', 'ignored', '/bin/sh', folder, file, PATH_ONLY)).toEqual({
+      kind: 'system'
+    })
+    expect(editorPlan('custom', '   ', '/bin/sh', folder, file, PATH_ONLY)).toEqual({
+      kind: 'no-command'
+    })
   })
 })
 
@@ -127,25 +135,35 @@ describe('runEditor (#55 D13, D15, AC16)', () => {
     fakeCommand('code')
     const folder = join(dir, 'my repo')
     const file = join(folder, "it's $HOME a.ts")
-    expect(await run(editorPlan('vscode', '', '/bin/sh', folder, file))).toEqual({ ok: true })
+    expect(await run(editorPlan('vscode', '', '/bin/sh', folder, file, PATH_ONLY))).toEqual({
+      ok: true
+    })
     expect(logged()).toEqual([join(bin, 'code'), folder, file])
   })
 
   it('reads `<command> not found` when the editor is not installed', async () => {
-    expect(await run(editorPlan('vscode', '', '/bin/sh', dir, join(dir, 'a.ts')))).toEqual({
+    expect(
+      await run(editorPlan('vscode', '', '/bin/sh', dir, join(dir, 'a.ts'), PATH_ONLY))
+    ).toEqual({
       ok: false,
-      reason: 'code not found'
+      reason: 'code not found',
+      notFound: true
     })
-    expect(await run(editorPlan('custom', 'fake-editor --wait', '/bin/sh', dir, 'x'))).toEqual({
+    expect(
+      await run(editorPlan('custom', 'fake-editor --wait', '/bin/sh', dir, 'x', PATH_ONLY))
+    ).toEqual({
       ok: false,
-      reason: 'fake-editor not found'
+      reason: 'fake-editor not found',
+      notFound: true
     })
   })
 
   it("appends the file to a custom command as one argument, the command's own words kept", async () => {
     fakeCommand('fake-editor')
     const file = join(dir, 'a b; rm -rf "x".md')
-    expect(await run(editorPlan('custom', 'fake-editor --wait', '/bin/sh', dir, file))).toEqual({
+    expect(
+      await run(editorPlan('custom', 'fake-editor --wait', '/bin/sh', dir, file, PATH_ONLY))
+    ).toEqual({
       ok: true
     })
     expect(logged()).toEqual([join(bin, 'fake-editor'), '--wait', file])
@@ -153,12 +171,12 @@ describe('runEditor (#55 D13, D15, AC16)', () => {
 
   it("gives a failing editor's last error line, or its exit code", async () => {
     fakeCommand('code', 'echo "warming up" >&2; echo "cannot open display" >&2; exit 3')
-    expect(await run(editorPlan('vscode', '', '/bin/sh', dir, 'x'))).toEqual({
+    expect(await run(editorPlan('vscode', '', '/bin/sh', dir, 'x', PATH_ONLY))).toEqual({
       ok: false,
       reason: 'cannot open display'
     })
     fakeCommand('code', 'exit 4')
-    expect(await run(editorPlan('vscode', '', '/bin/sh', dir, 'x'))).toEqual({
+    expect(await run(editorPlan('vscode', '', '/bin/sh', dir, 'x', PATH_ONLY))).toEqual({
       ok: false,
       reason: 'exited with code 4'
     })
@@ -167,14 +185,16 @@ describe('runEditor (#55 D13, D15, AC16)', () => {
   it('takes an editor still running after the wait as started', async () => {
     fakeCommand('fake-editor', 'sleep 5')
     const started = Date.now()
-    expect(await run(editorPlan('custom', 'fake-editor', '/bin/sh', dir, 'x'), 300)).toEqual({
+    expect(
+      await run(editorPlan('custom', 'fake-editor', '/bin/sh', dir, 'x', PATH_ONLY), 300)
+    ).toEqual({
       ok: true
     })
     expect(Date.now() - started).toBeLessThan(2000)
   })
 
   it("reads the shell's own failure when it can't start", async () => {
-    const result = await run(editorPlan('vscode', '', join(dir, 'sh'), dir, 'x'))
+    const result = await run(editorPlan('vscode', '', join(dir, 'sh'), dir, 'x', PATH_ONLY))
     expect(result).toEqual({ ok: false, reason: `${join(dir, 'sh')} not found` })
   })
 })
@@ -188,6 +208,7 @@ describe('openFile (#55 D13, D16, AC15)', () => {
     editorCommand: '',
     shell: '/bin/sh',
     env,
+    ...PATH_ONLY,
     spawn: ((command: string, args: string[], options: object) => {
       spawned.push([command, ...args])
       return spawn(command, args, options)
@@ -254,7 +275,8 @@ describe('openFile (#55 D13, D16, AC15)', () => {
       reason: 'no-command'
     })
     expect(spawned).toEqual([])
-    expect(await openFile(repo, 'src/a.ts', deps({ editor: 'zed' }))).toEqual({
+    const noDefaultApp = deps({ editor: 'zed', openPath: async () => 'No application' })
+    expect(await openFile(repo, 'src/a.ts', noDefaultApp)).toEqual({
       ok: false,
       reason: 'failed',
       message: 'zed not found'
@@ -287,5 +309,153 @@ describe('listedFileErrorLine (#68 D27)', () => {
       listedFileErrorLine('/w/a.md', { ok: false, reason: 'failed', message: 'code not found' })
     ).toBe("Couldn't open a.md: code not found")
     expect(listedFileErrorLine('/w/a.md', { ok: true })).toBeNull()
+  })
+})
+
+/** A real VS Code at one of D1's system paths would come before the fake under the temp home. */
+const systemCode = editorCandidates('vscode', 'linux', '/nonexistent').some((path) =>
+  path.startsWith('/usr') || path.startsWith('/snap') || path.startsWith('/var')
+    ? existsSync(path)
+    : false
+)
+
+describe.skipIf(systemCode)('finding the editor and falling back (#70 D1, D3)', () => {
+  let repo: string
+  let home: string
+  let spawned: string[][]
+  let opened: string[]
+  let openError: string
+  const file = (): string => join(repo, 'a.ts')
+  const deps = (over: Partial<OpenDeps> = {}): OpenDeps => ({
+    editor: 'vscode',
+    editorCommand: '',
+    shell: '/bin/sh',
+    env,
+    platform: 'linux',
+    home,
+    spawn: ((command: string, args: string[], options: object) => {
+      spawned.push([command, ...args])
+      return spawn(command, args, options)
+    }) as unknown as OpenDeps['spawn'],
+    openPath: async (path) => {
+      opened.push(path)
+      return openError
+    },
+    waitMs: 3000,
+    ...over
+  })
+  /** A fake at D1's per-user flatpak export for VS Code, logging `flatpak` and its arguments. */
+  function flatpakCode(): string {
+    const path = join(home, '.local', 'share', 'flatpak', 'exports', 'bin', 'com.visualstudio.code')
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' flatpak "$@" >> '${log()}'\n`)
+    chmodSync(path, 0o755)
+    return path
+  }
+
+  beforeEach(() => {
+    repo = join(dir, 'repo')
+    mkdirSync(repo)
+    writeFileSync(join(repo, 'a.ts'), '')
+    home = join(dir, 'home')
+    spawned = []
+    opened = []
+    openError = ''
+  })
+
+  it('AC1: runs the bundle CLI at an installer path when no command is on the PATH', async () => {
+    flatpakCode()
+    expect(await openFile(repo, 'a.ts', deps())).toEqual({ ok: true })
+    expect(logged()).toEqual(['flatpak', repo, file()])
+    expect(opened).toEqual([])
+  })
+
+  it('AC1: passes the candidates as positional arguments, never in the parsed text', () => {
+    const plan = editorPlan('vscode', '', '/bin/sh', repo, file(), { platform: 'linux', home })
+    expect(plan.kind === 'run' && plan.args[2]).not.toMatch(/code|flatpak|visualstudio/)
+  })
+
+  it('AC1: skips a candidate that is not an executable regular file', async () => {
+    const path = flatpakCode()
+    chmodSync(path, 0o644)
+    expect(await openFile(repo, 'a.ts', deps({ openPath: async () => 'none' }))).toEqual({
+      ok: false,
+      reason: 'failed',
+      message: 'code not found'
+    })
+    expect(logged()).toEqual([])
+  })
+
+  it("AC2: runs the PATH's command before one at an installer path", async () => {
+    flatpakCode()
+    fakeCommand('code')
+    expect(await openFile(repo, 'a.ts', deps())).toEqual({ ok: true })
+    expect(logged()).toEqual([join(bin, 'code'), repo, file()])
+  })
+
+  it("finds Zed by Arch's zeditor", async () => {
+    fakeCommand('zeditor')
+    expect(await openFile(repo, 'a.ts', deps({ editor: 'zed' }))).toEqual({ ok: true })
+    expect(logged()).toEqual([join(bin, 'zeditor'), repo, file()])
+  })
+
+  it('AC4: opens with the default app when the editor is found nowhere, with a note', async () => {
+    expect(await openFile(repo, 'a.ts', deps())).toEqual({
+      ok: true,
+      reason: 'default-app',
+      message: 'code not found'
+    })
+    expect(opened).toEqual([file()])
+  })
+
+  it("AC4: gives the editor's reason when the default app fails too", async () => {
+    openError = 'No application knows how to open it'
+    expect(await openFile(repo, 'a.ts', deps({ editor: 'cursor' }))).toEqual({
+      ok: false,
+      reason: 'failed',
+      message: 'cursor not found'
+    })
+    expect(opened).toEqual([file()])
+  })
+
+  it('AC5: a custom command that is not found runs nothing else and opens no default app', async () => {
+    const result = await openFile(
+      repo,
+      'a.ts',
+      deps({ editor: 'custom', editorCommand: 'fake-missing' })
+    )
+    expect(result).toEqual({ ok: false, reason: 'failed', message: 'fake-missing not found' })
+    expect(opened).toEqual([])
+    expect(spawned).toHaveLength(1)
+  })
+
+  it.skipIf(!existsSync('/usr/bin/fish') && !existsSync('/bin/fish'))(
+    "finds the editor under fish's own syntax too",
+    async () => {
+      const fish = existsSync('/usr/bin/fish') ? '/usr/bin/fish' : '/bin/fish'
+      flatpakCode()
+      expect(await openFile(repo, 'a.ts', deps({ shell: fish }))).toEqual({ ok: true })
+      expect(logged()).toEqual(['flatpak', repo, file()])
+      expect(await openFile(repo, 'a.ts', deps({ shell: fish, editor: 'cursor' }))).toEqual({
+        ok: true,
+        reason: 'default-app',
+        message: 'cursor not found'
+      })
+    }
+  )
+})
+
+describe('the fallback note (#70 D3, AC4)', () => {
+  it('reads the note for a file opened with the default app', () => {
+    const result = { ok: true, reason: 'default-app', message: 'code not found' } as const
+    expect(openErrorLine('src/a.ts', result)).toBe(
+      'Opened a.ts with the default app: code not found'
+    )
+    expect(listedFileErrorLine('/w/.claude/settings.json', result)).toBe(
+      'Opened settings.json with the default app: code not found'
+    )
+    expect(isOpenNote(result)).toBe(true)
+    expect(isOpenNote({ ok: true })).toBe(false)
+    expect(isOpenNote({ ok: false, reason: 'failed', message: 'code not found' })).toBe(false)
   })
 })

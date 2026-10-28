@@ -32,7 +32,6 @@ import { recordGlobalPress } from '../../core/global-hotkey'
 import type { GlobalShortcutState } from '../../core/global-shortcut'
 import {
   DEFAULT_FONT_FAMILY,
-  EDITORS,
   MAX_EDITOR_COMMAND_LENGTH,
   MAX_FONT_FAMILY_LENGTH,
   MAX_FONT_SIZE,
@@ -63,8 +62,10 @@ import {
 } from '../../core/settings-form'
 import { MAX_COLUMN_CARD_LIMIT, MIN_COLUMN_CARD_LIMIT } from '../../core/column-limit'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
+import { editorChoices } from '../../core/editor-candidates'
 import { ghosttyStore, useGhosttyTheme } from './ghostty'
 import { installedAppFonts, installedFonts } from './installed-fonts'
+import { useInstalledEditors } from './installed-editors'
 import { ICON, SMALL_ICON } from './icons'
 import Modal from './Modal'
 import ShortcutKeys from './ShortcutKeys'
@@ -965,20 +966,14 @@ function AgentsSection(): React.JSX.Element {
   )
 }
 
-const EDITOR_LABELS: Record<Editor, string> = {
-  vscode: 'VS Code',
-  cursor: 'Cursor',
-  zed: 'Zed',
-  system: 'System default',
-  custom: 'Custom command'
-}
-
 /**
  * The Editor section (#55 D14): what the side panel's Files tab opens a file with, and the custom
- * command's one-line text, applied as it is typed.
+ * command's one-line text, applied as it is typed. An editor not found is disabled,
+ * `(not installed)`, unless it is the saved one (#70 D2).
  */
 function EditorField(): React.JSX.Element {
   const { editor, editorCommand } = useSettings()
+  const installed = useInstalledEditors()
   const id = useId()
   const selectId = `${id}-editor`
   return (
@@ -994,9 +989,9 @@ function EditorField(): React.JSX.Element {
           value={editor}
           onChange={(e) => settingsStore.update({ editor: e.target.value as Editor })}
         >
-          {EDITORS.map((choice) => (
-            <option key={choice} value={choice}>
-              {EDITOR_LABELS[choice]}
+          {editorChoices(installed, editor).map((choice) => (
+            <option key={choice.value} value={choice.value} disabled={choice.disabled}>
+              {choice.label}
             </option>
           ))}
         </select>

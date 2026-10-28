@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeLetter } from '../../core/git-status'
-import { openErrorLine, type OpenResult } from '../../core/open-result'
+import { isOpenNote, openErrorLine, type OpenResult } from '../../core/open-result'
 import FileIcon from './FileIcon'
 import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
@@ -172,7 +172,8 @@ function LocalFiles({
   const [selected, setSelected] = useState<string | null>(null)
   const treeRef = useRef<HTMLDivElement>(null)
   const shownSelected = rows.some((r) => r.path === selected) ? selected : null
-  const [openError, setOpenError] = useState<string | null>(null)
+  /** The last open's error line, or its note when the file opened with the default app (#70 D3). */
+  const [openError, setOpenError] = useState<{ text: string; note: boolean } | null>(null)
   /** Only the latest open's result shows. */
   const opens = useRef(0)
 
@@ -183,7 +184,9 @@ function LocalFiles({
     const at = ++opens.current
     setOpenError(null)
     void onOpenFile(path).then((result) => {
-      if (at === opens.current) setOpenError(openErrorLine(path, result))
+      if (at !== opens.current) return
+      const text = openErrorLine(path, result)
+      setOpenError(text === null ? null : { text, note: isOpenNote(result) })
     })
   }
 
@@ -234,8 +237,12 @@ function LocalFiles({
         </button>
       </div>
       {openError !== null && (
-        <div className="files-error" role="alert" data-testid="files-open-error">
-          <span className="files-error-text">{openError}</span>
+        <div
+          className={openError.note ? 'files-error files-note' : 'files-error'}
+          role={openError.note ? 'status' : 'alert'}
+          data-testid="files-open-error"
+        >
+          <span className="files-error-text">{openError.text}</span>
           <button
             type="button"
             className="icon-btn"

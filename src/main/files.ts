@@ -7,6 +7,7 @@ import { readOnlyGit, spawnRunner } from '../core/git'
 import { readStatus, type FolderStatus } from '../core/git-status'
 import type { Settings } from '../core/settings'
 import { IPC } from '../shared/api'
+import { editorLocation } from './editors'
 
 /**
  * The side panel's Files tab (#55 D7, D8, D10, D16): lists one folder inside the shown folder, its
@@ -55,6 +56,7 @@ export function registerFiles(
         editorCommand,
         shell: editorShell(shellSetting, env),
         env,
+        ...editorLocation(),
         spawn,
         openPath: (file) => shell.openPath(file)
       })

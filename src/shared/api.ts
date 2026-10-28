@@ -12,6 +12,7 @@ import type { BoardReply } from '../core/board-protocol'
 import type { GhosttyTheme } from '../core/ghostty-config'
 import type { GlobalShortcutState } from '../core/global-shortcut'
 import type { AgentChoice } from '../core/installed-agents'
+import type { NamedEditor } from '../core/editor-candidates'
 import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
 import type { FolderListing } from '../core/file-tree'
@@ -87,6 +88,7 @@ export const IPC = {
   filesStatus: 'files:status',
   filesOpen: 'files:open',
   agentsInstalled: 'agents:installed',
+  editorsInstalled: 'editors:installed',
   agentSetupRead: 'agentSetup:read',
   agentSetupClaudeVersion: 'agentSetup:claudeVersion',
   agentSetupSwitch: 'agentSetup:switch',
@@ -402,6 +404,15 @@ export interface AgentsApi {
   installed(): Promise<AgentChoice[] | null>
 }
 
+export interface EditorsApi {
+  /**
+   * Which of Settings > Editor's VS Code, Cursor and Zed are found (#70 D2: on the login shell's
+   * PATH or at their installers' paths), so its select can show the others disabled; null when
+   * the check failed.
+   */
+  installed(): Promise<NamedEditor[] | null>
+}
+
 /**
  * The side panel's Files tab (#55 D16), read by main inside the shown folder (an absolute,
  * existing folder): anything that resolves outside it is refused with `ok: false`.
@@ -526,6 +537,7 @@ export interface BikubeApi {
   git: GitApi
   files: FilesApi
   agents: AgentsApi
+  editors: EditorsApi
   agentSetup: AgentSetupApi
   update: UpdateApi
 }

@@ -25,6 +25,8 @@ const deps = (listed: ListedPaths): FileActionDeps => ({
     editor: 'system',
     editorCommand: '',
     shell: '/bin/sh',
+    platform: 'none',
+    home: '/nowhere',
     env: {},
     spawn,
     openPath: async (path) => {

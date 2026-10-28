@@ -14,24 +14,51 @@ import type { spawn as nodeSpawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { isDirectory } from './directories'
+import { EDITOR_NAMES, editorCandidates, type NamedEditor } from './editor-candidates'
 import { insideFolder } from './file-tree'
 import type { OpenResult } from './open-result'
 import type { Editor } from './settings'
 
 export type { OpenResult }
 
-/** The command each named editor's CLI is (D13). */
-const EDITOR_COMMANDS: Record<'vscode' | 'cursor' | 'zed', string> = {
-  vscode: 'code',
-  cursor: 'cursor',
-  zed: 'zed'
-}
-
 /** Shells that take POSIX `sh -c 'text' $0 $1…`. */
 const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
 
 /** The `$0` a POSIX shell is given, shown in its own error messages. */
 const ARG0 = 'bikube'
+
+/**
+ * Whether the candidate `$bikube_c` is found (#70 D1): an absolute path when it is an executable
+ * regular file (a symlink to one counts), a name when `command -v` finds it. Shared with the
+ * installed-editors check (D2), so both find the same editor.
+ */
+export const POSIX_CANDIDATE_TEST =
+  'case $bikube_c in /*) [ -f "$bikube_c" ] && [ -x "$bikube_c" ];; *) command -v "$bikube_c" >/dev/null 2>&1;; esac'
+
+/** `POSIX_CANDIDATE_TEST` in fish, for `$c`. */
+export const FISH_CANDIDATE_TEST =
+  "begin; if string match -q -- '/*' $c; test -f $c -a -x $c; else; command -q $c; end; end"
+
+/**
+ * The named editors' script (D1): `$1` is the number of candidates that follow, then the folder
+ * and the file; the first candidate found runs with them, none found exits 127.
+ */
+const POSIX_OPEN =
+  'bikube_n=$1; shift; bikube_f=; while [ "$bikube_n" -gt 0 ]; do bikube_c=$1; shift; bikube_n=$((bikube_n - 1)); ' +
+  `if [ -z "$bikube_f" ] && ${POSIX_CANDIDATE_TEST}; then bikube_f=$bikube_c; fi; done; ` +
+  '[ -n "$bikube_f" ] || exit 127; exec "$bikube_f" "$@"'
+
+const FISH_OPEN =
+  'set -l n $argv[1]; set -l f; for c in $argv[2..(math $n + 1)]; ' +
+  `if test -z "$f"; and ${FISH_CANDIDATE_TEST}; set f $c; end; end; ` +
+  'test -n "$f"; or exit 127; exec $f $argv[(math $n + 2)..-1]'
+
+/** Where the named editors are looked for (D1): `process.platform` and `~`. */
+export interface EditorLocation {
+  platform: string
+  /** `BIKUBE_HOME_DIR`, else the OS home. */
+  home: string
+}
 
 /** How an open runs: a login shell command, the OS's default app, or nothing (no custom command). */
 export type EditorPlan =
@@ -61,7 +88,8 @@ export function editorPlan(
   editorCommand: string,
   shell: string,
   folder: string,
-  file: string
+  file: string,
+  { platform, home }: EditorLocation
 ): EditorPlan {
   if (editor === 'system') return { kind: 'system' }
   const custom = editorCommand.trim()
@@ -75,28 +103,16 @@ export function editorPlan(
       ? { kind: 'run', name, command, args: ['-l', '-c', `${custom} $argv[1]`, file] }
       : { kind: 'run', name, command, args: ['-l', '-c', `${custom} "$1"`, ARG0, file] }
   }
-  const name = EDITOR_COMMANDS[editor]
-  return fish
-    ? {
-        kind: 'run',
-        name,
-        command,
-        args: ['-l', '-c', 'command -q $argv[1]; or exit 127; exec $argv', name, folder, file]
-      }
-    : {
-        kind: 'run',
-        name,
-        command,
-        args: [
-          '-l',
-          '-c',
-          'command -v "$1" >/dev/null 2>&1 || exit 127; exec "$@"',
-          ARG0,
-          name,
-          folder,
-          file
-        ]
-      }
+  const candidates = editorCandidates(editor, platform, home)
+  const positional = [String(candidates.length), ...candidates, folder, file]
+  return {
+    kind: 'run',
+    name: EDITOR_NAMES[editor],
+    command,
+    args: fish
+      ? ['-l', '-c', FISH_OPEN, ...positional]
+      : ['-l', '-c', POSIX_OPEN, ARG0, ...positional]
+  }
 }
 
 /** How long an editor may take to fail before it is taken as started (D13): a CLI like `code` returns at once; `subl --wait` never does. */
@@ -105,7 +121,8 @@ export const EDITOR_WAIT_MS = 4000
 /** The longest error reason kept from an editor's stderr. */
 const REASON_MAX = 300
 
-export type EditorRun = { ok: true } | { ok: false; reason: string }
+/** `notFound` when the shell exited 127: the command (or none of an editor's candidates) found. */
+export type EditorRun = { ok: true } | { ok: false; reason: string; notFound?: true }
 
 export interface RunDeps {
   spawn: typeof nodeSpawn
@@ -161,7 +178,9 @@ export function runEditor(
     }, waitMs)
     child.on('error', (err) => finish({ ok: false, reason: spawnReason(plan.command, err) }))
     const failed = (code: number | null, signal: NodeJS.Signals | null): void => {
-      if (code === 127) return finish({ ok: false, reason: `${plan.name} not found` })
+      if (code === 127) {
+        return finish({ ok: false, reason: `${plan.name} not found`, notFound: true })
+      }
       const last = stderr
         .split('\n')
         .map((line) => line.trim())
@@ -190,7 +209,7 @@ function spawnReason(command: string, err: unknown): string {
   return code === 'ENOENT' ? `${command} not found` : `${command} couldn't start`
 }
 
-export interface OpenDeps {
+export interface OpenDeps extends EditorLocation {
   editor: Editor
   editorCommand: string
   /** The login shell (`editorShell`). */
@@ -227,13 +246,16 @@ export async function openFile(
 /**
  * Opens the absolute `file` with the editor setting, `folder` as the project folder and the
  * shell's working directory; the caller has checked both (`openFile`, or #68's listed paths).
+ * VS Code, Cursor or Zed found nowhere (#70 D3) opens it with the default app instead, the
+ * editor's reason kept for the note, or for the error line when the default app fails too; a
+ * custom command not found never falls back.
  */
 export async function openInFolder(
   folder: string,
   file: string,
   deps: OpenDeps
 ): Promise<OpenResult> {
-  const plan = editorPlan(deps.editor, deps.editorCommand, deps.shell, folder, file)
+  const plan = editorPlan(deps.editor, deps.editorCommand, deps.shell, folder, file, deps)
   if (plan.kind === 'no-command') return { ok: false, reason: 'no-command' }
   if (plan.kind === 'system') {
     const error = await deps.openPath(file)
@@ -245,8 +267,15 @@ export async function openInFolder(
     cwd: folder,
     ...(deps.waitMs !== undefined && { waitMs: deps.waitMs })
   })
-  return run.ok ? run : { ok: false, reason: 'failed', message: run.reason }
+  if (run.ok) return run
+  if (run.notFound && isNamed(deps.editor)) {
+    const error = await deps.openPath(file)
+    if (error === '') return { ok: true, reason: 'default-app', message: run.reason }
+  }
+  return { ok: false, reason: 'failed', message: run.reason }
 }
+
+const isNamed = (editor: Editor): editor is NamedEditor => editor in EDITOR_NAMES
 
 /** Whether `path` is a regular file (a symlink to one counts). */
 export async function isFile(path: string): Promise<boolean> {

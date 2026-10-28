@@ -16,6 +16,7 @@ import { registerClipboard } from './clipboard'
 import { registerDirectories } from './directories'
 import { registerFiles } from './files'
 import { registerAgents } from './agents'
+import { registerEditors } from './editors'
 import { registerAgentSetup } from './agent-setup'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
 import { registerGit } from './git'
@@ -181,6 +182,7 @@ function startApp(): void {
   registerGit(() => settings.shell())
   registerFiles(() => settings.editor())
   registerAgents(() => settings.shell())
+  registerEditors(() => settings.shell())
   registerAgentSetup(() => settings.editor())
   const updates = registerUpdates(() => terminals.sessionCount)
 

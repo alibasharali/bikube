@@ -37,7 +37,7 @@ import {
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
 import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
-import { listedFileErrorLine } from '../../core/open-result'
+import { isOpenNote, listedFileErrorLine } from '../../core/open-result'
 import type { Workspace } from '../../core/workspace-store'
 import {
   saveConfig,
@@ -97,7 +97,8 @@ export function FileActionsProvider({
   snapshot: AgentSetupSnapshot
   children: React.ReactNode
 }): React.JSX.Element {
-  const [error, setError] = useState<string | null>(null)
+  /** The last action's error line, or its note when the file opened with the default app (#70 D3). */
+  const [error, setError] = useState<{ text: string; note: boolean } | null>(null)
   /** Only the latest open's result shows. */
   const opens = useRef(0)
   const paths = useMemo(() => new Set(snapshot.paths), [snapshot.paths])
@@ -109,7 +110,9 @@ export function FileActionsProvider({
         const at = ++opens.current
         setError(null)
         void window.bikube.agentSetup.openFile(folder, file).then((result) => {
-          if (at === opens.current) setError(listedFileErrorLine(file, result))
+          if (at !== opens.current) return
+          const text = listedFileErrorLine(file, result)
+          setError(text === null ? null : { text, note: isOpenNote(result) })
         })
       },
       reveal: (file) => {
@@ -117,9 +120,11 @@ export function FileActionsProvider({
         setError(null)
         void window.bikube.agentSetup.reveal(folder, file).then((revealed) => {
           if (at !== opens.current) return
-          setError(
-            listedFileErrorLine(file, revealed ? { ok: true } : { ok: false, reason: 'refused' })
+          const text = listedFileErrorLine(
+            file,
+            revealed ? { ok: true } : { ok: false, reason: 'refused' }
           )
+          setError(text === null ? null : { text, note: false })
         })
       }
     }),
@@ -128,8 +133,12 @@ export function FileActionsProvider({
   return (
     <FileActionsContext.Provider value={scope}>
       {error !== null && (
-        <div className="files-error" role="alert" data-testid="agent-setup-open-error">
-          <span className="files-error-text">{error}</span>
+        <div
+          className={error.note ? 'files-error files-note' : 'files-error'}
+          role={error.note ? 'status' : 'alert'}
+          data-testid="agent-setup-open-error"
+        >
+          <span className="files-error-text">{error.text}</span>
           <button
             type="button"
             className="icon-btn"

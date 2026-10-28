@@ -11,6 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { editorCandidates, type NamedEditor } from '../src/core/editor-candidates'
 import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -722,31 +723,61 @@ test('#55 AC8: Changed only lists just the changed paths and their folders; No c
 
 // Opening files (#55 S4): the editor setting, run through the login shell with its PATH.
 
+/** A fake editor at `path`, logging `run <its file name>` and then its arguments, one per line. */
+function fakeEditor(path: string): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(
+    path,
+    `#!/bin/sh\n{ echo "run $(basename "$0")"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`
+  )
+  chmodSync(path, 0o755)
+}
+
+/** The fake home every editor test launches with, as `HOME` and `BIKUBE_HOME_DIR` (#70 D1's `~`). */
+const editorHome = (): string => join(root, 'home')
+
 /**
  * The environment to launch with: its login shell (`/bin/sh -l`, through `SHELL`) gets a PATH of
  * a fake `bin` and the system folders only, so a real `code` never runs; `commands` are fake
- * editors there, each run logging `run <name>` and then its arguments, one per line.
+ * editors there (`fakeEditor`).
  */
 function editorEnv(commands: string[]): Record<string, string> {
-  const home = join(root, 'home')
+  const home = editorHome()
   const bin = join(root, 'bin')
   mkdirSync(home, { recursive: true })
   mkdirSync(bin, { recursive: true })
   writeFileSync(join(home, '.profile'), `PATH='${bin}':/usr/bin:/bin; export PATH\n`)
-  for (const name of commands) {
-    const path = join(bin, name)
-    writeFileSync(
-      path,
-      `#!/bin/sh\n{ echo "run $(basename "$0")"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`
-    )
-    chmodSync(path, 0o755)
-  }
+  for (const name of commands) fakeEditor(join(bin, name))
   const inherited: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) inherited[key] = value
   }
-  return { ...inherited, SHELL: '/bin/sh', HOME: home }
+  return { ...inherited, SHELL: '/bin/sh', HOME: home, BIKUBE_HOME_DIR: home }
 }
+
+/**
+ * Whether a real `editor` is installed at one of #70 D1's paths outside the fake home, which this
+ * machine's tests can't hide: a test that needs it found nowhere is skipped there (CI has none).
+ */
+const installedOutsideHome = (editor: NamedEditor): boolean =>
+  editorCandidates(editor, process.platform, '/nonexistent-home').some(
+    (path) => path.startsWith('/') && existsSync(path)
+  )
+
+/** Replaces `shell.openPath` in main with a recorder answering `error` ('' for opened, #70 D3). */
+async function recordOpenPath(error = ''): Promise<void> {
+  await app!.evaluate(({ shell }, error) => {
+    const opened: string[] = []
+    ;(globalThis as { openedPaths?: string[] }).openedPaths = opened
+    shell.openPath = async (path: string) => {
+      opened.push(path)
+      return error
+    }
+  }, error)
+}
+
+const openedPaths = (): Promise<string[]> =>
+  app!.evaluate(() => [...((globalThis as { openedPaths?: string[] }).openedPaths ?? [])])
 
 const editorLog = (): string => join(root, 'editors.log')
 const editorRuns = (): string[] =>
@@ -789,11 +820,13 @@ test('#55 AC13: double-click or Enter opens a file in VS Code with the folder; a
 })
 
 test('#55 AC14: a custom command from Settings > Editor opens the file; a missing editor shows why', async () => {
+  test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
   await openC1(editorEnv(['fake-editor']))
-  // VS Code is the default, and it isn't installed here.
+  await recordOpenPath()
+  // VS Code is the default, and it isn't installed here: the default app opens it (#70 D3).
   await row('src').dblclick()
   await row('src/a.ts').dblclick()
-  await expect(openError()).toHaveText("Couldn't open a.ts: code not found")
+  await expect(openError()).toHaveText('Opened a.ts with the default app: code not found')
   await openError().getByTestId('files-open-error-dismiss').click()
   await expect(openError()).toHaveCount(0)
 
@@ -821,6 +854,73 @@ test('#55 AC14: a custom command from Settings > Editor opens the file; a missin
   await row('README.md').dblclick()
   await expect(openError()).toHaveText('Set a command in Settings > Editor')
   expect(editorRuns()).toEqual(['run fake-editor', '--wait', join(repo, 'README.md')])
+})
+
+/** #70 D1's VS Code bundle CLI under the fake home: the per-user flatpak export on Linux. */
+const bundleCode = (): string =>
+  darwin
+    ? join(editorHome(), 'Applications/Visual Studio Code.app/Contents/Resources/app/bin/code')
+    : join(editorHome(), '.local/share/flatpak/exports/bin/com.visualstudio.code')
+
+test("#70 AC1: VS Code's bundle CLI opens the file when no code is on the login PATH", async () => {
+  test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
+  const env = editorEnv([])
+  fakeEditor(bundleCode())
+  await openC1(env)
+  await recordOpenPath()
+  await row('src').dblclick()
+  await row('src/a.ts').dblclick()
+  const name = bundleCode().slice(bundleCode().lastIndexOf('/') + 1)
+  await expect.poll(editorRuns).toEqual([`run ${name}`, repo, join(repo, 'src', 'a.ts')])
+  await page.waitForTimeout(500)
+  await expect(openError()).toHaveCount(0)
+  expect(await openedPaths()).toEqual([])
+})
+
+test('#70 AC4: an editor found nowhere opens the file with the default app, with a note; its failure the error', async () => {
+  test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
+  await openC1(editorEnv([]))
+  await recordOpenPath()
+  await row('src').dblclick()
+  await row('src/a.ts').dblclick()
+  await expect(openError()).toHaveText('Opened a.ts with the default app: code not found')
+  await expect(openError()).toHaveAttribute('role', 'status')
+  await expect(openError()).toHaveClass(/files-note/)
+  expect(await openedPaths()).toEqual([join(repo, 'src', 'a.ts')])
+  expect(editorRuns()).toEqual([])
+
+  // The default app failing too gives today's error line.
+  await recordOpenPath('No application knows how to open it')
+  await openError().getByTestId('files-open-error-dismiss').click()
+  await row('src/a.ts').dblclick()
+  await expect(openError()).toHaveText("Couldn't open a.ts: code not found")
+  await expect(openError()).toHaveAttribute('role', 'alert')
+  await expect(openError()).not.toHaveClass(/files-note/)
+  expect(await openedPaths()).toEqual([join(repo, 'src', 'a.ts')])
+})
+
+test('#70 AC3: Settings > Editor marks the editors not found, the saved one kept selectable', async () => {
+  test.skip(installedOutsideHome('cursor'), 'a real Cursor is installed here')
+  await openC1(editorEnv(['zed']))
+  await page.keyboard.press(darwin ? 'Meta+,' : 'Control+,')
+  const dialog = page.getByTestId('settings-dialog')
+  await dialog.getByTestId('settings-section-editor').click()
+  const select = dialog.getByTestId('settings-editor')
+  await expect(select).toHaveValue('vscode')
+  await expect(select.locator('option')).toHaveText([
+    'VS Code',
+    'Cursor (not installed)',
+    'Zed',
+    'System default',
+    'Custom command'
+  ])
+  const disabled = (label: string): Promise<boolean> =>
+    select.locator('option', { hasText: label }).evaluate((o) => (o as HTMLOptionElement).disabled)
+  expect(await disabled('Cursor')).toBe(true)
+  expect(await disabled('VS Code')).toBe(false)
+  expect(await disabled('Zed')).toBe(false)
+  expect(await disabled('System default')).toBe(false)
+  expect(await disabled('Custom command')).toBe(false)
 })
 
 test('#55 D13: a deleted file opens nothing', async () => {

@@ -24,6 +24,7 @@ import { editorShell, type OpenResult } from '../core/editor'
 import type { Settings } from '../core/settings'
 import { IPC } from '../shared/api'
 import { claudeSettingsPath } from './board'
+import { editorLocation } from './editors'
 
 /** Each folder's running read, shared by requests made during it (#68 D26: never two at once). */
 const reading = new Map<string, Promise<AgentSetupRead>>()
@@ -180,6 +181,7 @@ export function registerAgentSetup(
         editorCommand,
         shell: editorShell(login, env),
         env,
+        ...editorLocation(),
         spawn,
         openPath: (file: string) => shell.openPath(file)
       },

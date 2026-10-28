@@ -131,6 +131,9 @@ const api: BikubeApi = {
   agents: {
     installed: () => ipcRenderer.invoke(IPC.agentsInstalled)
   },
+  editors: {
+    installed: () => ipcRenderer.invoke(IPC.editorsInstalled)
+  },
   agentSetup: {
     read: (folder) => ipcRenderer.invoke(IPC.agentSetupRead, folder),
     claudeVersion: () => ipcRenderer.invoke(IPC.agentSetupClaudeVersion),

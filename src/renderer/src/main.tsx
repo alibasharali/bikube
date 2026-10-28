@@ -9,6 +9,7 @@ import { startAttention } from './attention'
 import { startAutoMoves } from './auto-move'
 import { startTemporaryShells } from './temporary-shells'
 import { startInstalledAgents } from './installed-agents'
+import { startInstalledEditors } from './installed-editors'
 import { listenForBoardRequests } from './board-requests'
 import { loadGhosttyTheme } from './ghostty'
 import { loadHomeDir } from './home'
@@ -40,6 +41,7 @@ void Promise.all([
   listenForSyncBoards()
   startAttention()
   startInstalledAgents()
+  startInstalledEditors()
   startAutoMoves()
   startTemporaryShells()
   createRoot(document.getElementById('root')!).render(

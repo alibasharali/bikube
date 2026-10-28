@@ -12,6 +12,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { editorCandidates } from '../src/core/editor-candidates'
 import { pickAppTheme } from './app-theme'
 import { SHORTCUTS, backToBoard, boardCard, expectCardOpen } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -964,6 +965,31 @@ async function recordRevealed(): Promise<void> {
 
 const revealedPaths = (): Promise<string[]> =>
   app!.evaluate(() => [...((globalThis as { revealedPaths?: string[] }).revealedPaths ?? [])])
+
+test("#70 AC1: a skill's Open file runs VS Code's bundle CLI when no code is on the login PATH", async () => {
+  // A real VS Code at a system path would come first; CI has none.
+  test.skip(
+    editorCandidates('vscode', process.platform, '/nonexistent-home').some(
+      (path) => path.startsWith('/') && existsSync(path)
+    ),
+    'a real VS Code is installed here'
+  )
+  const shell = loginShell(false)
+  const cli = darwin
+    ? join(home, 'Applications/Visual Studio Code.app/Contents/Resources/app/bin/code')
+    : join(home, '.local/share/flatpak/exports/bin/com.visualstudio.code')
+  mkdirSync(dirname(cli), { recursive: true })
+  writeFileSync(cli, `#!/bin/sh\n{ echo "run bundle"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`)
+  chmodSync(cli, 0o755)
+  const folder = await openWith(ac4Fixtures, shell)
+  const skill = join(folder, '.claude', 'skills', 'review', 'SKILL.md')
+  await tab('Skills').click()
+  await row('review').hover()
+  await row('review').getByRole('button', { name: 'Open file' }).click()
+  await expect.poll(editorRuns).toEqual(['run bundle', folder, skill])
+  await page.waitForTimeout(500)
+  await expect(panel().getByTestId('agent-setup-open-error')).toHaveCount(0)
+})
 
 test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Reveal shows it; unlisted paths open nothing", async () => {
   const shell = loginShell(false)

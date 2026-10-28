@@ -2401,6 +2401,11 @@ button.dev-server-chip:focus-visible {
   padding-top: 2px;
 }
 
+/* The banner as a note (#70 D3): the file opened with the default app instead. */
+.files-note {
+  color: var(--text-muted);
+}
+
 /* Split panes (#11 D2, D3, D5): 50/50 splits, the focused pane outlined once there are several */
 .pane-split {
   flex: 1 1 0;

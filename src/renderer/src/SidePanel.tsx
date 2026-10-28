@@ -81,7 +81,7 @@ function SidePanel({
           event.preventDefault()
           event.currentTarget.setPointerCapture(event.pointerId)
           drag.current = { startX: event.clientX, startWidth: width, last: width }
-          setPanelDragWidth(width)
+          setPanelDragWidth(view, width)
         }}
         onPointerMove={(event) => {
           const start = drag.current
@@ -91,7 +91,7 @@ function SidePanel({
             start.startX - event.clientX,
             view.innerWidth
           )
-          setPanelDragWidth(start.last)
+          setPanelDragWidth(view, start.last)
         }}
         onPointerUp={(event) => {
           const start = drag.current
@@ -103,13 +103,13 @@ function SidePanel({
             view.innerWidth
           )
           save(next)
-          setPanelDragWidth(null)
+          setPanelDragWidth(view, null)
         }}
         onLostPointerCapture={() => {
           // A drag cut short (e.g. the window lost the pointer) keeps the width it reached.
           if (drag.current) save(drag.current.last)
           drag.current = null
-          setPanelDragWidth(null)
+          setPanelDragWidth(view, null)
         }}
         onKeyDown={(event) => {
           const step =

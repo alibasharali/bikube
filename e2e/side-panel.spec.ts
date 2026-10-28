@@ -258,7 +258,7 @@ test('#57 AC2: the shortcut, the button and the palette toggle it on the board, 
   await expect(panel()).toBeVisible()
 })
 
-test('#55 AC2: the shortcut, the button and the hide button toggle it, saved across a restart', async () => {
+test('#55 AC2: the shortcut and the title bar button toggle it, with no hide button, saved across a restart', async () => {
   await openC1()
   await expectTerminalFocused()
   const narrow = await width(terminalArea())

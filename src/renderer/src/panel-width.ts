@@ -3,15 +3,16 @@ import { shownPanelWidth } from '../../core/side-panel'
 import { useSettings } from './settings'
 
 /**
- * The side panel's width while its edge is dragged, shared with the title bar's panel section so
- * both follow each move; null when no drag runs (the saved width applies).
+ * The side panel's width while its edge is dragged, and the window it is dragged in, shared with
+ * that window's title bar section so both follow each move; null when no drag runs (the saved
+ * width applies). Other windows keep the saved width until the drag ends and saves.
  */
-let dragWidth: number | null = null
+let drag: { view: Window; width: number } | null = null
 const listeners = new Set<() => void>()
 
-export function setPanelDragWidth(width: number | null): void {
-  if (width === dragWidth) return
-  dragWidth = width
+export function setPanelDragWidth(view: Window, width: number | null): void {
+  if (width === null ? drag === null : drag?.view === view && drag.width === width) return
+  drag = width === null ? null : { view, width }
   for (const listener of listeners) listener()
 }
 
@@ -35,6 +36,6 @@ export function useWindowWidth(view: Window): number {
 export function usePanelWidth(view: Window): number {
   const { sidePanelWidth } = useSettings()
   const windowWidth = useWindowWidth(view)
-  const dragging = useSyncExternalStore(subscribe, () => dragWidth)
+  const dragging = useSyncExternalStore(subscribe, () => (drag?.view === view ? drag.width : null))
   return dragging ?? shownPanelWidth(sidePanelWidth, windowWidth)
 }

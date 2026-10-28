@@ -301,7 +301,9 @@ test('#31 AC1: the open card has no bar; its terminal starts at the top of the m
   for (const id of ['card-back', 'pane-split-right', 'pane-split-down', 'card-close']) {
     await expect(page.getByTestId(id)).toHaveCount(0)
   }
-  await expect(view.getByRole('button')).toHaveCount(0)
+  // The only button is the main pane's Close card ×, over the terminal, not a bar (#11 D5).
+  await expect(view.getByRole('button')).toHaveCount(1)
+  await expect(view.getByRole('button')).toHaveAccessibleName('Close card')
   await expect(view.getByRole('heading')).toHaveCount(0)
   await expect(view.getByTestId('card-status')).toHaveCount(0)
   const main = await page.locator('main').boundingBox()

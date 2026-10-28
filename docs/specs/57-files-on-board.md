@@ -14,7 +14,7 @@ The side panel (#55) with its Files tab shows only while a card or shell is open
 
 ## Domain decisions
 
-- **D1 – Panel beside the board:** while a workspace's board shows, the side panel sits at the right of the board, full height of the content area, as it does beside a card (#55 D1): same tabs, hide button and resize edge. The board shrinks to fit and keeps scrolling horizontally. Not on the empty state (no workspace).
+- **D1 – Panel beside the board:** while a workspace's board shows, the side panel sits at the right of the board, full height of the content area, as it does beside a card (#55 D1): same tabs, hide button and resize edge (changed after shipping, developer's request 2026-10-28: from the window's top, with its tabs and show/hide button in the title bar above it as #55 D1 now says, and the workspace toolbar above the board ending at its edge). The board shrinks to fit and keeps scrolling horizontally. Not on the empty state (no workspace).
 - **D2 – Which folder:** on the board the Files tab shows the workspace's folder, as the Default shell does (#55 D5); an SSH workspace reads `Files aren't available over SSH yet` (#55 D6). Expansion and Changed only are shared with that folder's cards and shells (they are kept per folder shown).
 - **D3 – One open state:** the board uses the same saved `sidePanelOpen` and `sidePanelWidth` as cards (#55 D3): hiding it on the board hides it in cards, and the reverse.
 - **D4 – Toggling on the board:** the title bar's panel button shows on the board too (whenever a workspace is active), and the Toggle panel shortcut and the command palette's `Toggle panel` row work on the board, as in a card: the shortcut is swallowed on auto-repeat and does nothing behind a dialog.

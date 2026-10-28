@@ -2,7 +2,7 @@
 item: 71
 type: feature
 title: Tidier Agent setup page
-status: draft
+status: approved
 branch: claude/71-tidy-agent-setup
 ---
 

@@ -9,6 +9,7 @@
  * here too.
  */
 
+import { sandboxEntries, sandboxView } from './agent-setup-sandbox'
 import type { AgentSetupSectionId } from './agent-setup-sections'
 import {
   sourceLabel,
@@ -388,7 +389,8 @@ export const OVERVIEW_SECTIONS: readonly FilterableSection[] = [
   'commands',
   'hooks',
   'memory',
-  'permissions'
+  'permissions',
+  'sandbox'
 ]
 
 /** The sections the source filter applies to and that show its chip row (#71 D3). */
@@ -401,6 +403,7 @@ export type FilterableSection =
   | 'hooks'
   | 'memory'
   | 'permissions'
+  | 'sandbox'
   | 'config'
 
 export const FILTERABLE_SECTIONS: readonly FilterableSection[] = [
@@ -412,6 +415,7 @@ export const FILTERABLE_SECTIONS: readonly FilterableSection[] = [
   'hooks',
   'memory',
   'permissions',
+  'sandbox',
   'config'
 ]
 
@@ -445,6 +449,8 @@ function sectionOrigins(
         .map((e) => origin(e.source))
     case 'permissions':
       return permissionRules(permissionsView(snapshot, query, filter)).map((r) => origin(r.source))
+    case 'sandbox':
+      return sandboxEntries(sandboxView(snapshot, query, filter)).map((e) => origin(e.source))
     case 'plugins':
       return filterPlugins(snapshot.plugins, query, filter).map(pluginOrigin)
     case 'mcp':
@@ -874,6 +880,7 @@ export function mcpServerRows(
 export const CONFIG_EXCLUDED_KEYS: readonly string[] = [
   'hooks',
   'permissions',
+  'sandbox',
   'enabledPlugins',
   'enabledMcpjsonServers',
   'disabledMcpjsonServers',

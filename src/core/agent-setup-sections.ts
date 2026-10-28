@@ -15,6 +15,7 @@ export type AgentSetupSectionId =
   | 'hooks'
   | 'memory'
   | 'permissions'
+  | 'sandbox'
   | 'config'
 
 export interface AgentSetupSection {
@@ -36,6 +37,7 @@ const HINTS: Record<AgentSetupSectionId, string> = {
   hooks: 'Commands run on Claude Code events, by event',
   memory: 'Instruction files loaded at the start of every session, in load order',
   permissions: 'Tool rules: allowed, asked about and denied',
+  sandbox: "Where Claude Code's Bash sandbox lets commands write, read and connect",
   config: 'Settings keys and where each value comes from'
 }
 
@@ -55,7 +57,12 @@ export const AGENT_SETUP_GROUPS: readonly (readonly AgentSetupSection[])[] = [
     section('commands', 'Commands'),
     section('hooks', 'Hooks')
   ],
-  [section('memory', 'Memory'), section('permissions', 'Permissions'), section('config', 'Config')]
+  [
+    section('memory', 'Memory'),
+    section('permissions', 'Permissions'),
+    section('sandbox', 'Sandbox'),
+    section('config', 'Config')
+  ]
 ]
 
 /** Each group's name, shown above it in the vertical list. */

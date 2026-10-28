@@ -7,7 +7,13 @@ import {
   adjacentSection,
   type AgentSetupSectionId
 } from '../../core/agent-setup-sections'
-import { sectionSummaries, setupWarnings } from '../../core/agent-setup-rows'
+import {
+  isFilterableSection,
+  sectionSummaries,
+  setupWarnings,
+  sourceChips,
+  type SourceFilter
+} from '../../core/agent-setup-rows'
 import type { AgentSetupSnapshot } from '../../core/agent-setup-snapshot'
 import { keymapAction } from '../../core/keymap'
 import type { Workspace } from '../../core/workspace-store'
@@ -18,6 +24,7 @@ import {
   useAgentSetupData,
   useAgentSetupRefresh
 } from './agent-setup-data'
+import SourceFilterChips from './AgentSetupFilter'
 import { SectionIcon } from './agent-setup-icons'
 import { useAgentSetupMemory } from './agent-setup-memory'
 import {
@@ -51,6 +58,8 @@ export interface AgentSetupSectionProps {
   snapshot: AgentSetupSnapshot
   /** The search box's text; a section shows only its rows matching it. */
   query: string
+  /** The page's source filter (#71 D1): a section shows only its rows from it. */
+  filter: SourceFilter
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
   /** Puts `query` in the search box (a plugin's provides-counts, D15). */
@@ -214,7 +223,9 @@ function usePageWidth(ref: React.RefObject<HTMLElement | null>): number | null {
 
 function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const id = useId()
-  const { section, setSection, query, setQuery } = useAgentSetupMemory(workspace.id)
+  const { section, setSection, query, setQuery, filter, setFilter } = useAgentSetupMemory(
+    workspace.id
+  )
   const body = useRef<HTMLDivElement>(null)
   const width = usePageWidth(body)
   const narrow = width !== null && width < NARROW_WIDTH
@@ -230,8 +241,8 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
   }, [])
   const { snapshot, failed, expanded } = useAgentSetupData(folder)
   const summaries = useMemo(
-    () => (snapshot ? sectionSummaries(snapshot, query) : null),
-    [snapshot, query]
+    () => (snapshot ? sectionSummaries(snapshot, query, filter) : null),
+    [snapshot, query, filter]
   )
   const counts = useMemo(() => {
     if (!summaries) return undefined
@@ -241,15 +252,24 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
     }
     return result
   }, [summaries])
-  // Sections with no row matching the search are dimmed (D25); Stats and Status are not filtered.
+  // Sections with no row matching the search and the filter are dimmed (D25, #71 D6); Stats and
+  // Status are not filtered.
   const dimmed = useMemo(() => {
-    if (!summaries || query.trim() === '') return undefined
+    if (!summaries || (query.trim() === '' && filter.kind === 'all')) return undefined
     const result = new Set<AgentSetupSectionId>()
     for (const [key, summary] of Object.entries(summaries)) {
       if (summary.count === 0) result.add(key as AgentSetupSectionId)
     }
     return result
-  }, [summaries, query])
+  }, [summaries, query, filter])
+  // The chip row of a filterable section (#71 D3); Overview's comes with its split links (D7).
+  const chips = useMemo(
+    () =>
+      snapshot && isFilterableSection(section)
+        ? sourceChips(snapshot, section, query, filter)
+        : null,
+    [snapshot, section, query, filter]
+  )
   const warnings = useMemo(
     () => (snapshot ? new Set(setupWarnings(snapshot).map((w) => w.section)) : undefined),
     [snapshot]
@@ -327,6 +347,14 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
             <p className="agent-setup-panel-hint">{current.hint}</p>
           </div>
         </div>
+        {chips && snapshot && (
+          <SourceFilterChips
+            chips={chips}
+            filter={filter}
+            snapshot={snapshot}
+            onFilter={setFilter}
+          />
+        )}
         {section === 'stats' ? (
           // Stats read the transcripts on their own, not the snapshot (D14).
           <StatsSection workspace={workspace} />
@@ -336,6 +364,7 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
               workspace={workspace}
               snapshot={snapshot}
               query={query}
+              filter={filter}
               onShowSection={setSection}
               onSearch={setQuery}
               expanded={expanded}
@@ -383,7 +412,7 @@ export function SectionList({
   counts?: Partial<Record<AgentSetupSectionId, number>>
   /** The sections with an entry that has a warning (D24). */
   warnings?: ReadonlySet<AgentSetupSectionId>
-  /** The sections with no row matching the search (D25), shown dimmed. */
+  /** The sections with no row matching the search and the filter (D25, #71 D6), shown dimmed. */
   dimmed?: ReadonlySet<AgentSetupSectionId>
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement>(null)

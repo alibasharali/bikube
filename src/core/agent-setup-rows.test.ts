@@ -22,7 +22,14 @@ import {
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
-  sourceSplit
+  sourceSplit,
+  sourceChips,
+  ALL_SOURCES,
+  type SourceFilter,
+  filterLabel,
+  matchesSource,
+  sameFilter,
+  noMatchText
 } from './agent-setup-rows'
 import type {
   AgentSetupSnapshot,
@@ -774,5 +781,195 @@ describe('parseConfigNumber', () => {
     for (const bad of ['', ' ', 'abc', '1e400', 'Infinity', 'NaN', '0x10', '1,5', '3 4']) {
       expect(parseConfigNumber(bad)).toBeNull()
     }
+  })
+})
+
+// The source filter (#71 D1–D6): every section's rows, counts and chips follow it.
+
+/** #71's fixture: 2 Project, 3 User and 1 kit skill; only User agents; a Project command. */
+const ac71 = snapshot({
+  plugins: [plugin('kit@market', { scope: 'user' }), plugin('tools@market', { scope: 'project' })],
+  skills: [
+    def('review', { kind: 'project' }),
+    def('publish', { kind: 'project' }),
+    def('notes', { kind: 'user' }),
+    def('blog', { kind: 'user' }),
+    def('draft', { kind: 'user' }),
+    def('kit:lint', kit)
+  ],
+  agents: [def('helper', { kind: 'user' })],
+  commands: [def('deploy', { kind: 'project' })],
+  hooks: [
+    hook('PreToolUse', 'board activity . working', { source: { kind: 'bikube' }, file: undefined }),
+    hook('PreToolUse', 'check-user', { source: { kind: 'user' } }),
+    hook('SessionStart', 'board instruction', { source: { kind: 'bikube' }, file: undefined }),
+    hook('SessionStart', 'hello', { source: { kind: 'user' } })
+  ],
+  memory: [memory('~/.claude/CLAUDE.md', { source: { kind: 'user' } })],
+  settings: [
+    settingsFile('local', { verbose: true, permissions: { deny: ['Read(./x)'] } }),
+    settingsFile('user', { cleanupPeriodDays: 30, permissions: { allow: ['Bash(ls)'] } })
+  ],
+  marketplaces: { file: '/m', state: 'found', value: { market: { source: 'x' } } },
+  claudeJson: { ...snapshot().claudeJson, preferences: { autoUpdates: true } }
+})
+
+const userFilter: SourceFilter = { kind: 'user' }
+const kitFilter: SourceFilter = { kind: 'plugin', key: 'kit@market' }
+
+describe('sourceChips', () => {
+  it('AC1: All, then the sources with rows, each counted; none for a one-source section', () => {
+    expect(sourceChips(ac71, 'skills', '', ALL_SOURCES)).toEqual({
+      all: 6,
+      sources: [
+        { kind: 'project', label: 'Project', count: 2 },
+        { kind: 'user', label: 'User', count: 3 }
+      ],
+      plugin: { count: 1, plugins: [{ key: 'kit@market', name: 'kit', count: 1 }] }
+    })
+    expect(sourceChips(ac71, 'agents', '', ALL_SOURCES)).toBeNull()
+  })
+
+  it('AC5: an active filter keeps its chip, counted 0 where the section has no row from it', () => {
+    expect(sourceChips(ac71, 'memory', '', { kind: 'project' })).toEqual({
+      all: 1,
+      sources: [
+        { kind: 'project', label: 'Project', count: 0 },
+        { kind: 'user', label: 'User', count: 1 }
+      ],
+      plugin: null
+    })
+    // A plugin filter keeps the Plugin chip, its menu listing the plugins with rows here.
+    expect(sourceChips(ac71, 'agents', '', kitFilter)?.plugin).toEqual({ count: 0, plugins: [] })
+  })
+
+  it('AC4: counts read the rows matching the search, the chips staying', () => {
+    const chips = sourceChips(ac71, 'skills', 'bl', userFilter)!
+    expect(chips.all).toBe(2)
+    expect(chips.sources.map((c) => [c.label, c.count])).toEqual([
+      ['Project', 1],
+      ['User', 1]
+    ])
+    expect(chips.plugin).toEqual({
+      count: 0,
+      plugins: [{ key: 'kit@market', name: 'kit', count: 0 }]
+    })
+  })
+
+  it("AC7: Plugins' chips read the installs' scopes; the menu lists each plugin", () => {
+    expect(sourceChips(ac71, 'plugins', '', ALL_SOURCES)).toEqual({
+      all: 2,
+      sources: [
+        { kind: 'project', label: 'Project', count: 1 },
+        { kind: 'user', label: 'User', count: 1 }
+      ],
+      plugin: null
+    })
+    expect(sourceChips(ac71, 'plugins', '', kitFilter)?.plugin).toEqual({
+      count: 2,
+      plugins: [
+        { key: 'kit@market', name: 'kit', count: 1 },
+        { key: 'tools@market', name: 'tools', count: 1 }
+      ]
+    })
+  })
+})
+
+describe('the source filter', () => {
+  it('AC2: a source shows only its rows and counts them', () => {
+    expect(filterDefinitions(ac71.skills, '', userFilter).map((e) => e.name)).toEqual([
+      'notes',
+      'blog',
+      'draft'
+    ])
+    expect(sectionSummaries(ac71, '', userFilter).skills?.count).toBe(3)
+    expect(sectionSummaries(ac71, '', ALL_SOURCES).skills?.count).toBe(6)
+  })
+
+  it('AC3: every section follows it; one with no row from it counts 0', () => {
+    const summaries = sectionSummaries(ac71, '', userFilter)
+    expect(summaries.hooks?.count).toBe(2)
+    expect(
+      hookGroups(ac71.hooks, '', userFilter).map((g) => g.hooks.map((h) => h.command))
+    ).toEqual([['check-user'], ['hello']])
+    expect(summaries.commands?.count).toBe(0)
+    expect(summaries.agents?.count).toBe(1)
+    expect(summaries.memory?.count).toBe(1)
+    expect(summaries.permissions?.count).toBe(1)
+    expect(summaries.mcp?.count).toBe(0)
+    // Config: the User key and the preference (User's), not the Local key.
+    expect(summaries.config?.count).toBe(2)
+    expect(configRows(ac71, '', userFilter).map((r) => r.key)).toEqual(['cleanupPeriodDays'])
+    expect(preferenceRows(ac71, '', { kind: 'local' })).toEqual([])
+    expect(permissionsView(ac71, '', { kind: 'local' }).deny.map((r) => r.rule)).toEqual([
+      'Read(./x)'
+    ])
+    expect(permissionsView(ac71, '', { kind: 'local' }).allow).toEqual([])
+  })
+
+  it('AC4: combines with the search', () => {
+    expect(filterDefinitions(ac71.skills, 'bl', userFilter).map((e) => e.name)).toEqual(['blog'])
+    expect(sectionSummaries(ac71, 'bl', userFilter).skills?.count).toBe(1)
+  })
+
+  it('AC6: every plugin, or one plugin by its key; a plugin no longer listed matches nothing', () => {
+    expect(filterDefinitions(ac71.skills, '', kitFilter).map((e) => e.name)).toEqual(['kit:lint'])
+    expect(filterDefinitions(ac71.skills, '', { kind: 'plugins' }).map((e) => e.name)).toEqual([
+      'kit:lint'
+    ])
+    const gone: SourceFilter = { kind: 'plugin', key: 'gone@market' }
+    expect(filterDefinitions(ac71.skills, '', gone)).toEqual([])
+    expect(filterLabel(ac71, gone)).toBe('Plugin gone@market')
+    expect(filterLabel(ac71, kitFilter)).toBe('Plugin kit')
+    expect(filterLabel(ac71, { kind: 'plugins' })).toBe('Plugin')
+    expect(filterLabel(ac71, userFilter)).toBe('User')
+    expect(filterLabel(ac71, ALL_SOURCES)).toBe('All')
+  })
+
+  it('AC7: a plugin filter shows its plugin in Plugins, and no marketplace', () => {
+    expect(filterPlugins(ac71.plugins, '', kitFilter).map((p) => p.key)).toEqual(['kit@market'])
+    expect(filterPlugins(ac71.plugins, '', { kind: 'plugins' })).toHaveLength(2)
+    expect(filterPlugins(ac71.plugins, '', userFilter).map((p) => p.key)).toEqual(['kit@market'])
+    expect(marketplaceRows(ac71, '', kitFilter)).toEqual([])
+    expect(marketplaceRows(ac71, '', userFilter)).toEqual([])
+    expect(marketplaceRows(ac71, '', ALL_SOURCES).map((m) => m.name)).toEqual(['market'])
+  })
+
+  it('D2: a memory file is kept with its imports, or for its matching imports only', () => {
+    const tree = [
+      memory('CLAUDE.md', {
+        imports: [memory('a.md'), memory('mine.md', { source: { kind: 'user' } })]
+      })
+    ]
+    expect(filterMemory(tree, '', userFilter)).toEqual([
+      { ...tree[0], imports: [tree[0]!.imports[1]] }
+    ])
+    expect(filterMemory(tree, '', { kind: 'project' })).toEqual(tree)
+  })
+
+  it("D2: rows past a folder's limit count only with no search and the filter at All", () => {
+    const s = snapshot({ skills: [def('a', { kind: 'user' })], more: { skills: 4 } })
+    expect(sectionSummaries(s, '').skills?.count).toBe(5)
+    expect(sectionSummaries(s, '', userFilter).skills?.count).toBe(1)
+  })
+
+  it('matchesSource and sameFilter', () => {
+    expect(matchesSource(userFilter, { kind: 'user' })).toBe(true)
+    expect(matchesSource(userFilter, kit)).toBe(false)
+    expect(matchesSource({ kind: 'plugins' }, kit)).toBe(true)
+    expect(sameFilter(kitFilter, { kind: 'plugin', key: 'kit@market' })).toBe(true)
+    expect(sameFilter(kitFilter, { kind: 'plugins' })).toBe(false)
+    expect(sameFilter(userFilter, { kind: 'user' })).toBe(true)
+  })
+})
+
+describe('noMatchText', () => {
+  it('D6: names the filter and the search when they leave no row', () => {
+    expect(noMatchText('skills', 'bl', ac71, ALL_SOURCES)).toBe('No skills match “bl”.')
+    expect(noMatchText('memory files', '', ac71, { kind: 'project' })).toBe(
+      'No memory files from Project.'
+    )
+    expect(noMatchText('skills', ' bl ', ac71, userFilter)).toBe('No skills from User match “bl”.')
+    expect(noMatchText('skills', '', ac71, kitFilter)).toBe('No skills from Plugin kit.')
   })
 })

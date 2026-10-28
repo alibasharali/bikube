@@ -19,6 +19,8 @@ interface MenuButtonProps {
   /** The button's content and class: ⋯ in an icon button by default. */
   icon?: React.ReactNode
   buttonClassName?: string
+  /** Makes the button a toggle too (`aria-pressed`), as a filter chip with a menu (#71 D4). */
+  pressed?: boolean
 }
 
 /** A ⋯ button with a menu. Esc closes and returns focus; click outside or Tab closes. */
@@ -30,7 +32,8 @@ function MenuButton({
   fixed,
   children,
   icon,
-  buttonClassName = 'icon-btn'
+  buttonClassName = 'icon-btn',
+  pressed
 }: MenuButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<React.CSSProperties | undefined>(undefined)
@@ -101,6 +104,7 @@ function MenuButton({
         data-testid={testId}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-pressed={pressed}
         aria-label={label}
         onClick={toggle}
       >

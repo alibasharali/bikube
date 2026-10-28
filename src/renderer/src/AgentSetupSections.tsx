@@ -15,6 +15,7 @@ import {
   marketplaceRows,
   mcpServerRows,
   mcpStateLabel,
+  noMatchText,
   parseConfigNumber,
   permissionsView,
   pluginProvides,
@@ -24,7 +25,8 @@ import {
   sectionSummaries,
   settingsFileStates,
   setupWarnings,
-  sourceSplit
+  sourceSplit,
+  type SourceFilter
 } from '../../core/agent-setup-rows'
 import {
   sourceLabel,
@@ -64,6 +66,8 @@ export interface SectionViewProps {
   snapshot: AgentSetupSnapshot
   /** The search box's text; a section shows only its rows matching it. */
   query: string
+  /** The page's source filter (#71 D1): a section shows only its rows from it. */
+  filter: SourceFilter
   /** Shows another section, as a click on it in the list (Overview's cards, D12). */
   onShowSection: (id: AgentSetupSectionId) => void
   /** Puts `query` in the search box (a plugin's provides-counts, D15). */
@@ -230,9 +234,11 @@ const OVERVIEW_CARDS: readonly AgentSetupSectionId[] = [
 export function OverviewSection({
   snapshot,
   query,
+  filter,
   onShowSection
 }: SectionViewProps): React.JSX.Element {
-  const summaries = sectionSummaries(snapshot, query)
+  const summaries = sectionSummaries(snapshot, query, filter)
+  const narrowed = query.trim() !== '' || filter.kind !== 'all'
   const warnings = setupWarnings(snapshot)
   return (
     <div className="agent-setup-overview">
@@ -247,7 +253,7 @@ export function OverviewSection({
               type="button"
               className="agent-setup-card"
               data-testid={`agent-setup-overview-${id}`}
-              data-dimmed={query.trim() !== '' && summary.count === 0}
+              data-dimmed={narrowed && summary.count === 0}
               onClick={() => onShowSection(id)}
             >
               <span className="agent-setup-card-head">
@@ -366,11 +372,13 @@ function DefinitionRow({
 function DefinitionSection({
   kind,
   snapshot,
-  query
+  query,
+  filter
 }: SectionViewProps & { kind: DefinitionKind }): React.JSX.Element {
   const all = snapshot[kind]
-  const rows = filterDefinitions(all, query)
-  const more = query.trim() === '' ? (snapshot.more[kind] ?? 0) : 0
+  const rows = filterDefinitions(all, query, filter)
+  // Rows past the folder's limit only with no search and the filter at All (#71 D2).
+  const more = query.trim() === '' && filter.kind === 'all' ? (snapshot.more[kind] ?? 0) : 0
   if (all.length === 0 && more === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-empty">
@@ -381,7 +389,7 @@ function DefinitionSection({
   if (rows.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-        No {NOUNS[kind]} match “{query.trim()}”.
+        {noMatchText(NOUNS[kind], query, snapshot, filter)}
       </p>
     )
   }
@@ -486,9 +494,10 @@ export function MemorySection({
   workspace,
   snapshot,
   query,
+  filter,
   expanded
 }: SectionViewProps): React.JSX.Element {
-  const rows = filterMemory(snapshot.memory, query)
+  const rows = filterMemory(snapshot.memory, query, filter)
   if (snapshot.memory.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-empty">
@@ -500,7 +509,7 @@ export function MemorySection({
   if (rows.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-        No memory files match “{query.trim()}”.
+        {noMatchText('memory files', query, snapshot, filter)}
       </p>
     )
   }
@@ -520,8 +529,8 @@ export function MemorySection({
 }
 
 /** Hooks (D19): every hook command by event, Bikube's with its chip and no Open file. */
-export function HooksSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
-  const groups = hookGroups(snapshot.hooks, query)
+export function HooksSection({ snapshot, query, filter }: SectionViewProps): React.JSX.Element {
+  const groups = hookGroups(snapshot.hooks, query, filter)
   if (snapshot.hooks.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-empty">
@@ -533,7 +542,7 @@ export function HooksSection({ snapshot, query }: SectionViewProps): React.JSX.E
   if (groups.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-        No hooks match “{query.trim()}”.
+        {noMatchText('hooks', query, snapshot, filter)}
       </p>
     )
   }
@@ -613,8 +622,12 @@ const PERMISSION_LISTS = [
 ] as const
 
 /** Permissions (D20), read-only: the effective default mode, then every source's rules. */
-export function PermissionsSection({ snapshot, query }: SectionViewProps): React.JSX.Element {
-  const view = permissionsView(snapshot, query)
+export function PermissionsSection({
+  snapshot,
+  query,
+  filter
+}: SectionViewProps): React.JSX.Element {
+  const view = permissionsView(snapshot, query, filter)
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-permissions">
       <dl className="agent-setup-facts">
@@ -907,10 +920,11 @@ export function PluginsSection({
   workspace,
   snapshot,
   query,
+  filter,
   onShowSection,
   onSearch
 }: SectionViewProps): React.JSX.Element {
-  const plugins = filterPlugins(snapshot.plugins, query)
+  const plugins = filterPlugins(snapshot.plugins, query, filter)
   const marketplaces = marketplaceRows(snapshot, query)
   const searching = query.trim() !== ''
   return (
@@ -923,7 +937,7 @@ export function PluginsSection({
           </p>
         ) : plugins.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-            No plugins match “{query.trim()}”.
+            {noMatchText('plugins', query, snapshot, filter)}
           </p>
         ) : (
           <ul className="agent-setup-rows">
@@ -940,40 +954,43 @@ export function PluginsSection({
           </ul>
         )}
       </section>
-      <section className="agent-setup-group">
-        <h4 className="agent-setup-subheading">Marketplaces</h4>
-        {marketplaces.length === 0 ? (
-          <p className="agent-setup-empty" data-testid="agent-setup-marketplaces-empty">
-            {searching
-              ? `No marketplaces match “${query.trim()}”.`
-              : 'No marketplaces known. Add one in Claude Code with /plugin marketplace add.'}
-          </p>
-        ) : (
-          <ul className="agent-setup-rows" data-testid="agent-setup-marketplaces">
-            {marketplaces.map((market) => (
-              <li
-                key={market.name}
-                className="agent-setup-row"
-                data-testid="agent-setup-marketplace"
-              >
-                <div className="agent-setup-row-main">
-                  <span className="agent-setup-row-name" data-testid="agent-setup-row-name">
-                    {market.name}
-                  </span>
-                  <span className="agent-setup-row-file" title={market.source}>
-                    {market.source}
-                  </span>
-                  {market.lastUpdated && (
-                    <span className="agent-setup-row-meta agent-setup-row-end">
-                      Updated {updatedText(market.lastUpdated)}
+      {/* Marketplaces have no source: shown only with the filter at All (#71 D2). */}
+      {filter.kind === 'all' && (
+        <section className="agent-setup-group">
+          <h4 className="agent-setup-subheading">Marketplaces</h4>
+          {marketplaces.length === 0 ? (
+            <p className="agent-setup-empty" data-testid="agent-setup-marketplaces-empty">
+              {searching
+                ? `No marketplaces match “${query.trim()}”.`
+                : 'No marketplaces known. Add one in Claude Code with /plugin marketplace add.'}
+            </p>
+          ) : (
+            <ul className="agent-setup-rows" data-testid="agent-setup-marketplaces">
+              {marketplaces.map((market) => (
+                <li
+                  key={market.name}
+                  className="agent-setup-row"
+                  data-testid="agent-setup-marketplace"
+                >
+                  <div className="agent-setup-row-main">
+                    <span className="agent-setup-row-name" data-testid="agent-setup-row-name">
+                      {market.name}
                     </span>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                    <span className="agent-setup-row-file" title={market.source}>
+                      {market.source}
+                    </span>
+                    {market.lastUpdated && (
+                      <span className="agent-setup-row-meta agent-setup-row-end">
+                        Updated {updatedText(market.lastUpdated)}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   )
 }
@@ -1064,10 +1081,11 @@ function McpServerItem({
 export function McpServersSection({
   workspace,
   snapshot,
-  query
+  query,
+  filter
 }: SectionViewProps): React.JSX.Element {
   const all = mcpServerRows(snapshot, '')
-  const rows = mcpServerRows(snapshot, query)
+  const rows = mcpServerRows(snapshot, query, filter)
   if (all.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-empty">
@@ -1078,7 +1096,7 @@ export function McpServersSection({
   if (rows.length === 0) {
     return (
       <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-        No MCP servers match “{query.trim()}”.
+        {noMatchText('MCP servers', query, snapshot, filter)}
       </p>
     )
   }
@@ -1282,12 +1300,17 @@ function ConfigItem({
  * value and where it comes from, booleans and numbers changed in place in settings.local.json;
  * then `~/.claude.json`'s Preferences, read-only.
  */
-export function ConfigSection({ workspace, snapshot, query }: SectionViewProps): React.JSX.Element {
+export function ConfigSection({
+  workspace,
+  snapshot,
+  query,
+  filter
+}: SectionViewProps): React.JSX.Element {
   const all = configRows(snapshot, '')
-  const rows = configRows(snapshot, query)
+  const rows = configRows(snapshot, query, filter)
   const allPreferences = preferenceRows(snapshot, '')
-  const preferences = preferenceRows(snapshot, query)
-  const searching = query.trim() !== ''
+  const preferences = preferenceRows(snapshot, query, filter)
+  const narrowed = query.trim() !== '' || filter.kind !== 'all'
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-config">
       <section className="agent-setup-group">
@@ -1299,7 +1322,7 @@ export function ConfigSection({ workspace, snapshot, query }: SectionViewProps):
           </p>
         ) : rows.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-no-match">
-            No settings match “{query.trim()}”.
+            {noMatchText('settings', query, snapshot, filter)}
           </p>
         ) : (
           <ul className="agent-setup-rows">
@@ -1318,8 +1341,8 @@ export function ConfigSection({ workspace, snapshot, query }: SectionViewProps):
         <h4 className="agent-setup-subheading">Preferences</h4>
         {preferences.length === 0 ? (
           <p className="agent-setup-empty" data-testid="agent-setup-preferences-empty">
-            {searching && allPreferences.length > 0
-              ? `No preferences match “${query.trim()}”.`
+            {narrowed && allPreferences.length > 0
+              ? noMatchText('preferences', query, snapshot, filter)
               : 'No preferences in ~/.claude.json. Claude Code saves them there from /config.'}
           </p>
         ) : (

@@ -22,6 +22,91 @@ import {
   type SettingsFile
 } from './agent-setup-snapshot'
 
+/** The source chips other than All and Plugin, in the chip row's order (#71 D3). */
+export type SourceChipKind = 'project' | 'local' | 'user' | 'bikube'
+const SOURCE_CHIP_KINDS: readonly SourceChipKind[] = ['project', 'local', 'user', 'bikube']
+
+/**
+ * The page's source filter (#71 D1): every source, one source kind, every plugin, or one plugin
+ * by its `installed_plugins.json` key.
+ */
+export type SourceFilter =
+  { kind: 'all' } | { kind: SourceChipKind } | { kind: 'plugins' } | { kind: 'plugin'; key: string }
+
+/** The filter at its default: every source. */
+export const ALL_SOURCES: SourceFilter = { kind: 'all' }
+
+/** Whether two filters are the same choice. */
+export const sameFilter = (a: SourceFilter, b: SourceFilter): boolean =>
+  a.kind === b.kind && (a.kind !== 'plugin' || (b.kind === 'plugin' && a.key === b.key))
+
+/**
+ * Where a row comes from for the filter (#71 D2): its source chip's source, and the plugin it
+ * belongs to (a plugin's entry, or an installed plugin's own row, whose chip reads its scope).
+ */
+interface RowOrigin {
+  source: EntrySource
+  plugin?: { key: string; name: string }
+}
+
+const origin = (source: EntrySource): RowOrigin =>
+  source.kind === 'plugin'
+    ? { source, plugin: { key: source.key, name: source.plugin } }
+    : { source }
+
+/** Whether a row from `row` shows under `filter` (#71 D2). */
+function originMatches(filter: SourceFilter, row: RowOrigin): boolean {
+  switch (filter.kind) {
+    case 'all':
+      return true
+    case 'plugins':
+      return row.plugin !== undefined
+    case 'plugin':
+      return row.plugin?.key === filter.key
+    default:
+      return row.source.kind === filter.kind
+  }
+}
+
+/** Whether an entry from `source` shows under `filter` (#71 D2). */
+export const matchesSource = (filter: SourceFilter, source: EntrySource): boolean =>
+  originMatches(filter, origin(source))
+
+/**
+ * The filter's chip label (#71 D4): `All`, `Project`, …, `Plugin` for every plugin, `Plugin
+ * <name>` for one (its key when the snapshot no longer lists it).
+ */
+export function filterLabel(
+  snapshot: Pick<AgentSetupSnapshot, 'plugins'>,
+  filter: SourceFilter
+): string {
+  switch (filter.kind) {
+    case 'all':
+      return 'All'
+    case 'plugins':
+      return 'Plugin'
+    case 'plugin':
+      return `Plugin ${snapshot.plugins.find((p) => p.key === filter.key)?.name ?? filter.key}`
+    default:
+      return sourceLabel({ kind: filter.kind })
+  }
+}
+
+/**
+ * A section's line when the search or the filter leaves no row (D25, #71 D6): `No <noun> match
+ * “<query>”.`, `No <noun> from <chip label>.` or both.
+ */
+export function noMatchText(
+  noun: string,
+  query: string,
+  snapshot: Pick<AgentSetupSnapshot, 'plugins'>,
+  filter: SourceFilter
+): string {
+  const from = filter.kind === 'all' ? '' : ` from ${filterLabel(snapshot, filter)}`
+  const searched = query.trim()
+  return `No ${noun}${from}${searched === '' ? '' : ` match “${searched}”`}.`
+}
+
 /** The search's terms: lower case, split on spaces (D25). */
 const terms = (query: string): string[] => query.toLowerCase().split(/\s+/).filter(Boolean)
 
@@ -45,28 +130,36 @@ const definitionFields = (entry: DefinitionEntry): (string | null | undefined)[]
   sourceLabel(entry.source)
 ]
 
-/** The skills, agents or commands matching `query` (D25). */
+/** The skills, agents or commands matching `query` (D25) and `filter` (#71 D2). */
 export function filterDefinitions(
   entries: readonly DefinitionEntry[],
-  query: string
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
 ): DefinitionEntry[] {
-  return entries.filter((entry) => matchesQuery(query, definitionFields(entry)))
+  return entries.filter(
+    (entry) => matchesSource(filter, entry.source) && matchesQuery(query, definitionFields(entry))
+  )
 }
 
-const memoryMatches = (entry: MemoryEntry, query: string): boolean =>
+const memoryMatches = (entry: MemoryEntry, query: string, filter: SourceFilter): boolean =>
+  matchesSource(filter, entry.source) &&
   matchesQuery(query, [entry.label, entry.file, sourceLabel(entry.source)])
 
 /**
- * The memory files matching `query`, or holding an import that does, each with only its matching
- * imports (all of them when it matches itself).
+ * The memory files matching `query` and `filter`, or holding an import that does, each with only
+ * its matching imports (all of them when it matches itself).
  */
-export function filterMemory(entries: readonly MemoryEntry[], query: string): MemoryEntry[] {
-  if (terms(query).length === 0) return [...entries]
+export function filterMemory(
+  entries: readonly MemoryEntry[],
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): MemoryEntry[] {
+  if (terms(query).length === 0 && filter.kind === 'all') return [...entries]
   const kept: MemoryEntry[] = []
   for (const entry of entries) {
-    if (memoryMatches(entry, query)) kept.push(entry)
+    if (memoryMatches(entry, query, filter)) kept.push(entry)
     else {
-      const imports = filterMemory(entry.imports, query)
+      const imports = filterMemory(entry.imports, query, filter)
       if (imports.length > 0) kept.push({ ...entry, imports })
     }
   }
@@ -102,13 +195,18 @@ const hookMatches = (hook: HookEntry, query: string): boolean =>
   matchesQuery(query, [hook.event, hook.matcher ?? 'All', hook.command, sourceLabel(hook.source)])
 
 /**
- * The hooks matching `query`, grouped by event: known events in Claude Code's order, unknown ones
- * after them by name (D19); within an event, as read (Bikube's, local, project, user, plugins).
+ * The hooks matching `query` and `filter`, grouped by event: known events in Claude Code's order,
+ * unknown ones after them by name (D19); within an event, as read (Bikube's, local, project, user,
+ * plugins).
  */
-export function hookGroups(hooks: readonly HookEntry[], query: string): HookGroup[] {
+export function hookGroups(
+  hooks: readonly HookEntry[],
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): HookGroup[] {
   const groups = new Map<string, HookEntry[]>()
   for (const hook of hooks) {
-    if (!hookMatches(hook, query)) continue
+    if (!matchesSource(filter, hook.source) || !hookMatches(hook, query)) continue
     const group = groups.get(hook.event)
     if (group) group.push(hook)
     else groups.set(hook.event, [hook])
@@ -155,8 +253,15 @@ export interface PermissionsView {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-/** The permission rules matching `query` (D25), by precedence; `defaultMode` is never filtered. */
-export function permissionsView(snapshot: AgentSetupSnapshot, query: string): PermissionsView {
+/**
+ * The permission rules matching `query` (D25) and `filter` (#71 D2), by precedence; `defaultMode`
+ * is never filtered.
+ */
+export function permissionsView(
+  snapshot: AgentSetupSnapshot,
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): PermissionsView {
   const view: PermissionsView = {
     defaultMode: null,
     allow: [],
@@ -168,6 +273,7 @@ export function permissionsView(snapshot: AgentSetupSnapshot, query: string): Pe
     const permissions = file.value?.['permissions']
     if (!isObject(permissions)) continue
     const source = settingsSource(file)
+    const shown = matchesSource(filter, source)
     const mode = permissions['defaultMode']
     if (view.defaultMode === null && typeof mode === 'string') {
       view.defaultMode = { value: mode, source, file: file.file }
@@ -176,7 +282,7 @@ export function permissionsView(snapshot: AgentSetupSnapshot, query: string): Pe
       const rules = permissions[list]
       if (!Array.isArray(rules)) continue
       for (const rule of rules) {
-        if (typeof rule !== 'string') continue
+        if (typeof rule !== 'string' || !shown) continue
         if (!matchesQuery(query, [rule, sourceLabel(source)])) continue
         view[list].push({ rule, source, file: file.file })
       }
@@ -251,37 +357,149 @@ export function sourceSplit(summary: SectionSummary): string {
     .join(' · ')
 }
 
+/** The sections the source filter applies to and that show its chip row (#71 D3). */
+export type FilterableSection =
+  | 'plugins'
+  | 'mcp'
+  | 'skills'
+  | 'agents'
+  | 'commands'
+  | 'hooks'
+  | 'memory'
+  | 'permissions'
+  | 'config'
+
+export const FILTERABLE_SECTIONS: readonly FilterableSection[] = [
+  'plugins',
+  'mcp',
+  'skills',
+  'agents',
+  'commands',
+  'hooks',
+  'memory',
+  'permissions',
+  'config'
+]
+
+export const isFilterableSection = (id: AgentSetupSectionId): id is FilterableSection =>
+  (FILTERABLE_SECTIONS as readonly string[]).includes(id)
+
+const pluginOrigin = (plugin: PluginEntry): RowOrigin => ({
+  source: pluginSource(plugin),
+  plugin: { key: plugin.key, name: plugin.name }
+})
+
+/** Section `id`'s rows matching `query` and `filter`, as where each comes from (#71 D2). */
+function sectionOrigins(
+  snapshot: AgentSetupSnapshot,
+  id: FilterableSection,
+  query: string,
+  filter: SourceFilter
+): RowOrigin[] {
+  switch (id) {
+    case 'skills':
+    case 'agents':
+    case 'commands':
+      return filterDefinitions(snapshot[id], query, filter).map((e) => origin(e.source))
+    case 'hooks':
+      return hookGroups(snapshot.hooks, query, filter).flatMap((g) =>
+        g.hooks.map((h) => origin(h.source))
+      )
+    case 'memory':
+      return memoryRows(snapshot.memory)
+        .filter((entry) => memoryMatches(entry, query, filter))
+        .map((e) => origin(e.source))
+    case 'permissions':
+      return permissionRules(permissionsView(snapshot, query, filter)).map((r) => origin(r.source))
+    case 'plugins':
+      return filterPlugins(snapshot.plugins, query, filter).map(pluginOrigin)
+    case 'mcp':
+      return mcpServerRows(snapshot, query, filter).map((r) => origin(r.source))
+    case 'config':
+      return [
+        ...configRows(snapshot, query, filter).map((r) => origin(r.source)),
+        ...preferenceRows(snapshot, query, filter).map(() => origin({ kind: 'user' }))
+      ]
+  }
+}
+
 /**
- * Each section with rows: the count of its rows matching `query` (all of them for an empty one),
- * D11's rows past a folder's limit counted while nothing is searched.
+ * Each section with rows: the count of its rows matching `query` and `filter` (#71 D6; all of them
+ * for an empty query at All), D11's rows past a folder's limit counted only with no search and the
+ * filter at All (#71 D2).
  */
 export function sectionSummaries(
   snapshot: AgentSetupSnapshot,
-  query: string
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
 ): Partial<Record<AgentSetupSectionId, SectionSummary>> {
-  const searching = terms(query).length > 0
-  const definitions = (id: 'skills' | 'agents' | 'commands'): SectionSummary =>
-    summary(
-      filterDefinitions(snapshot[id], query).map((e) => e.source),
-      searching ? 0 : (snapshot.more[id] ?? 0)
+  const unfiltered = terms(query).length === 0 && filter.kind === 'all'
+  const result: Partial<Record<AgentSetupSectionId, SectionSummary>> = {}
+  for (const id of FILTERABLE_SECTIONS) {
+    const more =
+      unfiltered && (id === 'skills' || id === 'agents' || id === 'commands')
+        ? (snapshot.more[id] ?? 0)
+        : 0
+    result[id] = summary(
+      sectionOrigins(snapshot, id, query, filter).map((r) => r.source),
+      more
     )
+  }
+  return result
+}
+
+/** One plugin in the Plugin chip's menu (#71 D4), with its rows matching the search. */
+export interface PluginChip {
+  key: string
+  name: string
+  count: number
+}
+
+/** A section's chip row (#71 D3, D4): each chip's count is its rows matching the search. */
+export interface SourceChips {
+  /** The section's rows matching the search. */
+  all: number
+  /** The source chips shown, in order. */
+  sources: { kind: SourceChipKind; label: string; count: number }[]
+  /** The Plugin chip, when shown: its count (every plugin's rows) and its menu's plugins by name. */
+  plugin: { count: number; plugins: PluginChip[] } | null
+}
+
+/**
+ * Section `id`'s chip row (#71 D3, D4), or null when it shows none: All, then the sources with a
+ * row in the section (the search not applied, so chips stay while typing), each with its rows
+ * matching `query`. A section whose rows all come from one source shows none, unless the filter
+ * isn't All: then its chip is always there (count 0 without rows), so it can be set back.
+ */
+export function sourceChips(
+  snapshot: AgentSetupSnapshot,
+  id: FilterableSection,
+  query: string,
+  filter: SourceFilter
+): SourceChips | null {
+  const every = sectionOrigins(snapshot, id, '', ALL_SOURCES)
+  const matching = sectionOrigins(snapshot, id, query, ALL_SOURCES)
+  const count = (chip: SourceFilter): number =>
+    matching.filter((row) => originMatches(chip, row)).length
+  const kinds = SOURCE_CHIP_KINDS.filter(
+    (kind) => filter.kind === kind || every.some((row) => row.source.kind === kind)
+  )
+  const fromPlugins = every.some((row) => row.source.kind === 'plugin')
+  const pluginShown = fromPlugins || filter.kind === 'plugins' || filter.kind === 'plugin'
+  if (filter.kind === 'all' && kinds.length + (fromPlugins ? 1 : 0) <= 1) return null
+  let plugin: SourceChips['plugin'] = null
+  if (pluginShown) {
+    const names = new Map<string, string>()
+    for (const row of every) if (row.plugin) names.set(row.plugin.key, row.plugin.name)
+    const plugins = [...names]
+      .map(([key, name]) => ({ key, name, count: count({ kind: 'plugin', key }) }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.key < b.key ? -1 : 1))
+    plugin = { count: count({ kind: 'plugins' }), plugins }
+  }
   return {
-    skills: definitions('skills'),
-    agents: definitions('agents'),
-    commands: definitions('commands'),
-    hooks: summary(hookGroups(snapshot.hooks, query).flatMap((g) => g.hooks.map((h) => h.source))),
-    memory: summary(
-      memoryRows(snapshot.memory)
-        .filter((entry) => memoryMatches(entry, query))
-        .map((e) => e.source)
-    ),
-    permissions: summary(permissionRules(permissionsView(snapshot, query)).map((r) => r.source)),
-    plugins: summary(filterPlugins(snapshot.plugins, query).map(pluginSource)),
-    mcp: summary(mcpServerRows(snapshot, query).map((r) => r.source)),
-    config: summary([
-      ...configRows(snapshot, query).map((r) => r.source),
-      ...preferenceRows(snapshot, query).map((): EntrySource => ({ kind: 'user' }))
-    ])
+    all: matching.length,
+    sources: kinds.map((kind) => ({ kind, label: sourceLabel({ kind }), count: count({ kind }) })),
+    plugin
   }
 }
 
@@ -361,17 +579,26 @@ export function pluginSource(plugin: PluginEntry): EntrySource {
     : { kind: 'user' }
 }
 
-/** The installed plugins matching `query` (D25): by name, key, description, author or source. */
-export function filterPlugins(plugins: readonly PluginEntry[], query: string): PluginEntry[] {
-  return plugins.filter((plugin) =>
-    matchesQuery(query, [
-      plugin.name,
-      plugin.key,
-      plugin.description,
-      plugin.author,
-      plugin.version,
-      sourceLabel(pluginSource(plugin))
-    ])
+/**
+ * The installed plugins matching `query` (D25): by name, key, description, author or source; and
+ * `filter` (#71 D2): by its install's scope, and every plugin's or its own plugin's filter.
+ */
+export function filterPlugins(
+  plugins: readonly PluginEntry[],
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): PluginEntry[] {
+  return plugins.filter(
+    (plugin) =>
+      originMatches(filter, pluginOrigin(plugin)) &&
+      matchesQuery(query, [
+        plugin.name,
+        plugin.key,
+        plugin.description,
+        plugin.author,
+        plugin.version,
+        sourceLabel(pluginSource(plugin))
+      ])
   )
 }
 
@@ -431,10 +658,17 @@ const marketplaceSource = (source: unknown): string => {
   return text('url') ?? text('path') ?? text('repo') ?? ''
 }
 
-/** The marketplaces of `known_marketplaces.json` matching `query` (D15, D25), in file order. */
-export function marketplaceRows(snapshot: AgentSetupSnapshot, query: string): MarketplaceRow[] {
+/**
+ * The marketplaces of `known_marketplaces.json` matching `query` (D15, D25), in file order. They
+ * have no source: none under any filter but All (#71 D2).
+ */
+export function marketplaceRows(
+  snapshot: AgentSetupSnapshot,
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): MarketplaceRow[] {
   const value = snapshot.marketplaces.value
-  if (!isObject(value)) return []
+  if (!isObject(value) || filter.kind !== 'all') return []
   const rows: MarketplaceRow[] = []
   for (const [name, entry] of Object.entries(value)) {
     if (!isObject(entry)) continue
@@ -536,7 +770,11 @@ function projectServerState(settings: readonly SettingsFile[], name: string): Mc
  * Every MCP server matching `query` (D16, D25): `.mcp.json`'s (Project), `~/.claude.json`'s
  * project entry (Local) and its own (User), then each plugin's. Nothing is started or connected to.
  */
-export function mcpServerRows(snapshot: AgentSetupSnapshot, query: string): McpServerRow[] {
+export function mcpServerRows(
+  snapshot: AgentSetupSnapshot,
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): McpServerRow[] {
   const rows: McpServerRow[] = []
   const project = isObject(snapshot.mcpJson.value) ? snapshot.mcpJson.value['mcpServers'] : null
   if (isObject(project)) {
@@ -575,15 +813,17 @@ export function mcpServerRows(snapshot: AgentSetupSnapshot, query: string): McpS
       )
     }
   }
-  return rows.filter((row) =>
-    matchesQuery(query, [
-      row.name,
-      row.type,
-      row.target,
-      ...row.envNames,
-      ...row.headerNames,
-      sourceLabel(row.source)
-    ])
+  return rows.filter(
+    (row) =>
+      matchesSource(filter, row.source) &&
+      matchesQuery(query, [
+        row.name,
+        row.type,
+        row.target,
+        ...row.envNames,
+        ...row.headerNames,
+        sourceLabel(row.source)
+      ])
   )
 }
 
@@ -642,7 +882,11 @@ const byKey = (a: { key: string }, b: { key: string }): number =>
  * Config's rows matching `query` (D21, D25: key, value or source), by key: every top-level key the
  * settings files set but those other sections show, its value the first file's by precedence (D10).
  */
-export function configRows(snapshot: AgentSetupSnapshot, query: string): ConfigRow[] {
+export function configRows(
+  snapshot: AgentSetupSnapshot,
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): ConfigRow[] {
   const setters = new Map<string, ConfigSetter[]>()
   for (const file of snapshot.settings) {
     if (!file.value) continue
@@ -670,7 +914,12 @@ export function configRows(snapshot: AgentSetupSnapshot, query: string): ConfigR
       // Only a value D22 lets the page change; the rest is read-only (D28).
       resettable: winner.source.kind === 'local' && control !== null
     }
-    if (matchesQuery(query, [key, row.text, sourceLabel(row.source)])) rows.push(row)
+    if (
+      matchesSource(filter, row.source) &&
+      matchesQuery(query, [key, row.text, sourceLabel(row.source)])
+    ) {
+      rows.push(row)
+    }
   }
   return rows.sort(byKey)
 }
@@ -691,9 +940,14 @@ export interface PreferenceRow {
   file: string
 }
 
-/** The Preferences matching `query` (D21, D25), by key. */
-export function preferenceRows(snapshot: AgentSetupSnapshot, query: string): PreferenceRow[] {
+/** The Preferences matching `query` (D21, D25) and `filter` (#71 D2: they are User's), by key. */
+export function preferenceRows(
+  snapshot: AgentSetupSnapshot,
+  query: string,
+  filter: SourceFilter = ALL_SOURCES
+): PreferenceRow[] {
   const { claudeJson } = snapshot
+  if (!matchesSource(filter, { kind: 'user' })) return []
   return Object.entries(claudeJson.preferences)
     .filter(([key]) => isPreferenceKey(key))
     .map(([key, value]) => ({ key, value, text: String(value), file: claudeJson.file }))

@@ -1265,6 +1265,10 @@ test('#72 AC6: with no sandbox in any settings file, Enabled reads Off and every
   await expect(panel().getByTestId('agent-setup-sandbox-empty')).toHaveText(
     'No sandbox settings. Add a "sandbox" object to .claude/settings.json or ~/.claude/settings.json.'
   )
+  // #73: the line keeps a group heading's gap above the facts card.
+  const empty = await panel().getByTestId('agent-setup-sandbox-empty').boundingBox()
+  const facts = await panel().locator('.agent-setup-facts').boundingBox()
+  expect(Math.round(facts!.y - (empty!.y + empty!.height))).toBe(12)
 })
 
 test("#71 D9, #72: Sandbox's list headings show their counts and collapse, kept across sections", async () => {

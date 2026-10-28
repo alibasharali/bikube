@@ -165,6 +165,13 @@ function gitInit(dir: string): void {
   git('commit', '-q', '-m', 'first')
 }
 
+/** The vertical space between the bottom of `upper` and the top of `lower`, in whole pixels. */
+async function gapBetween(upper: Locator, lower: Locator): Promise<number> {
+  const a = await upper.boundingBox()
+  const b = await lower.boundingBox()
+  return Math.round(b!.y - (a!.y + a!.height))
+}
+
 test('#69 AC1: + New card opens the New card dialog; Mod+Enter creates, opens and saves the description', async () => {
   const dir = makeDir('alpha')
   gitInit(dir)
@@ -177,6 +184,10 @@ test('#69 AC1: + New card opens the New card dialog; Mod+Enter creates, opens an
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole('heading', { name: 'New card' })).toBeVisible()
   await expect(dialog).toContainText('Add to Backlog')
+  // #73: the hint keeps the gap between fields above the Title label.
+  expect(
+    await gapBetween(page.getByTestId('new-card-column'), dialog.locator('.field label').first())
+  ).toBe(12)
   await expect(page.getByTestId('new-card-input')).toBeFocused()
   await expect(page.getByTestId('new-card-input')).toHaveAttribute('placeholder', 'Terminal 1')
   await expect(page.getByTestId('new-card-description')).toBeVisible()
@@ -245,6 +256,10 @@ test('#69 AC3: Edit description… saves the description and its icon tooltip, e
   await page.getByTestId('card-menu-description').click()
   await expect(dialog).toBeVisible()
   await expect(field).toBeFocused()
+  // #73: the card's title line keeps the gap between fields above the Description field.
+  expect(
+    await gapBetween(dialog.locator('.new-card-column'), dialog.locator('.field').first())
+  ).toBe(12)
   // Drawn over the board: no card or panel covers it (it is outside the card's stacking context).
   const covered = (): Promise<boolean> =>
     dialog.evaluate((el) => {

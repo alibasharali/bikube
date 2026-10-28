@@ -85,7 +85,7 @@ export interface SectionViewProps {
  * A group of a section's rows under a heading button (#71 D9): a chevron, the group's name and
  * the count of its rows shown; a click or Enter collapses the rows, kept in the page memory.
  */
-function CollapsibleGroup({
+export function CollapsibleGroup({
   section,
   name,
   count,

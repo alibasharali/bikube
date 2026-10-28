@@ -1,5 +1,10 @@
 import { sandboxView } from '../../core/agent-setup-sandbox'
-import { FileActions, SourceChip, type SectionViewProps } from './AgentSetupSections'
+import {
+  CollapsibleGroup,
+  FileActions,
+  SourceChip,
+  type SectionViewProps
+} from './AgentSetupSections'
 
 /** A list's test id: `agent-setup-sandbox-<its dotted path, dots as dashes>`. */
 const listTestId = (key: string): string => `agent-setup-sandbox-${key.replaceAll('.', '-')}`
@@ -7,9 +12,16 @@ const listTestId = (key: string): string => `agent-setup-sandbox-${key.replaceAl
 /**
  * Sandbox (#72), read-only: the effective switches and values as facts (D4), then every list's
  * entries of every settings file with where each is set (D5), the lists filtered by the search
- * (D6) and the source filter (#71 D2, the facts never), and D8's line when no file sets `sandbox`.
+ * (D6) and the source filter (#71 D2, the facts never), each list under a heading that collapses
+ * as Permissions' do (#71 D9), and D8's line when no file sets `sandbox`.
  */
-export function SandboxSection({ snapshot, query, filter }: SectionViewProps): React.JSX.Element {
+export function SandboxSection({
+  snapshot,
+  query,
+  filter,
+  collapsed,
+  onToggleGroup
+}: SectionViewProps): React.JSX.Element {
   const view = sandboxView(snapshot, query, filter)
   return (
     <div className="agent-setup-groups" data-testid="agent-setup-sandbox">
@@ -50,8 +62,14 @@ export function SandboxSection({ snapshot, query, filter }: SectionViewProps): R
       {view.lists.map((list) => {
         const testId = listTestId(list.key)
         return (
-          <section key={list.key} className="agent-setup-group">
-            <h4 className="agent-setup-subheading">{list.label}</h4>
+          <CollapsibleGroup
+            key={list.key}
+            section="sandbox"
+            name={list.label}
+            count={list.entries.length}
+            collapsed={collapsed}
+            onToggleGroup={onToggleGroup}
+          >
             {list.entries.length === 0 ? (
               <p className="agent-setup-empty" data-testid={testId}>
                 None
@@ -81,7 +99,7 @@ export function SandboxSection({ snapshot, query, filter }: SectionViewProps): R
                 ))}
               </ul>
             )}
-          </section>
+          </CollapsibleGroup>
         )
       })}
     </div>

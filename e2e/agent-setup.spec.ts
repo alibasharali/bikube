@@ -1267,6 +1267,41 @@ test('#72 AC6: with no sandbox in any settings file, Enabled reads Off and every
   )
 })
 
+test("#71 D9, #72: Sandbox's list headings show their counts and collapse, kept across sections", async () => {
+  await openWith(sandboxFixtures)
+  await tab('Sandbox').click()
+  const allowed = groupToggle('Allowed domains')
+  await expect(allowed).toHaveText('Allowed domains 3')
+  await expect(groupToggle('Denied domains')).toHaveText('Denied domains 0')
+  await expect(allowed).toHaveAttribute('aria-expanded', 'true')
+  await expect(groupToggle('Deny read')).toHaveAttribute('aria-expanded', 'true')
+  const rows = await groupBody('Allowed domains')
+  await expect(rows.getByTestId('agent-setup-sandbox-entry')).toHaveCount(3)
+
+  await allowed.click()
+  await expect(allowed).toHaveAttribute('aria-expanded', 'false')
+  await expect(rows).toBeHidden()
+  // The facts and the other lists stay.
+  await expect(sandboxFact('enabled')).toBeVisible()
+  await expect(await groupBody('Deny read')).toBeVisible()
+
+  // The count follows the search and the filter.
+  await page.getByTestId('agent-setup-search').fill('github')
+  await expect(allowed).toHaveText('Allowed domains 2')
+  await page.getByTestId('agent-setup-search').fill('')
+  await chip('project').click()
+  await expect(allowed).toHaveText('Allowed domains 1')
+  await chip('all').click()
+
+  // Kept after a switch to Config and back.
+  await tab('Config').click()
+  await expect(panel()).toHaveAttribute('data-section', 'config')
+  await tab('Sandbox').click()
+  await expect(allowed).toHaveAttribute('aria-expanded', 'false')
+  await expect(await groupBody('Allowed domains')).toBeHidden()
+  await expect(groupToggle('Deny read')).toHaveAttribute('aria-expanded', 'true')
+})
+
 // #68 S7: Stats from transcripts written into the fake home's `.claude/projects`.
 
 /** A Claude Code project folder's name (D14): every character outside A-Z a-z 0-9 a dash. */

@@ -12,5 +12,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done
+- UX review: done (CLEAN, 2 polish)

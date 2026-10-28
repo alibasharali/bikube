@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 | todo | | | |
+| S1 | done | `8399506..b40ce89` | CLEAN | `editorCandidates`, `editors:installed`, `OpenResult` default-app note |
 
 ## Rulings
 

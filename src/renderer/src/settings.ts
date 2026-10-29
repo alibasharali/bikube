@@ -106,7 +106,8 @@ export function ghosttyKeymap(): GhosttyKeymap | null {
     const result = withGhosttyShortcuts(
       resolveKeymap(settings.shortcuts, platform),
       ghosttyBinds(ghostty.keybinds, platform),
-      platform
+      platform,
+      settings.globalShortcut
     )
     keymapFor = { settings, ghostty, result }
   }

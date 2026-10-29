@@ -3,6 +3,7 @@
  * Bikube's shortcuts for the actions both have (`GHOSTTY_ACTIONS`). Plain TS, no DOM.
  */
 import {
+  GLOBAL_SHORTCUT_LABEL,
   fixedShortcuts,
   formatShortcut,
   SHIFTED,
@@ -237,15 +238,18 @@ export interface GhosttyKeymap {
 
 /**
  * `keymap` (Bikube's own, the user's changes included) with Ghostty's shortcut for each action it
- * binds, except where that shortcut is fixed (D8) or another action not set by Ghostty has it: that
- * one is skipped and the action keeps its own.
+ * binds, except where that shortcut is fixed (D8), the global shortcut (#51 D5, registered system
+ * wide, so the page would never see it) or another action not set by Ghostty has it: that one is
+ * skipped and the action keeps its own.
  */
 export function withGhosttyShortcuts(
   keymap: Keymap,
   binds: Partial<Record<ShortcutAction, string>>,
-  platform: string
+  platform: string,
+  globalShortcut?: string
 ): GhosttyKeymap {
-  const fixed = fixedShortcuts(platform)
+  const fixed = new Map(fixedShortcuts(platform))
+  if (globalShortcut !== undefined) fixed.set(globalShortcut, GLOBAL_SHORTCUT_LABEL)
   const result = { ...keymap }
   const skipped: string[] = []
   const set = SHORTCUT_ACTIONS.filter((action) => {

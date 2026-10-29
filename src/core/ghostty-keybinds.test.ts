@@ -91,6 +91,19 @@ describe('withGhosttyShortcuts', () => {
     ])
   })
 
+  it('skips a Ghostty shortcut that is the global shortcut, which the page never sees (#51)', () => {
+    const keymap = defaultKeymap('darwin')
+    const result = withGhosttyShortcuts(
+      keymap,
+      { focusNextPane: 'Ctrl+Alt+N' },
+      'darwin',
+      'Ctrl+Alt+N'
+    )
+    expect(result.keymap.focusNextPane).toBe(keymap.focusNextPane)
+    expect(result.fromGhostty).toEqual([])
+    expect(result.skipped).toEqual(['Ctrl+Alt+N (Next pane): Show or hide Bikube'])
+  })
+
   it('gives an action Ghostty moves its key to another action Ghostty binds', () => {
     const keymap = defaultKeymap('darwin')
     const result = withGhosttyShortcuts(

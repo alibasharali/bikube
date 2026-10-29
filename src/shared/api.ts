@@ -227,7 +227,10 @@ export interface SettingsApi {
   save(settings: Settings): void
   /** The login shell (`$SHELL`) and the shells in `/etc/shells` that exist, for the Shell setting. */
   shells(): Promise<ShellChoices>
-  /** Reads the user's Ghostty config and theme now, for the "Use Ghostty theme" setting. */
+  /**
+   * Reads the user's Ghostty config and theme now, for the "Use Ghostty config" and "Use Ghostty
+   * shortcuts" settings.
+   */
   ghosttyConfig(): Promise<GhosttyConfig>
 }
 

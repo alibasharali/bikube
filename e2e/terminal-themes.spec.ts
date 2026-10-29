@@ -6,8 +6,8 @@ import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// The Shell setting, the terminal theme pickers and "Use Ghostty theme". Each test launches with
-// its own data directory.
+// The Shell setting, the terminal theme pickers, "Use Ghostty config" and "Use Ghostty shortcuts".
+// Each test launches with its own data directory.
 
 let app: ElectronApplication | undefined
 

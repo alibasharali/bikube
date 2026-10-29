@@ -144,7 +144,11 @@ async function checkClaude(
   const settings = join(home, 'bikube-claude-settings.json')
   writeFileSync(settings, '{}\n')
   const sh = startShell({ BIKUBE_CLAUDE_SETTINGS: settings })
+  // Typed at the first prompt, not before it: a question before it (Ubuntu's zsh compinit
+  // asking about insecure directories) would take the first key.
+  await sh.until('the first prompt', (o) => o.includes(OSC('133;B')))
   sh.run(path(bin))
+  await sh.until('the PATH set', (o) => o.split(OSC('133;B')).length > 2)
   sh.run('claude -p hi')
   await sh.until('claude with the settings', (o) =>
     visible(o).includes(`claude-args:--settings ${settings} -p hi`)

@@ -4,7 +4,8 @@
 # terminal: OSC 133 A (prompt start), B (prompt end), C (command output start),
 # D;<exit code> (command finished), and OSC 7 with the directory. Nothing else changes: the
 # prompt (fish_prompt runs inside a wrapper adding B), $status seen by the user's prompt and
-# event handlers, their functions and history.
+# event handlers, their functions and history. It also defines `claude`, adding Bikube's Claude
+# Code settings (see below).
 
 if set -q BIKUBE_XDG_DATA_DIRS
     if test -n "$BIKUBE_XDG_DATA_DIRS"
@@ -47,5 +48,23 @@ if status is-interactive; and not set -q __bikube_integration
 
     function __bikube_postexec --on-event fish_postexec
         printf '\e]133;D;%s\a' $status
+    end
+
+    # Claude Code typed by hand gets Bikube's settings (its hooks: status, activity), as a Claude
+    # Code card's start line passes them, whatever the PATH order. A run naming its own
+    # --settings is left alone, and a `claude` function in the user's config replaces this one.
+    if not functions -q claude
+        function claude
+            # `string match` with no arguments would read stdin: only with some.
+            if contains -- --settings $argv; or begin
+                    set -q argv[1]; and string match -q -- '--settings=*' $argv
+                end
+                command claude $argv
+            else if test -n "$BIKUBE_CLAUDE_SETTINGS"; and test -f "$BIKUBE_CLAUDE_SETTINGS"
+                command claude --settings $BIKUBE_CLAUDE_SETTINGS $argv
+            else
+                command claude $argv
+            end
+        end
     end
 end

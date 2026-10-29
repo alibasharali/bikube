@@ -81,6 +81,30 @@ export async function checkCreateWorktree(
   return { ok: true, command: { ...command, branch } }
 }
 
+/** `command` naming `.` from a workspace shell (see `answerBoardCommand`). */
+function answerShell(
+  shellId: string,
+  command: BoardCommand,
+  isRunning: (cardId: string) => boolean,
+  setAgentStatus: (cardId: string, text: string) => void,
+  setActivity: (cardId: string, activity: Activity | null) => void
+): BoardReply {
+  if (command.command === 'status' || command.command === 'activity') {
+    if (!isRunning(shellId)) return { ok: false, error: SHELL_NOT_A_CARD }
+    if (command.command === 'status') setAgentStatus(shellId, cleanAgentStatus(command.text))
+    else setActivity(shellId, command.activity === 'none' ? null : command.activity)
+    return { ok: true }
+  }
+  if (
+    command.command === 'description' ||
+    command.command === 'session' ||
+    command.command === 'usage'
+  ) {
+    return { ok: true }
+  }
+  return { ok: false, error: SHELL_NOT_A_CARD }
+}
+
 /**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
@@ -178,7 +202,11 @@ export function answerBoardCommand(
     if (!created.ok) return { ok: false, error: `board: ${created.error.message}` }
     return { ok: true, output: `${created.value.id} ${titles.name}\n` }
   }
-  if (shell && command.card === CALLING_CARD) return { ok: false, error: SHELL_NOT_A_CARD }
+  // A shell is a terminal like a card's (Claude Code typed in it gets Bikube's hooks): its
+  // status and activity show for it, runtime only; it has no description, session or usage to
+  // keep, so those do nothing, and it can't be moved, renamed, described or set up.
+  if (shell && command.card === CALLING_CARD)
+    return answerShell(callingCardId, command, isRunning, setAgentStatus, setActivity)
   // A card's id names it in any workspace for a local card (#69 D7); `activity`, `session`,
   // `setup` and `usage` stay in the calling workspace, as an SSH card's commands do (D9).
   const placed =

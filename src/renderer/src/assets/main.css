@@ -4143,7 +4143,8 @@ button.dev-server-chip:focus-visible {
 }
 
 .shell-command,
-.shell-where {
+.shell-where,
+.shell-agent-status {
   padding-left: var(--shell-indent);
   overflow: hidden;
   color: var(--text-muted);
@@ -5953,4 +5954,10 @@ button.dev-server-chip:focus-visible {
 
 .tooltip-description {
   color: var(--text-muted);
+}
+
+/* A shell's Claude Code status line (`board status .`), as on a card: text, not code */
+.shell-agent-status {
+  color: var(--text);
+  font-family: inherit;
 }

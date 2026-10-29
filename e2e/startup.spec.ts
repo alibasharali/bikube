@@ -18,6 +18,7 @@ import {
 } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 import { fakeAgentsHome } from './fake-agents'
 import {
   claudeLogLines,
@@ -724,4 +725,23 @@ test('D9: Enter in the select creates the card once the type is picked', async (
   await select.press('Enter')
   await expectCardOpen(page, 'picked')
   await expect.poll(logLines).toHaveLength(1)
+})
+
+test("claude typed in the Default shell gets Bikube's settings, and its board status shows in the Shells tab", async () => {
+  const dir = makeDir('alpha')
+  await createWorkspace(dir, 'alpha')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toBeVisible()
+
+  // Typed by hand, as a card's start line does it: with --settings, not twice.
+  await run('claude -c')
+  await expect.poll(() => logLines().at(-1)).toBe(`${SETTINGS_ARGS} -c`)
+  await page.keyboard.press('Enter')
+
+  // Its hooks' `board status .` shows for the shell, in the Shells tab.
+  await run(`"$BIKUBE_BIN/board" status . 'Tests green'`)
+  await showShells(page)
+  await expect(
+    page.getByTestId('shell').filter({ hasText: 'Default shell' }).getByTestId('shell-agent-status')
+  ).toHaveText('Tests green')
 })

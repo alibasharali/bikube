@@ -27,7 +27,7 @@ import { listedShellCards, shellWorktreeCard } from '../../core/workspace-shells
 import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
 import { startInBackground } from './background-shells'
 import { closeCard, removeShell, restartCard, startCard } from './card-actions'
-import { useCardRunState } from './card-terminals'
+import { useCardRunState, useCardStatus } from './card-terminals'
 import { openCardWindow, useInWindow } from './card-windows'
 import ConfirmDialog from './ConfirmDialog'
 import DevServerChips from './DevServerChips'
@@ -148,6 +148,8 @@ function ShellRow({
 }): React.JSX.Element {
   const runState = useCardRunState(shell.id)
   const running = runState.kind === 'running'
+  // Claude Code in the shell keeps a status line with `board status .`, as a card's does.
+  const { agentStatus } = useCardStatus(shell.id)
   const listening = useDevServers(shell.id)
   const inWindow = useInWindow(shell.id)
   const [deleting, setDeleting] = useState(false)
@@ -217,6 +219,11 @@ function ShellRow({
         <span className="shell-command" data-testid="shell-row-command">
           {command || 'Plain shell'}
         </span>
+        {running && agentStatus && (
+          <span className="shell-agent-status" data-testid="shell-agent-status" title={agentStatus}>
+            {agentStatus}
+          </span>
+        )}
       </button>
       <span className="shell-row-actions">
         <span className={movable ? 'split-btn' : 'split-btn split-btn-single'}>

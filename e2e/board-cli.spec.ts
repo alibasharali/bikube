@@ -900,7 +900,7 @@ test("#69 AC6/AC8: a card created in another workspace gets the description, the
     ])
 })
 
-test("the Default shell runs board: it lists, creates and moves named cards, and `.` isn't a card", async () => {
+test("the Default shell runs board: it lists, creates and moves named cards, and `.` isn't a card to move", async () => {
   await launch()
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
@@ -920,7 +920,9 @@ test("the Default shell runs board: it lists, creates and moves named cards, and
   expect(created.code).toBe(0)
   expect(created.stdout.trim().split(' ')[1]).toBe('alpha')
   expect(await board(alpha, 'board move api done')).toEqual(ok)
-  expect(await board(alpha, 'board status . hello')).toEqual(
+  // `.` is the shell itself: its status shows for it; a card's commands are refused.
+  expect(await board(alpha, 'board status . hello')).toEqual(ok)
+  expect(await board(alpha, 'board move . done')).toEqual(
     refused('board: this is a shell, not a card; name a card by its id or title')
   )
 

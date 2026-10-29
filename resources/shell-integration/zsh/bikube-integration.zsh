@@ -3,7 +3,7 @@
 # C (command output start), D;<exit code> (command finished), and OSC 7 with the directory.
 # Nothing else changes: the prompt (the marks are added around it only while it shows), $? seen by the
 # user's own hooks (zsh gives every precmd hook the command's status), their precmd and preexec
-# hooks and history.
+# hooks and history. It also defines `claude`, adding Bikube's Claude Code settings (see below).
 
 if (( ! ${+__bikube_integration} )); then
   typeset -g __bikube_integration=1
@@ -146,4 +146,23 @@ if (( ! ${+__bikube_integration} )); then
   typeset -ga precmd_functions preexec_functions
   precmd_functions=(__bikube_precmd ${precmd_functions[@]} __bikube_prompt)
   preexec_functions+=(__bikube_preexec)
+
+  # Claude Code typed by hand gets Bikube's settings (its hooks: status, activity), as a Claude
+  # Code card's start line passes them, whatever the PATH order. A run naming its own
+  # --settings, and a `claude` function of the user's, are left alone.
+  if (( ! ${+functions[claude]} )); then
+    claude() {
+      local a
+      for a in "$@"; do
+        case $a in
+          --settings | --settings=*) command claude "$@"; return ;;
+        esac
+      done
+      if [[ -n ${BIKUBE_CLAUDE_SETTINGS-} && -f $BIKUBE_CLAUDE_SETTINGS ]]; then
+        command claude --settings "$BIKUBE_CLAUDE_SETTINGS" "$@"
+      else
+        command claude "$@"
+      fi
+    }
+  fi
 fi

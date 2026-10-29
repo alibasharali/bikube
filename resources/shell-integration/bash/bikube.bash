@@ -3,7 +3,8 @@
 # reads, then marks each prompt and command for the terminal: OSC 133 A (prompt start),
 # B (prompt end), C (command output start), D;<exit code> (command finished), and OSC 7 with the
 # directory. Nothing else changes: the prompt, $? seen by the user's PROMPT_COMMAND and prompt,
-# their DEBUG trap (run after Bikube's) and history are the user's. With bash-preexec (starship,
+# their DEBUG trap (run after Bikube's) and history are the user's. It also defines `claude`, adding
+# Bikube's Claude Code settings (see below). With bash-preexec (starship,
 # atuin), which owns the DEBUG trap and PROMPT_COMMAND, the marks go through its precmd_functions
 # and preexec_functions instead, also when it is loaded after this. Safe under the user's `set -u`.
 # Works on bash 3.2 (macOS's /bin/bash): no PS0, no ${var@Q}, no associative arrays, no declare -g.
@@ -245,5 +246,24 @@ if [[ $- == *i* ]] && [ -z "${__bikube_integration-}" ]; then
         ;;
     esac
     trap '__bikube_preexec "$_"' DEBUG
+  fi
+
+  # Claude Code typed by hand gets Bikube's settings (its hooks: status, activity), as a Claude
+  # Code card's start line passes them, whatever the PATH order. A run naming its own
+  # --settings, and a `claude` function of the user's, are left alone.
+  if ! declare -F claude >/dev/null; then
+    claude() {
+      local a
+      for a in "$@"; do
+        case $a in
+          --settings | --settings=*) command claude "$@"; return ;;
+        esac
+      done
+      if [[ -n ${BIKUBE_CLAUDE_SETTINGS-} && -f $BIKUBE_CLAUDE_SETTINGS ]]; then
+        command claude --settings "$BIKUBE_CLAUDE_SETTINGS" "$@"
+      else
+        command claude "$@"
+      fi
+    }
   fi
 fi

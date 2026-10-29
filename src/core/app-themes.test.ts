@@ -151,6 +151,17 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     need('pill-waiting-text on surface', t['pill-waiting-text'], t.surface, 4.5)
     // What changed (#75 D9): the Renamed badge in the working blue on the panel.
     need('pill-working-text on surface', t['pill-working-text'], t.surface, 4.5)
+    // The Agent tab (#75): the in-progress todo and a command's program as accent text on the
+    // panel; a command's title on its hovered or expanded row; the Running, Done and OK chips'
+    // text on their pill tints over the panel and over that row.
+    need('accent as text on surface', t.accent, t.surface, 4.5)
+    need('text on surface-hover', t.text, t['surface-hover'], 4.5)
+    for (const pill of ['working', 'waiting'] as const) {
+      for (const under of ['surface', 'surface-hover'] as const) {
+        const bg = composite(t[`pill-${pill}-bg`], t[under])
+        need(`text on pill-${pill}-bg over ${under}`, t.text, bg, 4.5)
+      }
+    }
     for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)
     need('accent-text on accent', t['accent-text'], t.accent, 4.5)
     // D5's one named exception: Default dark's danger text, #ffffff on #e5484d, as it is today.

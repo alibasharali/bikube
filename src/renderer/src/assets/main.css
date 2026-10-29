@@ -2515,7 +2515,7 @@ button.dev-server-chip:focus-visible {
 .agent-todo-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2574,10 +2574,12 @@ button.dev-server-chip:focus-visible {
   color: var(--text-muted);
 }
 
+/* At least 10rem for the name, so a narrow panel puts the meta on a line of its own */
 .agent-row-text {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 10rem;
   flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -2613,7 +2615,7 @@ button.dev-server-chip:focus-visible {
 
 .agent-command-status[data-status='done'] {
   background: var(--pill-waiting-bg);
-  color: var(--pill-waiting-text);
+  color: var(--text);
 }
 
 .agent-row .agent-command-status[data-status='failed'] {
@@ -2665,12 +2667,19 @@ button.dev-server-chip:focus-visible {
 
 .agent-command {
   min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+/* An expanded command: its detail framed with the highlighted toggle as one row */
+.agent-command:has(> .agent-command-toggle[aria-expanded='true']) {
+  border-color: var(--surface-hover);
 }
 
 .agent-command-toggle {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   width: 100%;
   min-width: 0;
   padding: var(--space-1) var(--space-2);
@@ -2730,14 +2739,15 @@ button.dev-server-chip:focus-visible {
   color: var(--text-muted);
 }
 
+/* The pill tints over the panel: the text in --text, which every theme holds to 4.5:1 there */
 .agent-command-status[data-status='running'] {
   background: var(--pill-working-bg);
-  color: var(--pill-working-text);
+  color: var(--text);
 }
 
 .agent-command-status[data-status='ok'] {
   background: var(--pill-waiting-bg);
-  color: var(--pill-waiting-text);
+  color: var(--text);
 }
 
 .agent-command-status[data-status='failed'],
@@ -2803,6 +2813,8 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-command-output {
+  max-height: 240px;
+  overflow-y: auto;
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

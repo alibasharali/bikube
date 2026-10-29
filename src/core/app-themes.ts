@@ -292,7 +292,7 @@ const CATPPUCCIN: AppTheme = {
     'border-strong': '#bcc0cc', // surface1
     text: '#4c4f69',
     'text-muted': '#5c5f77', // subtext1
-    accent: '#8839ef', // mauve
+    accent: '#8333e8', // mauve, darker for the Agent tab's accent text
     'accent-text': '#eff1f5',
     'accent-soft': 'rgba(136, 57, 239, 0.1)',
     'danger-text': '#eff1f5', // base
@@ -429,7 +429,7 @@ const NORD: AppTheme = {
     'border-strong': '#d8dee9',
     text: '#2e3440', // nord0
     'text-muted': '#4c566a', // nord3
-    accent: '#4d6e96', // nord10, darker for D5
+    accent: '#4a6890', // nord10, darker for D5 and the Agent tab's accent text
     'accent-text': '#eceff4',
     'accent-soft': 'rgba(94, 129, 172, 0.12)',
     'danger-text': '#eceff4', // nord6

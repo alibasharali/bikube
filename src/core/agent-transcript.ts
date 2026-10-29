@@ -4,8 +4,9 @@
  * fs is injected for Vitest; nothing outside that path is read.
  */
 import { open, readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import {
+  addSubagentLine,
   addTranscriptLine,
   agentSummary,
   newTranscriptState,
@@ -39,9 +40,15 @@ export interface TailFs {
     ): Promise<{ bytesRead: number }>
     close(): Promise<void>
   }>
+  /** Lists a folder's names; Node's when left out. */
+  readdir?(path: string): Promise<string[]>
 }
 
-const nodeTailFs: TailFs = { stat, open: (path) => open(path, 'r') }
+const nodeTailFs: TailFs = { stat, open: (path) => open(path, 'r'), readdir }
+
+/** The folder of a transcript's subagent transcripts (D3): `<session>/subagents` beside it. */
+export const subagentsFolder = (path: string): string =>
+  join(dirname(path), basename(path, '.jsonl'), 'subagents')
 
 /** How many lines are parsed between two turns of main's event loop (as `claude-stats.ts`). */
 const LINES_PER_TURN = 200
@@ -52,21 +59,35 @@ const CHUNK = 1 << 20
 
 const nextTurn = (): Promise<void> => new Promise((done) => setImmediate(done))
 
-/** A transcript's tail: the bytes read, the line begun after them, and the parse state. */
-interface Tail {
+/** One file's tail: the bytes read and the line begun after them. */
+interface FileTail {
   ino: number
   offset: number
   partial: Buffer
+}
+
+/**
+ * A conversation's tail: its transcript's and each subagent transcript's (by file name), and the
+ * one parse state they feed.
+ */
+interface Tail extends FileTail {
+  subagents: Map<string, FileTail>
   state: TranscriptState
   version: number
   timer: ReturnType<typeof setTimeout> | undefined
 }
 
+/** A subagent transcript that shrank or was replaced: the conversation is read again. */
+class Restart extends Error {}
+
 /**
  * Tails transcripts for the Agent tab (D4, D5): per path the byte offset read and the parse state,
- * so a request parses only the bytes appended since; a file that shrank or was replaced is read
- * from the start; a path's state is dropped 60 s after its last request. Requests for one path run
- * one at a time. Versions are unique across paths and drops, so a stale one never reads unchanged.
+ * so a request parses only the bytes appended since; the subagent transcripts under
+ * `<session>/subagents/*.jsonl` are tailed the same way into the same state, a new one picked up
+ * as it appears (S3); a file that shrank or was replaced is read from the start (a subagent's:
+ * the whole conversation); a path's state is dropped 60 s after its last request. Requests for
+ * one path run one at a time. Versions are unique across paths and drops, so a stale one never
+ * reads unchanged.
  */
 export class TranscriptTailer {
   private readonly fs: TailFs
@@ -98,7 +119,7 @@ export class TranscriptTailer {
     this.tails.delete(path)
   }
 
-  private async readNow(path: string, since?: number): Promise<AgentSummaryRead> {
+  private async readNow(path: string, since?: number, again = false): Promise<AgentSummaryRead> {
     let info: { isFile(): boolean; size: number; ino: number }
     try {
       info = await this.fs.stat(path)
@@ -122,6 +143,7 @@ export class TranscriptTailer {
         ino: info.ino,
         offset: 0,
         partial: Buffer.alloc(0),
+        subagents: new Map(),
         state: newTranscriptState(),
         version: ++this.versions,
         timer: undefined
@@ -132,21 +154,84 @@ export class TranscriptTailer {
     tail.timer = setTimeout(() => this.drop(path), TAIL_DROP_MS)
     tail.timer.unref?.()
 
-    if (info.size > tail.offset) {
-      try {
-        if (await this.readAppended(path, tail, info.size)) tail.version = ++this.versions
-      } catch (error) {
-        // Half a read leaves the state unsure: the next request starts again.
-        this.drop(path)
-        return { state: 'error', reason: errorCode(error) ?? 'unreadable' }
+    const state = tail.state
+    const lines = { count: 0 }
+    try {
+      let read = false
+      if (info.size > tail.offset) {
+        read = await this.readAppended(path, tail, info.size, lines, (line) =>
+          addTranscriptLine(state, line, null)
+        )
       }
+      if (await this.readSubagents(path, tail, lines)) read = true
+      if (read) tail.version = ++this.versions
+    } catch (error) {
+      // Half a read leaves the state unsure: the next request starts again.
+      this.drop(path)
+      if (error instanceof Restart && !again) return this.readNow(path, since, true)
+      return { state: 'error', reason: errorCode(error) ?? 'unreadable' }
     }
     if (since === tail.version) return { state: 'unchanged' }
     return { state: 'conversation', version: tail.version, summary: agentSummary(tail.state) }
   }
 
-  /** Parses the bytes from the tail's offset to `size`; whether any whole line was read. */
-  private async readAppended(path: string, tail: Tail, size: number): Promise<boolean> {
+  /** Parses what was appended to each subagent transcript; whether any whole line was read. */
+  private async readSubagents(
+    path: string,
+    tail: Tail,
+    lines: { count: number }
+  ): Promise<boolean> {
+    const folder = subagentsFolder(path)
+    let names: string[]
+    try {
+      names = await (this.fs.readdir ?? readdir)(folder)
+    } catch (error) {
+      const code = errorCode(error)
+      if (code === 'ENOENT' || code === 'ENOTDIR') return false
+      throw error
+    }
+    let read = false
+    for (const name of names.filter((n) => n.endsWith('.jsonl')).sort()) {
+      const file = join(folder, name)
+      let info: { isFile(): boolean; size: number; ino: number }
+      try {
+        info = await this.fs.stat(file)
+      } catch (error) {
+        if (errorCode(error) === 'ENOENT') continue
+        throw error
+      }
+      if (!info.isFile()) continue
+      let sub = tail.subagents.get(name)
+      if (sub && (sub.ino !== info.ino || info.size < sub.offset)) throw new Restart()
+      if (!sub) {
+        sub = { ino: info.ino, offset: 0, partial: Buffer.alloc(0) }
+        tail.subagents.set(name, sub)
+      }
+      if (info.size <= sub.offset) continue
+      const key = name.slice(0, -'.jsonl'.length)
+      const state = tail.state
+      if (
+        await this.readAppended(file, sub, info.size, lines, (line) =>
+          addSubagentLine(state, key, line)
+        )
+      ) {
+        read = true
+      }
+    }
+    return read
+  }
+
+  /**
+   * Parses the bytes of `path` from the tail's offset to `size` with `add`, giving the event loop
+   * a turn every 200 lines across the request; whether any whole line was read.
+   */
+  private async readAppended(
+    path: string,
+    tail: FileTail,
+    size: number,
+    counter: { count: number },
+    add: (line: string) => void
+  ): Promise<boolean> {
     const handle = await this.fs.open(path)
     let lines = 0
     try {
@@ -165,8 +250,9 @@ export class TranscriptTailer {
         }
         partial = bytes.subarray(end + 1)
         for (const line of bytes.subarray(0, end).toString('utf8').split('\n')) {
-          addTranscriptLine(tail.state, line, null)
-          if (++lines % LINES_PER_TURN === 0) await this.yieldToLoop()
+          add(line)
+          lines++
+          if (++counter.count % LINES_PER_TURN === 0) await this.yieldToLoop()
         }
       }
       tail.offset = position

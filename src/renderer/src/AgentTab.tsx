@@ -1,8 +1,14 @@
-import { ChevronRight, LoaderCircle } from 'lucide-react'
+import { Bot, ChevronRight, LoaderCircle, SquareTerminal, Workflow } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
 import { clockTime, formatDuration } from '../../core/agent-format'
-import { AGENT_ROW_STATUS_LABELS, agentRows, type AgentRow } from '../../core/agent-rows'
+import {
+  AGENT_ROW_STATUS_LABELS,
+  agentDuration,
+  agentRows,
+  foldAgentRows,
+  type AgentRow
+} from '../../core/agent-rows'
 import type { AgentCommand, AgentSummary, AgentTodo } from '../../core/agent-summary'
 import { AGENT_TAB_MESSAGES, agentTabSubject, type AgentSummaryRead } from '../../core/agent-tab'
 import { commandSteps } from '../../core/command-layout'
@@ -73,6 +79,7 @@ function AgentTab({
             summary={read.summary}
             usage={shell ? shellReport?.usage : cardUsage}
             activity={activity}
+            running={running}
           />
         )}
       </>
@@ -155,21 +162,25 @@ function useAgentSummary(
 function AgentView({
   summary,
   usage,
-  activity
+  activity,
+  running
 }: {
   summary: AgentSummary
   /** The card's usage as the board card shows it, or the shell's kept usage (D7, D3a). */
   usage: ClaudeUsage | undefined
   /** The card's or shell's activity (#31), for the main agent's status (D8). */
   activity: Activity | undefined
+  /** Whether the card's or shell's shell runs: a background command is stopped without it. */
+  running: boolean
 }): React.JSX.Element {
   const collapsed = useCollapsedAgentGroups()
   const [allCommands, setAllCommands] = useState(false)
   const commands = summary.commands.slice().reverse()
   const shownCommands = allCommands ? commands : commands.slice(0, SHOWN_COMMANDS)
-  const agents = agentRows(activity)
+  const [allAgents, setAllAgents] = useState(false)
+  const { shown, finished } = foldAgentRows(agentRows(activity, summary.agents, running))
   const counts: Record<AgentTabGroupId, number> = {
-    agents: agents.length,
+    agents: shown.length + (allAgents ? finished.length : 0),
     changes: 0,
     commands: shownCommands.length
   }
@@ -185,7 +196,14 @@ function AgentView({
             count={counts[group.id]}
             open={!collapsed.has(group.id)}
           >
-            {group.id === 'agents' && <AgentList rows={agents} />}
+            {group.id === 'agents' && (
+              <AgentList
+                rows={shown}
+                finished={finished}
+                showFinished={allAgents}
+                onToggleFinished={() => setAllAgents(!allAgents)}
+              />
+            )}
             {group.id === 'commands' && (
               <CommandList
                 commands={shownCommands}
@@ -253,28 +271,114 @@ function Todos({ todos }: { todos: AgentTodo[] }): React.JSX.Element {
   )
 }
 
-/** The Agents group's rows (D8): the main agent first. */
-function AgentList({ rows }: { rows: AgentRow[] }): React.JSX.Element {
+/** How often a running row's duration is redrawn (D8). */
+const TICK_MS = 1000
+
+/** The clock, read again every second while `live`, for running rows' durations. */
+function useNow(live: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!live) return
+    const timer = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(timer)
+  }, [live])
+  return now
+}
+
+const ROW_ICONS: Record<AgentRow['kind'], typeof Bot> = {
+  main: Bot,
+  subagent: Workflow,
+  background: SquareTerminal
+}
+
+/**
+ * The Agents group's rows (D8): the main agent first, then subagents and background commands
+ * newest first, finished ones past the latest 5 folded into one `N finished` row that expands.
+ */
+function AgentList({
+  rows,
+  finished,
+  showFinished,
+  onToggleFinished
+}: {
+  rows: AgentRow[]
+  finished: AgentRow[]
+  showFinished: boolean
+  onToggleFinished: () => void
+}): React.JSX.Element {
+  const finishedId = useId()
+  const now = useNow(rows.some((row) => row.kind !== 'main' && row.status === 'running'))
   return (
-    <ul className="agent-rows">
-      {rows.map((row, i) => (
-        <li key={i} className="agent-row" data-testid="agent-row" data-kind={row.kind}>
-          <span className="agent-row-name" data-testid="agent-row-name">
-            {row.name}
-          </span>
-          <span
-            className="agent-command-status"
-            data-testid="agent-row-status"
-            data-status={row.status}
+    <>
+      <ul className="agent-rows">
+        {rows.map((row, i) => (
+          <AgentRowItem key={row.id ?? `main${i}`} row={row} now={now} />
+        ))}
+      </ul>
+      {finished.length > 0 && (
+        <>
+          <button
+            type="button"
+            className="agent-rows-finished"
+            data-testid="agent-rows-finished"
+            aria-expanded={showFinished}
+            aria-controls={finishedId}
+            onClick={onToggleFinished}
           >
-            {row.status === 'running' && (
-              <LoaderCircle {...SMALL_ICON} className="agent-command-spinner" />
-            )}
-            {AGENT_ROW_STATUS_LABELS[row.status]}
+            <ChevronRight {...SMALL_ICON} className="agent-setup-expand-icon" />
+            {finished.length} finished
+          </button>
+          <ul id={finishedId} className="agent-rows" hidden={!showFinished}>
+            {showFinished &&
+              finished.map((row, i) => (
+                <AgentRowItem key={row.id ?? `finished${i}`} row={row} now={now} />
+              ))}
+          </ul>
+        </>
+      )}
+    </>
+  )
+}
+
+/** One Agents row: its icon, name and description, status, duration and tool uses. */
+function AgentRowItem({ row, now }: { row: AgentRow; now: number }): React.JSX.Element {
+  const Icon = ROW_ICONS[row.kind]
+  const duration = agentDuration(row, now)
+  const tools = row.toolUses ?? null
+  return (
+    <li className="agent-row" data-testid="agent-row" data-kind={row.kind}>
+      <Icon {...SMALL_ICON} className="agent-row-icon" />
+      <span className="agent-row-text">
+        <span className="agent-row-name" data-testid="agent-row-name">
+          {row.name}
+        </span>
+        {row.description !== undefined && row.description !== null && (
+          <span className="agent-row-description" data-testid="agent-row-description">
+            {row.description}
           </span>
-        </li>
-      ))}
-    </ul>
+        )}
+      </span>
+      <span className="agent-row-meta">
+        <span
+          className="agent-command-status"
+          data-testid="agent-row-status"
+          data-status={row.status}
+        >
+          {row.status === 'running' && (
+            <LoaderCircle {...SMALL_ICON} className="agent-command-spinner" />
+          )}
+          {AGENT_ROW_STATUS_LABELS[row.status]}
+        </span>
+        {duration !== null && (
+          <span data-testid="agent-row-duration">{formatDuration(duration)}</span>
+        )}
+        {tools !== null && (
+          <span data-testid="agent-row-tools">
+            {tools} {tools === 1 ? 'tool use' : 'tool uses'}
+          </span>
+        )}
+      </span>
+    </li>
   )
 }
 

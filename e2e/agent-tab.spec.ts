@@ -546,3 +546,153 @@ test('#75 AC15a: Claude Code in the Default and a temporary shell, runtime only'
   await page.waitForTimeout(1000)
   expect(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')).not.toContain(session)
 })
+
+// S3 (#75 D8): subagents, read from `<session>/subagents/agent-<id>.jsonl` beside the transcript
+// and matched to their Task by prompt, and background commands.
+
+const agentRow = (name: string): Locator =>
+  group('Agents')
+    .getByTestId('agent-row')
+    .filter({ has: page.getByTestId('agent-row-name').getByText(name, { exact: true }) })
+
+const EXPLORE_PROMPT = 'Find where the side panel is drawn.'
+
+const taskUse = (seconds: number): string =>
+  assistant(
+    [
+      {
+        type: 'tool_use',
+        id: 'task1',
+        name: 'Task',
+        input: {
+          subagent_type: 'Explore',
+          description: 'Find the panel code',
+          prompt: EXPLORE_PROMPT
+        }
+      }
+    ],
+    seconds
+  )
+
+/** The Explore subagent's own transcript: its prompt, then `ls src`. */
+const SUBAGENT_FIXTURE = [
+  line({
+    type: 'user',
+    timestamp: at(2),
+    isSidechain: true,
+    agentId: 'a1b2c3',
+    uuid: randomUUID(),
+    message: { role: 'user', content: EXPLORE_PROMPT }
+  }),
+  line({
+    type: 'assistant',
+    timestamp: at(3),
+    isSidechain: true,
+    agentId: 'a1b2c3',
+    uuid: randomUUID(),
+    message: {
+      model: 'claude-haiku-4-5',
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool_use',
+          id: 's1',
+          name: 'Bash',
+          input: { command: 'ls src', description: 'List src' }
+        }
+      ]
+    }
+  })
+]
+
+test('#75 AC8: a running subagent, its command tagged, Done with a duration on its result', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await newCard('agent', true)
+  await expect.poll(() => claudeLogLines(fake.log).length).toBeGreaterThan(0)
+  const id = await sessionIdOf('agent')
+  const subagents = join(transcriptOf(id).replace(/\.jsonl$/, ''), 'subagents')
+  mkdirSync(subagents, { recursive: true })
+  writeFileSync(join(subagents, 'agent-a1b2c3.jsonl'), SUBAGENT_FIXTURE.join(''))
+  writeTranscript(id, [taskUse(1)])
+
+  await expect(group('Agents').getByTestId('agent-row-name')).toHaveText(['Main agent', 'Explore'])
+  const explore = agentRow('Explore')
+  await expect(explore.getByTestId('agent-row-description')).toHaveText('Find the panel code')
+  await expect(explore.getByTestId('agent-row-status')).toHaveText('Running')
+  await expect(explore.getByTestId('agent-row-tools')).toHaveText('1 tool use')
+  await expect(commandTitles()).toHaveText(['List src'])
+  await expect(commandRows().first().getByTestId('agent-command-agent')).toHaveText('Explore')
+
+  appendFileSync(
+    transcriptOf(id),
+    bashResult('task1', 'The panel is in SidePanel.tsx.', 42, false, {
+      status: 'completed',
+      totalToolUseCount: 4
+    })
+  )
+  await expect(explore.getByTestId('agent-row-status')).toHaveText('Done', { timeout: 3000 })
+  await expect(explore.getByTestId('agent-row-duration')).toHaveText('41s')
+  await expect(explore.getByTestId('agent-row-tools')).toHaveText('4 tool uses')
+})
+
+test('#75 AC9: a background command runs in Agents and reads Background in Commands', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  // Started 5 s ago, so its duration counts live from there.
+  const started = new Date(Date.now() - 5000).toISOString()
+  await claudeCard('agent', [
+    line({
+      type: 'assistant',
+      timestamp: started,
+      isSidechain: false,
+      uuid: randomUUID(),
+      message: {
+        model: 'claude-opus-4-8',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'bg1',
+            name: 'Bash',
+            input: {
+              command: 'npm run dev',
+              description: 'Start dev server',
+              run_in_background: true
+            }
+          }
+        ]
+      }
+    }),
+    line({
+      type: 'user',
+      timestamp: started,
+      isSidechain: false,
+      uuid: randomUUID(),
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'bg1',
+            content: 'Command running in background with ID: bash_1',
+            is_error: false
+          }
+        ]
+      },
+      toolUseResult: { backgroundTaskId: 'bash_1' }
+    })
+  ])
+
+  const dev = agentRow('Start dev server')
+  await expect(dev).toHaveAttribute('data-kind', 'background')
+  await expect(dev.getByTestId('agent-row-status')).toHaveText('Running')
+  const duration = dev.getByTestId('agent-row-duration')
+  await expect(duration).toHaveText(/^\d+s$/)
+  const first = await duration.textContent()
+  await expect(duration).not.toHaveText(first!, { timeout: 3000 })
+  await expect(commandTitles()).toHaveText(['Start dev server'])
+  await expect(commandRows().first().getByTestId('agent-command-status')).toHaveText('Background')
+})

@@ -226,6 +226,53 @@ describe("main's transcript tailing (#75 D4, D5)", () => {
     expect(turns).toBeGreaterThanOrEqual(2)
   })
 
+  it('tails each subagent transcript under <session>/subagents, appended bytes only, new files as they appear (S3)', async () => {
+    const taskUse = `${JSON.stringify({
+      type: 'assistant',
+      timestamp: '2026-10-29T14:32:00.000Z',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'task1',
+            name: 'Task',
+            input: { subagent_type: 'Explore', description: 'Find', prompt: 'Look' }
+          }
+        ]
+      }
+    })}\n`
+    appendFileSync(path, taskUse)
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    const subagents = join(path.replace(/\.jsonl$/, ''), 'subagents')
+    const agentsOf = (read: AgentSummaryRead): string[] =>
+      read.state === 'conversation'
+        ? (read.summary.agents ?? []).map((a) => `${a.name} ${a.status} ${a.toolUses}`)
+        : []
+    const tagged = (read: AgentSummaryRead): string[] =>
+      read.state === 'conversation'
+        ? read.summary.commands.map((c) => `${c.description} ${c.agent}`)
+        : []
+    expect(agentsOf(await tailer.read(path))).toEqual(['Explore running null'])
+
+    mkdirSync(subagents, { recursive: true })
+    const subFile = join(subagents, 'agent-a1.jsonl')
+    const prompt = `${JSON.stringify({ type: 'user', isSidechain: true, message: { role: 'user', content: 'Look' } })}\n`
+    writeFileSync(subFile, prompt + bashUse('s1', 'ls src', 'List src'))
+    writeFileSync(join(subagents, 'agent-a1.meta.json'), '{"not":"a transcript line"}\n')
+    const first = await tailer.read(path)
+    expect(agentsOf(first)).toEqual(['Explore running 1'])
+    expect(tagged(first)).toEqual(['Show status null', 'List src Explore'])
+    const version = first.state === 'conversation' ? first.version : -1
+    expect(await tailer.read(path, version)).toEqual({ state: 'unchanged' })
+
+    reads = []
+    const size = Buffer.byteLength(prompt + bashUse('s1', 'ls src', 'List src'))
+    appendFileSync(subFile, bashResult('s1', 'a'))
+    const second = await tailer.read(path, version)
+    expect(commandsOf(second)).toEqual(['Show status running', 'List src ok'])
+    expect(reads).toEqual([`${size}+${Buffer.byteLength(bashResult('s1', 'a'))}`])
+  })
+
   it("answers an error with the reason when the transcript can't be read (D12)", async () => {
     const failing: TailFs = {
       stat: tailFs.stat,

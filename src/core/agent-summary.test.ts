@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   SUMMARY_LIMITS,
+  addSubagentLine,
   addTranscriptLine,
   agentSummary,
   newTranscriptState,
@@ -243,5 +244,185 @@ describe("the agent summary's header (#75 D7)", () => {
 
   it('has no todos and no model for an empty transcript', () => {
     expect(read([])).toEqual({ model: null, todos: [], commands: [] })
+  })
+})
+
+const task = (id: string, input: Record<string, unknown>, seconds = 0, name = 'Task'): Entry =>
+  assistant([{ type: 'tool_use', id, name, input }], seconds)
+
+/** A subagent transcript's first entry: its prompt, as Claude Code writes it. */
+const subPrompt = (prompt: string, seconds = 0, agentId?: string): Entry => ({
+  type: 'user',
+  timestamp: at(seconds),
+  isSidechain: true,
+  ...(agentId !== undefined && { agentId }),
+  message: { role: 'user', content: prompt }
+})
+
+const sub = (entry: Entry): string => JSON.stringify({ ...entry, isSidechain: true })
+
+describe("the agent summary's subagents (#75 D8, AC8)", () => {
+  it('reads a Task as a running subagent, its transcript tagging its commands by prompt', () => {
+    const state = newTranscriptState()
+    read(
+      [
+        task(
+          'task1',
+          { subagent_type: 'Explore', description: 'Find the panel code', prompt: 'Look for it' },
+          5
+        )
+      ],
+      state
+    )
+    addSubagentLine(state, 'agent-a1', sub(subPrompt('Look for it', 6)))
+    addSubagentLine(state, 'agent-a1', sub(bash('s1', 'ls src', 'List src', 7)))
+    addSubagentLine(state, 'agent-a1', sub(result('s1', 'a\nb', 8)))
+    let summary = agentSummary(state)
+    expect(summary.agents).toEqual([
+      {
+        id: 'task1',
+        kind: 'subagent',
+        name: 'Explore',
+        description: 'Find the panel code',
+        status: 'running',
+        startedAt: T0 + 5000,
+        endedAt: null,
+        toolUses: 1
+      }
+    ])
+    expect(summary.commands.map((c) => [c.description, c.agent, c.status])).toEqual([
+      ['List src', 'Explore', 'ok']
+    ])
+
+    read([result('task1', [{ type: 'text', text: 'Found it' }], 50)], state)
+    summary = agentSummary(state)
+    expect(summary.agents?.[0]).toMatchObject({ status: 'done', endedAt: T0 + 50_000 })
+  })
+
+  it("matches a file by the agent id the Task's result names, and takes the result's tool total", () => {
+    const state = newTranscriptState()
+    read(
+      [
+        task('t1', { description: 'One', prompt: 'same' }, 0, 'Agent'),
+        task('t2', { subagent_type: 'Plan', description: 'Two', prompt: 'same' }, 1),
+        result('t2', 'done', 9, false, { agentId: 'b2', totalToolUseCount: 7 })
+      ],
+      state
+    )
+    addSubagentLine(state, 'agent-b2', sub(subPrompt('same', 2)))
+    addSubagentLine(state, 'agent-b2', sub(bash('x', 'pwd', 'Where', 3)))
+    addSubagentLine(state, 'agent-c3', sub(subPrompt('same', 2)))
+    addSubagentLine(state, 'agent-c3', sub(bash('y', 'id', 'Who', 3)))
+    addSubagentLine(state, 'agent-d4', sub(subPrompt('unknown', 2)))
+    addSubagentLine(state, 'agent-d4', sub(bash('z', 'ls', 'Lost', 3)))
+    const summary = agentSummary(state)
+    expect(summary.agents?.map((a) => [a.name, a.description, a.status, a.toolUses])).toEqual([
+      ['Subagent', 'One', 'running', 1],
+      ['Plan', 'Two', 'done', 7]
+    ])
+    expect(summary.commands.map((c) => [c.description, c.agent])).toEqual([
+      ['Where', 'Plan'],
+      ['Who', 'Subagent'],
+      ['Lost', 'Subagent']
+    ])
+  })
+
+  it('reads a failed subagent, and a background one running until its notification', () => {
+    const notification = (useId: string, status: string, seconds: number): Entry =>
+      ({
+        type: 'queue-operation',
+        timestamp: at(seconds),
+        operation: 'enqueue',
+        content: `<task-notification>\n<task-id>a9</task-id>\n<tool-use-id>${useId}</tool-use-id>\n<status>${status}</status>\n<usage><tool_uses>12</tool_uses></usage>\n</task-notification>`
+      }) as Entry
+    const summary = read([
+      task('f', { subagent_type: 'Explore', prompt: 'p' }, 0),
+      result('f', 'Agent crashed', 4, true),
+      task('b', { subagent_type: 'Review', prompt: 'q', run_in_background: true }, 5),
+      result('b', 'Async agent launched successfully.', 5, false, {
+        isAsync: true,
+        status: 'async_launched',
+        agentId: 'a9'
+      }),
+      notification('b', 'completed', 60),
+      notification('b', 'completed', 90)
+    ])
+    expect(
+      summary.agents?.map((a) => [a.name, a.status, a.startedAt, a.endedAt, a.toolUses])
+    ).toEqual([
+      ['Explore', 'failed', T0, T0 + 4000, null],
+      ['Review', 'done', T0 + 5000, T0 + 60_000, 12]
+    ])
+    expect(read([task('b', { prompt: 'q' }, 5)]).agents?.[0].status).toBe('running')
+  })
+
+  it('keeps at most 500 subagents and background commands, dropping the oldest (D11)', () => {
+    const entries: Entry[] = []
+    for (let i = 0; i < SUMMARY_LIMITS.agents + 3; i++)
+      entries.push(task(`t${i}`, { prompt: `${i}` }))
+    const summary = read(entries)
+    expect(summary.agents).toHaveLength(SUMMARY_LIMITS.agents)
+    expect(summary.agents?.[0].id).toBe('t3')
+  })
+})
+
+describe("the agent summary's background commands (#75 D8, AC9)", () => {
+  const background = (id: string, command: string, description?: string, seconds = 0): Entry =>
+    bash(id, command, description, seconds, { run_in_background: true })
+
+  it('lists a background Bash as running while the transcript shows no end', () => {
+    const summary = read([
+      background('b1', 'npm run dev', 'Start dev server', 3),
+      result('b1', 'Command running in background with ID: bash_1', 4)
+    ])
+    expect(summary.agents).toEqual([
+      {
+        id: 'b1',
+        kind: 'background',
+        name: 'Start dev server',
+        description: null,
+        status: 'running',
+        startedAt: T0 + 3000,
+        endedAt: null,
+        toolUses: null
+      }
+    ])
+    expect(summary.commands[0].status).toBe('background')
+  })
+
+  it("ends it by a BashOutput's final status, a kill, or a notification naming its shell", () => {
+    const query = (id: string, name: string, input: Record<string, unknown>, s: number): Entry =>
+      assistant([{ type: 'tool_use', id, name, input }], s)
+    const summary = read([
+      background('b1', 'x'.repeat(80), undefined, 0),
+      result('b1', 'Command running in background with ID: bash_1', 1),
+      background('b2', 'npm run watch', 'Watch', 2),
+      result('b2', 'started', 3, false, { backgroundTaskId: 'bash_2' }),
+      background('b3', 'make', 'Build', 4),
+      result('b3', 'Command running in background with ID: b3shell', 5),
+      background('b4', 'sleep 9', 'Sleep', 6),
+      result('b4', 'Command running in background with ID: b4shell', 6),
+      query('q1', 'BashOutput', { bash_id: 'bash_1' }, 10),
+      result('q1', '<status>running</status>', 11),
+      query('q2', 'BashOutput', { bash_id: 'bash_1' }, 12),
+      result('q2', '<status>failed</status>\n<exit_code>2</exit_code>', 13),
+      query('q3', 'KillShell', { shell_id: 'bash_2' }, 20),
+      result('q3', 'Successfully killed shell: bash_2', 21),
+      {
+        type: 'user',
+        timestamp: at(30),
+        message: {
+          role: 'user',
+          content:
+            '<task-notification>\n<task-id>b3shell</task-id>\n<status>completed</status>\n<summary>Background command "make" completed (exit code 0)</summary>\n</task-notification>'
+        }
+      }
+    ])
+    expect(summary.agents?.map((a) => [a.name, a.status, a.endedAt])).toEqual([
+      ['x'.repeat(60), 'failed', T0 + 13_000],
+      ['Watch', 'stopped', T0 + 21_000],
+      ['Build', 'done', T0 + 30_000],
+      ['Sleep', 'running', null]
+    ])
   })
 })

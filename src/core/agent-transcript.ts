@@ -234,17 +234,56 @@ export async function findSessionTranscript(
   return found?.path ?? null
 }
 
+/** How many sessions' found paths a `SessionLookup` keeps. */
+const LOOKUP_SESSIONS = 32
+
+/**
+ * `findSessionTranscript` with the path it found kept per session id, so the tab's 1 s poll
+ * checks that one file instead of every project folder; it scans again once that file is gone.
+ * Keeps the latest `LOOKUP_SESSIONS` sessions; a session not found is never kept.
+ */
+export class SessionLookup {
+  private readonly found = new Map<string, string>()
+
+  constructor(private readonly fs: LookupFs = { readdir, stat }) {}
+
+  async find(home: string, sessionId: string): Promise<string | null> {
+    const key = `${home}\0${sessionId}`
+    const kept = this.found.get(key)
+    if (kept !== undefined) {
+      this.found.delete(key)
+      try {
+        if ((await this.fs.stat(kept)).isFile()) {
+          this.found.set(key, kept)
+          return kept
+        }
+      } catch {
+        // Gone: scan again.
+      }
+    }
+    const path = await findSessionTranscript(home, sessionId, this.fs)
+    if (path !== null) {
+      this.found.set(key, path)
+      if (this.found.size > LOOKUP_SESSIONS) {
+        this.found.delete(this.found.keys().next().value as string)
+      }
+    }
+    return path
+  }
+}
+
 /**
  * Answers a shell's request (D3a, D4), which names the session alone: a session id that isn't a
  * UUID is refused before anything is read; else the summary of the transcript
- * `findSessionTranscript` finds, `none` while there is none.
+ * `lookup` finds (a new `SessionLookup` over `fs` when none is given), `none` while there is none.
  */
 export async function readSessionSummary(
   request: { sessionId: unknown; since?: unknown },
-  deps: { home: string; fs?: LookupFs; tailer?: TranscriptTailer }
+  deps: { home: string; fs?: LookupFs; lookup?: SessionLookup; tailer?: TranscriptTailer }
 ): Promise<AgentSummaryRead> {
   if (!isSessionId(request.sessionId)) return { state: 'error', reason: 'invalid session id' }
-  const path = await findSessionTranscript(deps.home, request.sessionId.toLowerCase(), deps.fs)
+  const lookup = deps.lookup ?? new SessionLookup(deps.fs)
+  const path = await lookup.find(deps.home, request.sessionId.toLowerCase())
   if (path === null) return { state: 'none' }
   const since = Number.isSafeInteger(request.since) ? (request.since as number) : undefined
   return (deps.tailer ?? new TranscriptTailer()).read(path, since)

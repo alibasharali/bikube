@@ -7,6 +7,7 @@ import type { AgentSummaryRead } from './agent-tab'
 import {
   TranscriptTailer,
   findSessionTranscript,
+  SessionLookup,
   readAgentSummary,
   readSessionSummary,
   transcriptPath,
@@ -307,6 +308,42 @@ describe("a shell's transcript, found by its session id (#75 D3a, D4)", () => {
     expect(
       await readSessionSummary({ sessionId: SESSION, since }, { home, fs: lookupFs, tailer })
     ).toEqual({ state: 'unchanged' })
+  })
+
+  it('keeps the path it found, scanning again only once that file is gone', async () => {
+    const lookup = new SessionLookup(lookupFs)
+    expect(await lookup.find(home, SESSION)).toBeNull()
+    const first = writeTranscript('/some/other/folder')
+    expect(await lookup.find(home, SESSION)).toBe(first)
+    asked = []
+    writeTranscript('/yet/another')
+    // Found before: only that file is checked, no folder listed.
+    expect(await lookup.find(home, SESSION)).toBe(first)
+    expect(asked).toEqual([first])
+    rmSync(first)
+    asked = []
+    expect(await lookup.find(home, SESSION)).toBe(
+      join(home, '.claude', 'projects', encodeProjectFolder('/yet/another'), `${SESSION}.jsonl`)
+    )
+    expect(asked).toContain(join(home, '.claude', 'projects'))
+  })
+
+  it('keeps a bounded number of sessions', async () => {
+    const lookup = new SessionLookup(lookupFs)
+    const ids = Array.from(
+      { length: 40 },
+      (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`
+    )
+    for (const id of ids) {
+      writeTranscript('/some/other/folder', id)
+      await lookup.find(home, id)
+    }
+    asked = []
+    await lookup.find(home, ids[0])
+    expect(asked).toContain(join(home, '.claude', 'projects'))
+    asked = []
+    await lookup.find(home, ids[39])
+    expect(asked).toHaveLength(1)
   })
 
   it('refuses a session id that is not a UUID, reading nothing', async () => {

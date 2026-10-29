@@ -2,13 +2,13 @@ import { answerBoardCommand, checkCreateWorktree } from '../../core/board-answer
 import { findShellCard } from '../../core/workspace-shells'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
+import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
 import { workspaceStore } from './store'
+import { setCardUsage } from './usage'
 
 /** Whether `id` is one of the workspaces' shells (the Default one included), not a card. */
 const isWorkspaceShell = (id: string): boolean =>
   workspaceStore.getState().workspaces.some((w) => findShellCard(w, id) !== undefined)
-import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
-import { setCardUsage } from './usage'
 
 /**
  * Answers `board` requests from cards' shells (#9 D10): resolved and applied against the store,

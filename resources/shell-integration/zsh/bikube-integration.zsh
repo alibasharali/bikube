@@ -149,9 +149,10 @@ if (( ! ${+__bikube_integration} )); then
 
   # Claude Code typed by hand gets Bikube's settings (its hooks: status, activity), as a Claude
   # Code card's start line passes them, whatever the PATH order. A run naming its own
-  # --settings, and a `claude` function of the user's, are left alone.
+  # --settings, and a `claude` function of the user's, are left alone. `function claude` and not
+  # `claude()`: zsh expands an `alias claude=…` defined by then in the latter.
   if (( ! ${+functions[claude]} )); then
-    claude() {
+    function claude {
       local a
       for a in "$@"; do
         case $a in

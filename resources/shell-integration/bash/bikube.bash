@@ -250,9 +250,11 @@ if [[ $- == *i* ]] && [ -z "${__bikube_integration-}" ]; then
 
   # Claude Code typed by hand gets Bikube's settings (its hooks: status, activity), as a Claude
   # Code card's start line passes them, whatever the PATH order. A run naming its own
-  # --settings, and a `claude` function of the user's, are left alone.
+  # --settings, and a `claude` function of the user's, are left alone. `function claude` and not
+  # `claude()`: bash expands a user's `alias claude=…` in the latter, a syntax error that would
+  # take this whole block with it.
   if ! declare -F claude >/dev/null; then
-    claude() {
+    function claude {
       local a
       for a in "$@"; do
         case $a in

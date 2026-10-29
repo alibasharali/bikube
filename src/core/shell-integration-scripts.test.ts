@@ -329,6 +329,27 @@ describeShell('bash', (bash) => {
     )
   })
 
+  it("keeps the integration and adds the settings under the user's `alias claude`", async () => {
+    const home = folder()
+    const bin = join(home, 'fake-bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(bin, 'claude'), '#!/bin/sh\necho "claude-args:$*"\n', { mode: 0o755 })
+    const settings = join(home, 'bikube-claude-settings.json')
+    writeFileSync(settings, '{}\n')
+    writeFileSync(
+      join(home, '.bash_profile'),
+      [`PATH=${bin}:$PATH`, "alias claude='claude --from-alias'", "PS1='user[$?]> '"].join('\n') +
+        '\n'
+    )
+    const sh = start(bash, home, { BIKUBE_CLAUDE_SETTINGS: settings })
+    sh.run('claude -p hi')
+    await sh.until('claude through the alias with the settings', (o) =>
+      visible(o).includes(`claude-args:--settings ${settings} --from-alias -p hi`)
+    )
+    expect(visible(sh.output())).not.toMatch(/syntax error/)
+    expect(marks(sh.output())).toContain('133;A')
+  })
+
   it("works under the login files' `set -u` without an error", async () => {
     const home = folder()
     writeFileSync(

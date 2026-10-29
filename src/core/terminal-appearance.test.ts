@@ -80,7 +80,8 @@ describe('terminalAppearance (#10 D3, D4)', () => {
         letterSpacing: 0,
         fontWeight: 400,
         drawBoldTextInBrightColors: true
-      }
+      },
+      padding: { x: 0, y: 0 }
     })
   })
 
@@ -153,10 +154,10 @@ describe('terminalAppearance (#10 D3, D4)', () => {
 
   it("uses Ghostty's colours when that setting is on and they are read, the picked theme until then", () => {
     const ghostty = { dark: GHOSTTY_DEFAULT_PALETTE, light: TERMINAL_PALETTES.light }
-    const on = { ...DEFAULT_SETTINGS, theme: 'dark' as const, useGhosttyTheme: true }
+    const on = { ...DEFAULT_SETTINGS, theme: 'dark' as const, useGhosttyConfig: true }
     expect(terminalAppearance(on, true, ghostty).theme).toBe(GHOSTTY_DEFAULT_PALETTE)
     expect(terminalAppearance(on, true, null).theme).toBe(TERMINAL_PALETTES.dark)
-    expect(terminalAppearance({ ...on, useGhosttyTheme: false }, true, ghostty).theme).toBe(
+    expect(terminalAppearance({ ...on, useGhosttyConfig: false }, true, ghostty).theme).toBe(
       TERMINAL_PALETTES.dark
     )
   })

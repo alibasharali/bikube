@@ -38,6 +38,7 @@ import {
   MAX_LETTER_SPACING,
   FONT_WEIGHTS,
   MIN_FONT_SIZE,
+  MIN_UNFOCUSED_PANE_OPACITY,
   SCROLLBACK_CHOICES,
   THEMES,
   isShellSetting,
@@ -63,13 +64,14 @@ import {
 import { MAX_COLUMN_CARD_LIMIT, MIN_COLUMN_CARD_LIMIT } from '../../core/column-limit'
 import { syncFolderOf, syncStatusText } from '../../core/sync-status'
 import { editorChoices } from '../../core/editor-candidates'
-import { ghosttyStore, useGhosttyTheme } from './ghostty'
+import { ghosttyStore, useGhosttyRead } from './ghostty'
 import { installedAppFonts, installedFonts } from './installed-fonts'
 import { useInstalledEditors } from './installed-editors'
 import { ICON, SMALL_ICON } from './icons'
 import Modal from './Modal'
 import ShortcutKeys from './ShortcutKeys'
-import { settingsStore, useSettings } from './settings'
+import { ghosttyKeymap, settingsStore, useEffectiveSettings, useSettings } from './settings'
+import type { GhosttyTerminalSettings } from '../../core/ghostty-config'
 import TerminalPreview from './TerminalPreview'
 import ThemePicker from './ThemePicker'
 import AppThemePicker from './AppThemePicker'
@@ -228,6 +230,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }): React.JSX.Element
               keymap={resolveKeymap(settings.shortcuts, window.bikube.platform)}
               globalShortcut={settings.globalShortcut}
               openWaitingOnShow={settings.openWaitingOnShow}
+              useGhosttyShortcuts={settings.useGhosttyShortcuts}
             />
           )}
           {section === 'sync' && <SyncFolderField id={`${id}-sync`} errorId={`${id}-sync-error`} />}
@@ -493,6 +496,39 @@ function AppFontRow({
 }
 
 /**
+ * What the Ghostty config sets while "Use Ghostty config" is on and it has been read: each such
+ * setting shows Ghostty's value in place of its control. Empty otherwise.
+ */
+function useGhosttySet(): GhosttyTerminalSettings {
+  const ghostty = useGhosttyRead()
+  const { useGhosttyConfig } = useSettings()
+  return useGhosttyConfig && ghostty !== null ? ghostty.terminal : {}
+}
+
+/** A setting the Ghostty config sets: its value, read-only, in place of the control. */
+function GhosttyValueRow({
+  label,
+  testId,
+  value
+}: {
+  label: string
+  testId: string
+  value: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="settings-row" data-testid={`${testId}-ghostty`}>
+      <span className="settings-label">{label}</span>
+      <div className="settings-control">
+        <span className="ghostty-value">{value}</span>
+        <p className="field-hint">From your Ghostty config.</p>
+      </div>
+    </div>
+  )
+}
+
+const onOff = (on: boolean): string => (on ? 'On' : 'Off')
+
+/**
  * The terminals' font rows in the Terminal section (#66 D5): size (typed, or stepped with the
  * buttons and the arrow keys), family (a listed font, or Custom applied on blur or Enter, empty
  * meaning the default), weight, line height and letter spacing. The family's draft lives in the
@@ -506,6 +542,7 @@ function TerminalFontRows({
   setFamily: (family: string) => void
 }): React.JSX.Element {
   const settings = useSettings()
+  const ghostty = useGhosttySet()
   const id = useId()
   const [sizeText, setSizeText] = useState(() => String(settingsStore.get().fontSize))
   const [sizeInvalid, setSizeInvalid] = useState(false)
@@ -552,119 +589,147 @@ function TerminalFontRows({
   const familyId = `${id}-family`
   return (
     <>
-      <div className="settings-row">
-        <label className="settings-label" htmlFor={sizeId}>
-          Font size
-        </label>
-        <div className="settings-control">
-          <div className="stepper">
-            <button
-              type="button"
-              className="stepper-btn"
-              aria-label="Smaller font"
-              disabled={settings.fontSize <= MIN_FONT_SIZE}
-              onClick={() => step(-1)}
-            >
-              <Minus {...SMALL_ICON} />
-            </button>
-            <input
-              id={sizeId}
-              className="stepper-input"
-              data-testid="settings-font-size"
-              inputMode="numeric"
-              value={sizeText}
-              autoComplete="off"
-              aria-invalid={sizeInvalid ? true : undefined}
-              aria-describedby={sizeInvalid ? sizeErrorId : undefined}
-              onChange={(e) => changeSize(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
-                e.preventDefault()
-                step(e.key === 'ArrowUp' ? 1 : -1)
-              }}
-            />
-            <button
-              type="button"
-              className="stepper-btn"
-              aria-label="Larger font"
-              disabled={settings.fontSize >= MAX_FONT_SIZE}
-              onClick={() => step(1)}
-            >
-              <Plus {...SMALL_ICON} />
-            </button>
+      {ghostty.fontSize !== undefined ? (
+        <GhosttyValueRow label="Font size" testId="settings-font-size" value={ghostty.fontSize} />
+      ) : (
+        <div className="settings-row">
+          <label className="settings-label" htmlFor={sizeId}>
+            Font size
+          </label>
+          <div className="settings-control">
+            <div className="stepper">
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label="Smaller font"
+                disabled={settings.fontSize <= MIN_FONT_SIZE}
+                onClick={() => step(-1)}
+              >
+                <Minus {...SMALL_ICON} />
+              </button>
+              <input
+                id={sizeId}
+                className="stepper-input"
+                data-testid="settings-font-size"
+                inputMode="numeric"
+                value={sizeText}
+                autoComplete="off"
+                aria-invalid={sizeInvalid ? true : undefined}
+                aria-describedby={sizeInvalid ? sizeErrorId : undefined}
+                onChange={(e) => changeSize(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+                  e.preventDefault()
+                  step(e.key === 'ArrowUp' ? 1 : -1)
+                }}
+              />
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label="Larger font"
+                disabled={settings.fontSize >= MAX_FONT_SIZE}
+                onClick={() => step(1)}
+              >
+                <Plus {...SMALL_ICON} />
+              </button>
+            </div>
+            {sizeInvalid && (
+              <p
+                className="field-error"
+                id={sizeErrorId}
+                role="alert"
+                data-testid="settings-error-font-size"
+              >
+                {FONT_SIZE_ERROR}
+              </p>
+            )}
           </div>
-          {sizeInvalid && (
-            <p
-              className="field-error"
-              id={sizeErrorId}
-              role="alert"
-              data-testid="settings-error-font-size"
-            >
-              {FONT_SIZE_ERROR}
-            </p>
-          )}
         </div>
-      </div>
-      <div className="settings-row">
-        <label className="settings-label" htmlFor={familyId}>
-          Font family
-        </label>
-        <div className="settings-control">
-          <select
-            id={familyId}
-            className="settings-input"
-            data-testid="settings-font-choice"
-            value={fontValue}
-            onChange={(e) => pickFont(e.target.value)}
-          >
-            <option value="">{DEFAULT_FONT_LABEL}</option>
-            {fonts.map((name) => (
-              <option key={name} value={name} style={{ fontFamily: familyOf(name) }}>
-                {installed.has(name) ? name : `${name} (not installed)`}
-              </option>
-            ))}
-            <option value={CUSTOM_FONT}>Custom…</option>
-          </select>
-          {showCustom && (
-            <input
+      )}
+      {ghostty.fontFamily !== undefined ? (
+        <GhosttyValueRow
+          label="Font family"
+          testId="settings-font-choice"
+          value={ghostty.fontFamily}
+        />
+      ) : (
+        <div className="settings-row">
+          <label className="settings-label" htmlFor={familyId}>
+            Font family
+          </label>
+          <div className="settings-control">
+            <select
+              id={familyId}
               className="settings-input"
-              data-testid="settings-font-family"
-              aria-label="Custom font family"
-              value={family}
-              maxLength={MAX_FONT_FAMILY_LENGTH}
-              placeholder={DEFAULT_FONT_FAMILY}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(e) => setFamily(e.target.value)}
-              onBlur={applyFamily}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return
-                e.preventDefault()
-                applyFamily()
-              }}
-            />
-          )}
-          <p className="field-hint">
-            {showCustom
-              ? 'Any CSS font family, e.g. "Comic Mono", monospace. Prompt icons work with any font.'
-              : 'Installed coding fonts. Prompt icons (Nerd Font glyphs) work with any font.'}
-          </p>
+              data-testid="settings-font-choice"
+              value={fontValue}
+              onChange={(e) => pickFont(e.target.value)}
+            >
+              <option value="">{DEFAULT_FONT_LABEL}</option>
+              {fonts.map((name) => (
+                <option key={name} value={name} style={{ fontFamily: familyOf(name) }}>
+                  {installed.has(name) ? name : `${name} (not installed)`}
+                </option>
+              ))}
+              <option value={CUSTOM_FONT}>Custom…</option>
+            </select>
+            {showCustom && (
+              <input
+                className="settings-input"
+                data-testid="settings-font-family"
+                aria-label="Custom font family"
+                value={family}
+                maxLength={MAX_FONT_FAMILY_LENGTH}
+                placeholder={DEFAULT_FONT_FAMILY}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(e) => setFamily(e.target.value)}
+                onBlur={applyFamily}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  applyFamily()
+                }}
+              />
+            )}
+            <p className="field-hint">
+              {showCustom
+                ? 'Any CSS font family, e.g. "Comic Mono", monospace. Prompt icons work with any font.'
+                : 'Installed coding fonts. Prompt icons (Nerd Font glyphs) work with any font.'}
+            </p>
+          </div>
         </div>
-      </div>
-      <SelectRow
-        label="Font weight"
-        testId="settings-font-weight"
-        value={String(settings.fontWeight)}
-        options={FONT_WEIGHTS.map((w) => [String(w), FONT_WEIGHT_LABELS[w]])}
-        onChange={(v) => settingsStore.update({ fontWeight: Number(v) })}
-      />
-      <SelectRow
-        label="Line height"
-        testId="settings-line-height"
-        value={String(settings.lineHeight)}
-        options={LINE_HEIGHTS.map((h) => [String(h), h === 1 ? '1.0 (default)' : h.toFixed(1)])}
-        onChange={(v) => settingsStore.update({ lineHeight: Number(v) })}
-      />
+      )}
+      {ghostty.fontWeight !== undefined ? (
+        <GhosttyValueRow
+          label="Font weight"
+          testId="settings-font-weight"
+          value={`${FONT_WEIGHT_LABELS[ghostty.fontWeight]} (font-thicken)`}
+        />
+      ) : (
+        <SelectRow
+          label="Font weight"
+          testId="settings-font-weight"
+          value={String(settings.fontWeight)}
+          options={FONT_WEIGHTS.map((w) => [String(w), FONT_WEIGHT_LABELS[w]])}
+          onChange={(v) => settingsStore.update({ fontWeight: Number(v) })}
+        />
+      )}
+      {ghostty.lineHeight !== undefined ? (
+        <GhosttyValueRow
+          label="Line height"
+          testId="settings-line-height"
+          value={ghostty.lineHeight.toFixed(1)}
+        />
+      ) : (
+        <SelectRow
+          label="Line height"
+          testId="settings-line-height"
+          value={String(settings.lineHeight)}
+          options={LINE_HEIGHTS.map((h) => [String(h), h === 1 ? '1.0 (default)' : h.toFixed(1)])}
+          onChange={(v) => settingsStore.update({ lineHeight: Number(v) })}
+        />
+      )}
       <SelectRow
         label="Letter spacing"
         testId="settings-letter-spacing"
@@ -848,24 +913,147 @@ function SegmentedRow<T extends string>({
   )
 }
 
+const PADDINGS = [0, 2, 4, 6, 8, 10, 12, 16, 20, 24, 32, 40]
+/** Unfocused pane opacities offered: 1 is not dimmed. */
+const PANE_OPACITIES = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2].filter(
+  (o) => o >= MIN_UNFOCUSED_PANE_OPACITY
+)
+const opacityLabel = (o: number): string =>
+  o === 1 ? 'Not dimmed' : `${Math.round(o * 100)}% shown`
+
+/**
+ * How panes are laid out and told apart: the padding around each terminal's text, how much an
+ * unfocused split pane is dimmed, and the colour of the line between panes (Ghostty's
+ * `window-padding-x`/`-y`, `unfocused-split-opacity` and `split-divider-color`).
+ */
+function PaneLookRows(): React.JSX.Element {
+  const settings = useSettings()
+  const ghostty = useGhosttySet()
+  const id = useId()
+  const px = (n: number): string => `${n} px`
+  const paddingRow = (
+    key: 'paddingX' | 'paddingY',
+    label: string,
+    testId: string
+  ): React.JSX.Element => {
+    const set = ghostty[key]
+    if (set !== undefined) return <GhosttyValueRow label={label} testId={testId} value={px(set)} />
+    // A value from the file that isn't listed still shows as itself.
+    const values = PADDINGS.includes(settings[key]) ? PADDINGS : [...PADDINGS, settings[key]]
+    return (
+      <SelectRow
+        label={label}
+        testId={testId}
+        value={String(settings[key])}
+        options={values
+          .sort((a, b) => a - b)
+          .map((n) => [String(n), n === 0 ? '0 px (default)' : px(n)])}
+        onChange={(v) => settingsStore.update({ [key]: Number(v) })}
+      />
+    )
+  }
+  const opacity = settings.unfocusedPaneOpacity
+  const opacities = PANE_OPACITIES.includes(opacity) ? PANE_OPACITIES : [...PANE_OPACITIES, opacity]
+  const divider = ghostty.paneDividerColor ?? settings.paneDividerColor
+  return (
+    <>
+      {paddingRow('paddingX', 'Padding left and right', 'settings-padding-x')}
+      {paddingRow('paddingY', 'Padding top and bottom', 'settings-padding-y')}
+      {ghostty.unfocusedPaneOpacity !== undefined ? (
+        <GhosttyValueRow
+          label="Unfocused panes"
+          testId="settings-unfocused-opacity"
+          value={opacityLabel(ghostty.unfocusedPaneOpacity)}
+        />
+      ) : (
+        <SelectRow
+          label="Unfocused panes"
+          hint="Dims every split pane but the focused one."
+          testId="settings-unfocused-opacity"
+          value={String(opacity)}
+          options={opacities.sort((a, b) => b - a).map((o) => [String(o), opacityLabel(o)])}
+          onChange={(v) => settingsStore.update({ unfocusedPaneOpacity: Number(v) })}
+        />
+      )}
+      {ghostty.paneDividerColor !== undefined ? (
+        <GhosttyValueRow
+          label="Divider colour"
+          testId="settings-divider-colour"
+          value={
+            <>
+              <span className="colour-swatch" style={{ background: divider }} />
+              {divider}
+            </>
+          }
+        />
+      ) : (
+        <div className="settings-row">
+          <label className="settings-label" htmlFor={`${id}-divider`}>
+            Divider colour
+          </label>
+          <div className="settings-control settings-inline">
+            <input
+              id={`${id}-divider`}
+              type="color"
+              className="colour-input"
+              data-testid="settings-divider-colour"
+              value={divider === '' ? '#3a3e4c' : divider}
+              onChange={(e) => settingsStore.update({ paneDividerColor: e.target.value })}
+            />
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="settings-divider-colour-reset"
+              disabled={divider === ''}
+              onClick={() => settingsStore.update({ paneDividerColor: '' })}
+            >
+              Default
+            </button>
+            <p className="field-hint">
+              {divider === '' ? 'The app theme’s border colour.' : 'The line between split panes.'}
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 /** The terminal's behaviour: cursor, bold colours, scrollback, bell, input and shell integration. */
 function TerminalBehaviourRows(): React.JSX.Element {
   const settings = useSettings()
+  const ghostty = useGhosttySet()
   return (
     <>
-      <SegmentedRow
-        label="Cursor"
-        testId="settings-cursor"
-        value={settings.cursorStyle}
-        labels={CURSOR_LABELS}
-        onChange={(cursorStyle) => settingsStore.update({ cursorStyle })}
-      />
-      <SwitchRow
-        label="Blinking cursor"
-        testId="settings-cursor-blink"
-        checked={settings.cursorBlink}
-        onChange={(cursorBlink) => settingsStore.update({ cursorBlink })}
-      />
+      {ghostty.cursorStyle !== undefined ? (
+        <GhosttyValueRow
+          label="Cursor"
+          testId="settings-cursor"
+          value={CURSOR_LABELS[ghostty.cursorStyle]}
+        />
+      ) : (
+        <SegmentedRow
+          label="Cursor"
+          testId="settings-cursor"
+          value={settings.cursorStyle}
+          labels={CURSOR_LABELS}
+          onChange={(cursorStyle) => settingsStore.update({ cursorStyle })}
+        />
+      )}
+      {ghostty.cursorBlink !== undefined ? (
+        <GhosttyValueRow
+          label="Blinking cursor"
+          testId="settings-cursor-blink"
+          value={onOff(ghostty.cursorBlink)}
+        />
+      ) : (
+        <SwitchRow
+          label="Blinking cursor"
+          testId="settings-cursor-blink"
+          checked={settings.cursorBlink}
+          onChange={(cursorBlink) => settingsStore.update({ cursorBlink })}
+        />
+      )}
       <SwitchRow
         label="Bold in bright colours"
         hint="Bold text uses the bright ANSI colours, as most terminals do."
@@ -902,22 +1090,52 @@ function TerminalBehaviourRows(): React.JSX.Element {
         labels={BELL_LABELS}
         onChange={(bell) => settingsStore.update({ bell })}
       />
-      <SwitchRow
-        label="Copy on select"
-        hint="Selecting text in a terminal copies it."
-        testId="settings-copy-on-select"
-        checked={settings.copyOnSelect}
-        onChange={(copyOnSelect) => settingsStore.update({ copyOnSelect })}
-      />
-      {window.bikube.platform === 'darwin' && (
+      {ghostty.copyOnSelect !== undefined ? (
+        <GhosttyValueRow
+          label="Copy on select"
+          testId="settings-copy-on-select"
+          value={onOff(ghostty.copyOnSelect)}
+        />
+      ) : (
         <SwitchRow
-          label="Option as Meta"
-          hint="Option+B, Option+F and Alt shortcuts reach the shell instead of typing ∫ or ƒ."
-          testId="settings-option-meta"
-          checked={settings.optionAsMeta}
-          onChange={(optionAsMeta) => settingsStore.update({ optionAsMeta })}
+          label="Copy on select"
+          hint="Selecting text in a terminal copies it."
+          testId="settings-copy-on-select"
+          checked={settings.copyOnSelect}
+          onChange={(copyOnSelect) => settingsStore.update({ copyOnSelect })}
         />
       )}
+      {ghostty.hideMouseWhileTyping !== undefined ? (
+        <GhosttyValueRow
+          label="Hide pointer while typing"
+          testId="settings-hide-mouse"
+          value={onOff(ghostty.hideMouseWhileTyping)}
+        />
+      ) : (
+        <SwitchRow
+          label="Hide pointer while typing"
+          hint="The pointer hides over a terminal as you type, until you move the mouse."
+          testId="settings-hide-mouse"
+          checked={settings.hideMouseWhileTyping}
+          onChange={(hideMouseWhileTyping) => settingsStore.update({ hideMouseWhileTyping })}
+        />
+      )}
+      {window.bikube.platform === 'darwin' &&
+        (ghostty.optionAsMeta !== undefined ? (
+          <GhosttyValueRow
+            label="Option as Meta"
+            testId="settings-option-meta"
+            value={onOff(ghostty.optionAsMeta)}
+          />
+        ) : (
+          <SwitchRow
+            label="Option as Meta"
+            hint="Option+B, Option+F and Alt shortcuts reach the shell instead of typing ∫ or ƒ."
+            testId="settings-option-meta"
+            checked={settings.optionAsMeta}
+            onChange={(optionAsMeta) => settingsStore.update({ optionAsMeta })}
+          />
+        ))}
       <SwitchRow
         label="Shell integration"
         hint="Prompt marks and command status in zsh, bash and fish. Applies to new terminals."
@@ -1141,10 +1359,11 @@ function useResolvedTheme(): ResolvedTheme {
 }
 
 /**
- * The Terminal section: where the colours come from, Bikube's built-in themes (one for the dark
- * app theme, one for the light, each picked in the theme picker) or the user's Ghostty config
- * (with what was read and Reload), then the font rows (#66 D5) and a preview of the terminal in
- * the colours and font in effect now, redrawn as either changes (D6).
+ * The Terminal section: Use Ghostty config (with what was read and Reload), else Bikube's
+ * built-in colour themes (one for the dark app theme, one for the light, each picked in the theme
+ * picker), then the font rows (#66 D5), a preview of the terminal in the colours and font in
+ * effect now, redrawn as either changes (D6), the pane rows and the behaviour rows. Every row the
+ * Ghostty config sets shows its value instead of the control.
  */
 function TerminalColoursField({
   onPick,
@@ -1156,7 +1375,8 @@ function TerminalColoursField({
   setFamily: (family: string) => void
 }): React.JSX.Element {
   const settings = useSettings()
-  const ghostty = useGhosttyTheme()
+  const effective = useEffectiveSettings()
+  const ghostty = useGhosttyRead()
   const resolved = useResolvedTheme()
   const id = useId()
   const [reading, setReading] = useState(false)
@@ -1165,35 +1385,20 @@ function TerminalColoursField({
     void ghosttyStore.reload().finally(() => setReading(false))
   }
 
-  const useGhostty = settings.useGhosttyTheme
+  const useGhostty = settings.useGhosttyConfig
   const palette = terminalPalette(settings, resolved, ghosttyStore.palettes())
   return (
     <>
-      <fieldset className="settings-row">
-        <legend className="settings-label">Colours</legend>
-        <div className="segmented">
-          {(
-            [
-              [false, 'Built-in themes', 'settings-colours-builtin'],
-              [true, 'From Ghostty', 'settings-use-ghostty']
-            ] as const
-          ).map(([value, label, testId]) => (
-            <label key={label} className="radio">
-              <input
-                type="radio"
-                name={`${id}-colours`}
-                data-testid={testId}
-                checked={useGhostty === value}
-                onChange={() => {
-                  settingsStore.update({ useGhosttyTheme: value })
-                  if (value) reload()
-                }}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <SwitchRow
+        label="Use Ghostty config"
+        hint="Colours, font, cursor, padding and split looks from your Ghostty config. What it doesn’t set stays as below."
+        testId="settings-use-ghostty"
+        checked={useGhostty}
+        onChange={(value) => {
+          settingsStore.update({ useGhosttyConfig: value })
+          if (value) reload()
+        }}
+      />
       {!useGhostty &&
         (['dark', 'light'] as const).map((appearance) => {
           const name =
@@ -1271,13 +1476,14 @@ function TerminalColoursField({
         <span className="settings-label">Preview</span>
         <TerminalPreview
           palette={palette}
-          fontFamily={withSymbols(settings.fontFamily)}
-          fontSize={settings.fontSize}
-          fontWeight={settings.fontWeight}
-          lineHeight={settings.lineHeight}
-          letterSpacing={settings.letterSpacing}
+          fontFamily={withSymbols(effective.fontFamily)}
+          fontSize={effective.fontSize}
+          fontWeight={effective.fontWeight}
+          lineHeight={effective.lineHeight}
+          letterSpacing={effective.letterSpacing}
         />
       </div>
+      <PaneLookRows />
       <TerminalBehaviourRows />
     </>
   )
@@ -1414,19 +1620,33 @@ type Recording = ShortcutAction | 'global'
  * stops recording; a press that can't be a shortcut, or is already used, shows why and keeps
  * recording. A new shortcut, a Reset or a Clear applies and saves at once, like the dialog's other
  * fields. While any field records, main holds no global shortcut (#51 D6), so its press reaches
- * the recorder.
+ * the recorder. With Use Ghostty shortcuts on, an action Ghostty binds shows Ghostty's shortcut,
+ * with no recording or Reset, and a recorded shortcut is refused when Ghostty's action has it.
  */
 function ShortcutsSection({
-  keymap,
+  keymap: ownKeymap,
   globalShortcut,
-  openWaitingOnShow
+  openWaitingOnShow,
+  useGhosttyShortcuts
 }: {
+  /** Bikube's own shortcuts, the user's changes included: what Reset and recording change. */
   keymap: Keymap
   /** Refused to every in-app action (#51 D5). */
   globalShortcut?: string
   openWaitingOnShow: boolean
+  useGhosttyShortcuts: boolean
 }): React.JSX.Element {
   const platform = window.bikube.platform
+  const ghosttyRead = useGhosttyRead()
+  const fromGhostty = ghosttyKeymap()
+  // Every shortcut in effect, Ghostty's included: what a recorded one may not share.
+  const keymap = fromGhostty?.keymap ?? ownKeymap
+  const ghosttySet = new Set<ShortcutAction>(fromGhostty?.fromGhostty ?? [])
+  const [readingGhostty, setReadingGhostty] = useState(false)
+  const reloadGhostty = (): void => {
+    setReadingGhostty(true)
+    void ghosttyStore.reload().finally(() => setReadingGhostty(false))
+  }
   const defaults = defaultKeymap(platform)
   const id = useId()
   const [recording, setRecording] = useState<Recording | null>(null)
@@ -1471,7 +1691,7 @@ function ShortcutsSection({
 
   const apply = (action: ShortcutAction, shortcut: string): void => {
     settingsStore.update({
-      shortcuts: shortcutOverrides({ ...keymap, [action]: shortcut }, platform)
+      shortcuts: shortcutOverrides({ ...ownKeymap, [action]: shortcut }, platform)
     })
   }
 
@@ -1581,10 +1801,12 @@ function ShortcutsSection({
           )}
         </div>
         <div className="shortcut-row">
-          <label className="shortcut-label" htmlFor={`${id}-open-waiting`}>
-            Open the next waiting card
-          </label>
-          <span className="switch shortcut-switch">
+          <div className="shortcut-text">
+            <label className="shortcut-label" htmlFor={`${id}-open-waiting`}>
+              Open the next waiting card
+            </label>
+          </div>
+          <span className="switch shortcut-control">
             <input
               id={`${id}-open-waiting`}
               type="checkbox"
@@ -1597,6 +1819,72 @@ function ShortcutsSection({
           </span>
         </div>
       </fieldset>
+      <fieldset className="field shortcuts" data-testid="settings-shortcuts-ghostty">
+        <legend>Ghostty</legend>
+        <div className="shortcut-row">
+          <div className="shortcut-text">
+            <label className="shortcut-label" htmlFor={`${id}-use-ghostty`}>
+              Use Ghostty shortcuts
+            </label>
+            <p className="field-hint" id={`${id}-use-ghostty-hint`}>
+              {!useGhosttyShortcuts
+                ? 'Ghostty’s keys for splits, panes, zoom, prompts and Find, from its defaults and your keybind lines.'
+                : ghosttyRead === null
+                  ? 'Reading the Ghostty config…'
+                  : `${ghosttySet.size} shortcuts below come from Ghostty${
+                      ghosttyRead.files.length === 0 ? ' (its defaults: no config found)' : ''
+                    }, marked Ghostty.`}
+            </p>
+          </div>
+          <span className="shortcut-control">
+            <span className="switch">
+              <input
+                id={`${id}-use-ghostty`}
+                type="checkbox"
+                role="switch"
+                aria-describedby={`${id}-use-ghostty-hint`}
+                data-testid="settings-use-ghostty-shortcuts"
+                checked={useGhosttyShortcuts}
+                onChange={(e) => {
+                  stop()
+                  settingsStore.update({ useGhosttyShortcuts: e.target.checked })
+                  if (e.target.checked) reloadGhostty()
+                }}
+              />
+              <span className="switch-track" aria-hidden="true" />
+            </span>
+            {useGhosttyShortcuts && (
+              <button
+                type="button"
+                className="icon-btn"
+                data-testid="settings-ghostty-shortcuts-reload"
+                aria-label="Reload the Ghostty config"
+                title="Reload the Ghostty config"
+                disabled={readingGhostty}
+                onClick={reloadGhostty}
+              >
+                <RotateCw {...SMALL_ICON} />
+              </button>
+            )}
+          </span>
+          {(fromGhostty?.skipped.length ?? 0) > 0 && (
+            <div className="shortcut-skipped" data-testid="settings-ghostty-shortcuts-status">
+              <p className="field-hint">Not used, since Bikube already uses the key:</p>
+              <ul>
+                {fromGhostty!.skipped.map((line) => (
+                  <li
+                    key={line}
+                    className="field-hint"
+                    data-testid="settings-ghostty-shortcut-skipped"
+                  >
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </fieldset>
       {/* Named Shortcuts for assistive tech, as before the Global group (#31). */}
       <fieldset className="field shortcuts" data-testid="settings-shortcuts" aria-label="Shortcuts">
         <legend>In Bikube</legend>
@@ -1604,8 +1892,20 @@ function ShortcutsSection({
           <div key={action} className="shortcut-row">
             <span id={`${id}-${action}`} className="shortcut-label">
               {SHORTCUT_LABELS[action]}
+              {ghosttySet.has(action) && (
+                <span
+                  className="shortcut-source"
+                  data-testid={`settings-shortcut-ghostty-${action}`}
+                >
+                  Ghostty
+                </span>
+              )}
             </span>
-            <button {...fieldProps(action)} data-testid={`settings-shortcut-${action}`}>
+            <button
+              {...fieldProps(action)}
+              disabled={ghosttySet.has(action)}
+              data-testid={`settings-shortcut-${action}`}
+            >
               <span id={`${id}-${action}-value`}>
                 {recording === action && refusal?.action !== action ? (
                   'Press a shortcut…'
@@ -1619,7 +1919,7 @@ function ShortcutsSection({
               className="btn btn-small shortcut-reset"
               data-testid={`settings-shortcut-reset-${action}`}
               aria-label={`Reset ${SHORTCUT_LABELS[action]}`}
-              disabled={keymap[action] === defaults[action]}
+              disabled={ghosttySet.has(action) || ownKeymap[action] === defaults[action]}
               onClick={() => {
                 if (recording === action) stop()
                 // The default may be another action's shortcut now: refused, the value stays.

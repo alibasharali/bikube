@@ -243,7 +243,7 @@ test('a saved Light theme gives a light window and board from the start', async 
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -263,7 +263,7 @@ test('a saved Dark theme gives a dark window and board from the start, whatever 
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -541,7 +541,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
 
   await page.keyboard.press(SHORTCUT)
@@ -552,7 +552,7 @@ test('AC6: a typed family applies when the dialog closes by Escape or a click ou
   await expect.poll(async () => (await openLook(page)).fontFamily).toBe('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":13,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
 })
 
@@ -569,7 +569,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(dialog(page).getByTestId('settings-error-font-size')).toHaveCount(0)
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   for (const text of ['40', '7', '12.5', 'abc']) {
     await size.fill(text)
@@ -585,7 +585,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('Courier New, monospace')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
 
   // Closing drops the invalid size; reopening shows the last valid one.
@@ -601,7 +601,7 @@ test('font fields: an invalid size shows the error and is not applied; the famil
   await expect(family).toHaveValue('')
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"system","fontSize":18,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
 })
 
@@ -625,7 +625,7 @@ test('AC7: Light, size 16 and Courier New are kept across a restart, and the boa
 
   await app.close()
   const expected =
-    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":16,"fontFamily":"Courier New, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   expect(readSettingsFile(dataDir)).toBe(expected)
   const statePath = join(dataDir, 'bikube-state.json')
   const stateBefore = JSON.parse(readFileSync(statePath, 'utf8')) as { version: number }
@@ -671,7 +671,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -687,7 +687,7 @@ test('AC8: invalid fields take their defaults, the rest is kept, and the next ch
   await dialog(page).getByRole('radio', { name: 'Dark' }).check()
   await expectSettingsFile(
     dataDir,
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   // The app works: a workspace and a running card.
   await page.keyboard.press('Escape')
@@ -1206,7 +1206,7 @@ test('#64 AC3: with no app theme the board keeps Default, dark and light', async
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -1225,7 +1225,7 @@ test('#64 AC5: a saved Bikube theme is the window background and the first paint
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","appTheme":"bikube","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","appTheme":"bikube","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app
@@ -1258,7 +1258,7 @@ test('#64 AC7: changing the app theme leaves the running terminal theme and pane
   const dataDir = newDataDir()
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Dracula","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"light","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Dracula","useGhosttyConfig":false}}'
   )
   const launched = await launchApp({ dataDir })
   app = launched.app

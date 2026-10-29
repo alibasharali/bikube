@@ -15,14 +15,14 @@ const NEW_FIELDS = {
   shell: '',
   terminalThemeDark: 'Bikube Dark',
   terminalThemeLight: 'Bikube Light',
-  useGhosttyTheme: false,
+  useGhosttyConfig: false,
   ...PREFERENCE_DEFAULTS
 }
 
 describe('parseSettingsFile (#10 D7, AC8)', () => {
   it('replaces the invalid fields with defaults and keeps the valid ones', () => {
     const parsed = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}',
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}',
       'linux'
     )
     expect(parsed.settings).toEqual({
@@ -42,11 +42,11 @@ describe('parseSettingsFile (#10 D7, AC8)', () => {
 
   it('serializes a change to dark as exactly the expected file', () => {
     const { settings } = parseSettingsFile(
-      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}',
+      '{"version":1,"settings":{"theme":"neon","fontSize":99,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}',
       'linux'
     )
     expect(serializeSettings({ ...settings, theme: 'dark' })).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Courier New","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
     )
   })
 })
@@ -271,10 +271,10 @@ describe('syncFolder in the settings file (#13 D10, AC12)', () => {
   it('writes syncFolder after the font family, and leaves it out when off', () => {
     const settings = { theme: 'dark' as const, fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
     expect(serializeSettings(settings, '/Users/me/Sync')).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"syncFolder":"/Users/me/Sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false,"syncFolder":"/Users/me/Sync"}}'
     )
     expect(serializeSettings(settings, null)).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
     )
   })
 
@@ -309,7 +309,7 @@ describe('shell and terminal colours in the settings file', () => {
       shell: '/opt/homebrew/bin/fish',
       terminalThemeDark: 'Catppuccin Mocha',
       terminalThemeLight: 'Catppuccin Latte',
-      useGhosttyTheme: true
+      useGhosttyConfig: true
     }
     expect(parseSettingsFile(file({ ...base, ...fields }), 'linux').settings).toEqual({
       ...base,
@@ -325,7 +325,7 @@ describe('shell and terminal colours in the settings file', () => {
         shell: 'fish',
         terminalThemeDark: 'No Such Theme',
         terminalThemeLight: 7,
-        useGhosttyTheme: 'yes'
+        useGhosttyConfig: 'yes'
       }),
       'linux'
     )
@@ -334,7 +334,7 @@ describe('shell and terminal colours in the settings file', () => {
       'shell',
       'terminalThemeDark',
       'terminalThemeLight',
-      'useGhosttyTheme'
+      'useGhosttyConfig'
     ])
   })
 
@@ -386,10 +386,10 @@ describe('shortcuts in the settings file (#31 D9, AC8)', () => {
     expect(parsed.settings.shortcuts).toEqual({ splitRight: 'Ctrl+Alt+R' })
     expect(parsed.replaced).toEqual([])
     expect(serializeSettings(parsed.settings, '/Sync')).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false,"shortcuts":{"splitRight":"Ctrl+Alt+R"},"syncFolder":"/Sync"}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false,"shortcuts":{"splitRight":"Ctrl+Alt+R"},"syncFolder":"/Sync"}}'
     )
     expect(serializeSettings({ ...parsed.settings, shortcuts: {} })).toBe(
-      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+      '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
     )
   })
 
@@ -825,6 +825,36 @@ describe('the Card display limit preference', () => {
       const parsed = parseSettingsFile(file({ ...base, columnCardLimit: value }), 'linux')
       expect(parsed.settings.columnCardLimit).toBe(10)
       expect(parsed.replaced).toEqual(['columnCardLimit'])
+    }
+  })
+})
+
+describe('Use Ghostty config and the pane settings', () => {
+  it('reads a file from before it, whose useGhosttyTheme is the same switch', () => {
+    const text = JSON.stringify({ version: 1, settings: { useGhosttyTheme: true } })
+    expect(parseSettingsFile(text, 'darwin').settings.useGhosttyConfig).toBe(true)
+  })
+
+  it('checks the padding, dim, divider colour, pointer and Ghostty shortcut settings', () => {
+    const base = { ...DEFAULT_SETTINGS }
+    const valid = {
+      paddingX: 10,
+      paddingY: 40,
+      unfocusedPaneOpacity: 0.5,
+      paneDividerColor: '#7cd5f1',
+      hideMouseWhileTyping: true,
+      useGhosttyShortcuts: true
+    }
+    expect(validateSettings({ ...base, ...valid }, 'darwin')).toMatchObject(valid)
+    for (const bad of [
+      { paddingX: 41 },
+      { paddingY: 1.5 },
+      { unfocusedPaneOpacity: 0.1 },
+      { unfocusedPaneOpacity: 0.555 },
+      { paneDividerColor: 'cyan' },
+      { useGhosttyShortcuts: 'yes' }
+    ]) {
+      expect(validateSettings({ ...base, ...bad }, 'darwin')).toBeNull()
     }
   })
 })

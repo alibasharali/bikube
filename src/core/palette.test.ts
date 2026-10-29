@@ -218,6 +218,7 @@ describe('paletteItems actions (#40 D6)', () => {
       'Find',
       'Copy command output',
       'Open in new window',
+      'Rename card…',
       'Edit description…',
       'Move card to In Progress',
       'Move card to Review',
@@ -244,12 +245,13 @@ describe('paletteItems actions (#40 D6)', () => {
 
   it('offers no splits or Close card for a stopped card', () => {
     const view = { ...cardView, running: false }
-    expect(labels(input(state, { view })).slice(0, 7)).toEqual([
+    expect(labels(input(state, { view })).slice(0, 8)).toEqual([
       'Back to board',
       'Toggle panel',
       'Find',
       'Copy command output',
       'Open in new window',
+      'Rename card…',
       'Edit description…',
       'Move card to In Progress'
     ])
@@ -339,6 +341,13 @@ describe('paletteItems actions (#40 D6)', () => {
       'Zoom pane'
     ])
     expect(rows[8]).toMatchObject({ action: { id: 'zoomPane' }, shortcut: 'Ctrl+Shift+Enter' })
+    // With panes to move between: Next pane, Previous pane and Equalize panes after it.
+    expect(rows.slice(9, 12).map((r) => r.label)).toEqual([
+      'Next pane',
+      'Previous pane',
+      'Equalize panes'
+    ])
+    expect(labels(input(state, { view: cardView }))).not.toContain('Next pane')
     expect(labels(input(state, { view: { ...cardView, zoomed: true } }))).toContain('Zoom pane')
   })
 
@@ -346,9 +355,9 @@ describe('paletteItems actions (#40 D6)', () => {
     const rows = paletteItems(input(state, { view: cardView })).actions
     const at = rows.findIndex((r) => r.label === 'Open in new window')
     expect(rows[at]).toMatchObject({ action: { id: 'openInWindow' }, shortcut: 'Ctrl+Shift+O' })
-    // After the view's own actions, before Edit description… (#69 D4) and the moves.
+    // After the view's own actions, before Rename card…, Edit description… (#69 D4) and the moves.
     expect(rows[at - 1].label).toBe('Copy command output')
-    expect(rows[at + 1].label).toBe('Edit description…')
+    expect(rows[at + 1].label).toBe('Rename card…')
     const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
     expect(labels(input(state, { view: shell }))).toContain('Open in new window')
     expect(labels(input(state, { view: { ...cardView, running: false } }))).toContain(

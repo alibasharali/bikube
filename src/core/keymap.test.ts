@@ -44,7 +44,15 @@ describe('defaultKeymap (#31 D6)', () => {
       nextPrompt: 'Cmd+ArrowDown',
       zoomPane: 'Shift+Cmd+Enter',
       openInWindow: 'Shift+Cmd+O',
-      copyCommandOutput: 'Shift+Cmd+A'
+      copyCommandOutput: 'Shift+Cmd+A',
+      focusNextPane: 'Cmd+]',
+      focusPreviousPane: 'Cmd+[',
+      equalizePanes: 'Ctrl+Cmd+=',
+      resizePaneLeft: 'Ctrl+Cmd+ArrowLeft',
+      resizePaneRight: 'Ctrl+Cmd+ArrowRight',
+      resizePaneUp: 'Ctrl+Cmd+ArrowUp',
+      resizePaneDown: 'Ctrl+Cmd+ArrowDown',
+      renameCard: 'Alt+Cmd+R'
     })
     for (const platform of ['linux', 'win32']) {
       expect(defaultKeymap(platform)).toEqual({
@@ -63,7 +71,15 @@ describe('defaultKeymap (#31 D6)', () => {
         nextPrompt: 'Ctrl+Shift+ArrowDown',
         zoomPane: 'Ctrl+Shift+Enter',
         openInWindow: 'Ctrl+Shift+O',
-        copyCommandOutput: 'Ctrl+Shift+A'
+        copyCommandOutput: 'Ctrl+Shift+A',
+        focusNextPane: 'Ctrl+Cmd+]',
+        focusPreviousPane: 'Ctrl+Cmd+[',
+        equalizePanes: 'Ctrl+Cmd+=',
+        resizePaneLeft: 'Ctrl+Shift+Cmd+ArrowLeft',
+        resizePaneRight: 'Ctrl+Shift+Cmd+ArrowRight',
+        resizePaneUp: 'Ctrl+Shift+Cmd+ArrowUp',
+        resizePaneDown: 'Ctrl+Shift+Cmd+ArrowDown',
+        renameCard: 'Ctrl+Shift+F2'
       })
     }
   })
@@ -529,9 +545,11 @@ describe('recordPress (#31 D8, AC7)', () => {
       refused('Already used by Toggle Developer Tools')
     )
     expect(record(press('z', { metaKey: true }), 'darwin')).toEqual(refused('Already used by Undo'))
-    expect(record(press('r', { metaKey: true }), 'darwin')).toEqual(
-      refused('Already used by Reload')
-    )
+    // macOS's Reload has no Cmd+R, so a shortcut (Ghostty's `cmd+r`) can take it.
+    expect(record(press('r', { metaKey: true }), 'darwin')).toEqual({
+      kind: 'set',
+      shortcut: 'Cmd+R'
+    })
     expect(record(press('a', { metaKey: true }), 'darwin')).toEqual(
       refused('Already used by Select All')
     )

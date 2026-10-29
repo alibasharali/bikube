@@ -11,9 +11,9 @@ import { startTemporaryShells } from './temporary-shells'
 import { startInstalledAgents } from './installed-agents'
 import { startInstalledEditors } from './installed-editors'
 import { listenForBoardRequests } from './board-requests'
-import { loadGhosttyTheme } from './ghostty'
+import { loadGhosttyConfig } from './ghostty'
 import { loadHomeDir } from './home'
-import { loadSettingsStore } from './settings'
+import { loadSettingsStore, settingsStore } from './settings'
 import { loadSymbolsFont } from './symbols-font'
 import { loadWorkspaceStore } from './store'
 import { listenForSyncBoards, loadSyncStatus, receiveSyncBoards } from './sync'
@@ -30,7 +30,7 @@ receiveSyncBoards()
 // xterm caches the glyphs it draws first.
 void Promise.all([
   loadWorkspaceStore(),
-  loadSettingsStore().then(loadGhosttyTheme),
+  loadSettingsStore().then(() => loadGhosttyConfig(settingsStore.get())),
   loadSyncStatus(),
   loadSymbolsFont(),
   loadHomeDir()

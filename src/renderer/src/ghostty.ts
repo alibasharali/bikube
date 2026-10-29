@@ -1,18 +1,18 @@
 import { useSyncExternalStore } from 'react'
-import type { GhosttyTheme } from '../../core/ghostty-config'
+import type { GhosttyConfig } from '../../core/ghostty-config'
 import type { GhosttyPalettes } from '../../core/terminal-appearance'
-import { settingsStore } from './settings'
+import type { Settings } from '../../core/settings'
 
 /**
- * The user's Ghostty colours, read by main when "Use Ghostty theme" is on: at launch, when the
- * setting is turned on, and on Reload. Null until the first read.
+ * The user's Ghostty config, read by main while "Use Ghostty config" or "Use Ghostty shortcuts"
+ * is on: at launch, when either is turned on, and on Reload. Null until the first read.
  */
-let current: GhosttyTheme | null = null
+let current: GhosttyConfig | null = null
 const listeners = new Set<() => void>()
 let reading: Promise<void> | null = null
 
 export const ghosttyStore = {
-  get: (): GhosttyTheme | null => current,
+  get: (): GhosttyConfig | null => current,
   palettes: (): GhosttyPalettes => (current ? { dark: current.dark, light: current.light } : null),
   subscribe(listener: () => void): () => void {
     listeners.add(listener)
@@ -21,7 +21,7 @@ export const ghosttyStore = {
   /** Reads the Ghostty config again; a read already running is reused. */
   reload(): Promise<void> {
     reading ??= window.bikube.settings
-      .ghosttyTheme()
+      .ghosttyConfig()
       .then((theme) => {
         current = theme
         for (const listener of [...listeners]) listener()
@@ -33,11 +33,13 @@ export const ghosttyStore = {
   }
 }
 
-/** Reads the Ghostty colours before the first render when the setting is on. */
-export async function loadGhosttyTheme(): Promise<void> {
-  if (settingsStore.get().useGhosttyTheme) await ghosttyStore.reload().catch(() => undefined)
+/** Reads the Ghostty config before the first render when either setting is on. */
+export async function loadGhosttyConfig(settings: Settings): Promise<void> {
+  if (settings.useGhosttyConfig || settings.useGhosttyShortcuts) {
+    await ghosttyStore.reload().catch(() => undefined)
+  }
 }
 
-export function useGhosttyTheme(): GhosttyTheme | null {
+export function useGhosttyRead(): GhosttyConfig | null {
   return useSyncExternalStore(ghosttyStore.subscribe, ghosttyStore.get)
 }

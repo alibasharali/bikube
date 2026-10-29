@@ -106,6 +106,10 @@ export type PaletteAction =
   | { id: 'openShell' }
   | { id: 'nextWaiting' }
   | { id: 'zoomPane' }
+  | { id: 'focusNextPane' }
+  | { id: 'focusPreviousPane' }
+  | { id: 'equalizePanes' }
+  | { id: 'renameCard' }
   | { id: 'openInWindow' }
   | { id: 'editDescription' }
   | { id: 'newWorkspace' }
@@ -250,14 +254,25 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   }
   // Whenever the view has panes to zoom, or is zoomed (#48 D7).
   if (view.paneCount > 1 || view.zoomed) rows.push(keymapRow('zoomPane', keymap))
+  if (view.paneCount > 1) {
+    rows.push(
+      keymapRow('focusNextPane', keymap),
+      keymapRow('focusPreviousPane', keymap),
+      keymapRow('equalizePanes', keymap)
+    )
+  }
   // A card or shell open here goes to its own window (#53 D6).
   rows.push(keymapRow('openInWindow', keymap))
   if (view.kind !== 'card') return rows
   const workspace = input.state.workspaces.find((w) => w.id === view.workspaceId)
   const card = workspace?.cards.find((c) => c.id === view.cardId)
-  // The open card has no menu (#31 D1): its description is edited from here (#69 D4).
-  if (card)
-    rows.push({ kind: 'action', action: { id: 'editDescription' }, label: 'Edit description…' })
+  // The open card has no menu (#31 D1): it is renamed and its description edited from here (#69 D4).
+  if (card) {
+    rows.push(
+      { ...keymapRow('renameCard', keymap), label: 'Rename card…' },
+      { kind: 'action', action: { id: 'editDescription' }, label: 'Edit description…' }
+    )
+  }
   // The grid view shows no columns, so it offers no moves between them.
   if (!workspace || !card || workspaceView(workspace, input.defaultView) === 'grid') return rows
   for (const column of workspace.columns) {

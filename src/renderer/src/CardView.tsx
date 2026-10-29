@@ -9,11 +9,12 @@ import { requestCloseCard, runPendingInWorkspaceFolder, startCard } from './card
 import { usePendingWorktree, type PendingWorktreeRun } from './pending-worktrees'
 import CloseCardDialog from './CloseCardDialog'
 import DescriptionDialog from './DescriptionDialog'
+import RenameCardDialog from './RenameCardDialog'
 import RemoveWorktreeDialog from './RemoveWorktreeDialog'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
 import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
-import { currentKeymap, settingsStore, useSettings } from './settings'
+import { currentKeymap, settingsStore, useEffectiveSettings, useSettings } from './settings'
 import { workspaceStore } from './store'
 import SidePanel from './SidePanel'
 import {
@@ -21,6 +22,7 @@ import {
   cardTerminals,
   usePaneLayout,
   useCardRunState,
+  useTerminalBackground,
   type XtermScreen
 } from './card-terminals'
 import { dialogOpenIn, useViewWindow } from './view-window'
@@ -56,6 +58,16 @@ interface FindProps {
  */
 interface ZoomProps {
   zoomedPanes?: number
+}
+
+/**
+ * How split panes look: an unfocused pane's dim, 0 (none) to 0.85, as the share of the terminal's
+ * background laid over it (Ghostty's `unfocused-split-opacity`), and whether the pointer hides
+ * while typing.
+ */
+interface PaneLookProps {
+  dim: number
+  hideMouseWhileTyping: boolean
 }
 
 /**
@@ -126,19 +138,29 @@ function Pane({
   find,
   onCloseFind,
   zoomedPanes,
-  onCloseCard
+  onCloseCard,
+  dim,
+  hideMouseWhileTyping,
+  grow
 }: {
   cardId: string
   paneId: string
   screen: XtermScreen | undefined
   focused: boolean
+  /** Its share of its split, as a flex grow; absent for an equal one. */
+  grow?: number
 } & FindProps &
   ZoomProps &
+  PaneLookProps &
   CloseCardProps): React.JSX.Element {
   // The main pane's close button closes the card, as Close pane does there; extra panes close.
   const closeCard = paneId === MAIN_PANE ? onCloseCard : undefined
   const view = useViewWindow()
   const hostRef = useRef<HTMLDivElement>(null)
+  const fill = useTerminalBackground()
+  // Typing hides the pointer until it moves (Ghostty's `mouse-hide-while-typing`).
+  const [typing, setTyping] = useState(false)
+  if (typing && !hideMouseWhileTyping) setTyping(false)
   useEffect(() => screen?.attach(hostRef.current!), [screen])
   useEffect(() => {
     if (focused) focusScreen(screen, view)
@@ -148,7 +170,15 @@ function Pane({
       className="pane"
       data-testid="pane"
       data-focused={focused}
+      data-typing={typing || undefined}
       hidden={zoomedPanes !== undefined && !focused}
+      style={grow === undefined ? undefined : { flexGrow: grow }}
+      onKeyDownCapture={() => {
+        if (hideMouseWhileTyping && !typing) setTyping(true)
+      }}
+      onMouseMove={() => {
+        if (typing) setTyping(false)
+      }}
       onMouseDownCapture={(event) => {
         // Closing a pane isn't clicking into it: the focus stays where it was (D3). Using the
         // find bar is: the pane it searches is the focused one (#35 D3, D10).
@@ -157,6 +187,13 @@ function Pane({
       }}
     >
       <div className="pane-terminal" ref={hostRef} />
+      {dim > 0 && !focused && (
+        <div
+          className="pane-dim"
+          data-testid="pane-dim"
+          style={{ background: fill, opacity: dim }}
+        />
+      )}
       {zoomedPanes !== undefined && focused && (
         <button
           type="button"
@@ -217,18 +254,24 @@ interface CloseCardProps {
   onCloseCard?: () => void
 }
 
-/** The split tree (#11 D2): every split is 50/50, right side by side, down stacked. */
+/**
+ * The split tree (#11 D2): right side by side, down stacked, 50/50 until resized (each side's
+ * share as its flex grow).
+ */
 function PaneTree({
   cardId,
   tree,
   focused,
+  grow,
   ...findProps
 }: {
   cardId: string
   tree: SplitTree
   focused: string
+  grow?: number
 } & FindProps &
   ZoomProps &
+  PaneLookProps &
   CloseCardProps): React.JSX.Element {
   if (tree.kind === 'leaf') {
     return (
@@ -237,16 +280,28 @@ function PaneTree({
         paneId={tree.id}
         screen={paneScreen(cardId, tree.id)}
         focused={tree.id === focused}
+        grow={grow}
         {...findProps}
       />
     )
   }
   // While zoomed, a split without the focused pane takes no space (#48 D1).
   const hidden = findProps.zoomedPanes !== undefined && !paneIds(tree).includes(focused)
+  const ratio = tree.ratio
   return (
-    <div className={`pane-split pane-split-${tree.direction}`} hidden={hidden}>
-      <PaneTree cardId={cardId} tree={tree.first} focused={focused} {...findProps} />
-      <PaneTree cardId={cardId} tree={tree.second} focused={focused} {...findProps} />
+    <div
+      className={`pane-split pane-split-${tree.direction}`}
+      hidden={hidden}
+      style={grow === undefined ? undefined : { flexGrow: grow }}
+    >
+      <PaneTree cardId={cardId} tree={tree.first} focused={focused} grow={ratio} {...findProps} />
+      <PaneTree
+        cardId={cardId}
+        tree={tree.second}
+        focused={focused}
+        grow={ratio === undefined ? undefined : 1 - ratio}
+        {...findProps}
+      />
     </div>
   )
 }
@@ -281,6 +336,7 @@ function CardView({
   useEffect(() => markOpened(card.id), [card.id])
   const [closing, setClosing] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   // A card that stops or fails while its Close dialog is open has nothing left to close.
   if (closing && runState.kind !== 'running') setClosing(false)
   const layout = usePaneLayout(card.id)
@@ -307,6 +363,7 @@ function CardView({
   const splittable = running && canSplit(layout)
   const focusedPane = layout.focused
   const { sidePanelOpen } = useSettings()
+  const { unfocusedPaneOpacity, paneDividerColor, hideMouseWhileTyping } = useEffectiveSettings()
   // The find bar (#35 D3, D10): never open when the view opens, gone when it goes away.
   const [find, setFind] = useState<OpenFind | null>(null)
   // The bar closes with the pane it searches (#35 D10); a closed pane's id is never kept.
@@ -348,7 +405,20 @@ function CardView({
       else if (action === 'copyCommandOutput') paneScreen(card.id, focusedPane)?.copyCommandOutput()
       // Zooms the focused pane or ends the zoom (#48 D3); the terminal keeps the keyboard.
       else if (action === 'zoomPane') cardPanes().toggleZoom(card.id)
-      else if (action === 'openInWindow') onOpenInWindow?.()
+      // Pane moves and sizes (Ghostty's goto_split, equalize_splits, resize_split); the
+      // terminal keeps the keyboard, the newly focused one's once it moves.
+      else if (action === 'focusNextPane') cardPanes().focusAdjacent(card.id, 1)
+      else if (action === 'focusPreviousPane') cardPanes().focusAdjacent(card.id, -1)
+      else if (action === 'equalizePanes') cardPanes().equalize(card.id)
+      else if (action === 'resizePaneLeft') cardPanes().resize(card.id, 'left')
+      else if (action === 'resizePaneRight') cardPanes().resize(card.id, 'right')
+      else if (action === 'resizePaneUp') cardPanes().resize(card.id, 'up')
+      else if (action === 'resizePaneDown') cardPanes().resize(card.id, 'down')
+      // Ghostty's prompt_surface_title: a card's title (a shell has none of its own here).
+      else if (action === 'renameCard') {
+        const ws = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
+        if (ws?.cards.some((c) => c.id === card.id)) setRenaming(true)
+      } else if (action === 'openInWindow') onOpenInWindow?.()
       // The open card has no menu (#31 D1): the palette edits its description (#69 D4); a
       // shell has none.
       else if (action === 'editDescription') {
@@ -402,6 +472,11 @@ function CardView({
           className="card-view-terminal"
           data-testid="card-terminal"
           data-zoomed={layout.zoomed === true}
+          style={
+            paneDividerColor === ''
+              ? undefined
+              : ({ '--pane-divider': paneDividerColor } as React.CSSProperties)
+          }
         >
           {awaitingWorktree ? (
             <PendingWorktreeView
@@ -418,6 +493,8 @@ function CardView({
               find={find}
               onCloseFind={closeFind}
               zoomedPanes={layout.zoomed ? paneIds(layout.tree).length : undefined}
+              dim={layout.zoomed || paneIds(layout.tree).length < 2 ? 0 : 1 - unfocusedPaneOpacity}
+              hideMouseWhileTyping={hideMouseWhileTyping}
               // Close card, whichever pane is focused: Close pane in the main pane asks the same.
               // Only while it runs, as both do nothing on a stopped card.
               onCloseCard={running ? () => runAction.current('closeCard') : undefined}
@@ -429,6 +506,16 @@ function CardView({
             workspaceId={workspaceId}
             card={card}
             onClose={() => setEditingDescription(false)}
+          />
+        )}
+        {renaming && (
+          <RenameCardDialog
+            workspaceId={workspaceId}
+            card={card}
+            onClose={() => {
+              setRenaming(false)
+              focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
+            }}
           />
         )}
         {closing && (

@@ -1,6 +1,6 @@
 import { PanelLeftOpen } from 'lucide-react'
 import { useEffect } from 'react'
-import { keymapAction, resolveKeymap, terminalShortcut, workspaceShortcut } from '../../core/keymap'
+import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
 import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
 import { defaultShellId } from '../../core/workspace-store'
@@ -9,7 +9,7 @@ import CardView from './CardView'
 import { openCardWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 import ShortcutKeys from './ShortcutKeys'
-import { currentKeymap, settingsStore, useSettings } from './settings'
+import { currentKeymap, settingsStore, useKeymap } from './settings'
 import { useWorkspaceState } from './store'
 import { dialogOpenIn, ViewWindowContext } from './view-window'
 
@@ -43,8 +43,7 @@ function CardWindow({
 }): React.JSX.Element | null {
   const { workspaces } = useWorkspaceState()
   // Its shortcut on the button, as Settings has it now.
-  const { shortcuts } = useSettings()
-  const keymap = resolveKeymap(shortcuts, window.bikube.platform)
+  const keymap = useKeymap()
   const workspace = workspaces.find((w) => w.id === workspaceId)
   const card =
     workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))

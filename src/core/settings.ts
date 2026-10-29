@@ -2,8 +2,9 @@
  * App-wide settings (#10 D1) and their file format (D6, D7). Plain TS with no Electron or Node
  * imports, so main and the renderer can both use it. The file holds
  * `{ "version": 1, "settings": { "theme", "fontSize", "fontFamily", "shell", "terminalThemeDark",
- * "terminalThemeLight", "useGhosttyTheme", "shortcuts"?, "globalShortcut"?, "syncFolder"? } }`;
- * a file from before the shell and terminal theme fields gets their defaults.
+ * "terminalThemeLight", "useGhosttyConfig", "shortcuts"?, "globalShortcut"?, "syncFolder"? } }`;
+ * a file from before the shell and terminal theme fields gets their defaults, and one from before
+ * "Use Ghostty config" has its `useGhosttyTheme` read as it.
  *
  * `shortcuts` (#31 D9) holds only the shortcuts that differ from this OS's default (absent when
  * none do), so reading and checking it needs the platform the app runs on. So does
@@ -41,8 +42,11 @@ export interface Settings extends Preferences {
   /** The terminal colour theme under the dark app theme, and under the light one. */
   terminalThemeDark: string
   terminalThemeLight: string
-  /** Use the colours of the user's Ghostty config instead of the two themes above. */
-  useGhosttyTheme: boolean
+  /**
+   * Use the user's Ghostty config: its colours instead of the two themes above, and every
+   * terminal setting it sets (`GhosttyTerminalSettings`) instead of Bikube's own.
+   */
+  useGhosttyConfig: boolean
   /** The shortcuts that differ from this OS's default (#31 D9); absent when none do. */
   shortcuts?: ShortcutOverrides
   /** The system-wide shortcut that shows or hides Bikube (#51 D9), as D7 text; absent when none. */
@@ -59,6 +63,10 @@ export const SCROLLBACK_CHOICES = [1000, 5000, 10000, 50000] as const
 export const MIN_LINE_HEIGHT = 1
 export const MAX_LINE_HEIGHT = 2
 export const MAX_LETTER_SPACING = 4
+/** Space around each pane's terminal, in pixels, as Ghostty's `window-padding-x`/`-y`. */
+export const MAX_TERMINAL_PADDING = 40
+/** Ghostty's own lower limit for `unfocused-split-opacity`. */
+export const MIN_UNFOCUSED_PANE_OPACITY = 0.15
 export const MIN_SIDE_PANEL_WIDTH = 200
 export const MAX_SIDE_PANEL_WIDTH = 4000
 /** What the Files tab opens a file with (#55 D14). */
@@ -95,6 +103,21 @@ export interface Preferences {
   bell: Bell
   /** Bold text in the bright ANSI colours, as most terminals do. */
   boldBright: boolean
+  /** Pixels between each pane's edge and its text, left and right, 0 to 40. */
+  paddingX: number
+  /** Pixels between each pane's edge and its text, top and bottom, 0 to 40. */
+  paddingY: number
+  /**
+   * How much of a split card's unfocused panes shows through, 0.15 to 1 (1: not dimmed), as
+   * Ghostty's `unfocused-split-opacity`: the terminal's background is laid over the rest.
+   */
+  unfocusedPaneOpacity: number
+  /** The line between split panes, `#rrggbb`, or '' for the app theme's border. */
+  paneDividerColor: string
+  /** The pointer hides over a terminal while typing there, until the mouse moves. */
+  hideMouseWhileTyping: boolean
+  /** Ghostty's `keybind` lines (and its defaults) set the shortcuts Bikube has an action for. */
+  useGhosttyShortcuts: boolean
   /** A notification when an agent waits for the user or asks a question. */
   notifications: boolean
   notificationSound: boolean
@@ -150,6 +173,12 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   fontWeight: 400,
   bell: 'none',
   boldBright: true,
+  paddingX: 0,
+  paddingY: 0,
+  unfocusedPaneOpacity: 1,
+  paneDividerColor: '',
+  hideMouseWhileTyping: false,
+  useGhosttyShortcuts: false,
   notifications: true,
   notificationSound: true,
   claudeStatus: true,
@@ -171,6 +200,9 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
+const isPadding = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_TERMINAL_PADDING
+const HEX_COLOUR = /^#[0-9a-f]{6}$/
 const oneOf =
   <T>(values: readonly T[]) =>
   (v: unknown): v is T =>
@@ -193,6 +225,16 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   fontWeight: oneOf(FONT_WEIGHTS as readonly number[]),
   bell: oneOf(BELLS),
   boldBright: isBoolean,
+  paddingX: (v): v is number => isPadding(v),
+  paddingY: (v): v is number => isPadding(v),
+  unfocusedPaneOpacity: (v): v is number =>
+    typeof v === 'number' &&
+    v >= MIN_UNFOCUSED_PANE_OPACITY &&
+    v <= 1 &&
+    Math.abs(Math.round(v * 100) - v * 100) < 1e-9,
+  paneDividerColor: (v): v is string => v === '' || (typeof v === 'string' && HEX_COLOUR.test(v)),
+  hideMouseWhileTyping: isBoolean,
+  useGhosttyShortcuts: isBoolean,
   notifications: isBoolean,
   notificationSound: isBoolean,
   claudeStatus: isBoolean,
@@ -236,7 +278,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   shell: '',
   terminalThemeDark: BIKUBE_DARK,
   terminalThemeLight: BIKUBE_LIGHT,
-  useGhosttyTheme: false,
+  useGhosttyConfig: false,
   ...PREFERENCE_DEFAULTS
 })
 
@@ -296,7 +338,7 @@ export function validateSettings(value: unknown, platform: string): Settings | n
     !isShellSetting(value.shell) ||
     !isTerminalThemeName(value.terminalThemeDark) ||
     !isTerminalThemeName(value.terminalThemeLight) ||
-    typeof value.useGhosttyTheme !== 'boolean'
+    typeof value.useGhosttyConfig !== 'boolean'
   ) {
     return null
   }
@@ -324,7 +366,7 @@ export function validateSettings(value: unknown, platform: string): Settings | n
       shell: value.shell,
       terminalThemeDark: value.terminalThemeDark,
       terminalThemeLight: value.terminalThemeLight,
-      useGhosttyTheme: value.useGhosttyTheme,
+      useGhosttyConfig: value.useGhosttyConfig,
       ...(preferences as Preferences)
     },
     shortcuts
@@ -377,7 +419,7 @@ export function parseSettingsFile(text: string, platform: string): ParsedSetting
   else replaced.push('fontFamily')
   // Absent in a file from before them: the default, not a replacement.
   const check = <
-    K extends 'shell' | 'terminalThemeDark' | 'terminalThemeLight' | 'useGhosttyTheme'
+    K extends 'shell' | 'terminalThemeDark' | 'terminalThemeLight' | 'useGhosttyConfig'
   >(
     key: K,
     valid: (value: unknown) => value is Settings[K]
@@ -388,7 +430,11 @@ export function parseSettingsFile(text: string, platform: string): ParsedSetting
   check('shell', isShellSetting)
   check('terminalThemeDark', isTerminalThemeName)
   check('terminalThemeLight', isTerminalThemeName)
-  check('useGhosttyTheme', (v): v is boolean => typeof v === 'boolean')
+  // A file from before "Use Ghostty config" names it `useGhosttyTheme`.
+  if (!('useGhosttyConfig' in raw) && typeof raw.useGhosttyTheme === 'boolean') {
+    settings.useGhosttyConfig = raw.useGhosttyTheme
+  }
+  check('useGhosttyConfig', (v): v is boolean => typeof v === 'boolean')
   for (const key of PREFERENCE_KEYS) {
     const raw_ = raw[key]
     if (PREFERENCE_CHECKS[key](raw_)) (settings as unknown as Record<string, unknown>)[key] = raw_
@@ -421,7 +467,7 @@ export function serializeSettings(settings: Settings, syncFolder: string | null 
       shell,
       terminalThemeDark,
       terminalThemeLight,
-      useGhosttyTheme: settings.useGhosttyTheme,
+      useGhosttyConfig: settings.useGhosttyConfig,
       ...Object.fromEntries(
         PREFERENCE_KEYS.filter((key) => settings[key] !== PREFERENCE_DEFAULTS[key]).map((key) => [
           key,

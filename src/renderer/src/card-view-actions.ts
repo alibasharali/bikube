@@ -15,6 +15,14 @@ export type CardViewAction =
   | 'openInWindow'
   | 'copyCommandOutput'
   | 'editDescription'
+  | 'focusNextPane'
+  | 'focusPreviousPane'
+  | 'equalizePanes'
+  | 'resizePaneLeft'
+  | 'resizePaneRight'
+  | 'resizePaneUp'
+  | 'resizePaneDown'
+  | 'renameCard'
 
 const CARD_VIEW_ACTIONS: readonly string[] = [
   'back',
@@ -28,7 +36,15 @@ const CARD_VIEW_ACTIONS: readonly string[] = [
   'zoomPane',
   'openInWindow',
   'copyCommandOutput',
-  'editDescription'
+  'editDescription',
+  'focusNextPane',
+  'focusPreviousPane',
+  'equalizePanes',
+  'resizePaneLeft',
+  'resizePaneRight',
+  'resizePaneUp',
+  'resizePaneDown',
+  'renameCard'
 ] satisfies CardViewAction[]
 
 export const isCardViewAction = (action: string | null): action is CardViewAction =>

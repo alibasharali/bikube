@@ -913,3 +913,108 @@ test('#48 AC5: a zoomed card is still zoomed on the same pane after Back', async
   await expect(panes().nth(2)).toBeHidden()
   await expect.poll(focusedPaneIndex).toBe(1)
 })
+
+test('Next pane and Previous pane move the keyboard between panes in order, wrapping', async () => {
+  await openApi()
+  await splitRight(page)
+  await splitDown(page)
+  await expect(panes()).toHaveCount(3)
+  await expect.poll(focusedPaneIndex).toBe(2)
+
+  await page.keyboard.press(SHORTCUTS.focusNextPane)
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  await expect.poll(focusedPaneIndex).toBe(0)
+  await page.keyboard.press(SHORTCUTS.focusPreviousPane)
+  await expect.poll(focusedPaneIndex).toBe(2)
+  await page.keyboard.press(SHORTCUTS.focusPreviousPane)
+  await run(1, 'echo moved-$((1+1))')
+  await expectLine(1, 'moved-2')
+  // The shell got none of the shortcut's keys.
+  expect((await bufferLines(1)).join('\n')).not.toContain(']')
+})
+
+test('Resize pane moves the divider and Equalize panes puts it back', async () => {
+  await openApi()
+  await splitRight(page)
+  const area = await box(page.getByTestId('card-terminal'))
+  const half = (await box(panes().nth(0))).width
+
+  // The focused right pane: its divider moves right, so the left pane grows by a twentieth.
+  await page.keyboard.press(SHORTCUTS.resizePaneRight)
+  await page.keyboard.press(SHORTCUTS.resizePaneRight)
+  await expect
+    .poll(async () => (await box(panes().nth(0))).width - half)
+    .toBeGreaterThan(area.width * 0.08)
+
+  await page.keyboard.press(SHORTCUTS.equalizePanes)
+  await expect
+    .poll(async () => Math.abs((await box(panes().nth(0))).width - half))
+    .toBeLessThanOrEqual(2)
+})
+
+test('Unfocused panes dims every pane but the focused one, and the setting is saved', async () => {
+  await openApi()
+  await splitRight(page)
+  await expect(page.getByTestId('pane-dim')).toHaveCount(0)
+
+  await page.getByTestId('settings-open').click()
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-terminal').click()
+  await settings.getByTestId('settings-unfocused-opacity').selectOption('0.5')
+  await page.keyboard.press('Escape')
+
+  await expect(panes().nth(0).getByTestId('pane-dim')).toHaveCount(1)
+  await expect(panes().nth(1).getByTestId('pane-dim')).toHaveCount(0)
+  await expect(panes().nth(0).getByTestId('pane-dim')).toHaveCSS('opacity', '0.5')
+  await panes().nth(0).click()
+  await expect(panes().nth(1).getByTestId('pane-dim')).toHaveCount(1)
+  await expect(panes().nth(0).getByTestId('pane-dim')).toHaveCount(0)
+  // Saved by main a moment after the change.
+  const path = join(dataDir, 'bikube-settings.json')
+  await expect
+    .poll(() =>
+      existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).settings.unfocusedPaneOpacity : null
+    )
+    .toBe(0.5)
+})
+
+test('Hide pointer while typing hides it over the pane until the mouse moves', async () => {
+  await openApi()
+  const pane = panes().nth(0)
+  await page.keyboard.type('x')
+  await expect(pane).not.toHaveAttribute('data-typing')
+
+  await page.getByTestId('settings-open').click()
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-terminal').click()
+  await settings.getByTestId('settings-hide-mouse').check()
+  await page.keyboard.press('Escape')
+
+  await pane.click()
+  await page.keyboard.type('y')
+  await expect(pane).toHaveAttribute('data-typing', 'true')
+  await expect(pane.getByTestId('terminal')).toHaveCSS('cursor', 'none')
+  const b = await box(pane)
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2)
+  await page.mouse.move(b.x + b.width / 3, b.y + b.height / 3)
+  await expect(pane).not.toHaveAttribute('data-typing')
+})
+
+test('Rename card renames the open card from its shortcut and the palette', async () => {
+  await openApi()
+  await page.keyboard.press(SHORTCUTS.renameCard)
+  const dialog = page.getByTestId('rename-card-dialog')
+  await expect(dialog.getByTestId('rename-card-input')).toBeFocused()
+  await expect(dialog.getByTestId('rename-card-input')).toHaveValue('api')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  expect((await bufferLines(0)).join('\n')).not.toContain('®')
+
+  await page.keyboard.press(SHORTCUTS.renameCard)
+  await dialog.getByTestId('rename-card-input').fill('api server')
+  await page.keyboard.press('Enter')
+  await expect(dialog).toHaveCount(0)
+  await expect.poll(focusedPaneIndex).toBe(0)
+  await backToBoard(page)
+  await expect(card('api server')).toBeVisible()
+})

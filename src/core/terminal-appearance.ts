@@ -40,6 +40,8 @@ export interface TerminalAppearance {
   fontFamily: string
   theme: Readonly<TerminalPalette>
   behaviour: TerminalBehaviour
+  /** Pixels between the pane's edge and the text, as Ghostty's `window-padding-x`/`-y`. */
+  padding: { x: number; y: number }
 }
 
 /** The Ghostty colours for each appearance, once read; null while not read or not in use. */
@@ -69,7 +71,8 @@ export function terminalAppearance(
       letterSpacing: settings.letterSpacing,
       fontWeight: settings.fontWeight,
       drawBoldTextInBrightColors: settings.boldBright
-    }
+    },
+    padding: { x: settings.paddingX, y: settings.paddingY }
   }
 }
 
@@ -78,7 +81,7 @@ export function terminalPalette(
   resolved: ResolvedTheme,
   ghostty: GhosttyPalettes = null
 ): Readonly<TerminalPalette> {
-  if (settings.useGhosttyTheme && ghostty !== null) return ghostty[resolved]
+  if (settings.useGhosttyConfig && ghostty !== null) return ghostty[resolved]
   const name = resolved === 'dark' ? settings.terminalThemeDark : settings.terminalThemeLight
   return terminalTheme(name) ?? TERMINAL_PALETTES[resolved]
 }

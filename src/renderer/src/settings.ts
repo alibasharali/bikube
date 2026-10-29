@@ -1,6 +1,9 @@
 import { useSyncExternalStore } from 'react'
+import { withGhosttyConfig } from '../../core/ghostty-config'
+import { ghosttyBinds, withGhosttyShortcuts, type GhosttyKeymap } from '../../core/ghostty-keybinds'
 import { resolveKeymap, type Keymap } from '../../core/keymap'
 import { validateSettings, type Settings } from '../../core/settings'
+import { ghosttyStore } from './ghostty'
 
 /** The app-wide settings in the renderer (#10 D1, D6): read them, and change them in place. */
 export interface SettingsStore {
@@ -71,9 +74,77 @@ export async function loadSettingsStore(): Promise<void> {
   )
 }
 
-/** Every configurable shortcut in effect now (#31 D5, D9); read at the time of each key press. */
+let ownKeymapFor: { settings: Settings; keymap: Keymap } | undefined
+
+/**
+ * Every configurable shortcut in effect now (#31 D5, D9), Ghostty's included while "Use Ghostty
+ * shortcuts" is on; read at the time of each key press. The same object until the settings or
+ * the Ghostty config change, so it can feed React.
+ */
 export function currentKeymap(): Keymap {
-  return resolveKeymap(settingsStore.get().shortcuts, window.bikube.platform)
+  const ghostty = ghosttyKeymap()
+  if (ghostty) return ghostty.keymap
+  const settings = settingsStore.get()
+  if (ownKeymapFor?.settings !== settings) {
+    ownKeymapFor = { settings, keymap: resolveKeymap(settings.shortcuts, window.bikube.platform) }
+  }
+  return ownKeymapFor.keymap
+}
+
+let keymapFor: { settings: Settings; ghostty: unknown; result: GhosttyKeymap } | undefined
+
+/**
+ * The shortcuts with Ghostty's laid over them while "Use Ghostty shortcuts" is on and its config is
+ * read, with which actions they set and what was skipped; null otherwise. Kept until either changes.
+ */
+export function ghosttyKeymap(): GhosttyKeymap | null {
+  const settings = settingsStore.get()
+  const ghostty = ghosttyStore.get()
+  if (!settings.useGhosttyShortcuts || ghostty === null) return null
+  if (keymapFor?.settings !== settings || keymapFor.ghostty !== ghostty) {
+    const { platform } = window.bikube
+    const result = withGhosttyShortcuts(
+      resolveKeymap(settings.shortcuts, platform),
+      ghosttyBinds(ghostty.keybinds, platform),
+      platform
+    )
+    keymapFor = { settings, ghostty, result }
+  }
+  return keymapFor.result
+}
+
+let effectiveFor: { settings: Settings; ghostty: unknown; result: Settings } | undefined
+
+/**
+ * The settings in effect: Bikube's, with what the Ghostty config sets while "Use Ghostty config"
+ * is on. The same object until either changes, so it can feed React.
+ */
+export function effectiveSettings(): Settings {
+  const settings = settingsStore.get()
+  const ghostty = ghosttyStore.get()
+  if (effectiveFor?.settings !== settings || effectiveFor.ghostty !== ghostty) {
+    effectiveFor = { settings, ghostty, result: withGhosttyConfig(settings, ghostty) }
+  }
+  return effectiveFor.result
+}
+
+const subscribeBoth = (listener: () => void): (() => void) => {
+  const offSettings = settingsStore.subscribe(listener)
+  const offGhostty = ghosttyStore.subscribe(listener)
+  return () => {
+    offSettings()
+    offGhostty()
+  }
+}
+
+/** `effectiveSettings()`, re-rendering when the settings or the Ghostty config change. */
+export function useEffectiveSettings(): Settings {
+  return useSyncExternalStore(subscribeBoth, effectiveSettings)
+}
+
+/** `currentKeymap()`, re-rendering when the settings or the Ghostty config change. */
+export function useKeymap(): Keymap {
+  return useSyncExternalStore(subscribeBoth, currentKeymap)
 }
 
 export function useSettings(): Settings {

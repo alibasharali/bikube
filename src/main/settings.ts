@@ -12,7 +12,7 @@ import { access, readFile, realpath } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { windowBackground, type AppThemeId } from '../core/app-themes'
-import { readGhosttyTheme } from '../core/ghostty-config'
+import { readGhosttyConfig } from '../core/ghostty-config'
 import { SessionManager } from '../core/session-manager'
 import { SettingsFile } from '../core/settings-file'
 import { shellCandidates } from '../core/shells'
@@ -113,9 +113,9 @@ export function registerSettings(): MainSettings {
     })
     return { login: SessionManager.defaultShell(), shells }
   })
-  ipcMain.handle(IPC.settingsGhosttyTheme, async (event) => {
-    if (!fromMainFrame(event)) throw new Error('settings:ghosttyTheme rejected: untrusted sender')
-    return readGhosttyTheme({
+  ipcMain.handle(IPC.settingsGhosttyConfig, async (event) => {
+    if (!fromMainFrame(event)) throw new Error('settings:ghosttyConfig rejected: untrusted sender')
+    return readGhosttyConfig({
       readFile: readText,
       home: homedir(),
       xdgConfigHome: process.env['XDG_CONFIG_HOME'],

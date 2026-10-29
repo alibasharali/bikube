@@ -10,9 +10,12 @@ import type { SpawnResult, TerminalApi, TerminalExit } from '../shared/api'
 import { MAX_TYPEAHEAD_CHARS, type CardRef, type CardScreen } from './card-sessions'
 import type { SessionRouter } from './session-router'
 import {
+  equalize,
+  focusAdjacent,
   focusPane,
   initialLayout,
   removePane,
+  resizeFocused,
   splitFocused,
   toggleZoom,
   type PaneLayout,
@@ -173,6 +176,21 @@ export class CardPanes<S extends CardScreen> {
   /** Zooms the card's focused pane, or ends its zoom (#48 D1); one pane never zooms. */
   toggleZoom(cardId: string): void {
     this.setLayout(cardId, toggleZoom(this.layout(cardId)))
+  }
+
+  /** Focuses the pane after (1) or before (-1) the focused one, wrapping. */
+  focusAdjacent(cardId: string, step: 1 | -1): void {
+    this.setLayout(cardId, focusAdjacent(this.layout(cardId), step))
+  }
+
+  /** Gives the card's panes equal sizes. */
+  equalize(cardId: string): void {
+    this.setLayout(cardId, equalize(this.layout(cardId)))
+  }
+
+  /** Moves the divider nearest the focused pane towards `direction`. */
+  resize(cardId: string, direction: 'left' | 'right' | 'up' | 'down'): void {
+    this.setLayout(cardId, resizeFocused(this.layout(cardId), direction))
   }
 
   /**

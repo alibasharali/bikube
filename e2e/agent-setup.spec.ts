@@ -1469,7 +1469,7 @@ const themeColours = (): Promise<{ page: string; bg: string; bar: string; accent
 test("AC18: in Dark, Light and Nord the page and its Stats use the theme's colours", async () => {
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   await launch()
   // Follow the app's Theme setting, not Playwright's pinned light scheme.
@@ -1951,7 +1951,7 @@ test("#71 AC12: each workspace's page keeps its own collapsed groups for the run
 test("#71 AC13: at 320 px the chips wrap with no sideways scroll; the pressed chip takes the theme's accent", async () => {
   writeFileSync(
     join(dataDir, 'bikube-settings.json'),
-    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyTheme":false}}'
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false}}'
   )
   await openWith(filterFixtures)
   await page.emulateMedia({ colorScheme: null })

@@ -127,13 +127,21 @@ test('the dark theme picker: search, preview, pick with Enter; Cancel and Escape
   expect(savedSettings(dataDir).terminalThemeLight).toBe('Bikube Light')
 })
 
-test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is kept across a restart", async () => {
+test("Use Ghostty config reads the user's Ghostty colours per appearance and its terminal settings, and is kept across a restart", async () => {
   const home = mkdtempSync(join(tmpdir(), 'bikube-ghostty-home-'))
   const config = join(home, '.config')
   mkdirSync(join(config, 'ghostty'), { recursive: true })
   writeFileSync(
     join(config, 'ghostty', 'config'),
-    'theme = light:Catppuccin Latte,dark:Catppuccin Mocha\npalette = 1=#ff0000\n'
+    [
+      'theme = light:Catppuccin Latte,dark:Catppuccin Mocha',
+      'palette = 1=#ff0000',
+      'font-size = 15',
+      'cursor-style = bar',
+      'window-padding-x = 10',
+      'window-padding-y = 6',
+      ''
+    ].join('\n')
   )
   // HOME too, so a real macOS config in ~/Library/Application Support is never read.
   const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: config } as Record<string, string>
@@ -152,6 +160,14 @@ test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is 
   // The built-in themes' pickers give way to what was read from Ghostty.
   await expect(dialog(page).getByTestId('settings-terminal-theme-dark')).toHaveCount(0)
   await expect(dialog(page).getByTestId('settings-terminal-theme-light')).toHaveCount(0)
+  // The settings the config sets show its values; the rest keep their controls.
+  await expect(dialog(page).getByTestId('settings-font-size-ghostty')).toContainText('15')
+  await expect(dialog(page).getByTestId('settings-cursor-ghostty')).toContainText('Bar')
+  await expect(dialog(page).getByTestId('settings-padding-x-ghostty')).toContainText('10 px')
+  await expect(dialog(page).getByTestId('settings-line-height')).toBeVisible()
+  await expect
+    .poll(() => terminalOptions(page))
+    .toEqual({ fontSize: 15, cursorStyle: 'bar', padding: '6px 10px' })
   // Playwright pins a light page: Latte, with the config's own red over the theme's.
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#eff1f5')
   expect((await openTerminal(page)).red).toBe('#ff0000')
@@ -162,7 +178,7 @@ test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is 
   writeFileSync(join(config, 'ghostty', 'config'), 'theme = Dracula\n')
   await dialog(page).getByTestId('settings-ghostty-reload').click()
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#282a36')
-  await expect.poll(() => savedSettings(dataDir).useGhosttyTheme).toBe(true)
+  await expect.poll(() => savedSettings(dataDir).useGhosttyConfig).toBe(true)
 
   await app.close()
   launched = await launchApp({ env, dataDir })
@@ -172,11 +188,67 @@ test("Use Ghostty theme reads the user's Ghostty config, per appearance, and is 
   await page.getByTestId('card').filter({ hasText: 'api' }).getByTestId('card-open').click()
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#282a36')
 
-  // Turned off: the picked themes again.
+  // Turned off: the picked themes and Bikube's own settings again.
   await page.getByTestId('settings-open').click()
   await dialog(page).getByTestId('settings-section-terminal').click()
-  await dialog(page).getByTestId('settings-colours-builtin').check()
+  await dialog(page).getByTestId('settings-use-ghostty').uncheck()
   await expect.poll(async () => (await openTerminal(page)).background).toBe('#14151a')
+  await expect
+    .poll(() => terminalOptions(page))
+    .toEqual({ fontSize: 13, cursorStyle: 'block', padding: '' })
+})
+
+/** The open card's terminal font size, cursor and padding (xterm's element's inline padding). */
+function terminalOptions(
+  page: Page
+): Promise<{ fontSize: number; cursorStyle: string; padding: string } | null> {
+  return page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      | (HTMLElement & {
+          __xterm?: { options: { fontSize: number; cursorStyle: string }; element?: HTMLElement }
+        })
+      | null
+    const term = host?.__xterm
+    if (!term) return null
+    const { fontSize, cursorStyle } = term.options
+    return { fontSize, cursorStyle, padding: term.element?.style.padding ?? '' }
+  })
+}
+
+test("Use Ghostty shortcuts takes Ghostty's keybinds for Bikube's actions, keeping a fixed shortcut", async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bikube-ghostty-home-'))
+  const config = join(home, '.config')
+  mkdirSync(join(config, 'ghostty'), { recursive: true })
+  writeFileSync(
+    join(config, 'ghostty', 'config'),
+    ['keybind = ctrl+alt+r=prompt_surface_title', 'keybind = ctrl+alt+n=goto_split:next', ''].join(
+      '\n'
+    )
+  )
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: config } as Record<string, string>
+  const launched = await launchApp({ env })
+  app = launched.app
+  const { page, dataDir } = launched
+  await workspaceWithCard(page, 'api')
+
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await dialog(page).getByTestId('settings-use-ghostty-shortcuts').check()
+  await expect(dialog(page).getByTestId('settings-shortcut-ghostty-renameCard')).toBeVisible()
+  await expect(dialog(page).getByTestId('settings-shortcut-renameCard')).toBeDisabled()
+  await expect(dialog(page).getByTestId('settings-shortcut-renameCard')).toContainText('R')
+  await expect.poll(() => savedSettings(dataDir).useGhosttyShortcuts).toBe(true)
+  await page.keyboard.press('Escape')
+
+  // Ghostty's prompt_surface_title key renames the open card.
+  await page.getByTestId('card-view').getByTestId('terminal').click()
+  await page.keyboard.press('Control+Alt+r')
+  const rename = page.getByTestId('rename-card-dialog')
+  await expect(rename).toBeVisible()
+  await rename.getByTestId('rename-card-input').fill('api v2')
+  await rename.getByTestId('rename-card-save').click()
+  await expect(rename).toHaveCount(0)
+  await expect(page).toHaveTitle(/api v2/)
 })
 
 test('the Shell setting: a listed shell starts new cards with $SHELL set; a missing one fails to start', async () => {

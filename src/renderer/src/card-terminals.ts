@@ -57,7 +57,7 @@ import { isSoftwareRenderer } from '../../core/webgl-support'
 import { ringBell } from './bell'
 import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
-import { currentKeymap, settingsStore } from './settings'
+import { currentKeymap, effectiveSettings, settingsStore } from './settings'
 import { workspaceStore } from './store'
 import '@xterm/xterm/css/xterm.css'
 
@@ -91,7 +91,7 @@ function osPrefersDark(): boolean {
 
 /** The terminal look for the current settings and OS appearance (#10 D3, D4). */
 function currentAppearance(): TerminalAppearance {
-  return terminalAppearance(settingsStore.get(), osPrefersDark(), ghosttyStore.palettes())
+  return terminalAppearance(effectiveSettings(), osPrefersDark(), ghosttyStore.palettes())
 }
 
 /**
@@ -109,6 +109,23 @@ function followAppearance(): void {
   ghosttyStore.subscribe(apply)
   osPrefersDark()
   darkQuery?.addEventListener('change', apply)
+}
+
+function subscribeAppearance(listener: () => void): () => void {
+  osPrefersDark()
+  const offSettings = settingsStore.subscribe(listener)
+  const offGhostty = ghosttyStore.subscribe(listener)
+  darkQuery?.addEventListener('change', listener)
+  return () => {
+    offSettings()
+    offGhostty()
+    darkQuery?.removeEventListener('change', listener)
+  }
+}
+
+/** The terminals' background colour now, e.g. for a dimmed pane's fill. */
+export function useTerminalBackground(): string {
+  return useSyncExternalStore(subscribeAppearance, () => currentAppearance().theme.background)
 }
 
 /** What the find bar searches for (#35 D4): the query and its two toggles. */
@@ -203,6 +220,8 @@ export class XtermScreen implements CardScreen {
   /** How many rows above the bottom the view was when last detached: kept across a move. */
   private rowsFromBottom = 0
   private webgl: WebglAddon | undefined
+  /** The padding in effect, applied to xterm's element once it is opened. */
+  private padding: TerminalAppearance['padding'] = { x: 0, y: 0 }
   /** The line height and letter spacing the screen was last fitted with: either changes its cells. */
   private cell = ''
   /** Claude Code's probe arrived since focus reporting was last turned off (#58 D1). */
@@ -227,8 +246,9 @@ export class XtermScreen implements CardScreen {
 
   /** `claudeCode`: the main pane of a card whose startup command is Claude Code. */
   constructor(private readonly claudeCode = false) {
-    const { fontFamily, fontSize, theme, behaviour } = currentAppearance()
+    const { fontFamily, fontSize, theme, behaviour, padding } = currentAppearance()
     this.palette = theme
+    this.padding = padding
     const { platform, link } = window.bikube
     // Plain URLs (the addon) and OSC 8 links (the handler) open in the browser on Mod+click.
     const openLink = (event: MouseEvent, uri: string): void => {
@@ -253,6 +273,7 @@ export class XtermScreen implements CardScreen {
     liveScreens.add(this)
     this.host.className = 'terminal'
     this.host.dataset.testid = 'terminal'
+    this.host.style.background = theme.background
     this.host.__xterm = this.term
     this.term.loadAddon(this.fit)
     this.term.loadAddon(new WebLinksAddon(openLink))
@@ -281,7 +302,7 @@ export class XtermScreen implements CardScreen {
         return
       }
       if (this.selectingOutput) return
-      if (!settingsStore.get().copyOnSelect || !this.term.hasSelection()) return
+      if (!effectiveSettings().copyOnSelect || !this.term.hasSelection()) return
       void clipboard.write(this.term.getSelection())
     })
     this.term.onBell(() => ringBell(this.host))
@@ -496,7 +517,10 @@ export class XtermScreen implements CardScreen {
     const view = (container.ownerDocument.defaultView ?? window) as Window & typeof globalThis
     container.appendChild(this.host)
     if (this.term.element) this.followWindow(view)
-    else this.term.open(this.host)
+    else {
+      this.term.open(this.host)
+      this.applyPadding(this.padding)
+    }
     this.followDocument(container.ownerDocument)
     if (this.shownIn && this.shownIn !== view) this.dropPendingFrames(this.shownIn)
     this.shownIn = view
@@ -712,12 +736,14 @@ export class XtermScreen implements CardScreen {
    * screen refits, so new columns and rows reach its PTY as a resize; a detached one refits when
    * next attached.
    */
-  applyAppearance({ fontFamily, fontSize, theme, behaviour }: TerminalAppearance): void {
+  applyAppearance({ fontFamily, fontSize, theme, behaviour, padding }: TerminalAppearance): void {
     const options = this.term.options
     if (this.palette !== theme) {
       this.palette = theme
       options.theme = xtermTheme(theme)
+      this.host.style.background = theme.background
     }
+    const padded = this.applyPadding(padding)
     // Only what changed: setting an option, even to its value, makes xterm redraw.
     for (const key of Object.keys(behaviour) as (keyof typeof behaviour)[]) {
       if (options[key] !== behaviour[key])
@@ -727,11 +753,30 @@ export class XtermScreen implements CardScreen {
       options.fontFamily !== fontFamily ||
       options.fontSize !== fontSize ||
       this.cell !== cellKey(behaviour)
-    if (!cellChanged) return
+    if (!cellChanged) {
+      if (padded) this.fitNow()
+      return
+    }
     options.fontFamily = fontFamily
     options.fontSize = fontSize
     this.cell = cellKey(behaviour)
     this.fitNow()
+  }
+
+  /**
+   * Pads xterm's own element, whose padding the fit addon takes off the size (Ghostty's
+   * `window-padding-x`/`-y`); the host's background, the theme's, shows there. Whether it changed.
+   */
+  private applyPadding(padding: TerminalAppearance['padding']): boolean {
+    this.padding = padding
+    const element = this.term.element
+    if (!element) return false
+    const value = `${padding.y}px ${padding.x}px`
+    if (element.style.padding === value || (value === '0px 0px' && element.style.padding === '')) {
+      return false
+    }
+    element.style.padding = value === '0px 0px' ? '' : value
+    return true
   }
 
   dispose(): void {

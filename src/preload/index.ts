@@ -86,7 +86,7 @@ const api: BikubeApi = {
     load: () => ipcRenderer.invoke(IPC.settingsLoad),
     save: (settings) => ipcRenderer.send(IPC.settingsSave, settings),
     shells: () => ipcRenderer.invoke(IPC.settingsShells),
-    ghosttyTheme: () => ipcRenderer.invoke(IPC.settingsGhosttyTheme)
+    ghosttyConfig: () => ipcRenderer.invoke(IPC.settingsGhosttyConfig)
   },
   sync: {
     status: () => ipcRenderer.invoke(IPC.syncStatus),

@@ -1497,23 +1497,63 @@ fieldset.field .segmented .radio {
   margin: 0 0 var(--space-3);
 }
 
+/* Each group's name, a heading above its rows with room above it. */
 .shortcuts legend {
   padding: 0;
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
   color: var(--text-muted);
   font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shortcuts + .shortcuts {
+  margin-top: var(--space-4);
+}
+
+.shortcuts .shortcut-row + .shortcut-row {
+  margin-top: var(--space-2);
 }
 
 .shortcut-row {
   display: grid;
-  grid-template-columns: 1fr 9.5rem auto;
+  /* The Reset column keeps its width when empty, so every row's fields and switches line up. */
+  grid-template-columns: 1fr 9.5rem minmax(4.5rem, auto);
   align-items: center;
   gap: var(--space-1) var(--space-2);
 }
 
-.shortcut-label {
+/* Over `.field label`: a switch row's label reads like every other row's. */
+.shortcuts .shortcut-label {
   color: var(--text);
   font-size: var(--text-md);
+}
+
+/* A switch row's label with its hint under it. */
+.shortcut-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A switch (then its Reload) lined up with the shortcut fields' left edge. */
+.shortcut-control {
+  grid-column: 2;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shortcut-skipped {
+  grid-column: 1 / -1;
+}
+
+.shortcut-skipped ul {
+  margin: 2px 0 0;
+  padding-left: var(--space-4);
 }
 
 .shortcut-field {
@@ -1540,11 +1580,6 @@ fieldset.field .segmented .radio {
 
 .shortcut-error {
   grid-column: 2 / -1;
-}
-
-/* The global shortcut's Open the next waiting card switch (#51 D5), under its field. */
-.shortcut-switch {
-  justify-self: start;
 }
 
 .field-hint {
@@ -2413,8 +2448,8 @@ button.dev-server-chip:focus-visible {
   min-height: 0;
   display: flex;
   gap: var(--space-1);
-  /* The gap between panes shows as a divider. */
-  background: var(--border);
+  /* The gap between panes shows as a divider: Settings' (or Ghostty's) colour, else the border. */
+  background: var(--pane-divider, var(--border));
 }
 
 .pane-split-down {
@@ -2440,6 +2475,19 @@ button.dev-server-chip:focus-visible {
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+
+/* An unfocused split pane's dim (Ghostty's unfocused-split-opacity): the terminal's background over it */
+.pane-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Typing hides the pointer over the pane until it moves (mouse-hide-while-typing) */
+.pane[data-typing] * {
+  cursor: none !important;
 }
 
 /* Zoom (#48 D1, D2, D5): hidden panes stay mounted but take no space; the shown one is unoutlined */
@@ -3066,6 +3114,55 @@ button.dev-server-chip:focus-visible {
   min-width: 0;
   padding-top: 6px;
   overflow-wrap: anywhere;
+}
+
+/* A setting the Ghostty config sets: its value in place of the control */
+.ghostty-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.colour-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+}
+
+.settings-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-inline .field-hint {
+  flex-basis: 100%;
+}
+
+.colour-input {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+/* A shortcut set by Ghostty's config: a small tag after its name */
+.shortcut-source {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 /*

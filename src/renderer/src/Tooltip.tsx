@@ -1,6 +1,6 @@
 import { cloneElement, useEffect, useId, useRef, useState } from 'react'
 import type { ShortcutAction } from '../../core/keymap'
-import { currentKeymap, useSettings } from './settings'
+import { useKeymap } from './settings'
 import ShortcutKeys from './ShortcutKeys'
 
 /** How long the pointer rests on a button before its tooltip shows, as native tooltips wait. */
@@ -28,12 +28,12 @@ function Tooltip({
   className?: string
   children: React.ReactElement<React.HTMLAttributes<HTMLElement>>
 }): React.JSX.Element {
-  useSettings()
+  const keymap = useKeymap()
   const id = useId()
   const [shown, setShown] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
-  const keys = shortcut ? currentKeymap()[shortcut] : ''
+  const keys = shortcut ? keymap[shortcut] : ''
   const show = (): void => {
     clearTimeout(timer.current)
     timer.current = setTimeout(() => setShown(true), SHOW_DELAY_MS)

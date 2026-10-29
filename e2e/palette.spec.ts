@@ -507,7 +507,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
 
   await openPalette()
   const actions = await titles(section('actions'))
-  expect(actions.slice(0, 12)).toEqual([
+  expect(actions.slice(0, 13)).toEqual([
     'Back to board',
     'Split right',
     'Split down',
@@ -516,6 +516,7 @@ test('AC7: with a running card open, the card view actions and its moves are lis
     'Find',
     'Copy command output',
     'Open in new window',
+    'Rename card…',
     'Edit description…',
     'Move card to In Progress',
     'Move card to Review',

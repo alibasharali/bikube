@@ -13,7 +13,12 @@ export const SHORTCUTS = {
   splitDown: darwin ? 'Meta+Shift+D' : 'Control+Shift+E',
   closePane: darwin ? 'Meta+W' : 'Control+Shift+W',
   closeCard: darwin ? 'Meta+Shift+W' : 'Control+Shift+Q',
-  zoomPane: darwin ? 'Meta+Shift+Enter' : 'Control+Shift+Enter'
+  zoomPane: darwin ? 'Meta+Shift+Enter' : 'Control+Shift+Enter',
+  focusNextPane: darwin ? 'Meta+]' : 'Control+Meta+]',
+  focusPreviousPane: darwin ? 'Meta+[' : 'Control+Meta+[',
+  equalizePanes: 'Control+Meta+=',
+  resizePaneRight: darwin ? 'Control+Meta+ArrowRight' : 'Control+Shift+Meta+ArrowRight',
+  renameCard: darwin ? 'Alt+Meta+r' : 'Control+Shift+F2'
 } as const
 
 /** The full-size card view. */

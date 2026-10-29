@@ -21,7 +21,15 @@ export const SHORTCUT_ACTIONS = [
   'nextPrompt',
   'zoomPane',
   'openInWindow',
-  'copyCommandOutput'
+  'copyCommandOutput',
+  'focusNextPane',
+  'focusPreviousPane',
+  'equalizePanes',
+  'resizePaneLeft',
+  'resizePaneRight',
+  'resizePaneUp',
+  'resizePaneDown',
+  'renameCard'
 ] as const
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
 
@@ -53,7 +61,16 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   // Not Cmd+O: an editor's Open (#53 D6).
   openInWindow: 'Shift+Cmd+O',
   // iTerm2's Select Output of Last Command (#60 D5).
-  copyCommandOutput: 'Shift+Cmd+A'
+  copyCommandOutput: 'Shift+Cmd+A',
+  // Ghostty's goto_split, equalize_splits and resize_split keys.
+  focusNextPane: 'Cmd+]',
+  focusPreviousPane: 'Cmd+[',
+  equalizePanes: 'Ctrl+Cmd+=',
+  resizePaneLeft: 'Ctrl+Cmd+ArrowLeft',
+  resizePaneRight: 'Ctrl+Cmd+ArrowRight',
+  resizePaneUp: 'Ctrl+Cmd+ArrowUp',
+  resizePaneDown: 'Ctrl+Cmd+ArrowDown',
+  renameCard: 'Alt+Cmd+R'
 })
 
 const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
@@ -78,7 +95,16 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   // Not Ctrl+O: it stays the shell's (readline's operate-and-get-next) (#53 D6).
   openInWindow: 'Ctrl+Shift+O',
   // Not Ctrl+A: it stays the shell's (#60 D5).
-  copyCommandOutput: 'Ctrl+Shift+A'
+  copyCommandOutput: 'Ctrl+Shift+A',
+  // Ghostty's Linux goto_split keys; Ctrl+Shift with a bracket types a brace on most layouts.
+  focusNextPane: 'Ctrl+Cmd+]',
+  focusPreviousPane: 'Ctrl+Cmd+[',
+  equalizePanes: 'Ctrl+Cmd+=',
+  resizePaneLeft: 'Ctrl+Shift+Cmd+ArrowLeft',
+  resizePaneRight: 'Ctrl+Shift+Cmd+ArrowRight',
+  resizePaneUp: 'Ctrl+Shift+Cmd+ArrowUp',
+  resizePaneDown: 'Ctrl+Shift+Cmd+ArrowDown',
+  renameCard: 'Ctrl+Shift+F2'
 })
 
 /** This OS's default shortcuts (D6). */
@@ -201,8 +227,37 @@ export function matchesShortcut(event: KeyEventLike, text: string): boolean {
   ) {
     return false
   }
-  return eventKey(event)?.toUpperCase() === shortcut.key.toUpperCase()
+  const key = eventKey(event)?.toUpperCase()
+  if (key === undefined) return false
+  const wanted = shortcut.key.toUpperCase()
+  // With Shift, a browser may report the punctuation key shifted or not (`>` or `.`).
+  return key === wanted || (shortcut.shift && (SHIFTED[key] === wanted || SHIFTED[wanted] === key))
 }
+
+/** Each punctuation and digit key's Shift character on a US layout. */
+export const SHIFTED: Readonly<Record<string, string>> = Object.freeze({
+  '.': '>',
+  ',': '<',
+  '/': '?',
+  ';': ':',
+  "'": '"',
+  '[': '{',
+  ']': '}',
+  '\\': '|',
+  '`': '~',
+  '-': '_',
+  '=': '+',
+  '1': '!',
+  '2': '@',
+  '3': '#',
+  '4': '$',
+  '5': '%',
+  '6': '^',
+  '7': '&',
+  '8': '*',
+  '9': '(',
+  '0': ')'
+})
 
 /** The action whose shortcut the press is, or null. */
 export function keymapAction(event: KeyEventLike, keymap: Keymap): ShortcutAction | null {
@@ -271,7 +326,15 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   nextPrompt: 'Next prompt',
   zoomPane: 'Zoom pane',
   openInWindow: 'Open in new window',
-  copyCommandOutput: 'Copy command output'
+  copyCommandOutput: 'Copy command output',
+  focusNextPane: 'Next pane',
+  focusPreviousPane: 'Previous pane',
+  equalizePanes: 'Equalize panes',
+  resizePaneLeft: 'Resize pane left',
+  resizePaneRight: 'Resize pane right',
+  resizePaneUp: 'Resize pane up',
+  resizePaneDown: 'Resize pane down',
+  renameCard: 'Rename card'
 })
 
 /** The app menu's accelerators on each OS (#14 D9, Electron's roles), as D7 text (D8). */
@@ -284,8 +347,6 @@ function menuAccelerators(platform: string): [string, string][] {
       ['Cmd+X', 'Cut'],
       ['Alt+Shift+Cmd+V', 'Paste and Match Style'],
       ['Cmd+A', 'Select All'],
-      ['Cmd+R', 'Reload'],
-      ['Shift+Cmd+R', 'Force Reload'],
       ['Alt+Cmd+I', 'Toggle Developer Tools'],
       ['Cmd+0', 'Actual Size'],
       ['Cmd++', 'Zoom In'],

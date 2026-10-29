@@ -9,7 +9,7 @@ import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
-import type { GhosttyTheme } from '../core/ghostty-config'
+import type { GhosttyConfig } from '../core/ghostty-config'
 import type { GlobalShortcutState } from '../core/global-shortcut'
 import type { AgentChoice } from '../core/installed-agents'
 import type { NamedEditor } from '../core/editor-candidates'
@@ -51,7 +51,7 @@ export const IPC = {
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
   settingsShells: 'settings:shells',
-  settingsGhosttyTheme: 'settings:ghosttyTheme',
+  settingsGhosttyConfig: 'settings:ghosttyConfig',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer',
   syncStatus: 'sync:status',
@@ -228,7 +228,7 @@ export interface SettingsApi {
   /** The login shell (`$SHELL`) and the shells in `/etc/shells` that exist, for the Shell setting. */
   shells(): Promise<ShellChoices>
   /** Reads the user's Ghostty config and theme now, for the "Use Ghostty theme" setting. */
-  ghosttyTheme(): Promise<GhosttyTheme>
+  ghosttyConfig(): Promise<GhosttyConfig>
 }
 
 export interface ShellChoices {

@@ -7,7 +7,7 @@ const NEW_FIELDS = {
   shell: '',
   terminalThemeDark: 'Bikube Dark',
   terminalThemeLight: 'Bikube Light',
-  useGhosttyTheme: false,
+  useGhosttyConfig: false,
   ...PREFERENCE_DEFAULTS
 }
 

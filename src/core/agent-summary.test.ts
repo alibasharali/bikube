@@ -18,6 +18,7 @@ interface Entry {
   isSidechain?: boolean
   message?: unknown
   toolUseResult?: unknown
+  cwd?: string
 }
 
 const assistant = (content: unknown[], seconds = 0, model = 'claude-opus-4-8'): Entry => ({
@@ -424,5 +425,181 @@ describe("the agent summary's background commands (#75 D8, AC9)", () => {
       ['Build', 'done', T0 + 30_000],
       ['Sleep', 'running', null]
     ])
+  })
+})
+
+/** A prompt the user typed: a main-agent user entry with text content. */
+const prompt = (text: unknown, seconds = 0, extra: Record<string, unknown> = {}): Entry => ({
+  type: 'user',
+  timestamp: at(seconds),
+  isSidechain: false,
+  message: { role: 'user', content: text },
+  ...extra
+})
+
+const tool = (id: string, name: string, input: Record<string, unknown>, seconds = 0): Entry =>
+  assistant([{ type: 'tool_use', id, name, input }], seconds)
+
+const reply = (text: string, seconds = 0): Entry => assistant([{ type: 'text', text }], seconds)
+
+describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
+  it('reads each typed prompt with its last reply, and its file changes once their result is in', () => {
+    const summary = read([
+      prompt('Add the panel', 0),
+      tool('w1', 'Write', { file_path: '/repo/src/a.ts', content: 'a\n'.repeat(10) }, 1),
+      result('w1', 'File created successfully at: /repo/src/a.ts', 2, false, {
+        type: 'create',
+        filePath: '/repo/src/a.ts'
+      }),
+      tool('e1', 'Edit', { file_path: '/repo/src/b.ts', old_string: 'x', new_string: 'y\nz' }, 3),
+      result('e1', 'The file has been updated.', 4, false, {
+        filePath: '/repo/src/b.ts',
+        structuredPatch: [{ lines: [' keep', '-x', '+y', '+z', ' keep'] }]
+      }),
+      reply('Added it.', 5),
+      prompt([{ type: 'text', text: 'Rename b' }], 10, { cwd: '/repo' }),
+      { ...bash('m1', 'cd /repo && git mv src/b.ts src/c.ts', 'Rename', 11), cwd: '/repo' },
+      result('m1', '', 12),
+      tool('e2', 'Edit', { file_path: '/repo/docs/x.md', old_string: 'a', new_string: 'a\nb' }, 13),
+      result('e2', 'The file has been updated.', 14),
+      reply('Thinking.', 15),
+      reply('Renamed b to c.', 16)
+    ])
+    expect(summary.prompts).toEqual([
+      { number: 1, text: 'Add the panel', reply: 'Added it.', startedAt: T0 },
+      { number: 2, text: 'Rename b', reply: 'Renamed b to c.', startedAt: T0 + 10_000 }
+    ])
+    expect(summary.changes).toEqual([
+      { prompt: 1, kind: 'new', path: '/repo/src/a.ts', added: 10, removed: 0 },
+      { prompt: 1, kind: 'edit', path: '/repo/src/b.ts', added: 2, removed: 1 },
+      {
+        prompt: 2,
+        kind: 'rename',
+        path: '/repo/src/b.ts',
+        to: '/repo/src/c.ts',
+        added: 0,
+        removed: 0
+      },
+      { prompt: 2, kind: 'edit', path: '/repo/docs/x.md', added: 1, removed: 0 }
+    ])
+  })
+
+  it('skips meta, command output, tool results, notifications and interruptions as prompts', () => {
+    const summary = read([
+      prompt('Caveat: the messages below were generated', 0, { isMeta: true }),
+      prompt('<command-name>/clear</command-name>', 1),
+      prompt('<local-command-stdout></local-command-stdout>', 2),
+      prompt('<task-notification><task-id>x</task-id></task-notification>', 3),
+      prompt([{ type: 'text', text: '[Request interrupted by user]' }], 4),
+      result('nothing', 'a result', 5),
+      prompt('Real one', 6)
+    ])
+    expect(summary.prompts?.map((p) => p.text)).toEqual(['Real one'])
+  })
+
+  it('leaves out failed, denied and pending edits, and failed or unsafe commands', () => {
+    const summary = read([
+      prompt('Go'),
+      tool('e1', 'Edit', { file_path: '/r/a', old_string: 'a', new_string: 'b' }),
+      result('e1', 'String not found', 1, true),
+      tool('e2', 'Write', { file_path: '/r/b', content: 'x' }),
+      result('e2', DENIAL, 2, true, 'User rejected tool use'),
+      tool('e3', 'Edit', { file_path: '/r/pending', old_string: 'a', new_string: 'b' }),
+      bash('b1', 'rm -f a.txt', 'Remove', 3),
+      result('b1', 'Exit code 1', 4, true),
+      bash('b2', 'rm *.log && rm $FILE && rm "$(ls)" && rm ~/x && git rm --cached k', 'Glob', 5),
+      result('b2', '', 6),
+      bash('b3', 'mv a b c', 'Three', 7),
+      result('b3', '', 8),
+      bash('b4', 'npm run x', 'Other', 9),
+      result('b4', '', 10)
+    ])
+    expect(summary.changes).toBeUndefined()
+  })
+
+  it('reads rm, git rm, mv and git mv steps, with flags, relative to the entry cwd', () => {
+    const summary = read([
+      prompt('Clean'),
+      {
+        ...bash('b', 'cd sub && rm -rf build out.txt; git rm -f old.ts || mv a.ts b.ts', 'X', 1),
+        cwd: '/repo'
+      },
+      result('b', '', 2),
+      bash('c', "mv 'one two.md' ../three.md", 'Y', 3),
+      result('c', '', 4)
+    ])
+    expect(summary.changes?.map((c) => [c.kind, c.path, c.to])).toEqual([
+      ['delete', '/repo/sub/build', undefined],
+      ['delete', '/repo/sub/out.txt', undefined],
+      ['delete', '/repo/sub/old.ts', undefined],
+      ['rename', '/repo/sub/a.ts', '/repo/sub/b.ts'],
+      ['rename', 'one two.md', '../three.md']
+    ])
+  })
+
+  it('counts MultiEdit and NotebookEdit, a Write that replaced a file, and sizes from strings', () => {
+    const summary = read([
+      prompt('Go'),
+      tool('m', 'MultiEdit', {
+        file_path: '/r/m.ts',
+        edits: [
+          { old_string: 'a\nb\nc', new_string: 'a\nB\nc' },
+          { old_string: 'x', new_string: 'x\ny' }
+        ]
+      }),
+      result('m', 'ok', 1),
+      tool('n', 'NotebookEdit', {
+        notebook_path: '/r/n.ipynb',
+        new_source: 'p\nq',
+        edit_mode: 'insert'
+      }),
+      result('n', 'ok', 2),
+      tool('w', 'Write', { file_path: '/r/w.ts', content: 'one\ntwo\n' }),
+      result('w', 'ok', 3, false, {
+        type: 'update',
+        structuredPatch: [{ lines: ['-old', '+one', '+two'] }]
+      })
+    ])
+    expect(summary.changes?.map((c) => [c.kind, c.path, c.added, c.removed])).toEqual([
+      ['edit', '/r/m.ts', 2, 1],
+      ['edit', '/r/n.ipynb', 2, 0],
+      ['edit', '/r/w.ts', 2, 1]
+    ])
+  })
+
+  it("gives a subagent's changes to the prompt its Task ran in", () => {
+    const state = newTranscriptState()
+    read(
+      [
+        prompt('First', 0),
+        task('task1', { subagent_type: 'general', description: 'D', prompt: 'Do it' }, 1),
+        prompt('Second', 10)
+      ],
+      state
+    )
+    addSubagentLine(state, 'agent-a1', sub(subPrompt('Do it', 2)))
+    addSubagentLine(
+      state,
+      'agent-a1',
+      sub(tool('s1', 'Write', { file_path: '/r/s.ts', content: 'x' }, 3))
+    )
+    addSubagentLine(state, 'agent-a1', sub(result('s1', 'ok', 4)))
+    expect(agentSummary(state).changes).toEqual([
+      { prompt: 1, kind: 'new', path: '/r/s.ts', added: 1, removed: 0 }
+    ])
+  })
+
+  it('caps the prompt at 2,000 characters, the reply at 4,000 and the changes at 5,000 (D11)', () => {
+    const entries: Entry[] = [prompt('p'.repeat(3000))]
+    for (let i = 0; i < SUMMARY_LIMITS.changes + 3; i++) {
+      entries.push(tool(`w${i}`, 'Write', { file_path: `/r/${i}`, content: 'x' }))
+      entries.push(result(`w${i}`, 'ok'))
+    }
+    entries.push(reply('r'.repeat(5000)))
+    const summary = read(entries)
+    expect(summary.prompts?.[0].text).toHaveLength(SUMMARY_LIMITS.prompt)
+    expect(summary.prompts?.[0].reply).toHaveLength(SUMMARY_LIMITS.reply)
+    expect(summary.changes).toHaveLength(SUMMARY_LIMITS.changes)
+    expect(summary.changes?.[0].path).toBe('/r/3')
   })
 })

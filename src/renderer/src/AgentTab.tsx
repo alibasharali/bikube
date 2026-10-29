@@ -1,6 +1,7 @@
 import { Bot, ChevronRight, LoaderCircle, SquareTerminal, Workflow } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
+import { changesView, type ChangeView } from '../../core/agent-changes'
 import { clockTime, formatDuration } from '../../core/agent-format'
 import {
   AGENT_ROW_STATUS_LABELS,
@@ -22,6 +23,7 @@ import {
   type AgentTabGroupId
 } from './agent-tab-groups'
 import { useCardRunState, useCardStatus } from './card-terminals'
+import { ChangesList } from './AgentChanges'
 import { ContextBar } from './CardLines'
 import { SMALL_ICON } from './icons'
 import { useShellAgent } from './shell-agents'
@@ -77,6 +79,7 @@ function AgentTab({
           <AgentView
             key={`${folder}\0${sessionId}`}
             summary={read.summary}
+            folder={folder ?? ''}
             usage={shell ? shellReport?.usage : cardUsage}
             activity={activity}
             running={running}
@@ -161,11 +164,14 @@ function useAgentSummary(
 /** The header and the three groups under it (D6), collapsed ones kept for the run of the app. */
 function AgentView({
   summary,
+  folder,
   usage,
   activity,
   running
 }: {
   summary: AgentSummary
+  /** The card's or shell's folder: What changed groups by it and opens files in it (D9). */
+  folder: string
   /** The card's usage as the board card shows it, or the shell's kept usage (D7, D3a). */
   usage: ClaudeUsage | undefined
   /** The card's or shell's activity (#31), for the main agent's status (D8). */
@@ -179,9 +185,11 @@ function AgentView({
   const shownCommands = allCommands ? commands : commands.slice(0, SHOWN_COMMANDS)
   const [allAgents, setAllAgents] = useState(false)
   const { shown, finished } = foldAgentRows(agentRows(activity, summary.agents, running))
+  const [changeView, setChangeView] = useState<ChangeView>({ kind: 'last' })
+  const changes = changesView(summary, folder, changeView)
   const counts: Record<AgentTabGroupId, number> = {
     agents: shown.length + (allAgents ? finished.length : 0),
-    changes: 0,
+    changes: changes.count,
     commands: shownCommands.length
   }
   return (
@@ -202,6 +210,15 @@ function AgentView({
                 finished={finished}
                 showFinished={allAgents}
                 onToggleFinished={() => setAllAgents(!allAgents)}
+              />
+            )}
+            {group.id === 'changes' && (
+              <ChangesList
+                summary={summary}
+                folder={folder}
+                view={changeView}
+                onView={setChangeView}
+                shown={changes}
               />
             )}
             {group.id === 'commands' && (

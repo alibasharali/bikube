@@ -1,7 +1,8 @@
 /**
  * The Agent tab's agent summary (#75 D7, D8, D10, D11): Claude Code transcript lines parsed into
  * the main agent's model and todo list, every subagent and background command with its status and
- * times, and every `Bash` command with its status, duration and output tail. No Node imports: main
+ * times, every `Bash` command with its status, duration and output tail, and (D9) the prompts the
+ * user typed with each one's last reply and the file changes made in it. No Node imports: main
  * feeds it the lines it tails (`agent-transcript.ts`), Vitest fixture lines. One
  * `TranscriptState` holds a whole conversation: the main transcript's lines come through
  * `addTranscriptLine` with `agent` null, each subagent transcript's through `addSubagentLine`
@@ -9,6 +10,7 @@
  * tool's result names, else by its first prompt, and its commands are tagged with the subagent's
  * name.
  */
+import { commandFileChanges, diffCount, lineCount, patchCount } from './agent-file-changes'
 
 /** D11's caps on what the summary carries. */
 export const SUMMARY_LIMITS = {
@@ -22,7 +24,16 @@ export const SUMMARY_LIMITS = {
   /** A background command's name when it has no description. */
   agentName: 60,
   todos: 200,
-  model: 200
+  model: 200,
+  /** A prompt's own text; the picker shows its first `promptLabel` characters. */
+  prompt: 2000,
+  promptLabel: 50,
+  /** A prompt's summary: the main agent's last text reply in it. */
+  reply: 4000,
+  /** Prompts kept, dropping the oldest (their file changes stay in the whole session). */
+  prompts: 1000,
+  /** File changes, across the session. */
+  changes: 5000
 } as const
 
 /**
@@ -80,6 +91,34 @@ export interface AgentTask {
   toolUses: number | null
 }
 
+/**
+ * A prompt the user typed (D9): a main-agent user entry with text content, not a tool result, a
+ * meta entry or command output. `number` counts from 1 in the session; `reply` is the main agent's
+ * last text reply in it.
+ */
+export interface AgentPrompt {
+  number: number
+  text: string
+  reply: string | null
+  startedAt: number | null
+}
+
+/**
+ * One file change an agent made (D9): `new` (a `Write` that created it), `edit` (an edit tool, or
+ * a `Write` over an existing file), `delete` or `rename` (`to` its new path) from a simple `rm`,
+ * `git rm`, `mv` or `git mv` step. Paths as the tool named them, or resolved against the entry's
+ * working directory; a path that stays relative is relative to the card's folder. `prompt` is the
+ * prompt's number it was made in, 0 before the first.
+ */
+export interface FileChange {
+  prompt: number
+  kind: 'new' | 'edit' | 'delete' | 'rename'
+  path: string
+  to?: string
+  added: number
+  removed: number
+}
+
 export interface AgentSummary {
   /** The main agent's latest assistant entry's model. */
   model: string | null
@@ -89,6 +128,30 @@ export interface AgentSummary {
   commands: AgentCommand[]
   /** Every subagent and background command, oldest first; absent while there are none. */
   agents?: AgentTask[]
+  /** The prompts the user typed, oldest first; absent while there are none. */
+  prompts?: AgentPrompt[]
+  /** Every file change, oldest first; absent while there are none. */
+  changes?: FileChange[]
+}
+
+/** A file change as read: its tool use's time and the order it was committed in, for sorting. */
+interface ChangeRead {
+  change: Omit<FileChange, 'prompt'>
+  /** The prompt it was made in; null for a subagent transcript's, given at `agentSummary`. */
+  prompt: number | null
+  at: number | null
+  seq: number
+}
+
+/** A change tool use waiting for its result: its changes, kept only when it succeeds. */
+interface PendingChange {
+  changes: Omit<FileChange, 'prompt'>[]
+  /** A `Write`, which reads New unless its result says it replaced a file. */
+  write: boolean
+  prompt: number | null
+  at: number | null
+  /** The subagent transcript it came from, or null. */
+  file: string | null
 }
 
 /** A subagent transcript read so far. */
@@ -98,6 +161,8 @@ interface SubagentFile {
   /** Its first user entry's text: the `Task`'s prompt. */
   prompt: string | null
   toolUses: number
+  /** Its file changes. */
+  changes: ChangeRead[]
 }
 
 /** What a `Task` tool use's own result and notifications say, kept apart from what is sent. */
@@ -108,6 +173,8 @@ interface TaskLink {
   toolUses: number | null
   /** A background command's shell id. */
   shellId: string | null
+  /** The prompt the main agent ran it in (a subagent's changes belong to it), else null. */
+  promptNumber: number | null
 }
 
 /** A conversation's parse state: fed line by line, read with `agentSummary`. */
@@ -132,6 +199,13 @@ export interface TranscriptState {
   commandFiles: Map<string, string>
   /** A `BashOutput`, `KillShell` or `TaskStop` tool use waiting for its result: the shell it names. */
   shellQueries: Map<string, { shellId: string; kill: boolean }>
+  prompts: AgentPrompt[]
+  /** Prompts read so far: the current one's number. */
+  promptCount: number
+  /** The main agent's (and agent-tagged lines') file changes. */
+  changes: ChangeRead[]
+  pendingChanges: Map<string, PendingChange>
+  changeSeq: number
 }
 
 export function newTranscriptState(): TranscriptState {
@@ -148,7 +222,12 @@ export function newTranscriptState(): TranscriptState {
     links: new Map(),
     files: new Map(),
     commandFiles: new Map(),
-    shellQueries: new Map()
+    shellQueries: new Map(),
+    prompts: [],
+    promptCount: 0,
+    changes: [],
+    pendingChanges: new Map(),
+    changeSeq: 0
   }
 }
 
@@ -302,7 +381,8 @@ function toolUse(
         prompt: typeof input.prompt === 'string' ? input.prompt : null,
         agentId: null,
         toolUses: null,
-        shellId: null
+        shellId: null,
+        promptNumber: main ? state.promptCount : null
       }
     )
   } else if (id !== null && typeof use.name === 'string' && use.name in SHELL_QUERIES) {
@@ -324,7 +404,7 @@ function toolUse(
           endedAt: null,
           toolUses: null
         },
-        { prompt: null, agentId: null, toolUses: null, shellId: null }
+        { prompt: null, agentId: null, toolUses: null, shellId: null, promptNumber: null }
       )
     }
     addCommand(
@@ -474,6 +554,7 @@ function shellQueryResult(
 function toolResult(state: TranscriptState, result: Json, at: number | null, extra: unknown): void {
   if (typeof result.tool_use_id !== 'string') return
   const content = resultText(result.content)
+  changeResult(state, result, content, extra)
   const query = state.shellQueries.get(result.tool_use_id)
   if (query) {
     state.shellQueries.delete(result.tool_use_id)
@@ -574,7 +655,12 @@ export function addTranscriptLine(
 export function addSubagentLine(state: TranscriptState, file: string, line: string): void {
   let read = state.files.get(file)
   if (!read) {
-    read = { agentId: /^agent-(.+)$/.exec(file)?.[1] ?? null, prompt: null, toolUses: 0 }
+    read = {
+      agentId: /^agent-(.+)$/.exec(file)?.[1] ?? null,
+      prompt: null,
+      toolUses: 0,
+      changes: []
+    }
     state.files.set(file, read)
   }
   const entry = parse(line)
@@ -601,6 +687,7 @@ function addLine(
   if (main && entry.isSidechain === true) return
   const at = timestamp(entry)
   notifications(state, entry, at)
+  if (main && entry.type === 'user') typedPrompt(state, entry, at)
   if (entry.type === 'assistant') {
     const message = entry.message
     if (
@@ -612,7 +699,12 @@ function addLine(
     ) {
       state.model = message.model.slice(0, SUMMARY_LIMITS.model)
     }
-    for (const use of blocks(entry, 'tool_use')) toolUse(state, use, at, agent, file)
+    if (main) lastReply(state, entry)
+    const cwd = typeof entry.cwd === 'string' && entry.cwd.startsWith('/') ? entry.cwd : null
+    for (const use of blocks(entry, 'tool_use')) {
+      toolUse(state, use, at, agent, file)
+      changeUse(state, use, at, file, cwd)
+    }
   } else if (entry.type === 'user') {
     for (const result of blocks(entry, 'tool_result')) {
       toolResult(state, result, at, entry.toolUseResult)
@@ -650,6 +742,159 @@ function matchFiles(state: TranscriptState): Map<string, string> {
   return matched
 }
 
+/** Text a user entry carries that Claude Code wrote, not the user: command output, notifications. */
+const NOT_TYPED =
+  /^(?:<(?:command-name|command-message|command-args|local-command-|bash-input|bash-stdout|bash-stderr|task-notification|user-memory-input)|\[Request interrupted)/
+
+/**
+ * A main-agent user entry the user typed starts a prompt (D9): text (or image) content, no tool
+ * result, not meta, a compact summary or command output.
+ */
+function typedPrompt(state: TranscriptState, entry: Json, at: number | null): void {
+  if (entry.isMeta === true || entry.isCompactSummary === true) return
+  if (entry.isVisibleInTranscriptOnly === true || entry.toolUseResult !== undefined) return
+  const message = entry.message
+  if (!isObject(message)) return
+  let typed: string
+  if (typeof message.content === 'string') typed = message.content
+  else if (Array.isArray(message.content)) {
+    const content = message.content.filter(isObject)
+    if (content.some((b) => b.type === 'tool_result')) return
+    const texts = content.filter((b) => b.type === 'text' && typeof b.text === 'string')
+    if (texts.length === 0 && !content.some((b) => b.type === 'image')) return
+    typed = texts.map((b) => b.text as string).join('\n')
+  } else return
+  if (NOT_TYPED.test(typed.trimStart())) return
+  state.promptCount++
+  state.prompts.push({
+    number: state.promptCount,
+    text: typed.trim().slice(0, SUMMARY_LIMITS.prompt),
+    reply: null,
+    startedAt: at
+  })
+  if (state.prompts.length > SUMMARY_LIMITS.prompts) state.prompts.shift()
+}
+
+/** The main agent's last text reply in the current prompt: its summary (D9). */
+function lastReply(state: TranscriptState, entry: Json): void {
+  const current = state.prompts[state.prompts.length - 1]
+  if (!current || current.number !== state.promptCount) return
+  const texts = blocks(entry, 'text').filter((b) => typeof b.text === 'string' && b.text.trim())
+  const last = texts[texts.length - 1]
+  if (last) current.reply = (last.text as string).trim().slice(0, SUMMARY_LIMITS.reply)
+}
+
+const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
+
+const stringOf = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+/** An edit tool's change, its size counted from its strings until a structured patch says otherwise. */
+function editChange(name: string, input: Json): Omit<FileChange, 'prompt'> | null {
+  const path = text(input.file_path ?? input.notebook_path, Number.MAX_SAFE_INTEGER)
+  if (path === null) return null
+  if (name === 'Write')
+    return { kind: 'new', path, added: lineCount(stringOf(input.content)), removed: 0 }
+  if (name === 'NotebookEdit') {
+    const added = input.edit_mode === 'delete' ? 0 : lineCount(stringOf(input.new_source))
+    return { kind: 'edit', path, added, removed: 0 }
+  }
+  const edits = name === 'MultiEdit' && Array.isArray(input.edits) ? input.edits : [input]
+  let added = 0
+  let removed = 0
+  for (const edit of edits) {
+    if (!isObject(edit)) continue
+    const count = diffCount(stringOf(edit.old_string), stringOf(edit.new_string))
+    added += count.added
+    removed += count.removed
+  }
+  return { kind: 'edit', path, added, removed }
+}
+
+/** A tool use that may change files: kept pending until its result says it succeeded (D9). */
+function changeUse(
+  state: TranscriptState,
+  use: Json,
+  at: number | null,
+  file: string | null,
+  cwd: string | null
+): void {
+  if (typeof use.id !== 'string' || typeof use.name !== 'string') return
+  const input = isObject(use.input) ? use.input : {}
+  let changes: Omit<FileChange, 'prompt'>[] = []
+  if (EDIT_TOOLS.has(use.name)) {
+    const change = editChange(use.name, input)
+    if (change) changes = [change]
+  } else if (use.name === 'Bash' && typeof input.command === 'string') {
+    if (input.run_in_background === true) return
+    changes = commandFileChanges(input.command, cwd).map((c) => ({ ...c, added: 0, removed: 0 }))
+  }
+  if (changes.length === 0) return
+  state.pendingChanges.set(use.id, {
+    changes,
+    write: use.name === 'Write',
+    prompt: file === null ? state.promptCount : null,
+    at,
+    file
+  })
+}
+
+/** A change tool use's result: its changes kept unless it failed, was denied or interrupted. */
+function changeResult(state: TranscriptState, result: Json, content: string, extra: unknown): void {
+  const id = result.tool_use_id as string
+  const pending = state.pendingChanges.get(id)
+  if (!pending) return
+  state.pendingChanges.delete(id)
+  if (result.is_error === true || isDenial(content, extra)) return
+  if (isObject(extra) && extra.interrupted === true) return
+  const info = isObject(extra) ? extra : {}
+  const patch = patchCount(info.structuredPatch)
+  const target = pending.file === null ? state.changes : state.files.get(pending.file)?.changes
+  if (!target) return
+  for (const change of pending.changes) {
+    const made = { ...change }
+    if (pending.write && info.type === 'update') made.kind = 'edit'
+    if (
+      patch &&
+      (made.kind === 'edit' || (made.kind === 'new' && patch.added + patch.removed > 0))
+    ) {
+      made.added = patch.added
+      made.removed = patch.removed
+    }
+    target.push({ change: made, prompt: pending.prompt, at: pending.at, seq: state.changeSeq++ })
+    if (target.length > SUMMARY_LIMITS.changes) target.shift()
+  }
+}
+
+/** The prompt a change at `at` was made in, by the prompts' start times. */
+function promptAt(state: TranscriptState, at: number | null): number {
+  if (at === null) return state.promptCount
+  let number = 0
+  for (const p of state.prompts) if (p.startedAt !== null && p.startedAt <= at) number = p.number
+  return number
+}
+
+/**
+ * Every file change in order: the main agent's, and each subagent transcript's given the prompt
+ * its `Task` ran in (by the start times when it isn't matched), sorted by prompt and time; the
+ * newest 5,000 (D11).
+ */
+function summaryChanges(state: TranscriptState, matched: Map<string, string>): FileChange[] {
+  const all: { read: ChangeRead; prompt: number }[] = state.changes.map((read) => ({
+    read,
+    prompt: read.prompt ?? promptAt(state, read.at)
+  }))
+  for (const [name, file] of state.files) {
+    const id = matched.get(name)
+    const taskPrompt = id === undefined ? null : (state.links.get(id)?.promptNumber ?? null)
+    for (const read of file.changes) {
+      all.push({ read, prompt: taskPrompt ?? promptAt(state, read.at) })
+    }
+  }
+  const time = (read: ChangeRead): number => read.at ?? Number.MAX_SAFE_INTEGER
+  all.sort((a, b) => a.prompt - b.prompt || time(a.read) - time(b.read) || a.read.seq - b.read.seq)
+  return all.slice(-SUMMARY_LIMITS.changes).map(({ read, prompt }) => ({ prompt, ...read.change }))
+}
+
 /** The summary of everything read so far: copies, so later lines never change a sent one. */
 export function agentSummary(state: TranscriptState): AgentSummary {
   const todos = state.todoSource === 'tasks' ? [...state.tasks.values()] : state.todos
@@ -660,6 +905,7 @@ export function agentSummary(state: TranscriptState): AgentSummary {
     const id = matched.get(file)
     return (id !== undefined ? state.agentsById.get(id)?.name : undefined) ?? 'Subagent'
   }
+  const changes = summaryChanges(state, matched)
   const summary: AgentSummary = {
     model: state.model,
     todos: todos.map((t) => ({ ...t })),
@@ -677,5 +923,7 @@ export function agentSummary(state: TranscriptState): AgentSummary {
           : null
     }))
   }
+  if (state.prompts.length > 0) summary.prompts = state.prompts.map((p) => ({ ...p }))
+  if (changes.length > 0) summary.changes = changes
   return summary
 }

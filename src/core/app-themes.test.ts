@@ -149,6 +149,8 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     need('pill-question-text on surface', t['pill-question-text'], t.surface, 4.5)
     // The Agent tab's expanded command (#75 D10): quoted strings in the waiting green on the panel.
     need('pill-waiting-text on surface', t['pill-waiting-text'], t.surface, 4.5)
+    // What changed (#75 D9): the Renamed badge in the working blue on the panel.
+    need('pill-working-text on surface', t['pill-working-text'], t.surface, 4.5)
     for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)
     need('accent-text on accent', t['accent-text'], t.accent, 4.5)
     // D5's one named exception: Default dark's danger text, #ffffff on #e5484d, as it is today.

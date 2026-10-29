@@ -2,6 +2,8 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { randomUUID } from 'node:crypto'
 import {
   appendFileSync,
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,6 +13,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeProjectFolder } from '../src/core/claude-stats'
+import { pickAppTheme } from './app-theme'
 import { backToBoard, boardCard, cardView, closeCard, expectCardOpen } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { claudeLogLines } from './fake-claude'
@@ -695,4 +698,264 @@ test('#75 AC9: a background command runs in Agents and reads Background in Comma
   await expect(duration).not.toHaveText(first!, { timeout: 3000 })
   await expect(commandTitles()).toHaveText(['Start dev server'])
   await expect(commandRows().first().getByTestId('agent-command-status')).toHaveText('Background')
+})
+
+// S4 (#75 D9): What changed, from the prompts and the edit tools and simple commands in them.
+
+const userPrompt = (text: string, seconds: number): string =>
+  line({
+    type: 'user',
+    timestamp: at(seconds),
+    isSidechain: false,
+    uuid: randomUUID(),
+    cwd: repo,
+    message: { role: 'user', content: text }
+  })
+
+const toolUse = (id: string, name: string, input: object, seconds: number): string =>
+  line({
+    type: 'assistant',
+    timestamp: at(seconds),
+    isSidechain: false,
+    uuid: randomUUID(),
+    cwd: repo,
+    message: {
+      model: 'claude-opus-4-8',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id, name, input }]
+    }
+  })
+
+/**
+ * AC10's session: prompt 1 writes `src/a.ts` (10 lines) and edits `src/b.ts` (+2 −1, from its
+ * structured patch); prompt 2 runs `git mv src/b.ts src/c.ts`, edits `docs/x.md` (+1 −0, counted
+ * from its strings) and replies `Renamed b to c.`
+ */
+const changesFixture = (): string[] => [
+  userPrompt('Add the panel', 100),
+  toolUse('w1', 'Write', { file_path: join(repo, 'src/a.ts'), content: 'a\n'.repeat(10) }, 101),
+  bashResult('w1', 'File created successfully', 102, false, {
+    type: 'create',
+    filePath: join(repo, 'src/a.ts')
+  }),
+  toolUse(
+    'e1',
+    'Edit',
+    { file_path: join(repo, 'src/b.ts'), old_string: 'x', new_string: 'y\nz' },
+    103
+  ),
+  bashResult('e1', 'The file has been updated.', 104, false, {
+    filePath: join(repo, 'src/b.ts'),
+    structuredPatch: [{ oldStart: 1, lines: [' keep', '-x', '+y', '+z'] }]
+  }),
+  assistant([{ type: 'text', text: 'Added the panel.' }], 105),
+  userPrompt('Rename b', 200),
+  toolUse('m1', 'Bash', { command: 'git mv src/b.ts src/c.ts', description: 'Rename b' }, 201),
+  bashResult('m1', '', 202),
+  toolUse(
+    'e2',
+    'Edit',
+    { file_path: join(repo, 'docs/x.md'), old_string: 'one', new_string: 'one\ntwo' },
+    203
+  ),
+  bashResult('e2', 'The file has been updated.', 204),
+  assistant([{ type: 'text', text: 'Renamed b to c.' }], 205)
+]
+
+const changes = (): Locator => group('What changed')
+const changeRows = (): Locator => changes().getByTestId('agent-change')
+
+/** Each shown file as `<folder> <name> <badge> <size>`, the size empty when it shows none. */
+const shownChanges = (): Promise<string[]> =>
+  changes()
+    .getByTestId('agent-changes-folder')
+    .evaluateAll((folders) =>
+      folders.flatMap((folder) =>
+        [...folder.querySelectorAll('[data-testid=agent-change]')].map((row) =>
+          [
+            folder.querySelector('[data-testid=agent-changes-folder-name]')?.textContent,
+            row.querySelector('[data-testid=agent-change-name]')?.textContent,
+            row.querySelector('[data-testid=agent-change-badge]')?.textContent,
+            row.querySelector('[data-testid=agent-change-size]')?.textContent ?? ''
+          ].join(' ')
+        )
+      )
+    )
+
+test('#75 AC10, AC11: What changed for the last prompt, the whole session and an earlier prompt', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', changesFixture())
+
+  const select = changes().getByTestId('agent-changes-view')
+  await expect(select).toHaveValue('last')
+  await expect(select.locator('option:checked')).toHaveText('Last prompt')
+  await expect(select.locator('option')).toHaveText([
+    'Last prompt',
+    'Whole session',
+    '#1 Add the panel'
+  ])
+  await expect(changes().getByTestId('agent-changes-heading')).toHaveText('2 files · +1 −0')
+  await expect.poll(shownChanges).toEqual(['docs x.md Edited +1 −0', 'src b.ts → c.ts Renamed '])
+  await expect(changes().getByTestId('agent-changes-summary')).toHaveText('Renamed b to c.')
+  await expect(group('What changed').getByTestId('agent-tab-group-count')).toHaveText('2')
+
+  // AC11: the whole session, then prompt 1.
+  await select.selectOption({ label: 'Whole session' })
+  await expect
+    .poll(shownChanges)
+    .toEqual(['docs x.md Edited +1 −0', 'src a.ts New +10 −0', 'src b.ts → c.ts Renamed '])
+  await expect(changes().getByTestId('agent-changes-summary')).toHaveCount(0)
+  await select.selectOption({ label: '#1 Add the panel' })
+  await expect.poll(shownChanges).toEqual(['src a.ts New +10 −0', 'src b.ts Edited +2 −1'])
+  await expect(changes().getByTestId('agent-changes-summary')).toHaveText('Added the panel.')
+
+  // Another card starts at Last prompt again, with its empty line.
+  await backToBoard(page)
+  await claudeCard('second', [userPrompt('Nothing yet', 1)])
+  await expect(changes().getByTestId('agent-changes-view')).toHaveValue('last')
+  await expect(changes().getByTestId('agent-changes-empty')).toHaveText(
+    'No file changes in this prompt.'
+  )
+})
+
+test('#75 AC12: clicking a changed file opens it with the folder, as the Files tab does', async () => {
+  const log = join(root, 'editor.log')
+  const code = join(fake.home, 'bin', 'code')
+  writeFileSync(code, `#!/bin/sh\n{ echo "run code"; printf '%s\\n' "$@"; } >> '${log}'\n`)
+  chmodSync(code, 0o755)
+  mkdirSync(join(repo, 'docs'), { recursive: true })
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  writeFileSync(join(repo, 'docs', 'x.md'), 'one\ntwo\n')
+  writeFileSync(join(repo, 'src', 'c.ts'), 'c\n')
+  const runs = (): string[] =>
+    existsSync(log) ? readFileSync(log, 'utf8').trimEnd().split('\n') : []
+
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const id = await claudeCard('agent', [...changesFixture(), userPrompt('Delete it', 300)])
+  // Deleted and outside files aren't buttons.
+  appendFileSync(
+    transcriptOf(id),
+    [
+      toolUse('d1', 'Bash', { command: 'rm src/c.ts', description: 'Remove c' }, 301),
+      bashResult('d1', '', 302),
+      toolUse(
+        'o1',
+        'Edit',
+        { file_path: '/tmp/elsewhere.txt', old_string: 'a', new_string: 'b' },
+        303
+      ),
+      bashResult('o1', 'ok', 304)
+    ].join('')
+  )
+  await expect.poll(shownChanges).toEqual(['src c.ts Deleted ', '/tmp elsewhere.txt Edited +1 −1'])
+  await expect(changeRows().getByRole('button')).toHaveCount(0)
+
+  await changes().getByTestId('agent-changes-view').selectOption({ label: '#2 Rename b' })
+  const file = changeRows().filter({ hasText: 'x.md' }).getByRole('button', { name: 'x.md' })
+  await file.click()
+  await expect.poll(runs).toEqual(['run code', repo, join(repo, 'docs', 'x.md')])
+  await expect(changes().getByTestId('agent-changes-open-error')).toHaveCount(0)
+})
+
+test('#75 AC17: at 200 px the tab has no sideways scroll, and its colours are the theme’s', async () => {
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false,"sidePanelWidth":200,"sidePanelTab":"agent"}}'
+  )
+  await launch()
+  await page.emulateMedia({ colorScheme: null })
+  await createWorkspace(repo, 'repo')
+  await claudeCard('agent', [
+    ...COMMANDS_FIXTURE,
+    ...changesFixture(),
+    toolUse(
+      'long',
+      'Edit',
+      {
+        file_path: join(
+          repo,
+          'a-very-long-folder-name-that-goes-on/and-on/file-with-a-long-name.ts'
+        ),
+        old_string: 'a',
+        new_string: 'b'
+      },
+      206
+    ),
+    bashResult('long', 'ok', 207)
+  ])
+  await expect(changes().getByTestId('agent-changes-heading')).toHaveText('3 files · +2 −1')
+  await expect(panel()).toHaveCSS('width', '200px')
+  await commandRows().nth(1).getByTestId('agent-command-toggle').click()
+  await expect(commandRows().nth(1).getByTestId('agent-command-detail')).toBeVisible()
+
+  const body = panel().getByTestId('agent-tab')
+  const noSideways = (): Promise<boolean> =>
+    panel()
+      .locator('.side-panel-body')
+      .evaluate(
+        (el) =>
+          el.scrollWidth <= el.clientWidth &&
+          (el.querySelector('[data-testid=agent-tab]') as HTMLElement).scrollWidth <=
+            (el.querySelector('[data-testid=agent-tab]') as HTMLElement).clientWidth
+      )
+
+  /** The tab's colours, each with the token it should come from resolved in the page. */
+  const colours = (): Promise<Record<string, [string, string]>> =>
+    body.evaluate((tab) => {
+      const resolve = (token: string): string => {
+        const probe = document.createElement('span')
+        probe.style.color = `var(${token})`
+        document.body.append(probe)
+        const colour = getComputedStyle(probe).color
+        probe.remove()
+        return colour
+      }
+      const color = (selector: string): string => {
+        const el = tab.querySelector(selector)
+        return el ? getComputedStyle(el).color : 'missing'
+      }
+      return {
+        name: [color('[data-testid=agent-change-name]'), resolve('--text')],
+        edited: [
+          color('[data-testid=agent-change-badge][data-badge=Edited]'),
+          resolve('--pill-question-text')
+        ],
+        renamed: [
+          color('[data-testid=agent-change-badge][data-badge=Renamed]'),
+          resolve('--pill-working-text')
+        ],
+        added: [color('.agent-change-added'), resolve('--pill-waiting-text')],
+        removed: [color('.agent-change-removed'), resolve('--danger')],
+        heading: [color('[data-testid=agent-changes-heading]'), resolve('--text-muted')],
+        summary: [color('[data-testid=agent-changes-summary]'), resolve('--text')],
+        command: [color('[data-testid=agent-command-title]'), resolve('--text')]
+      }
+    })
+  const expectThemed = async (): Promise<void> => {
+    await expect.poll(noSideways).toBe(true)
+    for (const [what, [shown, token]] of Object.entries(await colours())) {
+      expect(shown, what).toBe(token)
+    }
+  }
+
+  await expect(changeRows().first()).toBeVisible()
+  await expectThemed()
+  const darkText = (await colours()).name[1]
+
+  const settings = page.getByTestId('settings-dialog')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  await settings.getByRole('radio', { name: 'Light' }).check()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expect.poll(async () => (await colours()).name[1]).not.toBe(darkText)
+  await expectThemed()
+  const lightText = (await colours()).name[1]
+
+  await pickAppTheme(page, 'Nord')
+  await expect.poll(async () => (await colours()).name[1]).not.toBe(lightText)
+  await expectThemed()
 })

@@ -3,7 +3,7 @@
  * transcript under `<home>/.claude/projects` tailed into its agent summary (`agent-summary.ts`).
  * fs is injected for Vitest; nothing outside that path is read.
  */
-import { open, stat } from 'node:fs/promises'
+import { open, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
   addTranscriptLine,
@@ -193,6 +193,59 @@ export async function readAgentSummary(
     return { state: 'error', reason: 'not a folder' }
   }
   const path = transcriptPath(deps.home, resolve(request.folder), request.sessionId)
+  const since = Number.isSafeInteger(request.since) ? (request.since as number) : undefined
+  return (deps.tailer ?? new TranscriptTailer()).read(path, since)
+}
+
+export interface LookupFs {
+  readdir(path: string): Promise<string[]>
+  stat(path: string): Promise<{ isFile(): boolean; mtimeMs: number }>
+}
+
+/**
+ * A shell's transcript (D3a): Claude Code may have run in any folder the user `cd`'d to, so the
+ * session's file is looked for one level under `<home>/.claude/projects`, the most recently
+ * written when several match; null when none does. `sessionId` must already be checked.
+ */
+export async function findSessionTranscript(
+  home: string,
+  sessionId: string,
+  fs: LookupFs = { readdir, stat }
+): Promise<string | null> {
+  const projects = join(home, '.claude', 'projects')
+  let folders: string[]
+  try {
+    folders = await fs.readdir(projects)
+  } catch {
+    return null
+  }
+  let found: { path: string; mtimeMs: number } | null = null
+  for (const name of folders) {
+    const path = join(projects, name, `${sessionId}.jsonl`)
+    try {
+      const info = await fs.stat(path)
+      if (info.isFile() && (found === null || info.mtimeMs > found.mtimeMs)) {
+        found = { path, mtimeMs: info.mtimeMs }
+      }
+    } catch {
+      // Not in this folder.
+    }
+  }
+  return found?.path ?? null
+}
+
+/**
+ * Answers a shell's request (D3a, D4), which names the session alone: a session id that isn't a
+ * UUID is refused before anything is read; else the summary of the transcript
+ * `findSessionTranscript` finds, `none` while there is none.
+ */
+export async function readSessionSummary(
+  request: { sessionId: unknown; since?: unknown },
+  deps: { home: string; fs?: LookupFs; tailer?: TranscriptTailer }
+): Promise<AgentSummaryRead> {
+  if (!isSessionId(request.sessionId)) return { state: 'error', reason: 'invalid session id' }
+  const path = await findSessionTranscript(deps.home, request.sessionId.toLowerCase(), deps.fs)
+  if (path === null) return { state: 'none' }
   const since = Number.isSafeInteger(request.since) ? (request.since as number) : undefined
   return (deps.tailer ?? new TranscriptTailer()).read(path, since)
 }

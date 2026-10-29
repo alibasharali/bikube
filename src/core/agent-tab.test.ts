@@ -84,6 +84,41 @@ describe('what the Agent tab shows (#75 D2, D3)', () => {
     }
   })
 
+  it("follows a running shell's kept session, found by id, with the shell's folder (D3a)", () => {
+    const ws = workspace([card()])
+    const worktree = card({
+      id: 'c2',
+      directory: '/data/worktrees/repo-c2',
+      worktree: { path: '/data/worktrees/repo-c2', branch: 'c2', repo: '/repo' }
+    })
+    const named = { ...ws.shells[0], runIn: 'c2' }
+    const withRunIn = { ...ws, cards: [...ws.cards, worktree], shells: [named, ws.shells[1]] }
+    for (const [w, shell, folder] of [
+      [ws, null, '/repo'],
+      [ws, ws.shells[1], '/repo'],
+      [withRunIn, named, '/data/worktrees/repo-c2']
+    ] as const) {
+      expect(
+        agentTabSubject(w, shellCard(w, shell), { running: true, sessionId: SESSION })
+      ).toEqual({ kind: 'conversation', folder, sessionId: SESSION, shell: true })
+    }
+  })
+
+  it('asks to run claude in a shell with no session kept, or not running', () => {
+    const ws = workspace([card()])
+    const shell = shellCard(ws, null)
+    for (const kept of [
+      { running: true, sessionId: undefined },
+      { running: false, sessionId: SESSION },
+      { running: true, sessionId: 'not-a-uuid' }
+    ]) {
+      expect(agentTabSubject(ws, shell, kept)).toEqual({
+        kind: 'message',
+        text: AGENT_TAB_MESSAGES.shell
+      })
+    }
+  })
+
   it('has no conversation for a card without a session id', () => {
     const c = card({ agentSessionId: '' })
     expect(agentTabSubject(workspace([c]), c)).toEqual({

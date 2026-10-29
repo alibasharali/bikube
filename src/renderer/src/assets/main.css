@@ -2546,6 +2546,39 @@ button.dev-server-chip:focus-visible {
   min-width: 0;
 }
 
+/* The Agents group (#75 D8): the main agent first, its status chip as a command's */
+.agent-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.agent-row-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.agent-row .agent-command-status {
+  flex: none;
+  font-size: var(--text-xs);
+}
+
 /* The Commands group (#75 D10): rows that expand to the command laid out, its output and Copy */
 .agent-commands {
   display: flex;

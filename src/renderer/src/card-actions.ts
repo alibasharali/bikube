@@ -6,6 +6,7 @@ import { cardPanes, cardTerminals } from './card-terminals'
 import { forgetPendingWorktree, makePendingWorktree } from './pending-worktrees'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
+import { clearShellAgent } from './shell-agents'
 import { clearCardUsage } from './usage'
 
 /**
@@ -109,13 +110,14 @@ export function requestCloseCard(cardId: string, ask: () => void): void {
 /**
  * Stops every pane's process of a card being deleted and frees its screens (#11 D6), and removes
  * its kept output (#46 D7; a shell has none, and removing none does nothing) and its usage
- * (#50 D7).
+ * (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
  */
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
   window.bikube.scrollback.delete(cardId)
   clearCardUsage(cardId)
+  clearShellAgent(cardId)
 }
 
 /** Deletes a card and stops its processes, freeing its terminals (#4 D13, #11 D6). */

@@ -98,6 +98,7 @@ export const IPC = {
   agentSetupReveal: 'agentSetup:reveal',
   agentSetupStats: 'agentSetup:stats',
   agentTabSummary: 'agentTab:summary',
+  agentTabSessionSummary: 'agentTab:sessionSummary',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -361,6 +362,12 @@ export interface AgentTabApi {
    * the summary the asker holds: `unchanged` while the transcript has nothing new (D5).
    */
   summary(folder: string, sessionId: string, since?: number): Promise<AgentSummaryRead>
+  /**
+   * A workspace shell's conversation, named by its session id alone (#75 D3a, D4): main finds the
+   * transcript in any one folder under `<home>/.claude/projects` (the newest if several); an
+   * `error` (nothing read) unless `sessionId` is a UUID; `since` as for `summary`.
+   */
+  sessionSummary(sessionId: string, since?: number): Promise<AgentSummaryRead>
 }
 
 export interface AgentSetupApi {

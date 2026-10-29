@@ -1135,6 +1135,53 @@ describe('answerBoardCommand from a workspace shell', () => {
     expect(store.getState().workspaces[0].cards.every((c) => c.lastStatus === undefined)).toBe(true)
   })
 
+  it("hands a running shell's session and usage on, runtime only (#75 D3a)", () => {
+    const store = shellStore()
+    const before = store.getState()
+    const sessions: [string, string][] = []
+    const usages: [string, ClaudeUsage][] = []
+    const usage: ClaudeUsage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 0,
+      cacheRead: 0,
+      tokens: 3,
+      context: 1,
+      model: null
+    }
+    const ask = (from: string, command: Parameters<typeof answerBoardCommand>[2]): unknown =>
+      answerBoardCommand(
+        store,
+        from,
+        command,
+        (id) => id !== 's-dev',
+        () => {},
+        () => {},
+        () => {},
+        (id, next) => usages.push([id, next]),
+        undefined,
+        (id, session) => sessions.push([id, session])
+      )
+    const from = defaultShellId('alpha')
+    const SESSION = '0B8C3A1E-1111-4222-8333-444455556666'
+    expect(ask(from, { command: 'session', card: '.', session: SESSION })).toEqual({ ok: true })
+    expect(ask(from, { command: 'usage', card: '.', usage })).toEqual({ ok: true })
+    expect(sessions).toEqual([[from, SESSION.toLowerCase()]])
+    expect(usages).toEqual([[from, usage]])
+    // A stopped shell keeps nothing.
+    expect(ask('s-dev', { command: 'session', card: '.', session: SESSION })).toEqual({
+      ok: false,
+      error: SHELL_NOT_A_CARD
+    })
+    expect(ask('s-dev', { command: 'usage', card: '.', usage })).toEqual({
+      ok: false,
+      error: SHELL_NOT_A_CARD
+    })
+    expect(sessions).toHaveLength(1)
+    expect(usages).toHaveLength(1)
+    expect(store.getState()).toBe(before)
+  })
+
   it('still refuses a terminal that is neither a card nor a shell', () => {
     expect(
       answer(setup(), 'default-shell:gone', { command: 'workspaces', format: 'text' })

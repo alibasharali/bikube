@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeProjectFolder } from '../src/core/claude-stats'
-import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
+import { backToBoard, boardCard, cardView, closeCard, expectCardOpen } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
@@ -480,4 +480,69 @@ test("#75 AC15: `board session` in the card switches the tab to the new session'
   await endFakeClaude()
   await typeInCard(`board session . ${other}`)
   await expect(commandTitles()).toHaveText(['Echo B'], { timeout: 3000 })
+})
+
+// S2a (#75 D3a): Claude Code in a workspace shell. Its hooks' `board session .` and `board usage .`
+// are kept for the running shell, runtime only; the transcript is found by the session id alone
+// in any one folder under `.claude/projects`.
+
+/** Session C's transcript in another project folder: one command, and a 42%-context reply. */
+function writeShellTranscript(id: string): string {
+  const path = join(fake.home, '.claude', 'projects', '-some-other-folder', `${id}.jsonl`)
+  mkdirSync(join(path, '..'), { recursive: true })
+  writeFileSync(
+    path,
+    [bashUse('c1', 'echo C', 'Echo C', 0), bashResult('c1', 'C', 1), HEADER_FIXTURE[1]].join('')
+  )
+  return path
+}
+
+const mainAgent = (): Locator =>
+  group('Agents').getByTestId('agent-row').filter({ hasText: 'Main agent' })
+
+test('#75 AC15a: Claude Code in the Default and a temporary shell, runtime only', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const session = randomUUID()
+  const transcript = writeShellTranscript(session)
+
+  await page.getByTestId('toolbar-new-shell').click()
+  await expectCardOpen(page, 'Default')
+  await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
+  await typeInCard(`board session . ${session}`)
+  await expect(commandTitles()).toHaveText(['Echo C'], { timeout: 3000 })
+  await expect(mainAgent().getByTestId('agent-row-status')).toHaveText('Idle')
+  await typeInCard('board activity . working')
+  await expect(mainAgent().getByTestId('agent-row-status')).toHaveText('Running')
+  // D7: the context bar from the shell's own usage.
+  await typeInCard(`board usage . ${transcript}`)
+  await expect(panel().getByTestId('agent-tab-header').getByTestId('card-context-text')).toHaveText(
+    '42% context'
+  )
+
+  // A temporary shell (New shell with the Default shell running) follows its own report.
+  await backToBoard(page)
+  await page.getByTestId('toolbar-new-shell').click()
+  await expectCardOpen(page, 'Terminal 1')
+  await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
+  await typeInCard(`board session . ${session}`)
+  await expect(commandTitles()).toHaveText(['Echo C'], { timeout: 3000 })
+  await typeInCard('board activity . working')
+  await expect(mainAgent().getByTestId('agent-row-status')).toHaveText('Running')
+
+  // Closed and started again, the Default shell has no session.
+  await page.getByTestId('workspace-terminal').filter({ hasText: 'Default' }).click()
+  await expectCardOpen(page, 'Default')
+  await expect(commandTitles()).toHaveText(['Echo C'])
+  await closeCard(page)
+  await page.getByTestId('confirm-close').click()
+  await expect(cardView(page)).toHaveCount(0)
+  await page.getByTestId('toolbar-new-shell').click()
+  await expectCardOpen(page, 'Default')
+  await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
+
+  // Never saved.
+  await page.waitForTimeout(1000)
+  expect(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')).not.toContain(session)
 })

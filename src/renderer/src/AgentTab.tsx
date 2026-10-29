@@ -1,10 +1,13 @@
 import { ChevronRight, LoaderCircle } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
+import type { Activity } from '../../core/activity'
 import { clockTime, formatDuration } from '../../core/agent-format'
+import { AGENT_ROW_STATUS_LABELS, agentRows, type AgentRow } from '../../core/agent-rows'
 import type { AgentCommand, AgentSummary, AgentTodo } from '../../core/agent-summary'
 import { AGENT_TAB_MESSAGES, agentTabSubject, type AgentSummaryRead } from '../../core/agent-tab'
 import { commandSteps } from '../../core/command-layout'
 import type { Card, Workspace } from '../../core/workspace-store'
+import type { ClaudeUsage } from '../../core/claude-usage-types'
 import { hasUsage } from '../../core/usage-format'
 import {
   AGENT_TAB_GROUPS,
@@ -12,8 +15,10 @@ import {
   useCollapsedAgentGroups,
   type AgentTabGroupId
 } from './agent-tab-groups'
+import { useCardRunState, useCardStatus } from './card-terminals'
 import { ContextBar } from './CardLines'
 import { SMALL_ICON } from './icons'
+import { useShellAgent } from './shell-agents'
 import { useCardUsage } from './usage'
 
 /** How long after an answer the tab asks again while it shows (D5). */
@@ -24,9 +29,10 @@ const SHOWN_COMMANDS = 200
 /**
  * The side panel's Agent tab (#75): with a local Claude Code card in front, its current session's
  * conversation, asked of main by folder and session id about every second while the tab shows
- * (D3, D4, D5): the header and the groups; else D2's message. The board in front is `card`
- * undefined. Mounted only while the tab is selected and the panel shown, so it asks nothing
- * otherwise.
+ * (D3, D4, D5): the header and the groups; with a running workspace shell in front, the session
+ * Claude Code last reported in it, asked of main by its id alone, and the shell's own usage
+ * (D3a); else D2's message. The board in front is `card` undefined. Mounted only while the tab
+ * is selected and the panel shown, so it asks nothing otherwise.
  */
 function AgentTab({
   workspace,
@@ -35,10 +41,19 @@ function AgentTab({
   workspace: Workspace | undefined
   card: Card | undefined
 }): React.JSX.Element {
-  const subject = agentTabSubject(workspace, card)
+  const cardId = card?.id ?? ''
+  const shellReport = useShellAgent(card?.id)
+  const running = useCardRunState(cardId).kind === 'running'
+  const { activity } = useCardStatus(cardId)
+  const cardUsage = useCardUsage(cardId)
+  const subject = agentTabSubject(workspace, card, {
+    running,
+    sessionId: shellReport?.sessionId
+  })
   const folder = subject.kind === 'conversation' ? subject.folder : null
   const sessionId = subject.kind === 'conversation' ? subject.sessionId : null
-  const read = useAgentSummary(folder, sessionId)
+  const shell = subject.kind === 'conversation' && subject.shell === true
+  const read = useAgentSummary(folder, sessionId, shell)
 
   let body: React.ReactNode
   if (subject.kind === 'message') body = <Message text={subject.text} />
@@ -52,8 +67,13 @@ function AgentTab({
             Couldn&apos;t read the conversation: {read.reason}
           </p>
         )}
-        {read.summary && card && (
-          <AgentView key={`${folder}\0${sessionId}`} summary={read.summary} cardId={card.id} />
+        {read.summary && (
+          <AgentView
+            key={`${folder}\0${sessionId}`}
+            summary={read.summary}
+            usage={shell ? shellReport?.usage : cardUsage}
+            activity={activity}
+          />
         )}
       </>
     )
@@ -81,12 +101,18 @@ type Shown =
   | { state: 'error'; reason: string; summary?: AgentSummary }
 
 /**
- * Main's answers for this folder and session, asked again 1 s after each answer (D5) while
- * mounted; an `unchanged` answer changes nothing. Undefined until the first answer.
+ * Main's answers for this folder and session (a shell's by the session alone, D3a), asked again
+ * 1 s after each answer (D5) while mounted; an `unchanged` answer changes nothing. Undefined
+ * until the first answer.
  */
-function useAgentSummary(folder: string | null, sessionId: string | null): Shown | undefined {
+function useAgentSummary(
+  folder: string | null,
+  sessionId: string | null,
+  shell: boolean
+): Shown | undefined {
   const [answer, setAnswer] = useState<{ key: string; shown: Shown }>()
-  const key = folder !== null && sessionId !== null ? `${folder}\0${sessionId}` : null
+  const key =
+    folder !== null && sessionId !== null ? `${shell ? 'shell' : folder}\0${sessionId}` : null
   useEffect(() => {
     if (folder === null || sessionId === null || key === null) return
     let current = true
@@ -94,8 +120,10 @@ function useAgentSummary(folder: string | null, sessionId: string | null): Shown
     let version: number | undefined
     let last: AgentSummary | undefined
     const ask = (): void => {
-      void window.bikube.agentTab
-        .summary(folder, sessionId, version)
+      const request = shell
+        ? window.bikube.agentTab.sessionSummary(sessionId, version)
+        : window.bikube.agentTab.summary(folder, sessionId, version)
+      void request
         .catch((): AgentSummaryRead => ({ state: 'error', reason: 'request failed' }))
         .then((read) => {
           if (!current) return
@@ -119,30 +147,35 @@ function useAgentSummary(folder: string | null, sessionId: string | null): Shown
       current = false
       if (timer !== undefined) clearTimeout(timer)
     }
-  }, [folder, sessionId, key])
+  }, [folder, sessionId, shell, key])
   return answer && answer.key === key ? answer.shown : undefined
 }
 
 /** The header and the three groups under it (D6), collapsed ones kept for the run of the app. */
 function AgentView({
   summary,
-  cardId
+  usage,
+  activity
 }: {
   summary: AgentSummary
-  cardId: string
+  /** The card's usage as the board card shows it, or the shell's kept usage (D7, D3a). */
+  usage: ClaudeUsage | undefined
+  /** The card's or shell's activity (#31), for the main agent's status (D8). */
+  activity: Activity | undefined
 }): React.JSX.Element {
   const collapsed = useCollapsedAgentGroups()
   const [allCommands, setAllCommands] = useState(false)
   const commands = summary.commands.slice().reverse()
   const shownCommands = allCommands ? commands : commands.slice(0, SHOWN_COMMANDS)
+  const agents = agentRows(activity)
   const counts: Record<AgentTabGroupId, number> = {
-    agents: 0,
+    agents: agents.length,
     changes: 0,
     commands: shownCommands.length
   }
   return (
     <>
-      <AgentHeader summary={summary} cardId={cardId} />
+      <AgentHeader summary={summary} usage={usage} />
       <div className="agent-tab-groups">
         {AGENT_TAB_GROUPS.map((group) => (
           <AgentGroup
@@ -152,6 +185,7 @@ function AgentView({
             count={counts[group.id]}
             open={!collapsed.has(group.id)}
           >
+            {group.id === 'agents' && <AgentList rows={agents} />}
             {group.id === 'commands' && (
               <CommandList
                 commands={shownCommands}
@@ -169,12 +203,11 @@ function AgentView({
 /** The model, the board card's context bar and the todo list (D7); each absent without data. */
 function AgentHeader({
   summary,
-  cardId
+  usage
 }: {
   summary: AgentSummary
-  cardId: string
+  usage: ClaudeUsage | undefined
 }): React.JSX.Element | null {
-  const usage = useCardUsage(cardId)
   const withUsage = hasUsage(usage)
   if (summary.model === null && !withUsage && summary.todos.length === 0) return null
   return (
@@ -217,6 +250,31 @@ function Todos({ todos }: { todos: AgentTodo[] }): React.JSX.Element {
         ))}
       </ul>
     </div>
+  )
+}
+
+/** The Agents group's rows (D8): the main agent first. */
+function AgentList({ rows }: { rows: AgentRow[] }): React.JSX.Element {
+  return (
+    <ul className="agent-rows">
+      {rows.map((row, i) => (
+        <li key={i} className="agent-row" data-testid="agent-row" data-kind={row.kind}>
+          <span className="agent-row-name" data-testid="agent-row-name">
+            {row.name}
+          </span>
+          <span
+            className="agent-command-status"
+            data-testid="agent-row-status"
+            data-status={row.status}
+          >
+            {row.status === 'running' && (
+              <LoaderCircle {...SMALL_ICON} className="agent-command-spinner" />
+            )}
+            {AGENT_ROW_STATUS_LABELS[row.status]}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

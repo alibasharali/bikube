@@ -1,12 +1,14 @@
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { open, stat } from 'node:fs/promises'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { open, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSummaryRead } from './agent-tab'
 import {
   TranscriptTailer,
+  findSessionTranscript,
   readAgentSummary,
+  readSessionSummary,
   transcriptPath,
   type TailFs,
   type TranscriptFs
@@ -259,5 +261,62 @@ describe("main's transcript tailing (#75 D4, D5)", () => {
     expect(
       await readAgentSummary({ folder, sessionId: SESSION, since }, { home, fs, tailer })
     ).toEqual({ state: 'unchanged' })
+  })
+})
+
+describe("a shell's transcript, found by its session id (#75 D3a, D4)", () => {
+  const lookupFs = {
+    readdir: (path: string) => {
+      asked.push(path)
+      return readdir(path)
+    },
+    stat: (path: string) => {
+      asked.push(path)
+      return stat(path)
+    }
+  }
+
+  it('finds the session in any one project folder, the newest file if several match', async () => {
+    expect(await findSessionTranscript(home, SESSION, lookupFs)).toBeNull()
+    const older = writeTranscript('/some/other/folder')
+    expect(await findSessionTranscript(home, SESSION, lookupFs)).toBe(older)
+    const newer = writeTranscript('/yet/another')
+    utimesSync(older, new Date(1_000_000), new Date(1_000_000))
+    expect(await findSessionTranscript(home, SESSION, lookupFs)).toBe(newer)
+    utimesSync(newer, new Date(500_000), new Date(500_000))
+    expect(await findSessionTranscript(home, SESSION, lookupFs)).toBe(older)
+  })
+
+  it('looks one level down only, and takes no folder named like the session', async () => {
+    const deep = join(home, '.claude', 'projects', 'a', 'b', `${SESSION}.jsonl`)
+    mkdirSync(join(deep, '..'), { recursive: true })
+    writeFileSync(deep, '{}\n')
+    mkdirSync(join(home, '.claude', 'projects', 'c', `${SESSION}.jsonl`), { recursive: true })
+    expect(await findSessionTranscript(home, SESSION, lookupFs)).toBeNull()
+  })
+
+  it("reads the found transcript's summary, none while there is none", async () => {
+    const tailer = new TranscriptTailer()
+    expect(
+      await readSessionSummary({ sessionId: SESSION }, { home, fs: lookupFs, tailer })
+    ).toEqual({ state: 'none' })
+    writeTranscript('/some/other/folder')
+    const read = await readSessionSummary({ sessionId: SESSION }, { home, fs: lookupFs, tailer })
+    expect(read).toMatchObject({ state: 'conversation' })
+    const since = read.state === 'conversation' ? read.version : -1
+    expect(
+      await readSessionSummary({ sessionId: SESSION, since }, { home, fs: lookupFs, tailer })
+    ).toEqual({ state: 'unchanged' })
+  })
+
+  it('refuses a session id that is not a UUID, reading nothing', async () => {
+    writeTranscript('/some/other/folder')
+    for (const sessionId of ['../../etc/passwd', '*', `../${SESSION}`, '', 7, null]) {
+      expect(await readSessionSummary({ sessionId }, { home, fs: lookupFs })).toEqual({
+        state: 'error',
+        reason: 'invalid session id'
+      })
+    }
+    expect(asked).toEqual([])
   })
 })

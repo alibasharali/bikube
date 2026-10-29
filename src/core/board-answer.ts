@@ -81,27 +81,42 @@ export async function checkCreateWorktree(
   return { ok: true, command: { ...command, branch } }
 }
 
-/** `command` naming `.` from a workspace shell (see `answerBoardCommand`). */
+/** What a workspace shell's `.` hands on: its status, activity, Claude Code session and usage. */
+interface ShellReports {
+  setAgentStatus: (cardId: string, text: string) => void
+  setActivity: (cardId: string, activity: Activity | null) => void
+  setShellSession: (shellId: string, sessionId: string) => void
+  setUsage: (cardId: string, usage: ClaudeUsage) => void
+}
+
+/**
+ * `command` naming `.` from a workspace shell (see `answerBoardCommand`): its status, activity,
+ * Claude Code session and usage are handed on for the running shell, runtime only (#75 D3a);
+ * `description` prints nothing; anything else is refused.
+ */
 function answerShell(
   shellId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
-  setAgentStatus: (cardId: string, text: string) => void,
-  setActivity: (cardId: string, activity: Activity | null) => void
+  reports: ShellReports
 ): BoardReply {
-  if (command.command === 'status' || command.command === 'activity') {
-    if (!isRunning(shellId)) return { ok: false, error: SHELL_NOT_A_CARD }
-    if (command.command === 'status') setAgentStatus(shellId, cleanAgentStatus(command.text))
-    else setActivity(shellId, command.activity === 'none' ? null : command.activity)
-    return { ok: true }
-  }
   if (
-    command.command === 'description' ||
+    command.command === 'status' ||
+    command.command === 'activity' ||
     command.command === 'session' ||
     command.command === 'usage'
   ) {
+    if (!isRunning(shellId)) return { ok: false, error: SHELL_NOT_A_CARD }
+    if (command.command === 'status') {
+      reports.setAgentStatus(shellId, cleanAgentStatus(command.text))
+    } else if (command.command === 'activity') {
+      reports.setActivity(shellId, command.activity === 'none' ? null : command.activity)
+    } else if (command.command === 'session') {
+      reports.setShellSession(shellId, command.session.toLowerCase())
+    } else reports.setUsage(shellId, command.usage)
     return { ok: true }
   }
+  if (command.command === 'description') return { ok: true }
   return { ok: false, error: SHELL_NOT_A_CARD }
 }
 
@@ -114,7 +129,8 @@ function answerShell(
  * only on the calling card, which must be running with a pending setup (#39 D4): `ok` clears it in the store (saved) and hands the
  * card as it now is to `setupAnswered`, which types its start line; `failed` keeps it. `usage`
  * needs a running card and hands the usage to `setUsage`, also keeping it in the store as the
- * card's last usage, so it is there after a restart (#50 D5, D7).
+ * card's last usage, so it is there after a restart (#50 D5, D7). From a workspace shell, `.`'s
+ * `session` goes to `setShellSession` and its `usage` to `setUsage`, both runtime only (#75 D3a).
  * `list` answers with the workspace's columns and cards (`runtime` gives each card's state);
  * `create` adds a card, not started, at the bottom of a column and answers with its id; `rename`
  * renames one. Both save through the store like any board change. `description` answers with
@@ -141,7 +157,8 @@ export function answerBoardCommand(
   setActivity: (cardId: string, activity: Activity | null) => void = () => {},
   setupAnswered: (card: Card, result: SetupResult) => void = () => {},
   setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {},
-  runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) })
+  runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) }),
+  setShellSession: (shellId: string, sessionId: string) => void = () => {}
 ): BoardReply {
   const state = store.getState()
   const workspace = findCallingWorkspace(state, callingCardId)
@@ -203,10 +220,16 @@ export function answerBoardCommand(
     return { ok: true, output: `${created.value.id} ${titles.name}\n` }
   }
   // A shell is a terminal like a card's (Claude Code typed in it gets Bikube's hooks): its
-  // status and activity show for it, runtime only; it has no description, session or usage to
-  // keep, so those do nothing, and it can't be moved, renamed, described or set up.
-  if (shell && command.card === CALLING_CARD)
-    return answerShell(callingCardId, command, isRunning, setAgentStatus, setActivity)
+  // status, activity, session and usage are kept for it, runtime only (#75 D3a); it has no
+  // description, and it can't be moved, renamed, described or set up.
+  if (shell && command.card === CALLING_CARD) {
+    return answerShell(callingCardId, command, isRunning, {
+      setAgentStatus,
+      setActivity,
+      setShellSession,
+      setUsage
+    })
+  }
   // A card's id names it in any workspace for a local card (#69 D7); `activity`, `session`,
   // `setup` and `usage` stay in the calling workspace, as an SSH card's commands do (D9).
   const placed =

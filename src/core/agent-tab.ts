@@ -15,26 +15,39 @@ export const AGENT_TAB_MESSAGES = {
   noConversation: 'No conversation yet.'
 } as const
 
-/** A message in place of a conversation, or the conversation main is asked about. */
+/**
+ * A message in place of a conversation, or the conversation main is asked about: a card's by its
+ * folder and session id (D3), a shell's (`shell: true`) by its session id alone, `folder` being
+ * the folder its Files tab shows (D3a).
+ */
 export type AgentTabSubject =
-  { kind: 'message'; text: string } | { kind: 'conversation'; folder: string; sessionId: string }
+  | { kind: 'message'; text: string }
+  | { kind: 'conversation'; folder: string; sessionId: string; shell?: true }
+
+/** What a workspace shell keeps at runtime for the tab (D3a): whether it runs, and its session. */
+export interface ShellAgent {
+  running: boolean
+  sessionId: string | undefined
+}
 
 const message = (text: string): AgentTabSubject => ({ kind: 'message', text })
 
 /**
  * What the tab shows with `card` (a card or a workspace shell as a card) in front, or the board
  * when undefined: a local Claude Code card's session in its own directory (its worktree's for a
- * worktree card), else D2's message. A workspace shell's session comes with S2a (D3a).
+ * worktree card), a running local shell's kept session (`shell`, D3a), else D2's message.
  */
 export function agentTabSubject(
   workspace: Workspace | undefined,
-  card: Card | undefined
+  card: Card | undefined,
+  shell?: ShellAgent
 ): AgentTabSubject {
   if (!card) return message(AGENT_TAB_MESSAGES.board)
   if (card.host !== undefined) return message(AGENT_TAB_MESSAGES.ssh)
   const onBoard = workspace?.cards.some((c) => c.id === card.id) ?? false
   if (!onBoard && workspace && findShellCard(workspace, card.id)) {
-    return message(AGENT_TAB_MESSAGES.shell)
+    if (!shell?.running || !isSessionId(shell.sessionId)) return message(AGENT_TAB_MESSAGES.shell)
+    return { kind: 'conversation', folder: card.directory, sessionId: shell.sessionId, shell: true }
   }
   if (card.startup.kind !== 'claude') return message(AGENT_TAB_MESSAGES.notClaude)
   if (!isSessionId(card.agentSessionId)) return message(AGENT_TAB_MESSAGES.noConversation)

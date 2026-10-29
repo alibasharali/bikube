@@ -1,6 +1,6 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type { AgentSummaryRead } from '../core/agent-tab'
-import { TranscriptTailer, readAgentSummary } from '../core/agent-transcript'
+import { TranscriptTailer, readAgentSummary, readSessionSummary } from '../core/agent-transcript'
 import { IPC } from '../shared/api'
 import { userHome } from './home'
 
@@ -19,20 +19,33 @@ const TEST_HOOK = '__bikubeAgentTabRequests'
 /**
  * The Agent tab's request (#75 D3, D4, D5): main frame only; the folder and session id are checked
  * by `readAgentSummary`, which reads nothing but the session's transcript under the user's home
- * (`BIKUBE_HOME_DIR`, else the OS home), tailed by one `TranscriptTailer` for the app's run.
+ * (`BIKUBE_HOME_DIR`, else the OS home), tailed by one `TranscriptTailer` for the app's run. A
+ * workspace shell's request names the session alone, its transcript found by `readSessionSummary`
+ * in any one project folder (D3a).
  */
 export function registerAgentTab(): void {
   const tailer = new TranscriptTailer()
   const counts: Record<string, number> = {}
   if (!app.isPackaged) Object.assign(globalThis, { [TEST_HOOK]: counts })
+  const count = (sessionId: unknown): void => {
+    if (!app.isPackaged && typeof sessionId === 'string') {
+      counts[sessionId] = (counts[sessionId] ?? 0) + 1
+    }
+  }
   ipcMain.handle(
     IPC.agentTabSummary,
     (event, folder: unknown, sessionId: unknown, since: unknown): Promise<AgentSummaryRead> => {
       fromMainFrame(event, IPC.agentTabSummary)
-      if (!app.isPackaged && typeof sessionId === 'string') {
-        counts[sessionId] = (counts[sessionId] ?? 0) + 1
-      }
+      count(sessionId)
       return readAgentSummary({ folder, sessionId, since }, { home: userHome(), tailer })
+    }
+  )
+  ipcMain.handle(
+    IPC.agentTabSessionSummary,
+    (event, sessionId: unknown, since: unknown): Promise<AgentSummaryRead> => {
+      fromMainFrame(event, IPC.agentTabSessionSummary)
+      count(sessionId)
+      return readSessionSummary({ sessionId, since }, { home: userHome(), tailer })
     }
   )
 }

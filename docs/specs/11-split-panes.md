@@ -79,8 +79,8 @@ None. `drovr-state.json` and `drovr-settings.json` are unchanged; panes are neve
 
 ## Out of scope
 
-- Draggable dividers or uneven splits; zooming a pane to the full view.
-- Keyboard shortcuts to move focus between panes or close a pane.
+- Draggable dividers or uneven splits; zooming a pane to the full view. *Superseded by #48 and PR #90:* Zoom pane (#48); Resize pane moves the divider nearest the focused pane 5% a press, each side kept between 10% and 90%, and Equalize panes evens them; sizes are runtime only, like the panes. Dividers still don't drag.
+- Keyboard shortcuts to move focus between panes or close a pane. *Superseded by #31 and PR #90:* Close pane (#31); Next pane and Previous pane move the focus in tree order, wrapping, a zoom staying on the newly focused pane.
 - A startup command, title or status of its own for an extra pane; showing extra panes' output on the board.
 - Saving panes or their layout across restarts; restarting extra panes' shells.
 - Moving a pane to another card or turning it into a card.

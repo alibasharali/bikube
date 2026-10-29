@@ -7,6 +7,7 @@ import type { BoardAgent, BoardCommand } from './board-args'
 import type { CardMoveTarget } from './card-moves'
 import type { StartupCommand } from './startup-command'
 import { stripEscapes } from './card-status'
+import { findShellCard } from './workspace-shells'
 import {
   cardsInColumn,
   type Card,
@@ -18,19 +19,42 @@ import {
 export type BoardResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export const NOT_IN_A_CARD = 'board: not running inside a Bikube card'
+/** `.` from a workspace shell, which is a terminal but no card on the board. */
+export const SHELL_NOT_A_CARD = 'board: this is a shell, not a card; name a card by its id or title'
+
 /** Longest agent status, in characters (#9 D8). */
 export const MAX_AGENT_STATUS_LENGTH = 200
 
 /** `.` names the calling card (#9 D2). */
 export const CALLING_CARD = '.'
 
-/** The workspace holding the calling card, whichever workspace is active (#9 D2, D3). */
+/**
+ * The workspace holding the calling card, or the shell (the Default shell, a named or temporary
+ * one) the request came from, whichever workspace is active (#9 D2, D3): every Bikube terminal
+ * gets `board`.
+ */
 export function findCallingWorkspace(
   state: WorkspaceState,
   callingCardId: string
 ): BoardResult<Workspace> {
-  const workspace = state.workspaces.find((w) => w.cards.some((c) => c.id === callingCardId))
+  const workspace = state.workspaces.find(
+    (w) => w.cards.some((c) => c.id === callingCardId) || findShellCard(w, callingCardId)
+  )
   return workspace ? { ok: true, value: workspace } : { ok: false, error: NOT_IN_A_CARD }
+}
+
+/**
+ * What called `board` in `workspace` (found by `findCallingWorkspace`): its card, or its shell as
+ * the card-shaped record the terminals use, with `shell` set.
+ */
+export function callingTerminal(
+  workspace: Workspace,
+  callingCardId: string
+): { card: Card; shell: boolean } {
+  const card = workspace.cards.find((c) => c.id === callingCardId)
+  return card
+    ? { card, shell: false }
+    : { card: findShellCard(workspace, callingCardId)!, shell: true }
 }
 
 /**

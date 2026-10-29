@@ -899,3 +899,32 @@ test("#69 AC6/AC8: a card created in another workspace gets the description, the
       ['T2', true]
     ])
 })
+
+test("the Default shell runs board: it lists, creates and moves named cards, and `.` isn't a card", async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  await newCard('Backlog', 'api')
+  await back()
+
+  // New shell opens the workspace's Default shell, in the workspace folder.
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toBeVisible()
+  await expect.poll(terminalFocused).toBe(true)
+
+  const listed = await board(alpha, 'board list --json')
+  expect(listed.code).toBe(0)
+  expect(JSON.parse(listed.stdout).workspace.name).toBe('alpha')
+
+  const created = await board(alpha, `board create backlog 'From the shell'`)
+  expect(created.code).toBe(0)
+  expect(created.stdout.trim().split(' ')[1]).toBe('alpha')
+  expect(await board(alpha, 'board move api done')).toEqual(ok)
+  expect(await board(alpha, 'board status . hello')).toEqual(
+    refused('board: this is a shell, not a card; name a card by its id or title')
+  )
+
+  await back()
+  await expect(titlesIn('Backlog')).toHaveText(['From the shell'])
+  await expect(titlesIn('Done')).toHaveText(['api'])
+})

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './board-answer'
-import { NOT_IN_A_CARD } from './board-commands'
+import { NOT_IN_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
+  defaultShellId,
   InMemoryWorkspaceStore,
   type Card,
   type Workspace,
@@ -1037,6 +1038,80 @@ describe('answerBoardCommand across workspaces (#69 D6–D9, D11)', () => {
         error: 'board: invalid request'
       })
       expect(store.getState()).toBe(before)
+    })
+  })
+})
+
+describe('answerBoardCommand from a workspace shell', () => {
+  const shellStore = (): InMemoryWorkspaceStore => {
+    const store = setup()
+    const state = store.getState()
+    const alpha = state.workspaces[0]
+    return new InMemoryWorkspaceStore({
+      initialState: {
+        ...state,
+        workspaces: [
+          {
+            ...alpha,
+            shells: [
+              {
+                id: 's-dev',
+                name: 'Terminal 1',
+                command: '',
+                autostart: false,
+                type: 'shell',
+                temporary: true
+              }
+            ]
+          },
+          state.workspaces[1]
+        ]
+      }
+    })
+  }
+  const answer = (
+    store: InMemoryWorkspaceStore,
+    from: string,
+    command: Parameters<typeof answerBoardCommand>[2]
+  ): ReturnType<typeof answerBoardCommand> =>
+    answerBoardCommand(store, from, command, running, () => {})
+
+  it("lists and creates in the shell's workspace, the new card with the workspace's agent", () => {
+    const store = shellStore()
+    const listed = answer(store, defaultShellId('alpha'), { command: 'list', format: 'json' })
+    if (!listed.ok || listed.output === undefined) throw new Error('no output')
+    expect(JSON.parse(listed.output).workspace.id).toBe('alpha')
+
+    const created = answer(store, 's-dev', { command: 'create', column: 'Backlog', title: 'Docs' })
+    expect(created).toMatchObject({ ok: true, output: expect.stringMatching(/ alpha\n$/) })
+    const card = store.getState().workspaces[0].cards.find((c) => c.title === 'Docs')
+    expect(card?.startup).toEqual({ kind: 'claude' })
+    expect(card?.unopened).toBeUndefined()
+  })
+
+  it('moves and renames a named card, and refuses `.`, since a shell is no card', () => {
+    const store = shellStore()
+    const from = defaultShellId('alpha')
+    expect(answer(store, from, { command: 'move', card: 'api', column: 'Done' })).toEqual({
+      ok: true
+    })
+    expect(columnOf(store, 'c-api')).toBe('done')
+    expect(answer(store, from, { command: 'status', card: '.', text: 'hi' })).toEqual({
+      ok: false,
+      error: SHELL_NOT_A_CARD
+    })
+    expect(answer(store, from, { command: 'activity', card: '.', activity: 'working' })).toEqual({
+      ok: false,
+      error: SHELL_NOT_A_CARD
+    })
+  })
+
+  it('still refuses a terminal that is neither a card nor a shell', () => {
+    expect(
+      answer(setup(), 'default-shell:gone', { command: 'workspaces', format: 'text' })
+    ).toEqual({
+      ok: false,
+      error: NOT_IN_A_CARD
     })
   })
 })

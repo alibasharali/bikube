@@ -20,4 +20,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 ## Verification
 
 - done: ALL PASS (verifier, e2e/agent-tab.spec.ts 14/14 + Vitest)
-- UX review: running
+- UX review: done (2 must-fix fixed in 8fafc06: chip/accent contrast, 4 px stacked gaps; re-check CLEAN)

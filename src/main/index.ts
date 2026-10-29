@@ -18,6 +18,7 @@ import { registerFiles } from './files'
 import { registerAgents } from './agents'
 import { registerEditors } from './editors'
 import { registerAgentSetup } from './agent-setup'
+import { registerAgentTab } from './agent-tab'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
 import { registerGit } from './git'
 import { registerLinks } from './links'
@@ -184,6 +185,7 @@ function startApp(): void {
   registerAgents(() => settings.shell())
   registerEditors(() => settings.shell())
   registerAgentSetup(() => settings.editor())
+  registerAgentTab()
   const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.

@@ -157,7 +157,7 @@ test('#55 AC1: the panel shows by default at the right of the panes, 280 px, Fil
   expect(Math.abs(panelBox.height - termBox.height)).toBeLessThanOrEqual(1)
   // Its tabs are in the title bar above it.
   const tabs = page.getByTestId('titlebar-panel-side').getByRole('tab')
-  await expect(tabs).toHaveText(['Files', 'Shells'])
+  await expect(tabs).toHaveText(['Files', 'Shells', 'Agent'])
   await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
   await expect(panelButton()).toHaveAttribute('aria-pressed', 'true')
   // Nothing is saved while the panel is as by default.
@@ -317,7 +317,7 @@ test('#55 AC2: the shortcut and the title bar button toggle it, with no hide but
 test('the panel runs from the window top: its tabs and button in the title bar, as wide as the panel', async () => {
   await openC1()
   const section = page.getByTestId('titlebar-panel-side')
-  await expect(section.getByRole('tab')).toHaveText(['Files', 'Shells'])
+  await expect(section.getByRole('tab')).toHaveText(['Files', 'Shells', 'Agent'])
   await expect(section.getByTestId('titlebar-panel')).toHaveAttribute('aria-pressed', 'true')
   const above = (await section.boundingBox())!
   const body = (await panel().boundingBox())!

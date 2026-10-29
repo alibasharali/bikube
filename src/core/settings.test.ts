@@ -532,6 +532,13 @@ describe('the side panel preferences (#55 D3, D4)', () => {
     expect(parsed.settings).toMatchObject({ sidePanelOpen: true, sidePanelWidth: 280 })
     expect(parsed.replaced).toEqual(['sidePanelOpen', 'sidePanelWidth'])
   })
+
+  it('saves the Agent tab (#75 D1) and reads it back', () => {
+    const settings: Settings = { ...base, sidePanelTab: 'agent' }
+    const text = serializeSettings(settings)
+    expect(JSON.parse(text).settings).toMatchObject({ sidePanelTab: 'agent' })
+    expect(parseSettingsFile(text, 'linux').settings.sidePanelTab).toBe('agent')
+  })
 })
 
 describe('the editor preferences (#55 D14)', () => {

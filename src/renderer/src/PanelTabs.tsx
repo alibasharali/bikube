@@ -11,7 +11,8 @@ import Tooltip from './Tooltip'
 /** The panel's tabs (#55 D1), in strip order. */
 const PANEL_TABS: readonly { id: SidePanelTab; label: string }[] = [
   { id: 'files', label: 'Files' },
-  { id: 'shells', label: 'Shells' }
+  { id: 'shells', label: 'Shells' },
+  { id: 'agent', label: 'Agent' }
 ]
 
 /**

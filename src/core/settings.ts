@@ -73,7 +73,7 @@ export const MAX_SIDE_PANEL_WIDTH = 4000
 export const EDITORS = ['vscode', 'cursor', 'zed', 'system', 'custom'] as const
 
 /** The side panel's tabs, in strip order. */
-export const SIDE_PANEL_TABS = ['files', 'shells'] as const
+export const SIDE_PANEL_TABS = ['files', 'shells', 'agent'] as const
 export type SidePanelTab = (typeof SIDE_PANEL_TABS)[number]
 export type Editor = (typeof EDITORS)[number]
 export const MAX_EDITOR_COMMAND_LENGTH = 4096

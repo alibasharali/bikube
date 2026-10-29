@@ -6,6 +6,7 @@ import type {
 } from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
+import type { AgentSummaryRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -96,6 +97,7 @@ export const IPC = {
   agentSetupOpen: 'agentSetup:open',
   agentSetupReveal: 'agentSetup:reveal',
   agentSetupStats: 'agentSetup:stats',
+  agentTabSummary: 'agentTab:summary',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -351,6 +353,15 @@ export interface GitApi {
   merge(dir: string, repo: string, cardBranch: string, branch: string): Promise<SyncResult>
 }
 
+export interface AgentTabApi {
+  /**
+   * The Agent tab's conversation for a card in `folder` with Claude Code session `sessionId`
+   * (#75 D3, D4): read by main from `<home>/.claude/projects` only; an `error` (nothing read) unless
+   * `folder` is an absolute, existing directory and `sessionId` a UUID.
+   */
+  summary(folder: string, sessionId: string): Promise<AgentSummaryRead>
+}
+
 export interface AgentSetupApi {
   /**
    * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
@@ -542,5 +553,6 @@ export interface BikubeApi {
   agents: AgentsApi
   editors: EditorsApi
   agentSetup: AgentSetupApi
+  agentTab: AgentTabApi
   update: UpdateApi
 }

@@ -8,6 +8,7 @@ import {
   shownPanelWidth
 } from '../../core/side-panel'
 import type { Card } from '../../core/workspace-store'
+import AgentTab from './AgentTab'
 import FilesTab from './FilesTab'
 import { PanelTabs, PanelToggle } from './PanelTabs'
 import { setPanelDragWidth, usePanelWidth, useWindowWidth } from './panel-width'
@@ -149,6 +150,7 @@ function SidePanel({
             onOpen={onOpenShell}
           />
         )}
+        {tab === 'agent' && <AgentTab workspace={workspace} card={openCard} />}
       </div>
     </aside>
   )

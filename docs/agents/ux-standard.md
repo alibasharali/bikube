@@ -24,6 +24,7 @@ Every finding gets exactly one class: must-fix or polish.
 The change is broken for some user. The orchestrator sends it back for a fix round before the PR opens.
 
 - broken, overlapping or clipped layout (content cut off by its container without a scroll box or ellipsis)
+- text blocks touching: a label, hint, heading, empty-state line or other text with a vertical gap below the smallest spacing step (4 px without a scale) to the next element; it reads as broken
 - horizontal page scroll at 320 px or wider
 - text or controls unreadable in light or dark mode: body text contrast below 4.5:1, large text below 3:1
 - raw colours, spacing or hand-built controls where the project has UI primitives or design tokens for them
@@ -34,7 +35,11 @@ The change is broken for some user. The orchestrator sends it back for a fix rou
 Everything else this standard covers. Listed in the PR; no fix round.
 
 - alignment off by a few pixels (1–7 px between sibling edges)
-- spacing or type scale inconsistent with the neighbouring page
+- spacing or type scale inconsistent with the neighbouring page (gaps of at least the smallest step)
 - a crowded or unbalanced layout
 - unclear labels, button text or empty-state copy
 - touch targets under 24 px
+
+## Building it
+
+- **Check the computed style of combined classes.** When an element carries a generic class and a component class, a rule of equal specificity declared later in the stylesheet wins, whatever the class order in the markup (a later `.hint { margin: 0 }` wipes `.modal-hint`'s bottom margin). Write the override as a compound selector (`.hint.modal-hint`) and, where the project has browser tests, assert the gap with bounding boxes.

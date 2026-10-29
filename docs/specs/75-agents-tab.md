@@ -2,7 +2,7 @@
 item: 75
 type: feature
 title: Agent tab in the side panel
-status: draft
+status: approved
 branch: claude/75-agents-tab
 ---
 

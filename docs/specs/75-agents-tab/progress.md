@@ -19,5 +19,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: ALL PASS (verifier, e2e/agent-tab.spec.ts 14/14 + Vitest)
+- UX review: running

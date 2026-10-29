@@ -1,17 +1,27 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeProjectFolder } from '../src/core/claude-stats'
 import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
+import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
-// The side panel's Agent tab (#75 S1): the third tab, saved like the others; its messages for
-// the board, a card that isn't Claude Code, a workspace shell, an SSH card and a Claude Code card
-// with no transcript; and its collapsible groups once the card's transcript exists. The fake
+// The side panel's Agent tab (#75): the third tab, saved like the others; its messages for the
+// board, a card that isn't Claude Code, a workspace shell, an SSH card and a Claude Code card with
+// no transcript; its collapsible groups once the card's transcript exists; and (S2) the header and
+// the Commands group read live from fixture transcripts the tests write and append to. The fake
 // home (`fakeSshHome`: a fake `claude` and `ssh` on the login PATH) is also BIKUBE_HOME_DIR, so
 // main looks for transcripts under its `.claude/projects`.
 
@@ -203,4 +213,271 @@ test("#75 AC2: an SSH workspace's Claude Code card reads that the tab isn't avai
   await agentTab().click()
   await newCard('agent', true)
   await expect(message()).toHaveText("The Agent tab isn't available over SSH.")
+})
+
+// S2's fixtures: transcript lines in Claude Code's shapes.
+
+const T0 = Date.parse('2026-10-29T14:32:00.000Z')
+const at = (seconds: number): string => new Date(T0 + seconds * 1000).toISOString()
+
+const line = (entry: object): string => `${JSON.stringify(entry)}\n`
+
+const assistant = (content: object[], seconds: number, usage?: object): string =>
+  line({
+    type: 'assistant',
+    timestamp: at(seconds),
+    isSidechain: false,
+    uuid: randomUUID(),
+    message: { model: 'claude-opus-4-8', role: 'assistant', content, ...(usage && { usage }) }
+  })
+
+const bashUse = (id: string, command: string, description: string, seconds: number): string =>
+  assistant([{ type: 'tool_use', id, name: 'Bash', input: { command, description } }], seconds)
+
+const bashResult = (
+  id: string,
+  content: string,
+  seconds: number,
+  isError = false,
+  toolUseResult: unknown = { stdout: content, stderr: '', interrupted: false }
+): string =>
+  line({
+    type: 'user',
+    timestamp: at(seconds),
+    isSidechain: false,
+    uuid: randomUUID(),
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: id, content, is_error: isError }]
+    },
+    toolUseResult
+  })
+
+/** AC4's header: a TodoWrite, then the last main-agent entry on claude-opus-4-8 at 42% context. */
+const HEADER_FIXTURE = [
+  assistant(
+    [
+      {
+        type: 'tool_use',
+        id: 'todo1',
+        name: 'TodoWrite',
+        input: {
+          todos: [
+            { content: 'Write the parser', status: 'completed', activeForm: 'Writing the parser' },
+            { content: 'Run tests', status: 'in_progress', activeForm: 'Running tests' },
+            { content: 'Ship it', status: 'pending', activeForm: 'Shipping it' }
+          ]
+        }
+      }
+    ],
+    0
+  ),
+  assistant([{ type: 'text', text: 'Working on it.' }], 1, {
+    input_tokens: 20_000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 400_000,
+    output_tokens: 100
+  })
+]
+
+const DENIAL =
+  "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+
+/** AC6's three commands: ok, failed with exit code 1, denied. */
+const COMMANDS_FIXTURE = [
+  bashUse('t1', 'git status', 'Show status', 0),
+  bashResult('t1', 'On branch main', 1),
+  bashUse('t2', 'cd /repo && npm test | tail -5', 'Run tests', 10),
+  bashResult(
+    't2',
+    'Exit code 1\nFAIL src/a.test.ts\nTests: 1 failed',
+    72,
+    true,
+    'Error: Exit code 1'
+  ),
+  bashUse('t3', 'rm -rf build', 'Remove build', 80),
+  bashResult('t3', DENIAL, 81, true, 'User rejected tool use')
+]
+
+const transcriptOf = (id: string): string =>
+  join(fake.home, '.claude', 'projects', encodeProjectFolder(repo), `${id}.jsonl`)
+
+function writeTranscript(id: string, lines: string[]): string {
+  const path = transcriptOf(id)
+  mkdirSync(join(path, '..'), { recursive: true })
+  writeFileSync(path, lines.join(''))
+  return path
+}
+
+const commandRows = (): Locator => group('Commands').getByTestId('agent-command')
+const commandTitles = (): Locator => commandRows().getByTestId('agent-command-title')
+
+/** Focuses the open card's terminal and types `text` with Enter. */
+async function typeInCard(text: string): Promise<void> {
+  await cardView(page).getByTestId('terminal').first().click()
+  await page.keyboard.type(text)
+  await page.keyboard.press('Enter')
+}
+
+/**
+ * Creates Claude Code card `title` with the Agent tab selected and writes its transcript; the card
+ * stays open. Returns its session id.
+ */
+async function claudeCard(title: string, lines: string[]): Promise<string> {
+  await newCard(title, true)
+  await expect.poll(() => claudeLogLines(fake.log).length).toBeGreaterThan(0)
+  const id = await sessionIdOf(title)
+  writeTranscript(id, lines)
+  return id
+}
+
+/**
+ * Ends the fake `claude` (a message sent), leaving the card's shell at its prompt to run what is
+ * typed next.
+ */
+async function endFakeClaude(): Promise<void> {
+  await typeInCard('')
+  await page.waitForTimeout(500)
+}
+
+const requestCount = (sessionId: string): Promise<number> =>
+  app!.evaluate(
+    (_, id) =>
+      (globalThis as unknown as { __bikubeAgentTabRequests?: Record<string, number> })
+        .__bikubeAgentTabRequests?.[id] ?? 0,
+    sessionId
+  )
+
+test("#75 AC4: the header shows the model, the board card's context bar and the todos", async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const id = await claudeCard('agent', HEADER_FIXTURE)
+  await endFakeClaude()
+  await typeInCard(`board usage . ${transcriptOf(id)}`)
+  await backToBoard(page)
+  const boardUsage = boardCard(page, 'agent').getByTestId('card-usage')
+  await expect(boardUsage).toContainText('42% context')
+  const tooltip = await boardUsage.getAttribute('title')
+  expect(tooltip).toContain('Context 420,000')
+
+  await boardCard(page, 'agent').getByTestId('card-open').click()
+  await expectCardOpen(page, 'agent')
+  const header = panel().getByTestId('agent-tab-header')
+  await expect(header.getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  const bar = header.getByTestId('card-usage')
+  await expect(bar.getByTestId('card-context-text')).toHaveText('42% context')
+  await expect(bar).toHaveAttribute('title', tooltip!)
+  await expect(header.getByTestId('agent-todos-count')).toHaveText('1/3')
+  const todos = header.getByTestId('agent-todo')
+  await expect(todos).toHaveText(['Write the parser', 'Running tests', 'Ship it'])
+  await expect(todos.nth(0)).toHaveCSS('text-decoration-line', 'line-through')
+  const accent = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  )
+  const accentRgb = await page.evaluate((color) => {
+    const probe = document.createElement('span')
+    probe.style.color = color
+    document.body.append(probe)
+    const rgb = getComputedStyle(probe).color
+    probe.remove()
+    return rgb
+  }, accent)
+  await expect(todos.nth(1)).toHaveCSS('color', accentRgb)
+  await expect(todos.nth(2)).not.toHaveCSS('text-decoration-line', 'line-through')
+})
+
+test('#75 AC5, AC14: a command appended shows within 3 s; hidden, the tab asks main nothing', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const id = await claudeCard('agent', HEADER_FIXTURE)
+  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  await expect(group('Commands').getByTestId('agent-commands-empty')).toHaveText('No commands yet.')
+
+  appendFileSync(transcriptOf(id), bashUse('u1', 'npm run test:unit', 'Run unit tests', 5))
+  await expect(commandTitles().first()).toHaveText('Run unit tests', { timeout: 3000 })
+  await expect(commandRows().first().getByTestId('agent-command-status')).toHaveText('Running')
+  appendFileSync(transcriptOf(id), bashResult('u1', '12 passed', 9))
+  await expect(commandRows().first().getByTestId('agent-command-status')).toHaveText('OK', {
+    timeout: 3000
+  })
+  await expect(commandRows().first().getByTestId('agent-command-duration')).toHaveText('4s')
+
+  // AC14: on the Files tab main gets no request for it, until the Agent tab shows again.
+  await expect.poll(() => requestCount(id)).toBeGreaterThan(2)
+  await page.getByTestId('side-panel-tab-files').click()
+  await expect(panel().getByTestId('agent-tab')).toHaveCount(0)
+  const stopped = await requestCount(id)
+  await page.waitForTimeout(3000)
+  expect(await requestCount(id)).toBe(stopped)
+  await agentTab().click()
+  await expect.poll(() => requestCount(id)).toBeGreaterThan(stopped)
+})
+
+test('#75 AC6, AC7, AC13: Commands rows, an expanded command, Copy and a collapsed group', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await recordClipboardWrites(app!)
+  await agentTab().click()
+  await claudeCard('agent', COMMANDS_FIXTURE)
+
+  await expect(commandTitles()).toHaveText(['Remove build', 'Run tests', 'Show status'])
+  await expect(commandRows().getByTestId('agent-command-status')).toHaveText([
+    'Denied',
+    'Failed · exit 1',
+    'OK'
+  ])
+  await expect(commandRows().getByTestId('agent-command-line')).toHaveText([
+    'rm -rf build',
+    'cd /repo && npm test | tail -5',
+    'git status'
+  ])
+  await expect(commandRows().first().getByTestId('agent-command-line')).toHaveCSS(
+    'font-family',
+    /Menlo|Consolas|monospace/
+  )
+  await expect(group('Commands').getByTestId('agent-tab-group-count')).toHaveText('3')
+
+  // AC7: the Run tests row expanded.
+  const tests = commandRows().nth(1)
+  await tests.getByTestId('agent-command-toggle').click()
+  await expect(tests.getByTestId('agent-command-toggle')).toHaveAttribute('aria-expanded', 'true')
+  const steps = tests.getByTestId('agent-command-step')
+  await expect(steps).toHaveText(['cd /repo', '&& npm test', '| tail -5'])
+  await expect(steps.nth(0)).toHaveAttribute('data-dim', 'true')
+  await expect(steps.nth(1)).toHaveAttribute('data-dim', 'false')
+  await expect(tests.getByTestId('agent-command-output')).toContainText('Tests: 1 failed')
+  await tests.getByTestId('agent-command-copy').click()
+  await expect.poll(() => clipboardWrites(app!)).toEqual(['cd /repo && npm test | tail -5'])
+
+  // AC13: collapsed, it stays so for another Claude Code card, and not after a restart.
+  await groupToggle('Commands').click()
+  await expect(groupToggle('Commands')).toHaveAttribute('aria-expanded', 'false')
+  await expect(commandRows().first()).toBeHidden()
+  await backToBoard(page)
+  await claudeCard('second', COMMANDS_FIXTURE)
+  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  await expect(groupToggle('Commands')).toHaveAttribute('aria-expanded', 'false')
+  await expect(commandRows().first()).toBeHidden()
+
+  await restart()
+  await boardCard(page, 'agent').getByTestId('card-open').click()
+  await expectCardOpen(page, 'agent')
+  await expect(groupToggle('Commands')).toHaveAttribute('aria-expanded', 'true')
+  await expect(commandTitles()).toHaveText(['Remove build', 'Run tests', 'Show status'])
+})
+
+test("#75 AC15: `board session` in the card switches the tab to the new session's commands", async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', COMMANDS_FIXTURE)
+  await expect(commandTitles()).toHaveCount(3)
+
+  const other = randomUUID()
+  writeTranscript(other, [bashUse('b1', 'echo B', 'Echo B', 0), bashResult('b1', 'B', 1)])
+  await endFakeClaude()
+  await typeInCard(`board session . ${other}`)
+  await expect(commandTitles()).toHaveText(['Echo B'], { timeout: 3000 })
 })

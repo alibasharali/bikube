@@ -2,6 +2,7 @@
  * The side panel's Agent tab (#75): what it shows for what is in front (D2, D3), and the session
  * id check main applies to its requests (D4). No Node imports: the renderer runs it.
  */
+import type { AgentSummary } from './agent-summary'
 import { findShellCard } from './workspace-shells'
 import type { Card, Workspace } from './workspace-store'
 
@@ -48,9 +49,13 @@ export function isSessionId(value: unknown): value is string {
 }
 
 /**
- * Main's answer to the tab's request (D3, D4): `none` while the session's transcript doesn't
- * exist, `conversation` once it does, `error` for a refused request (nothing read) or a transcript
- * that can't be read (D12). S2 carries the agent summary in `conversation`.
+ * Main's answer to the tab's request (D3, D4, D5, D12): `none` while the session's transcript
+ * doesn't exist; `conversation` with its agent summary and the version it was read at; `unchanged`
+ * when the asker already holds that version; `error` for a refused request (nothing read) or a
+ * transcript that can't be read.
  */
 export type AgentSummaryRead =
-  { state: 'none' } | { state: 'conversation' } | { state: 'error'; reason: string }
+  | { state: 'none' }
+  | { state: 'conversation'; version: number; summary: AgentSummary }
+  | { state: 'unchanged' }
+  | { state: 'error'; reason: string }

@@ -357,9 +357,10 @@ export interface AgentTabApi {
   /**
    * The Agent tab's conversation for a card in `folder` with Claude Code session `sessionId`
    * (#75 D3, D4): read by main from `<home>/.claude/projects` only; an `error` (nothing read) unless
-   * `folder` is an absolute, existing directory and `sessionId` a UUID.
+   * `folder` is an absolute, existing directory and `sessionId` a UUID. `since` is the version of
+   * the summary the asker holds: `unchanged` while the transcript has nothing new (D5).
    */
-  summary(folder: string, sessionId: string): Promise<AgentSummaryRead>
+  summary(folder: string, sessionId: string, since?: number): Promise<AgentSummaryRead>
 }
 
 export interface AgentSetupApi {

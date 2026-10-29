@@ -90,8 +90,11 @@ function CardLines({
   )
 }
 
-/** How full the card's Claude Code context window is: a thin bar and its percentage. */
-function ContextBar({ usage }: { usage: ClaudeUsage }): React.JSX.Element {
+/**
+ * How full the card's Claude Code context window is: a thin bar and its percentage. The Agent
+ * tab's header shows this same bar (#75 D7).
+ */
+export function ContextBar({ usage }: { usage: ClaudeUsage }): React.JSX.Element {
   const use = contextUse(usage)
   return (
     <span

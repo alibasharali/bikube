@@ -1,9 +1,16 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { open, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readAgentSummary, transcriptPath, type TranscriptFs } from './agent-transcript'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentSummaryRead } from './agent-tab'
+import {
+  TranscriptTailer,
+  readAgentSummary,
+  transcriptPath,
+  type TailFs,
+  type TranscriptFs
+} from './agent-transcript'
 import { encodeProjectFolder } from './claude-stats'
 
 const SESSION = '0b6f1c1e-5d2a-4c1b-9a8e-3f1d2c4b5a69'
@@ -55,9 +62,9 @@ describe("the Agent tab's transcript request (#75 D3, D4)", () => {
   it('reports a conversation once the transcript exists, however the folder is spelled', async () => {
     writeTranscript()
     for (const spelled of [folder, `${folder}/`]) {
-      expect(await readAgentSummary({ folder: spelled, sessionId: SESSION }, { home, fs })).toEqual(
-        { state: 'conversation' }
-      )
+      expect(
+        await readAgentSummary({ folder: spelled, sessionId: SESSION }, { home, fs })
+      ).toMatchObject({ state: 'conversation' })
     }
   })
 
@@ -87,5 +94,170 @@ describe("the Agent tab's transcript request (#75 D3, D4)", () => {
       })
     }
     expect(asked).toEqual([file, join(root, 'missing')])
+  })
+})
+
+/** A Bash tool use and its result as transcript lines. */
+const bashUse = (id: string, command: string, description: string): string =>
+  `${JSON.stringify({
+    type: 'assistant',
+    timestamp: '2026-10-29T14:32:00.000Z',
+    message: {
+      model: 'claude-opus-4-8',
+      content: [{ type: 'tool_use', id, name: 'Bash', input: { command, description } }]
+    }
+  })}\n`
+const bashResult = (id: string, content: string): string =>
+  `${JSON.stringify({
+    type: 'user',
+    timestamp: '2026-10-29T14:32:03.000Z',
+    message: { content: [{ type: 'tool_result', tool_use_id: id, content, is_error: false }] }
+  })}\n`
+
+const commandsOf = (read: AgentSummaryRead): string[] =>
+  read.state === 'conversation'
+    ? read.summary.commands.map((c) => `${c.description} ${c.status}`)
+    : []
+
+describe("main's transcript tailing (#75 D4, D5)", () => {
+  /** Every byte range the tailer read, as `position+length`, and the paths it opened. */
+  let reads: string[]
+  let tailFs: TailFs
+  let path: string
+
+  beforeEach(() => {
+    reads = []
+    path = writeTranscript()
+    writeFileSync(path, bashUse('t1', 'git status', 'Show status'))
+    tailFs = {
+      stat: (p) => stat(p),
+      open: async (p) => {
+        const handle = await open(p, 'r')
+        return {
+          read: async (buffer, offset, length, position) => {
+            const done = await handle.read(buffer, offset, length, position)
+            reads.push(`${position}+${done.bytesRead}`)
+            return done
+          },
+          close: () => handle.close()
+        }
+      }
+    }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads the summary, answers unchanged for the same version, then parses only what was appended', async () => {
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    const first = await tailer.read(path)
+    expect(commandsOf(first)).toEqual(['Show status running'])
+    const version = first.state === 'conversation' ? first.version : -1
+    expect(await tailer.read(path, version)).toEqual({ state: 'unchanged' })
+    // Another asker without that version gets the summary.
+    expect(commandsOf(await tailer.read(path))).toEqual(['Show status running'])
+
+    const size = Buffer.byteLength(bashUse('t1', 'git status', 'Show status'))
+    reads = []
+    appendFileSync(path, bashResult('t1', 'ok'))
+    const second = await tailer.read(path, version)
+    expect(commandsOf(second)).toEqual(['Show status ok'])
+    expect(second.state === 'conversation' && second.version).not.toBe(version)
+    expect(reads.every((r) => Number(r.split('+')[0]) >= size)).toBe(true)
+  })
+
+  it('keeps a partial last line until it is complete', async () => {
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    const line = bashUse('t2', 'npm test', 'Run tests')
+    appendFileSync(path, line.slice(0, 40))
+    expect(commandsOf(await tailer.read(path))).toEqual(['Show status running'])
+    appendFileSync(path, line.slice(40))
+    expect(commandsOf(await tailer.read(path))).toEqual([
+      'Show status running',
+      'Run tests running'
+    ])
+  })
+
+  it('reads a file that shrank or was replaced again from the start', async () => {
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    await tailer.read(path)
+    rmSync(path)
+    writeFileSync(path, bashUse('b', 'echo B', 'Echo B'))
+    expect(commandsOf(await tailer.read(path))).toEqual(['Echo B running'])
+    writeFileSync(path, bashUse('c', 'echo C', 'C'))
+    expect(commandsOf(await tailer.read(path))).toEqual(['C running'])
+  })
+
+  it('answers none once the transcript is gone', async () => {
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    await tailer.read(path)
+    rmSync(path)
+    expect(await tailer.read(path)).toEqual({ state: 'none' })
+  })
+
+  it("drops a transcript's state 60 s after its last request", async () => {
+    vi.useFakeTimers()
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    await tailer.read(path)
+    vi.advanceTimersByTime(59_000)
+    reads = []
+    await tailer.read(path)
+    expect(reads).toEqual([])
+    vi.advanceTimersByTime(60_000)
+    await tailer.read(path)
+    expect(reads[0]).toMatch(/^0\+/)
+  })
+
+  it('gives the event loop a turn every 200 lines', async () => {
+    const lines = Array.from({ length: 450 }, (_, i) => bashUse(`t${i}`, `echo ${i}`, `${i}`))
+    writeFileSync(path, lines.join(''))
+    let turns = 0
+    const tailer = new TranscriptTailer({
+      fs: tailFs,
+      yieldToLoop: async () => {
+        turns++
+      }
+    })
+    const read = await tailer.read(path)
+    expect(read.state === 'conversation' && read.summary.commands).toHaveLength(450)
+    expect(turns).toBeGreaterThanOrEqual(2)
+  })
+
+  it("answers an error with the reason when the transcript can't be read (D12)", async () => {
+    const failing: TailFs = {
+      stat: tailFs.stat,
+      open: () => Promise.reject(Object.assign(new Error('denied'), { code: 'EACCES' }))
+    }
+    expect(await new TranscriptTailer({ fs: failing }).read(path)).toEqual({
+      state: 'error',
+      reason: 'EACCES'
+    })
+  })
+
+  it('opens nothing for a refused request (AC16)', async () => {
+    const opened: string[] = []
+    const tailer = new TranscriptTailer({
+      fs: { stat: tailFs.stat, open: (p) => (opened.push(p), tailFs.open(p)) }
+    })
+    for (const request of [
+      { folder, sessionId: '../../etc/passwd' },
+      { folder: 'repo', sessionId: SESSION }
+    ]) {
+      expect(await readAgentSummary(request, { home, fs, tailer })).toMatchObject({
+        state: 'error'
+      })
+    }
+    expect(opened).toEqual([])
+    expect(asked).toEqual([])
+  })
+
+  it("passes the asker's version through readAgentSummary", async () => {
+    const tailer = new TranscriptTailer({ fs: tailFs })
+    const first = await readAgentSummary({ folder, sessionId: SESSION }, { home, fs, tailer })
+    const since = first.state === 'conversation' ? first.version : -1
+    expect(
+      await readAgentSummary({ folder, sessionId: SESSION, since }, { home, fs, tailer })
+    ).toEqual({ state: 'unchanged' })
   })
 })

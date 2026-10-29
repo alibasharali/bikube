@@ -144,8 +144,7 @@ async function checkClaude(
   const settings = join(home, 'bikube-claude-settings.json')
   writeFileSync(settings, '{}\n')
   const sh = startShell({ BIKUBE_CLAUDE_SETTINGS: settings })
-  // Typed at the first prompt, not before it: a question before it (Ubuntu's zsh compinit
-  // asking about insecure directories) would take the first key.
+  // Typed at the first prompt, not before it: anything asked before it would take the first key.
   await sh.until('the first prompt', (o) => o.includes(OSC('133;B')))
   sh.run(path(bin))
   await sh.until('the PATH set', (o) => o.split(OSC('133;B')).length > 2)
@@ -601,7 +600,8 @@ describeShell('zsh', (zsh) => {
   })
 
   it("gives claude Bikube's settings, and leaves a run naming its own alone", async () => {
-    const home = folder()
+    // Away from the system's rc files, whose compinit asks a question on CI's runner.
+    const home = zshHome()
     await checkClaude(
       home,
       (env) => start(zsh, home, env),

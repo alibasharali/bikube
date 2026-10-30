@@ -391,6 +391,31 @@ describe("the agent summary's background commands (#75 D8, AC9)", () => {
     expect(summary.commands[0].status).toBe('background')
   })
 
+  it('reads a denied background Bash as Denied and a failed one as Failed, both tasks Failed', () => {
+    const summary = read([
+      background('d', 'npm run dev', 'Start dev server', 0),
+      result('d', DENIAL, 2, true, 'User rejected tool use'),
+      background('e', 'npm run serve', 'Serve', 3),
+      result('e', 'Exit code 127\nsh: serve: not found', 4, true),
+      background('f', 'npm run watch', 'Watch', 5),
+      result('f', 'Error: spawn failed', 6, true),
+      background('ok', 'npm run x', 'X', 7),
+      result('ok', 'Command running in background with ID: bash_9', 8)
+    ])
+    expect(summary.commands.map((c) => [c.description, c.status, c.exitCode, c.endedAt])).toEqual([
+      ['Start dev server', 'denied', null, T0 + 2000],
+      ['Serve', 'failed', 127, T0 + 4000],
+      ['Watch', 'failed', null, T0 + 6000],
+      ['X', 'background', null, T0 + 8000]
+    ])
+    expect(summary.agents?.map((a) => [a.name, a.status, a.endedAt])).toEqual([
+      ['Start dev server', 'failed', T0 + 2000],
+      ['Serve', 'failed', T0 + 4000],
+      ['Watch', 'failed', T0 + 6000],
+      ['X', 'running', null]
+    ])
+  })
+
   it("ends it by a BashOutput's final status, a kill, or a notification naming its shell", () => {
     const query = (id: string, name: string, input: Record<string, unknown>, s: number): Entry =>
       assistant([{ type: 'tool_use', id, name, input }], s)
@@ -586,6 +611,28 @@ describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
     addSubagentLine(state, 'agent-a1', sub(result('s1', 'ok', 4)))
     expect(agentSummary(state).changes).toEqual([
       { prompt: 1, kind: 'new', path: '/r/s.ts', added: 1, removed: 0 }
+    ])
+  })
+
+  it('drops a change whose path is longer than 4,096 characters, never cutting it (D11)', () => {
+    const long = `/r/${'d'.repeat(SUMMARY_LIMITS.path)}`
+    const fits = `/${'f'.repeat(SUMMARY_LIMITS.path - 1)}`
+    const summary = read([
+      prompt('p'),
+      tool('w1', 'Write', { file_path: long, content: 'x' }),
+      result('w1', 'ok'),
+      tool('w2', 'Edit', { file_path: fits, old_string: 'a', new_string: 'b' }),
+      result('w2', 'ok'),
+      bash('m1', `mv a.txt ${long}`),
+      result('m1', ''),
+      bash('m2', `rm ${long}`),
+      result('m2', ''),
+      bash('m3', 'rm /r/kept.txt'),
+      result('m3', '')
+    ])
+    expect(summary.changes?.map((c) => [c.kind, c.path.length])).toEqual([
+      ['edit', SUMMARY_LIMITS.path],
+      ['delete', '/r/kept.txt'.length]
     ])
   })
 

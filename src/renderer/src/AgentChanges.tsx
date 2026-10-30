@@ -11,6 +11,7 @@ import {
 import type { AgentSummary } from '../../core/agent-summary'
 import { isOpenNote, openErrorLine } from '../../core/open-result'
 import { SMALL_ICON } from './icons'
+import { useViewWindow } from './view-window'
 
 /**
  * What changed (#75 D9): the view select, `<n> files · +a −r`, the files grouped by folder with
@@ -170,10 +171,18 @@ function Summary({ text }: { text: string }): React.JSX.Element {
   const ref = useRef<HTMLParagraphElement>(null)
   const [expanded, setExpanded] = useState(false)
   const [clamped, setClamped] = useState(false)
+  const view = useViewWindow()
+  // Measured again whenever its box changes: drawn hidden (a collapsed group) it measures nothing,
+  // and a narrower panel can clamp a reply that fitted.
   useLayoutEffect(() => {
     const el = ref.current
-    if (el && !expanded) setClamped(el.scrollHeight > el.clientHeight + 1)
-  }, [text, expanded])
+    if (!el || expanded) return
+    const measure = (): void => setClamped(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    const observer = new (view as Window & typeof globalThis).ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [text, expanded, view])
   return (
     <div className="agent-changes-summary-block">
       <p

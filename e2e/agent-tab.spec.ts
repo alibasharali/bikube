@@ -820,6 +820,49 @@ test('#75 AC10, AC11: What changed for the last prompt, the whole session and an
   )
 })
 
+/** A prompt that edits one file and replies with `lines` lines. */
+const longReplyFixture = (lines: number): string[] => [
+  userPrompt('Explain it', 100),
+  toolUse(
+    'e1',
+    'Edit',
+    { file_path: join(repo, 'src/b.ts'), old_string: 'x', new_string: 'y' },
+    101
+  ),
+  bashResult('e1', 'The file has been updated.', 102),
+  assistant(
+    [
+      {
+        type: 'text',
+        text: Array.from({ length: lines }, (_, i) => `Line ${i + 1} of the reply.`).join('\n')
+      }
+    ],
+    103
+  )
+]
+
+test("#75 D9: a long summary's Show more is still offered after What changed was collapsed", async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', longReplyFixture(10))
+  const more = (): Locator => changes().getByTestId('agent-changes-more')
+  await expect(changes().getByTestId('agent-changes-summary')).toContainText('Line 10')
+  await expect(more()).toHaveText('Show more')
+
+  // Collapsed, another card's long reply is drawn hidden; opened again it is still clamped.
+  await groupToggle('What changed').click()
+  await expect(groupToggle('What changed')).toHaveAttribute('aria-expanded', 'false')
+  await backToBoard(page)
+  await claudeCard('second', longReplyFixture(12))
+  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  await groupToggle('What changed').click()
+  await expect(changes().getByTestId('agent-changes-summary')).toContainText('Line 12')
+  await expect(more()).toHaveText('Show more')
+  await more().click()
+  await expect(more()).toHaveText('Show less')
+})
+
 test('#75 AC12: clicking a changed file opens it with the folder, as the Files tab does', async () => {
   const log = join(root, 'editor.log')
   const code = join(fake.home, 'bin', 'code')

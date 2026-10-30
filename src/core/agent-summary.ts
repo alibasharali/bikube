@@ -33,7 +33,9 @@ export const SUMMARY_LIMITS = {
   /** Prompts kept, dropping the oldest (their file changes stay in the whole session). */
   prompts: 1000,
   /** File changes, across the session. */
-  changes: 5000
+  changes: 5000,
+  /** A file change's path (and a rename's new path): Linux's PATH_MAX; a longer one is dropped. */
+  path: 4096
 } as const
 
 /**
@@ -567,8 +569,12 @@ function toolResult(state: TranscriptState, result: Json, at: number | null, ext
     subagentResult(task, link, result, at, extra)
     return
   }
+  const interrupted = isObject(extra) && extra.interrupted === true
+  const failed = result.is_error === true || interrupted
   if (task && link && task.kind === 'background') {
     link.shellId = backgroundShellId(content, extra) ?? link.shellId
+    // A launch that was denied or failed never ran: its task ends there (D8).
+    if (failed) endAgent(task, 'failed', at)
   }
   const command = state.byId.get(result.tool_use_id)
   if (!command) {
@@ -577,10 +583,9 @@ function toolResult(state: TranscriptState, result: Json, at: number | null, ext
   }
   command.endedAt = at
   command.output = tailLines(content, SUMMARY_LIMITS.outputLines, SUMMARY_LIMITS.outputLineChars)
-  if (command.status === 'background') return
-  const interrupted = isObject(extra) && extra.interrupted === true
+  if (command.status === 'background' && !failed) return
   if (result.is_error === true && isDenial(content, extra)) command.status = 'denied'
-  else if (result.is_error === true || interrupted) {
+  else if (failed) {
     command.status = 'failed'
     const code = /^(?:Error: )?Exit code (\d+)/.exec(content)?.[1]
     command.exitCode = code === undefined ? null : Number(code)
@@ -791,7 +796,7 @@ const stringOf = (value: unknown): string => (typeof value === 'string' ? value 
 /** An edit tool's change, its size counted from its strings until a structured patch says otherwise. */
 function editChange(name: string, input: Json): Omit<FileChange, 'prompt'> | null {
   const path = text(input.file_path ?? input.notebook_path, Number.MAX_SAFE_INTEGER)
-  if (path === null) return null
+  if (path === null || path.length > SUMMARY_LIMITS.path) return null
   if (name === 'Write')
     return { kind: 'new', path, added: lineCount(stringOf(input.content)), removed: 0 }
   if (name === 'NotebookEdit') {
@@ -826,7 +831,11 @@ function changeUse(
     if (change) changes = [change]
   } else if (use.name === 'Bash' && typeof input.command === 'string') {
     if (input.run_in_background === true) return
-    changes = commandFileChanges(input.command, cwd).map((c) => ({ ...c, added: 0, removed: 0 }))
+    changes = commandFileChanges(input.command, cwd)
+      .filter(
+        (c) => c.path.length <= SUMMARY_LIMITS.path && (c.to?.length ?? 0) <= SUMMARY_LIMITS.path
+      )
+      .map((c) => ({ ...c, added: 0, removed: 0 }))
   }
   if (changes.length === 0) return
   state.pendingChanges.set(use.id, {

@@ -126,6 +126,11 @@ describe("What changed's cut (#77 C1)", () => {
     expect(cut.more).toBe(session.count - 2)
   })
 
+  it('cuts nothing at exactly the limit', () => {
+    expect(limitChanges(session, session.count).more).toBe(0)
+    expect(limitChanges(session, session.count).groups).toEqual(session.groups)
+  })
+
   it('leaves a view within the limit as it is', () => {
     const cut = limitChanges(session, 10)
     expect(cut.groups).toEqual(session.groups)

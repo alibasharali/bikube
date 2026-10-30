@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
-import { changesView, limitChanges, type ChangeView } from '../../core/agent-changes'
+import { changesView, limitChanges, valueOfView, type ChangeView } from '../../core/agent-changes'
 import { clockTime, formatDuration } from '../../core/agent-format'
 import {
   AGENT_ROW_STATUS_LABELS,
@@ -198,7 +198,11 @@ function AgentView({
   const [allAgents, setAllAgents] = useState(false)
   const { shown, finished } = foldAgentRows(agentRows(activity, summary.agents, running))
   const [changeView, setChangeView] = useState<ChangeView>({ kind: 'last' })
-  const [allChanges, setAllChanges] = useState(false)
+  // Show all holds for the view it was pressed in, and Last prompt is another view once a new
+  // prompt starts (#77 C3).
+  const changeKey = `${valueOfView(changeView)}:${summary.prompts?.at(-1)?.number ?? 0}`
+  const [allChangesFor, setAllChangesFor] = useState<string | null>(null)
+  const allChanges = allChangesFor === changeKey
   const changes = changesView(summary, folder, changeView)
   const cutChanges = limitChanges(changes, SHOWN_CHANGES)
   const counts: Record<AgentTabGroupId, number> = {
@@ -233,13 +237,13 @@ function AgentView({
                 view={changeView}
                 onView={(view) => {
                   setChangeView(view)
-                  setAllChanges(false)
+                  setAllChangesFor(null)
                 }}
                 shown={changes}
                 groups={allChanges ? changes.groups : cutChanges.groups}
                 more={cutChanges.more}
                 all={allChanges}
-                onToggleAll={() => setAllChanges(!allChanges)}
+                onToggleAll={() => setAllChangesFor(allChanges ? null : changeKey)}
               />
             )}
             {group.id === 'commands' && (

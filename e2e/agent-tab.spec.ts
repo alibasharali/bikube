@@ -917,7 +917,7 @@ test('#77: What changed and Commands cut at 10 rows with Show all and Show fewer
       bashResult(`c${i}`, `${i}`, 201 + 2 * i)
     )
   }
-  await claudeCard('agent', lines)
+  const id = await claudeCard('agent', lines)
 
   // AC1: 10 of the 12 files, the heading still all of them.
   const changesAll = changes().getByTestId('agent-changes-show-all')
@@ -948,6 +948,31 @@ test('#77: What changed and Commands cut at 10 rows with Show all and Show fewer
   await expect(commandsAll).toHaveText('Show fewer')
   await commandsAll.click()
   await expect(commandRows()).toHaveCount(10)
+
+  // AC4: Show all at Last prompt, then a new prompt with 12 more files starts cut again.
+  await changes().getByTestId('agent-changes-view').selectOption({ label: 'Last prompt' })
+  await changesAll.click()
+  await expect(changeRows()).toHaveCount(12)
+  const more = [userPrompt('Write twelve more', 300)]
+  for (let i = 0; i < 12; i++) {
+    const name = `g${String(i).padStart(2, '0')}.ts`
+    more.push(
+      toolUse(
+        `x${i}`,
+        'Write',
+        { file_path: join(repo, 'src', name), content: 'a\n' },
+        301 + 2 * i
+      ),
+      bashResult(`x${i}`, 'File created successfully', 302 + 2 * i, false, {
+        type: 'create',
+        filePath: join(repo, 'src', name)
+      })
+    )
+  }
+  appendFileSync(transcriptOf(id), more.join(''))
+  await expect(changes().getByTestId('agent-changes-heading')).toHaveText('12 files · +12 −0')
+  await expect(changeRows()).toHaveCount(10)
+  await expect(changesAll).toHaveText('Show all (2 more)')
 })
 
 // #77 AC3: lists within the limit show no button.

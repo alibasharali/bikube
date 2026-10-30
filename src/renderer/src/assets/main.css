@@ -3095,6 +3095,11 @@ button.dev-server-chip:focus-visible {
   cursor: none !important;
 }
 
+/* Settings' Focused pane outline switched off */
+.card-view-terminal[data-focus-outline='false'] .pane[data-focused='true'] {
+  outline: none;
+}
+
 /* Zoom (#48 D1, D2, D5): hidden panes stay mounted but take no space; the shown one is unoutlined */
 .pane[hidden],
 .pane-split[hidden] {

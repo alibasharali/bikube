@@ -842,12 +842,13 @@ describe('Use Ghostty config and the pane settings', () => {
     expect(parseSettingsFile(text, 'darwin').settings.useGhosttyConfig).toBe(true)
   })
 
-  it('checks the padding, dim, divider colour, pointer and Ghostty shortcut settings', () => {
+  it('checks the padding, dim, outline, divider colour, pointer and Ghostty shortcut settings', () => {
     const base = { ...DEFAULT_SETTINGS }
     const valid = {
       paddingX: 10,
       paddingY: 40,
       unfocusedPaneOpacity: 0.5,
+      focusOutline: false,
       paneDividerColor: '#7cd5f1',
       hideMouseWhileTyping: true,
       useGhosttyShortcuts: true
@@ -858,6 +859,7 @@ describe('Use Ghostty config and the pane settings', () => {
       { paddingY: 1.5 },
       { unfocusedPaneOpacity: 0.1 },
       { unfocusedPaneOpacity: 0.555 },
+      { focusOutline: 'no' },
       { paneDividerColor: 'cyan' },
       { useGhosttyShortcuts: 'yes' }
     ]) {

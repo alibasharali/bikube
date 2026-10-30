@@ -5,23 +5,29 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   AGENT_COMMANDS,
+  finishedCheck,
   installedPlan,
   parseInstalled,
   readInstalledAgents
 } from './installed-agents'
 
 describe('installedPlan', () => {
-  it('checks every command through a POSIX login shell, each a positional argument', () => {
+  it('checks every command through an interactive POSIX login shell, each a positional argument', () => {
     const plan = installedPlan('/bin/zsh', ['claude', '$(touch x)'])
     expect(plan.command).toBe('/bin/zsh')
-    expect(plan.args.slice(0, 2)).toEqual(['-l', '-c'])
-    expect(plan.args.slice(3)).toEqual(['bikube', 'claude', '$(touch x)'])
-    expect(plan.args[2]).not.toContain('claude')
+    expect(plan.args.slice(0, 3)).toEqual(['-l', '-i', '-c'])
+    expect(plan.args.slice(4)).toEqual(['bikube', 'claude', '$(touch x)'])
+    expect(plan.args[3]).not.toContain('claude')
   })
 
   it("uses fish's $argv under fish, and /bin/sh for a shell with neither syntax", () => {
     expect(installedPlan('/opt/homebrew/bin/fish', ['codex']).args.at(-1)).toBe('codex')
-    expect(installedPlan('/opt/homebrew/bin/fish', ['codex']).args[2]).toContain('$argv')
+    expect(installedPlan('/opt/homebrew/bin/fish', ['codex']).args.slice(0, 3)).toEqual([
+      '-l',
+      '-i',
+      '-c'
+    ])
+    expect(installedPlan('/opt/homebrew/bin/fish', ['codex']).args[3]).toContain('$argv')
     expect(installedPlan('/usr/bin/nu', ['codex']).command).toBe('/bin/sh')
   })
 })
@@ -42,6 +48,17 @@ describe('parseInstalled', () => {
       opencode: 'opencode',
       pi: 'pi'
     })
+  })
+})
+
+describe('finishedCheck', () => {
+  it('keeps only output that reached the end marker', () => {
+    expect(finishedCheck('Welcome\nbikube-found claude\nbikube-done\n')).toBe(
+      'Welcome\nbikube-found claude\nbikube-done\n'
+    )
+    expect(finishedCheck('Welcome\nbikube-found claude\n')).toBeNull()
+    expect(finishedCheck('')).toBeNull()
+    expect(finishedCheck(null)).toBeNull()
   })
 })
 
@@ -85,6 +102,41 @@ describe('readInstalledAgents', () => {
       expect(await readInstalledAgents({ spawn, shell, env })).toEqual(['claude', 'opencode'])
     })
   }
+
+  // #78: Claude Code's and Codex's installers put ~/.local/bin on PATH in ~/.zshrc, which only an
+  // interactive zsh reads, as a card's shell is.
+  it("finds the agents zsh puts on PATH in .zshrc, as a card's shell does", async () => {
+    const zsh = ['/bin/zsh', '/usr/bin/zsh'].find(
+      (path) => spawnSync(path, ['-c', 'exit 0']).status === 0
+    )
+    if (!zsh) return
+    writeFileSync(join(home, '.zprofile'), 'PATH=/usr/bin:/bin; export PATH\n')
+    writeFileSync(join(home, '.zshrc'), `echo Welcome\nexport PATH='${bin}':$PATH\n`)
+    fake('claude')
+    fake('codex')
+    expect(await readInstalledAgents({ spawn, shell: zsh, env })).toEqual(['claude', 'codex'])
+  })
+
+  it('reads an interactive rc file that waits for input as having none', async () => {
+    const zsh = ['/bin/zsh', '/usr/bin/zsh'].find(
+      (path) => spawnSync(path, ['-c', 'exit 0']).status === 0
+    )
+    if (!zsh) return
+    writeFileSync(join(home, '.zshrc'), 'read -r answer\n')
+    fake('claude')
+    expect(await readInstalledAgents({ spawn, shell: zsh, env, timeoutMs: 5_000 })).toEqual([
+      'claude'
+    ])
+  })
+
+  it('is null, not empty, when an interactive rc file execs another shell', async () => {
+    writeFileSync(
+      join(home, '.bash_profile'),
+      `PATH='${bin}':/usr/bin:/bin; export PATH\ncase $- in *i*) exec /bin/sh ;; esac\n`
+    )
+    fake('claude')
+    expect(await readInstalledAgents({ spawn, shell: '/bin/bash', env })).toBeNull()
+  })
 
   it('finds the agents under fish, where it is installed', async () => {
     const fish = ['/opt/homebrew/bin/fish', '/usr/local/bin/fish', '/usr/bin/fish'].find(

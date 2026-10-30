@@ -1,12 +1,18 @@
 /**
  * Status' Claude Code row (#68 D13): the version `claude --version` prints and the path
  * `command -v claude` gives, read through the user's login shell as the installed-agents check
- * runs (`-l -c`, the command a positional argument, each answer after a marker so whatever a
+ * runs (`LOGIN_CHECK`, the command a positional argument, each answer after a marker so whatever a
  * profile prints is ignored). Plain TS: main injects the process spawner, so Vitest runs real
  * shells on a fake `claude`.
  */
 
-import { runLoginShell, type InstalledDeps } from './installed-agents'
+import {
+  CHECK_DONE,
+  finishedCheck,
+  LOGIN_CHECK,
+  runLoginShell,
+  type InstalledDeps
+} from './installed-agents'
 
 /** What the check found: claude's path and its version's first line, or that it isn't there. */
 export type ClaudeVersion =
@@ -29,10 +35,10 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
     return {
       command: shell,
       args: [
-        '-l',
-        '-c',
-        `set p (command -v $argv[1]); or exit 0; printf '${FOUND} %s\\n' $p[1]; ` +
-          `set v ($argv[1] --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v[1]"; true`,
+        ...LOGIN_CHECK,
+        `if set p (command -v $argv[1]); printf '${FOUND} %s\\n' $p[1]; ` +
+          `set v ($argv[1] --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v[1]"; end; ` +
+          `printf '${CHECK_DONE}\\n'; true`,
         'claude'
       ]
     }
@@ -40,10 +46,10 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
   return {
     command: POSIX_SHELLS.has(flavour) ? shell : '/bin/sh',
     args: [
-      '-l',
-      '-c',
-      `p=$(command -v "$1" 2>/dev/null) || exit 0; printf '${FOUND} %s\\n' "$p"; ` +
-        `v=$("$1" --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v"; exit 0`,
+      ...LOGIN_CHECK,
+      `if p=$(command -v "$1" 2>/dev/null); then printf '${FOUND} %s\\n' "$p"; ` +
+        `v=$("$1" --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v"; fi; ` +
+        `printf '${CHECK_DONE}\\n'; exit 0`,
       'bikube',
       'claude'
     ]
@@ -64,11 +70,14 @@ export function parseClaudeVersion(stdout: string): ClaudeVersion {
   return { installed: true, path, version: version ? version : null }
 }
 
-/** Claude Code's version and path, or null when the check failed (no shell, an error, a timeout). */
+/**
+ * Claude Code's version and path, or null when the check failed (no shell, an error, a timeout,
+ * an rc file's `exec` cutting it short).
+ */
 export async function readClaudeVersion({
   shell,
   ...deps
 }: InstalledDeps): Promise<ClaudeVersion | null> {
-  const stdout = await runLoginShell(claudeVersionPlan(shell), deps)
+  const stdout = finishedCheck(await runLoginShell(claudeVersionPlan(shell), deps))
   return stdout === null ? null : parseClaudeVersion(stdout)
 }

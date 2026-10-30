@@ -1,7 +1,7 @@
 /**
  * Which agent CLIs the user has installed, so the startup selects can show the others disabled.
- * Read through the user's login shell (`-l -c`, as the editor and `gh` run, #55 D15), so it sees
- * the PATH a card's shell gets. Plain TS: main injects the process spawner, so Vitest runs real
+ * Read through the user's login shell, interactive too (`LOGIN_CHECK`), so it sees the PATH a
+ * card's shell gets. Plain TS: main injects the process spawner, so Vitest runs real
  * shells on fake commands.
  */
 
@@ -22,8 +22,29 @@ export const AGENT_COMMANDS: Readonly<Record<AgentChoice, string>> = {
 /** Shells that take POSIX `sh -c 'text' $0 $1…`. */
 const POSIX_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'oksh', 'yash', 'ash'])
 
+/**
+ * A login shell that is interactive too, as a card's shell in its PTY is: zsh reads `.zshrc` only
+ * then, and Claude Code's and Codex's installers put `~/.local/bin` on PATH there (#78). No
+ * terminal: stdin is closed and the process detached, so a profile asking for input reads EOF.
+ */
+export const LOGIN_CHECK = ['-l', '-i', '-c'] as const
+
 /** Each found command's line, so whatever a login profile prints is never read as one. */
 const FOUND = 'bikube-found'
+
+/**
+ * The line a `LOGIN_CHECK` script prints last. An interactive rc file can `exec` another shell
+ * (`[[ $- == *i* ]] && exec fish`), which then reads EOF and exits 0 having run none of the check:
+ * without this line the output means nothing, not that nothing is installed.
+ */
+export const CHECK_DONE = 'bikube-done'
+
+/** `stdout` when the check ran to its end (`CHECK_DONE`), else null. */
+export function finishedCheck(stdout: string | null): string | null {
+  return stdout !== null && stdout.split('\n').some((line) => line.trim() === CHECK_DONE)
+    ? stdout
+    : null
+}
 
 /**
  * How the login shell `shell` checks `commands`: they are positional arguments, never in the text
@@ -38,9 +59,8 @@ export function installedPlan(
     return {
       command: shell,
       args: [
-        '-l',
-        '-c',
-        `for c in $argv; command -q $c; and printf '${FOUND} %s\\n' $c; end; true`,
+        ...LOGIN_CHECK,
+        `for c in $argv; command -q $c; and printf '${FOUND} %s\\n' $c; end; printf '${CHECK_DONE}\\n'; true`,
         ...commands
       ]
     }
@@ -48,9 +68,8 @@ export function installedPlan(
   return {
     command: POSIX_SHELLS.has(flavour) ? shell : '/bin/sh',
     args: [
-      '-l',
-      '-c',
-      `for c in "$@"; do command -v "$c" >/dev/null 2>&1 && printf '${FOUND} %s\\n' "$c"; done; exit 0`,
+      ...LOGIN_CHECK,
+      `for c in "$@"; do command -v "$c" >/dev/null 2>&1 && printf '${FOUND} %s\\n' "$c"; done; printf '${CHECK_DONE}\\n'; exit 0`,
       'bikube',
       ...commands
     ]
@@ -83,7 +102,7 @@ export interface InstalledDeps {
 }
 
 /**
- * Runs `plan` (a login shell's `-l -c` check) and gives its stdout, or null when it failed (the
+ * Runs `plan` (a login shell's `LOGIN_CHECK`) and gives its stdout, or null when it failed (the
  * shell missing, a non-zero exit, a timeout). Detached (its own process group, killed at the
  * timeout), stdin closed, at most 64 KiB of output kept.
  */
@@ -132,12 +151,14 @@ export function runLoginShell(
 
 /**
  * The installed agents, as the login shell finds their commands; null when the check failed
- * (the shell missing, a non-zero exit, a timeout), so nothing is shown as not installed.
+ * (the shell missing, a non-zero exit, a timeout, an rc file's `exec` cutting it short), so nothing is shown as not installed.
  */
 export async function readInstalledAgents({
   shell,
   ...deps
 }: InstalledDeps): Promise<AgentChoice[] | null> {
-  const stdout = await runLoginShell(installedPlan(shell, Object.values(AGENT_COMMANDS)), deps)
+  const stdout = finishedCheck(
+    await runLoginShell(installedPlan(shell, Object.values(AGENT_COMMANDS)), deps)
+  )
   return stdout === null ? null : parseInstalled(stdout)
 }

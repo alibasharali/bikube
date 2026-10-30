@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changesView, viewOptions } from './agent-changes'
+import { changesView, limitChanges, viewOptions } from './agent-changes'
 import type { AgentSummary, FileChange } from './agent-summary'
 
 const T0 = Date.parse('2026-10-29T14:32:00.000Z')
@@ -111,5 +111,29 @@ describe("What changed's select (#75 D9)", () => {
       { value: '2', label: `#2 ${'a'.repeat(50)}` },
       { value: '1', label: '#1 Add the panel' }
     ])
+  })
+})
+
+describe("What changed's cut (#77 C1)", () => {
+  const session = changesView(SUMMARY, '/repo', { kind: 'session' })
+
+  it('keeps the first files in order, drops emptied folders and counts the rest', () => {
+    const cut = limitChanges(session, 2)
+    expect(cut.groups.flatMap((g) => g.files.map((f) => `${g.folder}${f.name}`))).toEqual(
+      session.groups.flatMap((g) => g.files.map((f) => `${g.folder}${f.name}`)).slice(0, 2)
+    )
+    expect(cut.groups.every((g) => g.files.length > 0)).toBe(true)
+    expect(cut.more).toBe(session.count - 2)
+  })
+
+  it('cuts nothing at exactly the limit', () => {
+    expect(limitChanges(session, session.count).more).toBe(0)
+    expect(limitChanges(session, session.count).groups).toEqual(session.groups)
+  })
+
+  it('leaves a view within the limit as it is', () => {
+    const cut = limitChanges(session, 10)
+    expect(cut.groups).toEqual(session.groups)
+    expect(cut.more).toBe(0)
   })
 })

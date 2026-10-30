@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
-import { changesView, type ChangeView } from '../../core/agent-changes'
+import { changesView, limitChanges, valueOfView, type ChangeView } from '../../core/agent-changes'
 import { clockTime, formatDuration } from '../../core/agent-format'
 import {
   AGENT_ROW_STATUS_LABELS,
@@ -35,13 +35,16 @@ import { useCardRunState, useCardStatus } from './card-terminals'
 import { ChangesList } from './AgentChanges'
 import { ContextBar } from './CardLines'
 import { SMALL_ICON } from './icons'
+import { ShowAllButton } from './ShowAllButton'
 import { useShellAgent } from './shell-agents'
 import { useCardUsage } from './usage'
 
 /** How long after an answer the tab asks again while it shows (D5). */
 const POLL_MS = 1000
-/** How many of the newest commands show before `Show all` (D10). */
-const SHOWN_COMMANDS = 200
+/** How many of the newest commands show before `Show all` (D10, #77 C2). */
+const SHOWN_COMMANDS = 10
+/** How many of What changed's files show before `Show all` (#77 C1). */
+const SHOWN_CHANGES = 10
 
 /**
  * The side panel's Agent tab (#75): with a local Claude Code card in front, its current session's
@@ -195,10 +198,16 @@ function AgentView({
   const [allAgents, setAllAgents] = useState(false)
   const { shown, finished } = foldAgentRows(agentRows(activity, summary.agents, running))
   const [changeView, setChangeView] = useState<ChangeView>({ kind: 'last' })
+  // Show all holds for the view it was pressed in, and Last prompt is another view once a new
+  // prompt starts (#77 C3).
+  const changeKey = `${valueOfView(changeView)}:${summary.prompts?.at(-1)?.number ?? 0}`
+  const [allChangesFor, setAllChangesFor] = useState<string | null>(null)
+  const allChanges = allChangesFor === changeKey
   const changes = changesView(summary, folder, changeView)
+  const cutChanges = limitChanges(changes, SHOWN_CHANGES)
   const counts: Record<AgentTabGroupId, number> = {
     agents: shown.length + (allAgents ? finished.length : 0),
-    changes: changes.count,
+    changes: allChanges ? changes.count : changes.count - cutChanges.more,
     commands: shownCommands.length
   }
   return (
@@ -226,15 +235,23 @@ function AgentView({
                 summary={summary}
                 folder={folder}
                 view={changeView}
-                onView={setChangeView}
+                onView={(view) => {
+                  setChangeView(view)
+                  setAllChangesFor(null)
+                }}
                 shown={changes}
+                groups={allChanges ? changes.groups : cutChanges.groups}
+                more={cutChanges.more}
+                all={allChanges}
+                onToggleAll={() => setAllChangesFor(allChanges ? null : changeKey)}
               />
             )}
             {group.id === 'commands' && (
               <CommandList
                 commands={shownCommands}
-                more={commands.length - shownCommands.length}
-                onShowAll={() => setAllCommands(true)}
+                more={Math.max(0, commands.length - SHOWN_COMMANDS)}
+                all={allCommands}
+                onToggleAll={() => setAllCommands(!allCommands)}
               />
             )}
           </AgentGroup>
@@ -411,11 +428,14 @@ function AgentRowItem({ row, now }: { row: AgentRow; now: number }): React.JSX.E
 function CommandList({
   commands,
   more,
-  onShowAll
+  all,
+  onToggleAll
 }: {
   commands: AgentCommand[]
+  /** The commands past the newest `SHOWN_COMMANDS` (#77 C2). */
   more: number
-  onShowAll: () => void
+  all: boolean
+  onToggleAll: () => void
 }): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
   if (commands.length === 0) {
@@ -442,16 +462,12 @@ function CommandList({
           />
         ))}
       </ul>
-      {more > 0 && (
-        <button
-          type="button"
-          className="btn btn-small agent-tab-show-all"
-          data-testid="agent-commands-show-all"
-          onClick={onShowAll}
-        >
-          Show all
-        </button>
-      )}
+      <ShowAllButton
+        testId="agent-commands-show-all"
+        more={more}
+        all={all}
+        onToggle={onToggleAll}
+      />
     </>
   )
 }

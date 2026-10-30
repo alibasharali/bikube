@@ -4,6 +4,7 @@ import {
   valueOfView,
   viewOfValue,
   viewOptions,
+  type ChangeGroup,
   type ChangeView,
   type ChangedFile,
   type ChangesShown
@@ -11,23 +12,34 @@ import {
 import type { AgentSummary } from '../../core/agent-summary'
 import { isOpenNote, openErrorLine } from '../../core/open-result'
 import { SMALL_ICON } from './icons'
+import { ShowAllButton } from './ShowAllButton'
 
 /**
  * What changed (#75 D9): the view select, `<n> files · +a −r`, the files grouped by folder with
- * their badges and sizes, a file inside the folder opening through the Files tab's `files:open`.
+ * their badges and sizes, a file inside the folder opening through the Files tab's `files:open`;
+ * `groups` is `shown`'s cut unless every file shows (#77 C1, C3).
  */
 export function ChangesList({
   summary,
   folder,
   view,
   onView,
-  shown
+  shown,
+  groups,
+  more,
+  all,
+  onToggleAll
 }: {
   summary: AgentSummary
   folder: string
   view: ChangeView
   onView: (view: ChangeView) => void
   shown: ChangesShown
+  groups: ChangeGroup[]
+  /** The files the cut leaves out. */
+  more: number
+  all: boolean
+  onToggleAll: () => void
 }): React.JSX.Element {
   const [openError, setOpenError] = useState<{ text: string; note: boolean } | null>(null)
   const opens = useRef(0)
@@ -85,7 +97,7 @@ export function ChangesList({
           {shown.empty}
         </p>
       ) : (
-        shown.groups.map((group) => (
+        groups.map((group) => (
           <div
             key={group.folder}
             className="agent-changes-folder"
@@ -102,6 +114,7 @@ export function ChangesList({
           </div>
         ))
       )}
+      <ShowAllButton testId="agent-changes-show-all" more={more} all={all} onToggle={onToggleAll} />
     </div>
   )
 }

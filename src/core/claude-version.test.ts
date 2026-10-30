@@ -116,6 +116,14 @@ describe('readClaudeVersion', () => {
     })
   })
 
+  it('#78: null, not Not installed, when an interactive rc file execs another shell', async () => {
+    writeFileSync(
+      join(home, '.bash_profile'),
+      `PATH='${bin}':/usr/bin:/bin; export PATH\ncase $- in *i*) exec /bin/sh ;; esac\n`
+    )
+    expect(await readClaudeVersion({ spawn, shell: '/bin/bash', env })).toBeNull()
+  })
+
   it('AC13: Not installed without claude; null when the check fails', async () => {
     expect(await readClaudeVersion({ spawn, shell: '/bin/sh', env })).toEqual({ installed: false })
     expect(await readClaudeVersion({ spawn, shell: join(dir, 'missing', 'zsh'), env })).toBeNull()

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   AGENT_COMMANDS,
+  finishedCheck,
   installedPlan,
   parseInstalled,
   readInstalledAgents
@@ -47,6 +48,17 @@ describe('parseInstalled', () => {
       opencode: 'opencode',
       pi: 'pi'
     })
+  })
+})
+
+describe('finishedCheck', () => {
+  it('keeps only output that reached the end marker', () => {
+    expect(finishedCheck('Welcome\nbikube-found claude\nbikube-done\n')).toBe(
+      'Welcome\nbikube-found claude\nbikube-done\n'
+    )
+    expect(finishedCheck('Welcome\nbikube-found claude\n')).toBeNull()
+    expect(finishedCheck('')).toBeNull()
+    expect(finishedCheck(null)).toBeNull()
   })
 })
 
@@ -103,6 +115,27 @@ describe('readInstalledAgents', () => {
     fake('claude')
     fake('codex')
     expect(await readInstalledAgents({ spawn, shell: zsh, env })).toEqual(['claude', 'codex'])
+  })
+
+  it('reads an interactive rc file that waits for input as having none', async () => {
+    const zsh = ['/bin/zsh', '/usr/bin/zsh'].find(
+      (path) => spawnSync(path, ['-c', 'exit 0']).status === 0
+    )
+    if (!zsh) return
+    writeFileSync(join(home, '.zshrc'), 'read -r answer\n')
+    fake('claude')
+    expect(await readInstalledAgents({ spawn, shell: zsh, env, timeoutMs: 5_000 })).toEqual([
+      'claude'
+    ])
+  })
+
+  it('is null, not empty, when an interactive rc file execs another shell', async () => {
+    writeFileSync(
+      join(home, '.bash_profile'),
+      `PATH='${bin}':/usr/bin:/bin; export PATH\ncase $- in *i*) exec /bin/sh ;; esac\n`
+    )
+    fake('claude')
+    expect(await readInstalledAgents({ spawn, shell: '/bin/bash', env })).toBeNull()
   })
 
   it('finds the agents under fish, where it is installed', async () => {

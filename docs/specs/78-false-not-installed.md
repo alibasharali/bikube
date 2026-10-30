@@ -14,17 +14,18 @@ A user with Claude Code and Codex in `~/.local/bin` (`which claude` in their ter
 
 ## Fix
 
-Both checks run the login shell interactive too, `-l -i -c`, so it reads the same startup files as a card's shell (zsh's `.zshrc`, fish's interactive config, bash's login files as before). Whatever an interactive profile prints is already ignored (only `bikube-found` / `bikube-version` lines count); stdin stays closed and the process detached with no controlling terminal, so a profile waiting for input reads EOF and job-control warnings go to the ignored stderr; the 15 s timeout still turns a hung profile into "unknown", which shows nothing as not installed.
+Both checks run the login shell interactive too, `-l -i -c`, so it reads the same startup files as a card's shell (zsh's `.zshrc`, fish's interactive config, bash's login files as before). Whatever an interactive profile prints is already ignored (only `bikube-found` / `bikube-version` lines count); stdin stays closed and the process detached with no controlling terminal, so a profile waiting for input reads EOF and job-control warnings go to the ignored stderr; the 15 s timeout still turns a hung profile into "unknown", which shows nothing as not installed. An interactive rc file can `exec` another shell (`[[ $- == *i* ]] && exec fish`), which reads EOF and exits 0 having run none of the check: both scripts print `bikube-done` last, and output without it reads as unknown too (`finishedCheck`), never as nothing installed.
 
 ## Acceptance criteria
 
 - **AC1 – PATH from .zshrc:** Given zsh as the login shell with a command's folder put on PATH only in `.zshrc`, when the installed-agents check runs, then that agent is found (before: not found).
 - **AC2 – Claude Code's Status row:** Given the same setup with a fake `claude`, when `readClaudeVersion` runs, then it reports `claude` installed at that path with its version.
+- **AC4 – An rc file that execs:** Given a login profile that `exec`s another shell when interactive, when either check runs, then it reads unknown (null), so no agent is shown as not installed.
 - **AC3 – Unchanged elsewhere:** the existing checks (a PATH from `.profile`/`.zprofile` under sh, bash and zsh, fish's config, no agents, a missing shell and a hung profile reading null) still pass.
 
 ## Slices
 
-1. **S1 – Interactive login shell for the agent checks:** `installedPlan` and `claudeVersionPlan` pass `-l -i -c`; Vitest cases for AC1 and AC2 with a fake `.zshrc` (skipped where zsh is missing, as the existing zsh cases). Satisfies AC1–AC3.
+1. **S1 – Interactive login shell for the agent checks:** `installedPlan` and `claudeVersionPlan` pass `-l -i -c`; Vitest cases for AC1 and AC2 with a fake `.zshrc` (skipped where zsh is missing, as the existing zsh cases). An end marker for both scripts, with Vitest cases for AC4 and an rc file waiting for input. Satisfies AC1–AC4.
 
 ## Test seams and verification
 

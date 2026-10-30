@@ -33,6 +33,20 @@ export const LOGIN_CHECK = ['-l', '-i', '-c'] as const
 const FOUND = 'bikube-found'
 
 /**
+ * The line a `LOGIN_CHECK` script prints last. An interactive rc file can `exec` another shell
+ * (`[[ $- == *i* ]] && exec fish`), which then reads EOF and exits 0 having run none of the check:
+ * without this line the output means nothing, not that nothing is installed.
+ */
+export const CHECK_DONE = 'bikube-done'
+
+/** `stdout` when the check ran to its end (`CHECK_DONE`), else null. */
+export function finishedCheck(stdout: string | null): string | null {
+  return stdout !== null && stdout.split('\n').some((line) => line.trim() === CHECK_DONE)
+    ? stdout
+    : null
+}
+
+/**
  * How the login shell `shell` checks `commands`: they are positional arguments, never in the text
  * the shell parses; fish gets `$argv`, a shell with neither syntax is replaced by `/bin/sh -l`.
  */
@@ -46,7 +60,7 @@ export function installedPlan(
       command: shell,
       args: [
         ...LOGIN_CHECK,
-        `for c in $argv; command -q $c; and printf '${FOUND} %s\\n' $c; end; true`,
+        `for c in $argv; command -q $c; and printf '${FOUND} %s\\n' $c; end; printf '${CHECK_DONE}\\n'; true`,
         ...commands
       ]
     }
@@ -55,7 +69,7 @@ export function installedPlan(
     command: POSIX_SHELLS.has(flavour) ? shell : '/bin/sh',
     args: [
       ...LOGIN_CHECK,
-      `for c in "$@"; do command -v "$c" >/dev/null 2>&1 && printf '${FOUND} %s\\n' "$c"; done; exit 0`,
+      `for c in "$@"; do command -v "$c" >/dev/null 2>&1 && printf '${FOUND} %s\\n' "$c"; done; printf '${CHECK_DONE}\\n'; exit 0`,
       'bikube',
       ...commands
     ]
@@ -137,12 +151,14 @@ export function runLoginShell(
 
 /**
  * The installed agents, as the login shell finds their commands; null when the check failed
- * (the shell missing, a non-zero exit, a timeout), so nothing is shown as not installed.
+ * (the shell missing, a non-zero exit, a timeout, an rc file's `exec` cutting it short), so nothing is shown as not installed.
  */
 export async function readInstalledAgents({
   shell,
   ...deps
 }: InstalledDeps): Promise<AgentChoice[] | null> {
-  const stdout = await runLoginShell(installedPlan(shell, Object.values(AGENT_COMMANDS)), deps)
+  const stdout = finishedCheck(
+    await runLoginShell(installedPlan(shell, Object.values(AGENT_COMMANDS)), deps)
+  )
   return stdout === null ? null : parseInstalled(stdout)
 }

@@ -6,7 +6,13 @@
  * shells on a fake `claude`.
  */
 
-import { LOGIN_CHECK, runLoginShell, type InstalledDeps } from './installed-agents'
+import {
+  CHECK_DONE,
+  finishedCheck,
+  LOGIN_CHECK,
+  runLoginShell,
+  type InstalledDeps
+} from './installed-agents'
 
 /** What the check found: claude's path and its version's first line, or that it isn't there. */
 export type ClaudeVersion =
@@ -30,8 +36,9 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
       command: shell,
       args: [
         ...LOGIN_CHECK,
-        `set p (command -v $argv[1]); or exit 0; printf '${FOUND} %s\\n' $p[1]; ` +
-          `set v ($argv[1] --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v[1]"; true`,
+        `if set p (command -v $argv[1]); printf '${FOUND} %s\\n' $p[1]; ` +
+          `set v ($argv[1] --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v[1]"; end; ` +
+          `printf '${CHECK_DONE}\\n'; true`,
         'claude'
       ]
     }
@@ -40,8 +47,9 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
     command: POSIX_SHELLS.has(flavour) ? shell : '/bin/sh',
     args: [
       ...LOGIN_CHECK,
-      `p=$(command -v "$1" 2>/dev/null) || exit 0; printf '${FOUND} %s\\n' "$p"; ` +
-        `v=$("$1" --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v"; exit 0`,
+      `if p=$(command -v "$1" 2>/dev/null); then printf '${FOUND} %s\\n' "$p"; ` +
+        `v=$("$1" --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v"; fi; ` +
+        `printf '${CHECK_DONE}\\n'; exit 0`,
       'bikube',
       'claude'
     ]
@@ -62,11 +70,14 @@ export function parseClaudeVersion(stdout: string): ClaudeVersion {
   return { installed: true, path, version: version ? version : null }
 }
 
-/** Claude Code's version and path, or null when the check failed (no shell, an error, a timeout). */
+/**
+ * Claude Code's version and path, or null when the check failed (no shell, an error, a timeout,
+ * an rc file's `exec` cutting it short).
+ */
 export async function readClaudeVersion({
   shell,
   ...deps
 }: InstalledDeps): Promise<ClaudeVersion | null> {
-  const stdout = await runLoginShell(claudeVersionPlan(shell), deps)
+  const stdout = finishedCheck(await runLoginShell(claudeVersionPlan(shell), deps))
   return stdout === null ? null : parseClaudeVersion(stdout)
 }

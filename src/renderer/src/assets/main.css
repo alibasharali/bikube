@@ -2714,11 +2714,6 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-xs);
 }
 
-.agent-command-note[data-status='failed'],
-.agent-command-note[data-status='denied'] {
-  color: var(--danger);
-}
-
 .agent-command-duration {
   flex: none;
   color: var(--text-muted);
@@ -2751,7 +2746,7 @@ button.dev-server-chip:focus-visible {
   text-overflow: ellipsis;
 }
 
-/* A status as a coloured icon and word (#75 D8, D10), the tints only on text the panel holds */
+/* A status as a coloured icon and a muted word (#75 D8, D10): the colour is the icon's, at 3:1 */
 .agent-status {
   display: inline-flex;
   flex: none;
@@ -2761,22 +2756,22 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-xs);
 }
 
-.agent-status[data-status='running'] {
+.agent-status-icon {
+  flex: none;
+}
+
+.agent-status[data-status='running'] .agent-status-icon {
   color: var(--pill-working-text);
 }
 
-.agent-status[data-status='ok'],
-.agent-status[data-status='done'] {
+.agent-status[data-status='ok'] .agent-status-icon,
+.agent-status[data-status='done'] .agent-status-icon {
   color: var(--pill-waiting-text);
 }
 
-.agent-status[data-status='failed'],
-.agent-status[data-status='denied'] {
+.agent-status[data-status='failed'] .agent-status-icon,
+.agent-status[data-status='denied'] .agent-status-icon {
   color: var(--danger);
-}
-
-.agent-status-icon {
-  flex: none;
 }
 
 .agent-command-spinner {

@@ -152,14 +152,13 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     // What changed (#75 D9): the Renamed badge in the working blue on the panel.
     need('pill-working-text on surface', t['pill-working-text'], t.surface, 4.5)
     // The Agent tab (#75): the in-progress todo and a command's program as accent text on the
-    // panel; a command's title on its hovered or expanded row; the Running, Done and OK chips'
-    // text on their pill tints over the panel and over that row.
+    // panel; a command's title on its hovered or expanded row; the status icons (D8, D10: running,
+    // OK or Done, failed or denied) on the panel and on that row, their words muted.
     need('accent as text on surface', t.accent, t.surface, 4.5)
     need('text on surface-hover', t.text, t['surface-hover'], 4.5)
-    for (const pill of ['working', 'waiting'] as const) {
+    for (const icon of ['pill-working-text', 'pill-waiting-text', 'danger'] as const) {
       for (const under of ['surface', 'surface-hover'] as const) {
-        const bg = composite(t[`pill-${pill}-bg`], t[under])
-        need(`text on pill-${pill}-bg over ${under}`, t.text, bg, 4.5)
+        need(`${icon} icon on ${under}`, t[icon], t[under], 3)
       }
     }
     for (const bg of ['bg', 'card', 'surface'] as const) need(`accent on ${bg}`, t.accent, t[bg], 3)

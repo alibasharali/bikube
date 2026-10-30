@@ -798,7 +798,6 @@ test('#75 AC10, AC11: What changed for the last prompt, the whole session and an
   ])
   await expect(changes().getByTestId('agent-changes-heading')).toHaveText('2 files · +1 −0')
   await expect.poll(shownChanges).toEqual(['docs x.md Edited +1 −0', 'src b.ts → c.ts Renamed '])
-  await expect(changes().getByTestId('agent-changes-summary')).toHaveText('Renamed b to c.')
   await expect(group('What changed').getByTestId('agent-tab-group-count')).toHaveText('2')
 
   // AC11: the whole session, then prompt 1.
@@ -806,10 +805,8 @@ test('#75 AC10, AC11: What changed for the last prompt, the whole session and an
   await expect
     .poll(shownChanges)
     .toEqual(['docs x.md Edited +1 −0', 'src a.ts New +10 −0', 'src b.ts → c.ts Renamed '])
-  await expect(changes().getByTestId('agent-changes-summary')).toHaveCount(0)
   await select.selectOption({ label: '#1 Add the panel' })
   await expect.poll(shownChanges).toEqual(['src a.ts New +10 −0', 'src b.ts Edited +2 −1'])
-  await expect(changes().getByTestId('agent-changes-summary')).toHaveText('Added the panel.')
 
   // Another card starts at Last prompt again, with its empty line.
   await backToBoard(page)
@@ -818,49 +815,6 @@ test('#75 AC10, AC11: What changed for the last prompt, the whole session and an
   await expect(changes().getByTestId('agent-changes-empty')).toHaveText(
     'No file changes in this prompt.'
   )
-})
-
-/** A prompt that edits one file and replies with `lines` lines. */
-const longReplyFixture = (lines: number): string[] => [
-  userPrompt('Explain it', 100),
-  toolUse(
-    'e1',
-    'Edit',
-    { file_path: join(repo, 'src/b.ts'), old_string: 'x', new_string: 'y' },
-    101
-  ),
-  bashResult('e1', 'The file has been updated.', 102),
-  assistant(
-    [
-      {
-        type: 'text',
-        text: Array.from({ length: lines }, (_, i) => `Line ${i + 1} of the reply.`).join('\n')
-      }
-    ],
-    103
-  )
-]
-
-test("#75 D9: a long summary's Show more is still offered after What changed was collapsed", async () => {
-  await launch()
-  await createWorkspace(repo, 'repo')
-  await agentTab().click()
-  await claudeCard('agent', longReplyFixture(10))
-  const more = (): Locator => changes().getByTestId('agent-changes-more')
-  await expect(changes().getByTestId('agent-changes-summary')).toContainText('Line 10')
-  await expect(more()).toHaveText('Show more')
-
-  // Collapsed, another card's long reply is drawn hidden; opened again it is still clamped.
-  await groupToggle('What changed').click()
-  await expect(groupToggle('What changed')).toHaveAttribute('aria-expanded', 'false')
-  await backToBoard(page)
-  await claudeCard('second', longReplyFixture(12))
-  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
-  await groupToggle('What changed').click()
-  await expect(changes().getByTestId('agent-changes-summary')).toContainText('Line 12')
-  await expect(more()).toHaveText('Show more')
-  await more().click()
-  await expect(more()).toHaveText('Show less')
 })
 
 test('#75 AC12: clicking a changed file opens it with the folder, as the Files tab does', async () => {
@@ -974,7 +928,6 @@ test('#75 AC17: at 200 px the tab has no sideways scroll, and its colours are th
         added: [color('.agent-change-added'), resolve('--pill-waiting-text')],
         removed: [color('.agent-change-removed'), resolve('--danger')],
         heading: [color('[data-testid=agent-changes-heading]'), resolve('--text-muted')],
-        summary: [color('[data-testid=agent-changes-summary]'), resolve('--text')],
         command: [color('[data-testid=agent-command-title]'), resolve('--text')]
       }
     })

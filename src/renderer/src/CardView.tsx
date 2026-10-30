@@ -363,7 +363,8 @@ function CardView({
   const splittable = running && canSplit(layout)
   const focusedPane = layout.focused
   const { sidePanelOpen } = useSettings()
-  const { unfocusedPaneOpacity, paneDividerColor, hideMouseWhileTyping } = useEffectiveSettings()
+  const { unfocusedPaneOpacity, focusOutline, paneDividerColor, hideMouseWhileTyping } =
+    useEffectiveSettings()
   // The find bar (#35 D3, D10): never open when the view opens, gone when it goes away.
   const [find, setFind] = useState<OpenFind | null>(null)
   // The bar closes with the pane it searches (#35 D10); a closed pane's id is never kept.
@@ -472,6 +473,7 @@ function CardView({
           className="card-view-terminal"
           data-testid="card-terminal"
           data-zoomed={layout.zoomed === true}
+          data-focus-outline={focusOutline}
           style={
             paneDividerColor === ''
               ? undefined

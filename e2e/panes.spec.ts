@@ -978,6 +978,38 @@ test('Unfocused panes dims every pane but the focused one, and the setting is sa
     .toBe(0.5)
 })
 
+test('Focused pane outline can be switched off, and the setting is saved', async () => {
+  await openApi()
+  await splitRight(page)
+  const outline = (): Promise<string> =>
+    panes()
+      .nth(1)
+      .evaluate((el) => getComputedStyle(el).outlineStyle)
+  await expect.poll(outline).toBe('solid')
+
+  await page.getByTestId('settings-open').click()
+  const settings = page.getByTestId('settings-dialog')
+  await settings.getByTestId('settings-section-terminal').click()
+  await expect(settings.getByTestId('settings-focus-outline')).toBeChecked()
+  await settings.getByTestId('settings-focus-outline').uncheck()
+  await page.keyboard.press('Escape')
+
+  await expect.poll(outline).toBe('none')
+  await panes().nth(0).click()
+  await expect(panes().nth(0)).toHaveAttribute('data-focused', 'true')
+  expect(
+    await panes()
+      .nth(0)
+      .evaluate((el) => getComputedStyle(el).outlineStyle)
+  ).toBe('none')
+  const path = join(dataDir, 'bikube-settings.json')
+  await expect
+    .poll(() =>
+      existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).settings.focusOutline : null
+    )
+    .toBe(false)
+})
+
 test('Hide pointer while typing hides it over the pane until the mouse moves', async () => {
   await openApi()
   const pane = panes().nth(0)

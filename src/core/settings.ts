@@ -112,6 +112,8 @@ export interface Preferences {
    * Ghostty's `unfocused-split-opacity`: the terminal's background is laid over the rest.
    */
   unfocusedPaneOpacity: number
+  /** The focused split pane is outlined in the accent. */
+  focusOutline: boolean
   /** The line between split panes, `#rrggbb`, or '' for the app theme's border. */
   paneDividerColor: string
   /** The pointer hides over a terminal while typing there, until the mouse moves. */
@@ -176,6 +178,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   paddingX: 0,
   paddingY: 0,
   unfocusedPaneOpacity: 1,
+  focusOutline: true,
   paneDividerColor: '',
   hideMouseWhileTyping: false,
   useGhosttyShortcuts: false,
@@ -232,6 +235,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     v >= MIN_UNFOCUSED_PANE_OPACITY &&
     v <= 1 &&
     Math.abs(Math.round(v * 100) - v * 100) < 1e-9,
+  focusOutline: isBoolean,
   paneDividerColor: (v): v is string => v === '' || (typeof v === 'string' && HEX_COLOUR.test(v)),
   hideMouseWhileTyping: isBoolean,
   useGhosttyShortcuts: isBoolean,

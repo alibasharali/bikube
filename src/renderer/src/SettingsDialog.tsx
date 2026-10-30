@@ -923,7 +923,7 @@ const opacityLabel = (o: number): string =>
 
 /**
  * How panes are laid out and told apart: the padding around each terminal's text, how much an
- * unfocused split pane is dimmed, and the colour of the line between panes (Ghostty's
+ * unfocused split pane is dimmed, whether the focused one is outlined, and the colour of the line between panes (Ghostty's
  * `window-padding-x`/`-y`, `unfocused-split-opacity` and `split-divider-color`).
  */
 function PaneLookRows(): React.JSX.Element {
@@ -975,6 +975,13 @@ function PaneLookRows(): React.JSX.Element {
           onChange={(v) => settingsStore.update({ unfocusedPaneOpacity: Number(v) })}
         />
       )}
+      <SwitchRow
+        label="Focused pane outline"
+        hint="Outlines the focused pane in the accent when a card is split."
+        testId="settings-focus-outline"
+        checked={settings.focusOutline}
+        onChange={(focusOutline) => settingsStore.update({ focusOutline })}
+      />
       {ghostty.paneDividerColor !== undefined ? (
         <GhosttyValueRow
           label="Divider colour"

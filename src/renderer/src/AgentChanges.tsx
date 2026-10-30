@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   valueOfView,
   viewOfValue,
@@ -11,12 +11,10 @@ import {
 import type { AgentSummary } from '../../core/agent-summary'
 import { isOpenNote, openErrorLine } from '../../core/open-result'
 import { SMALL_ICON } from './icons'
-import { useViewWindow } from './view-window'
 
 /**
  * What changed (#75 D9): the view select, `<n> files · +a −r`, the files grouped by folder with
- * their badges and sizes, a file inside the folder opening through the Files tab's `files:open`,
- * and the prompt's summary.
+ * their badges and sizes, a file inside the folder opening through the Files tab's `files:open`.
  */
 export function ChangesList({
   summary,
@@ -44,19 +42,26 @@ export function ChangesList({
   }
   return (
     <div className="agent-changes">
-      <select
-        className="settings-input agent-changes-view"
-        data-testid="agent-changes-view"
-        aria-label="Changes shown"
-        value={valueOfView(view)}
-        onChange={(e) => onView(viewOfValue(e.target.value))}
-      >
-        {viewOptions(summary).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="agent-changes-bar">
+        <select
+          className="settings-input agent-changes-view"
+          data-testid="agent-changes-view"
+          aria-label="Changes shown"
+          value={valueOfView(view)}
+          onChange={(e) => onView(viewOfValue(e.target.value))}
+        >
+          {viewOptions(summary).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {shown.empty === null && (
+          <span className="agent-changes-heading" data-testid="agent-changes-heading">
+            {shown.heading}
+          </span>
+        )}
+      </div>
       {openError !== null && (
         <div
           className={openError.note ? 'files-error files-note' : 'files-error'}
@@ -80,29 +85,23 @@ export function ChangesList({
           {shown.empty}
         </p>
       ) : (
-        <>
-          <p className="agent-changes-heading" data-testid="agent-changes-heading">
-            {shown.heading}
-          </p>
-          {shown.groups.map((group) => (
-            <div
-              key={group.folder}
-              className="agent-changes-folder"
-              data-testid="agent-changes-folder"
-            >
-              <p className="agent-changes-folder-name" data-testid="agent-changes-folder-name">
-                {group.folder}
-              </p>
-              <ul className="agent-changes-files">
-                {group.files.map((file) => (
-                  <ChangeRow key={file.name} file={file} largest={shown.largest} onOpen={open} />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </>
+        shown.groups.map((group) => (
+          <div
+            key={group.folder}
+            className="agent-changes-folder"
+            data-testid="agent-changes-folder"
+          >
+            <p className="agent-changes-folder-name" data-testid="agent-changes-folder-name">
+              {group.folder}
+            </p>
+            <ul className="agent-changes-files">
+              {group.files.map((file) => (
+                <ChangeRow key={file.name} file={file} largest={shown.largest} onOpen={open} />
+              ))}
+            </ul>
+          </div>
+        ))
       )}
-      {shown.summary !== null && <Summary key={shown.summary} text={shown.summary} />}
     </div>
   )
 }
@@ -163,48 +162,5 @@ function ChangeRow({
         )}
       </span>
     </li>
-  )
-}
-
-/** The prompt's last reply as plain text, line breaks kept, clamped to 6 lines with Show more. */
-function Summary({ text }: { text: string }): React.JSX.Element {
-  const ref = useRef<HTMLParagraphElement>(null)
-  const [expanded, setExpanded] = useState(false)
-  const [clamped, setClamped] = useState(false)
-  const view = useViewWindow()
-  // Measured again whenever its box changes: drawn hidden (a collapsed group) it measures nothing,
-  // and a narrower panel can clamp a reply that fitted.
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el || expanded) return
-    const measure = (): void => setClamped(el.scrollHeight > el.clientHeight + 1)
-    measure()
-    const observer = new (view as Window & typeof globalThis).ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [text, expanded, view])
-  return (
-    <div className="agent-changes-summary-block">
-      <p
-        ref={ref}
-        className={
-          expanded ? 'agent-changes-summary' : 'agent-changes-summary agent-changes-clamped'
-        }
-        data-testid="agent-changes-summary"
-      >
-        {text}
-      </p>
-      {(clamped || expanded) && (
-        <button
-          type="button"
-          className="btn btn-small agent-tab-show-all"
-          data-testid="agent-changes-more"
-          aria-expanded={expanded}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Show less' : 'Show more'}
-        </button>
-      )}
-    </div>
   )
 }

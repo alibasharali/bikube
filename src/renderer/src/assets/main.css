@@ -123,6 +123,12 @@ body,
   margin: 0;
 }
 
+/* The window never scrolls itself, only the panes in it (#76) */
+html,
+body {
+  overflow: hidden;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -2257,7 +2263,9 @@ button.dev-server-chip:focus-visible {
   color: var(--text);
 }
 
+/* Positioned, so what its tabs hide with .visually-hidden stays inside its scroll (#76) */
 .side-panel-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;

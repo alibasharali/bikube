@@ -1,4 +1,13 @@
-import { Bot, ChevronRight, LoaderCircle, SquareTerminal, Workflow } from 'lucide-react'
+import {
+  Ban,
+  Bot,
+  Check,
+  ChevronRight,
+  LoaderCircle,
+  SquareTerminal,
+  Workflow,
+  X
+} from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
 import { changesView, type ChangeView } from '../../core/agent-changes'
@@ -366,32 +375,31 @@ function AgentRowItem({ row, now }: { row: AgentRow; now: number }): React.JSX.E
     <li className="agent-row" data-testid="agent-row" data-kind={row.kind}>
       <Icon {...SMALL_ICON} className="agent-row-icon" />
       <span className="agent-row-text">
-        <span className="agent-row-name" data-testid="agent-row-name">
-          {row.name}
-        </span>
-        {row.description !== undefined && row.description !== null && (
-          <span className="agent-row-description" data-testid="agent-row-description">
-            {row.description}
+        <span className="agent-row-line">
+          <span className="agent-row-name" data-testid="agent-row-name">
+            {row.name}
           </span>
-        )}
-      </span>
-      <span className="agent-row-meta">
-        <span
-          className="agent-command-status"
-          data-testid="agent-row-status"
-          data-status={row.status}
-        >
-          {row.status === 'running' && (
-            <LoaderCircle {...SMALL_ICON} className="agent-command-spinner" />
-          )}
-          {AGENT_ROW_STATUS_LABELS[row.status]}
+          <StatusMark
+            testId="agent-row-status"
+            status={row.status}
+            label={AGENT_ROW_STATUS_LABELS[row.status]}
+          />
         </span>
-        {duration !== null && (
-          <span data-testid="agent-row-duration">{formatDuration(duration)}</span>
-        )}
-        {tools !== null && (
-          <span data-testid="agent-row-tools">
-            {tools} {tools === 1 ? 'tool use' : 'tool uses'}
+        {(row.description || duration !== null || tools !== null) && (
+          <span className="agent-row-line agent-row-sub">
+            {row.description && (
+              <span className="agent-row-description" data-testid="agent-row-description">
+                {row.description}
+              </span>
+            )}
+            {duration !== null && (
+              <span data-testid="agent-row-duration">{formatDuration(duration)}</span>
+            )}
+            {tools !== null && (
+              <span data-testid="agent-row-tools">
+                {tools} {tools === 1 ? 'tool use' : 'tool uses'}
+              </span>
+            )}
           </span>
         )}
       </span>
@@ -464,6 +472,12 @@ const statusLabel = (command: AgentCommand): string =>
       : `Failed · exit ${command.exitCode}`
     : STATUS_LABELS[command.status]
 
+/** The word a quiet status keeps in view on the right: `exit 1`, `Denied` or `Background`. */
+const statusNote = (command: AgentCommand): string =>
+  command.status === 'failed' && command.exitCode !== null
+    ? `exit ${command.exitCode}`
+    : statusLabel(command)
+
 function CommandRow({
   command,
   open,
@@ -488,33 +502,37 @@ function CommandRow({
         aria-controls={detailId}
         onClick={onToggle}
       >
-        <span className="agent-command-title" data-testid="agent-command-title">
-          {command.description ?? firstLine(command.command)}
-        </span>
-        <span className="agent-command-line" data-testid="agent-command-line">
-          {firstLine(command.command)}
-        </span>
-        <span className="agent-command-meta">
-          <span
-            className="agent-command-status"
-            data-testid="agent-command-status"
-            data-status={command.status}
-          >
-            {command.status === 'running' && (
-              <LoaderCircle {...SMALL_ICON} className="agent-command-spinner" />
-            )}
-            {statusLabel(command)}
+        <span className="agent-command-head">
+          <StatusMark
+            testId="agent-command-status"
+            status={command.status}
+            label={statusLabel(command)}
+            quiet
+          />
+          <span className="agent-command-title" data-testid="agent-command-title">
+            {command.description ?? firstLine(command.command)}
           </span>
-          {duration !== null && <span data-testid="agent-command-duration">{duration}</span>}
-          {command.startedAt !== null && (
-            <span data-testid="agent-command-time">{clockTime(command.startedAt)}</span>
-          )}
           {command.agent !== null && (
             <span className="agent-command-agent" data-testid="agent-command-agent">
               {command.agent}
             </span>
           )}
+          {command.status !== 'ok' && command.status !== 'running' && (
+            <span className="agent-command-note" data-status={command.status} aria-hidden="true">
+              {statusNote(command)}
+            </span>
+          )}
+          {duration !== null && (
+            <span className="agent-command-duration" data-testid="agent-command-duration">
+              {duration}
+            </span>
+          )}
         </span>
+        {command.description !== null && (
+          <span className="agent-command-line" data-testid="agent-command-line">
+            {firstLine(command.command)}
+          </span>
+        )}
       </button>
       {open && (
         <div className="agent-command-detail" id={detailId} data-testid="agent-command-detail">
@@ -524,18 +542,72 @@ function CommandRow({
               {command.output.join('\n')}
             </pre>
           )}
-          <CopyButton text={command.command} />
+          <div className="agent-command-actions">
+            <CopyButton text={command.command} />
+            {command.startedAt !== null && (
+              <span className="agent-command-time" data-testid="agent-command-time">
+                Started {clockTime(command.startedAt)}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </li>
   )
 }
 
-/** The command one step per line, its operator first, coloured from the theme (D10). */
-function CommandSteps({ command }: { command: string }): React.JSX.Element {
+const STATUS_ICONS: Partial<Record<string, typeof Bot>> = {
+  ok: Check,
+  done: Check,
+  failed: X,
+  denied: Ban,
+  background: SquareTerminal
+}
+
+/**
+ * A command's or agent row's status as a coloured icon and word, no chip; `quiet` keeps only the
+ * icon in view (the word still read out), for the statuses most rows have.
+ */
+function StatusMark({
+  testId,
+  status,
+  label,
+  quiet = false
+}: {
+  testId: string
+  status: string
+  label: string
+  quiet?: boolean
+}): React.JSX.Element {
+  const Icon = status === 'running' ? LoaderCircle : STATUS_ICONS[status]
   return (
-    <div className="agent-command-steps" data-testid="agent-command-steps">
-      {commandSteps(command).map((step, i) => (
+    <span className="agent-status" data-testid={testId} data-status={status} title={label}>
+      {Icon && (
+        <Icon
+          {...SMALL_ICON}
+          className={
+            status === 'running' ? 'agent-status-icon agent-command-spinner' : 'agent-status-icon'
+          }
+        />
+      )}
+      <span className={quiet && Icon ? 'visually-hidden' : undefined}>{label}</span>
+    </span>
+  )
+}
+
+/**
+ * The command one step per line, coloured from the theme (D10), its operator in a gutter so every
+ * step's command, and its wrapped lines, start in the same column.
+ */
+function CommandSteps({ command }: { command: string }): React.JSX.Element {
+  const steps = commandSteps(command)
+  return (
+    <div
+      className="agent-command-steps"
+      data-testid="agent-command-steps"
+      data-gutter={steps.length > 1}
+    >
+      {steps.map((step, i) => (
         <div
           key={i}
           className={step.dim ? 'agent-command-step agent-command-step-dim' : 'agent-command-step'}
@@ -543,11 +615,13 @@ function CommandSteps({ command }: { command: string }): React.JSX.Element {
           data-dim={step.dim}
         >
           {step.operator !== null && <span className="cmd-operator">{step.operator} </span>}
-          {step.parts.map((part, j) => (
-            <span key={j} className={`cmd-${part.kind}`}>
-              {part.text}
-            </span>
-          ))}
+          <span className="agent-command-step-text">
+            {step.parts.map((part, j) => (
+              <span key={j} className={`cmd-${part.kind}`}>
+                {part.text}
+              </span>
+            ))}
+          </span>
         </div>
       ))}
     </div>

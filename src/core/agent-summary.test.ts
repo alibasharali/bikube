@@ -468,7 +468,7 @@ const tool = (id: string, name: string, input: Record<string, unknown>, seconds 
 const reply = (text: string, seconds = 0): Entry => assistant([{ type: 'text', text }], seconds)
 
 describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
-  it('reads each typed prompt with its last reply, and its file changes once their result is in', () => {
+  it('reads each typed prompt, and its file changes once their result is in', () => {
     const summary = read([
       prompt('Add the panel', 0),
       tool('w1', 'Write', { file_path: '/repo/src/a.ts', content: 'a\n'.repeat(10) }, 1),
@@ -491,8 +491,8 @@ describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
       reply('Renamed b to c.', 16)
     ])
     expect(summary.prompts).toEqual([
-      { number: 1, text: 'Add the panel', reply: 'Added it.', startedAt: T0 },
-      { number: 2, text: 'Rename b', reply: 'Renamed b to c.', startedAt: T0 + 10_000 }
+      { number: 1, text: 'Add the panel', startedAt: T0 },
+      { number: 2, text: 'Rename b', startedAt: T0 + 10_000 }
     ])
     expect(summary.changes).toEqual([
       { prompt: 1, kind: 'new', path: '/repo/src/a.ts', added: 10, removed: 0 },
@@ -636,16 +636,14 @@ describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
     ])
   })
 
-  it('caps the prompt at 2,000 characters, the reply at 4,000 and the changes at 5,000 (D11)', () => {
+  it('caps the prompt at 2,000 characters and the changes at 5,000 (D11)', () => {
     const entries: Entry[] = [prompt('p'.repeat(3000))]
     for (let i = 0; i < SUMMARY_LIMITS.changes + 3; i++) {
       entries.push(tool(`w${i}`, 'Write', { file_path: `/r/${i}`, content: 'x' }))
       entries.push(result(`w${i}`, 'ok'))
     }
-    entries.push(reply('r'.repeat(5000)))
     const summary = read(entries)
     expect(summary.prompts?.[0].text).toHaveLength(SUMMARY_LIMITS.prompt)
-    expect(summary.prompts?.[0].reply).toHaveLength(SUMMARY_LIMITS.reply)
     expect(summary.changes).toHaveLength(SUMMARY_LIMITS.changes)
     expect(summary.changes?.[0].path).toBe('/r/3')
   })

@@ -1,7 +1,7 @@
 /**
  * The Agent tab's What changed group (#75 D9): the summary's file changes for one view (the last
  * prompt, the whole session or one earlier prompt) merged into one badge per file, with sizes,
- * grouped by folder relative to the card's folder, and the view's summary. No Node or DOM
+ * grouped by folder relative to the card's folder. No Node or DOM
  * imports: the renderer runs it.
  */
 import { joinPath, normalizePath } from './agent-file-changes'
@@ -40,8 +40,6 @@ export interface ChangesShown {
   count: number
   /** The largest file's lines added and removed, for the size bars. */
   largest: number
-  /** The prompt's last reply; null for the whole session or none. */
-  summary: string | null
   /** The empty line when no file changed in the view, else null. */
   empty: string | null
 }
@@ -185,8 +183,6 @@ export function changesView(summary: AgentSummary, folder: string, view: ChangeV
   const ordered = [...groups.entries()].sort(
     ([a, ga], [b, gb]) => Number(gb.inside) - Number(ga.inside) || compareNames(a, b)
   )
-  const reply =
-    view.kind === 'session' ? null : (prompts.find((p) => p.number === number)?.reply ?? null)
   return {
     groups: ordered.map(([name, group]) => ({
       folder: name,
@@ -195,7 +191,6 @@ export function changesView(summary: AgentSummary, folder: string, view: ChangeV
     heading: `${count} ${count === 1 ? 'file' : 'files'} · +${added} −${removed}`,
     count,
     largest,
-    summary: reply,
     empty:
       count > 0
         ? null

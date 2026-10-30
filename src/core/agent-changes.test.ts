@@ -10,8 +10,8 @@ const SUMMARY: AgentSummary = {
   todos: [],
   commands: [],
   prompts: [
-    { number: 1, text: 'Add the panel', reply: 'Added it.', startedAt: T0 },
-    { number: 2, text: 'Rename b', reply: 'Renamed b to c.', startedAt: T0 + 1000 }
+    { number: 1, text: 'Add the panel', startedAt: T0 },
+    { number: 2, text: 'Rename b', startedAt: T0 + 1000 }
   ],
   changes: [
     { prompt: 1, kind: 'new', path: '/repo/src/a.ts', added: 10, removed: 0 },
@@ -27,20 +27,19 @@ const shown = (view: ReturnType<typeof changesView>): string[][] =>
   )
 
 describe("What changed's views (#75 D9, AC10, AC11)", () => {
-  it('shows the last prompt: grouped by folder, a rename without a size, the reply', () => {
+  it('shows the last prompt: grouped by folder, a rename without a size', () => {
     const view = changesView(SUMMARY, '/repo', { kind: 'last' })
     expect(shown(view)).toEqual([
       ['docs', 'x.md', 'Edited', '+1 −0'],
       ['src', 'b.ts → c.ts', 'Renamed', '']
     ])
     expect(view.heading).toBe('2 files · +1 −0')
-    expect(view.summary).toBe('Renamed b to c.')
     expect(view.empty).toBeNull()
     expect(view.groups[0].files[0].open).toBe('docs/x.md')
     expect(view.groups[1].files[0].open).toBe('src/c.ts')
   })
 
-  it('merges the whole session: New, an edit then a rename Renamed, no summary', () => {
+  it('merges the whole session: New, an edit then a rename Renamed', () => {
     const view = changesView(SUMMARY, '/repo', { kind: 'session' })
     expect(shown(view)).toEqual([
       ['docs', 'x.md', 'Edited', '+1 −0'],
@@ -48,7 +47,6 @@ describe("What changed's views (#75 D9, AC10, AC11)", () => {
       ['src', 'b.ts → c.ts', 'Renamed', '']
     ])
     expect(view.heading).toBe('3 files · +11 −0')
-    expect(view.summary).toBeNull()
   })
 
   it('shows one earlier prompt', () => {
@@ -57,7 +55,6 @@ describe("What changed's views (#75 D9, AC10, AC11)", () => {
       ['src', 'a.ts', 'New', '+10 −0'],
       ['src', 'b.ts', 'Edited', '+2 −1']
     ])
-    expect(view.summary).toBe('Added it.')
     expect(view.largest).toBe(10)
   })
 
@@ -104,9 +101,9 @@ describe("What changed's views (#75 D9, AC10, AC11)", () => {
 describe("What changed's select (#75 D9)", () => {
   it('offers Last prompt, Whole session, then earlier prompts newest first by 50 characters', () => {
     const prompts = [
-      { number: 1, text: 'Add the panel', reply: null, startedAt: null },
-      { number: 2, text: `${'a'.repeat(60)}\nmore`, reply: null, startedAt: null },
-      { number: 3, text: 'Last', reply: null, startedAt: null }
+      { number: 1, text: 'Add the panel', startedAt: null },
+      { number: 2, text: `${'a'.repeat(60)}\nmore`, startedAt: null },
+      { number: 3, text: 'Last', startedAt: null }
     ]
     expect(viewOptions({ ...SUMMARY, prompts })).toEqual([
       { value: 'last', label: 'Last prompt' },

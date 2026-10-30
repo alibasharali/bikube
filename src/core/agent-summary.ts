@@ -2,7 +2,7 @@
  * The Agent tab's agent summary (#75 D7, D8, D10, D11): Claude Code transcript lines parsed into
  * the main agent's model and todo list, every subagent and background command with its status and
  * times, every `Bash` command with its status, duration and output tail, and (D9) the prompts the
- * user typed with each one's last reply and the file changes made in it. No Node imports: main
+ * user typed and the file changes made in each. No Node imports: main
  * feeds it the lines it tails (`agent-transcript.ts`), Vitest fixture lines. One
  * `TranscriptState` holds a whole conversation: the main transcript's lines come through
  * `addTranscriptLine` with `agent` null, each subagent transcript's through `addSubagentLine`
@@ -28,8 +28,6 @@ export const SUMMARY_LIMITS = {
   /** A prompt's own text; the picker shows its first `promptLabel` characters. */
   prompt: 2000,
   promptLabel: 50,
-  /** A prompt's summary: the main agent's last text reply in it. */
-  reply: 4000,
   /** Prompts kept, dropping the oldest (their file changes stay in the whole session). */
   prompts: 1000,
   /** File changes, across the session. */
@@ -95,13 +93,11 @@ export interface AgentTask {
 
 /**
  * A prompt the user typed (D9): a main-agent user entry with text content, not a tool result, a
- * meta entry or command output. `number` counts from 1 in the session; `reply` is the main agent's
- * last text reply in it.
+ * meta entry or command output. `number` counts from 1 in the session.
  */
 export interface AgentPrompt {
   number: number
   text: string
-  reply: string | null
   startedAt: number | null
 }
 
@@ -704,7 +700,6 @@ function addLine(
     ) {
       state.model = message.model.slice(0, SUMMARY_LIMITS.model)
     }
-    if (main) lastReply(state, entry)
     const cwd = typeof entry.cwd === 'string' && entry.cwd.startsWith('/') ? entry.cwd : null
     for (const use of blocks(entry, 'tool_use')) {
       toolUse(state, use, at, agent, file)
@@ -774,19 +769,9 @@ function typedPrompt(state: TranscriptState, entry: Json, at: number | null): vo
   state.prompts.push({
     number: state.promptCount,
     text: typed.trim().slice(0, SUMMARY_LIMITS.prompt),
-    reply: null,
     startedAt: at
   })
   if (state.prompts.length > SUMMARY_LIMITS.prompts) state.prompts.shift()
-}
-
-/** The main agent's last text reply in the current prompt: its summary (D9). */
-function lastReply(state: TranscriptState, entry: Json): void {
-  const current = state.prompts[state.prompts.length - 1]
-  if (!current || current.number !== state.promptCount) return
-  const texts = blocks(entry, 'text').filter((b) => typeof b.text === 'string' && b.text.trim())
-  const last = texts[texts.length - 1]
-  if (last) current.reply = (last.text as string).trim().slice(0, SUMMARY_LIMITS.reply)
 }
 
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])

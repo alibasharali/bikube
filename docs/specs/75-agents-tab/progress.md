@@ -16,6 +16,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-10-29 S2a (orchestrator): a lookup cache added in review was dropped because it broke D3a's newest-file rule; the shell lookup scans the projects folder per request, as specced.
 - 2026-10-29 S4 (orchestrator): the parser also keeps at most the newest 1,000 prompts in the picker (in D11's spirit; their file changes still count under Whole session). Listed in the PR's trade-offs.
+- 2026-10-30 polish (developer, PR #95): What changed drops the prompt's summary (the main agent's last reply), and the parser stops keeping it; the view select and the count share a line. Agents and Commands rows lose their chips for a coloured icon and word, Commands rows are two lines (the command only under a description, the time moved beside Copy), and an expanded command's operators sit in a gutter. D8, D9, D10, AC10 and AC11 revised to match.
 
 ## Verification
 

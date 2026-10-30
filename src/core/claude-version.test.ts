@@ -9,13 +9,14 @@ import { claudeVersionPlan, parseClaudeVersion, readClaudeVersion } from './clau
 // shell, as the installed-agents check runs.
 
 describe('claudeVersionPlan', () => {
-  it('names claude as a positional argument of a POSIX login shell; fish gets $argv', () => {
+  it('names claude as a positional argument of an interactive POSIX login shell; fish gets $argv', () => {
     const plan = claudeVersionPlan('/bin/zsh')
     expect(plan.command).toBe('/bin/zsh')
-    expect(plan.args.slice(0, 2)).toEqual(['-l', '-c'])
-    expect(plan.args.slice(3)).toEqual(['bikube', 'claude'])
-    expect(plan.args[2]).not.toContain('claude')
-    expect(claudeVersionPlan('/usr/bin/fish').args[2]).toContain('$argv')
+    expect(plan.args.slice(0, 3)).toEqual(['-l', '-i', '-c'])
+    expect(plan.args.slice(4)).toEqual(['bikube', 'claude'])
+    expect(plan.args[3]).not.toContain('claude')
+    expect(claudeVersionPlan('/usr/bin/fish').args.slice(0, 3)).toEqual(['-l', '-i', '-c'])
+    expect(claudeVersionPlan('/usr/bin/fish').args[3]).toContain('$argv')
     expect(claudeVersionPlan('/usr/bin/nu').command).toBe('/bin/sh')
   })
 })
@@ -74,6 +75,22 @@ describe('readClaudeVersion', () => {
       })
     })
   }
+
+  it("#78: reads claude that zsh puts on PATH in .zshrc, as a card's shell does", async () => {
+    const zsh = ['/bin/zsh', '/usr/bin/zsh'].find(
+      (path) => spawnSync(path, ['-c', 'exit 0']).status === 0
+    )
+    if (!zsh) return
+    writeFileSync(join(home, '.zprofile'), 'PATH=/usr/bin:/bin; export PATH\n')
+    writeFileSync(join(home, '.zshrc'), `echo Welcome\nexport PATH='${bin}':$PATH\n`)
+    writeFileSync(join(bin, 'claude'), "#!/bin/sh\necho '2.1.0 (Claude Code)'\n")
+    chmodSync(join(bin, 'claude'), 0o755)
+    expect(await readClaudeVersion({ spawn, shell: zsh, env })).toEqual({
+      installed: true,
+      path: join(bin, 'claude'),
+      version: '2.1.0 (Claude Code)'
+    })
+  })
 
   it('AC13: reads the version and path under fish, where it is installed', async () => {
     const fish = ['/opt/homebrew/bin/fish', '/usr/local/bin/fish', '/usr/bin/fish'].find(

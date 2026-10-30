@@ -1,12 +1,12 @@
 /**
  * Status' Claude Code row (#68 D13): the version `claude --version` prints and the path
  * `command -v claude` gives, read through the user's login shell as the installed-agents check
- * runs (`-l -c`, the command a positional argument, each answer after a marker so whatever a
+ * runs (`LOGIN_CHECK`, the command a positional argument, each answer after a marker so whatever a
  * profile prints is ignored). Plain TS: main injects the process spawner, so Vitest runs real
  * shells on a fake `claude`.
  */
 
-import { runLoginShell, type InstalledDeps } from './installed-agents'
+import { LOGIN_CHECK, runLoginShell, type InstalledDeps } from './installed-agents'
 
 /** What the check found: claude's path and its version's first line, or that it isn't there. */
 export type ClaudeVersion =
@@ -29,8 +29,7 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
     return {
       command: shell,
       args: [
-        '-l',
-        '-c',
+        ...LOGIN_CHECK,
         `set p (command -v $argv[1]); or exit 0; printf '${FOUND} %s\\n' $p[1]; ` +
           `set v ($argv[1] --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v[1]"; true`,
         'claude'
@@ -40,8 +39,7 @@ export function claudeVersionPlan(shell: string): { command: string; args: strin
   return {
     command: POSIX_SHELLS.has(flavour) ? shell : '/bin/sh',
     args: [
-      '-l',
-      '-c',
+      ...LOGIN_CHECK,
       `p=$(command -v "$1" 2>/dev/null) || exit 0; printf '${FOUND} %s\\n' "$p"; ` +
         `v=$("$1" --version </dev/null 2>/dev/null); printf '${VERSION} %s\\n' "$v"; exit 0`,
       'bikube',

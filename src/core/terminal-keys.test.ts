@@ -100,10 +100,18 @@ describe('isClaudeCodeProgram', () => {
     expect(isClaudeCodeProgram('/opt/homebrew/bin/claude')).toBe(true)
   })
 
+  it('is the native install, named after its version file', () => {
+    expect(isClaudeCodeProgram('2.1.312')).toBe(true)
+    expect(isClaudeCodeProgram('/Users/me/.local/share/claude/versions/2.1.312')).toBe(true)
+  })
+
   it('is nothing else, nor an unknown program', () => {
     expect(isClaudeCodeProgram('zsh')).toBe(false)
     expect(isClaudeCodeProgram('claude-code-router')).toBe(false)
     expect(isClaudeCodeProgram('/usr/bin/node')).toBe(false)
+    expect(isClaudeCodeProgram('/opt/tool/versions/2.1.312')).toBe(false)
+    expect(isClaudeCodeProgram('2.1')).toBe(false)
+    expect(isClaudeCodeProgram('')).toBe(false)
     expect(isClaudeCodeProgram(null)).toBe(false)
   })
 })

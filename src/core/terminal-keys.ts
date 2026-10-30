@@ -21,13 +21,23 @@ export function isShiftEnter(event: KeyLike): boolean {
  */
 export const CLAUDE_CODE_PROBE_OSC = 7501
 
+/** The file name of a Claude Code native install's binary: its version. */
+const NATIVE_BUILD = /^\d+\.\d+\.\d+$/
+
 /**
  * Whether `program`, the name node-pty reads for a terminal's foreground process (a bare name on
  * macOS, maybe a path on Linux), is Claude Code: it sends its probe only once, so a pane that
- * turns focus reporting on again (after Ctrl+Z and `fg`) is told by this instead.
+ * turns focus reporting on again (after Ctrl+Z and `fg`) is told by this instead. The native
+ * installer's `claude` is a symlink to `…/claude/versions/<version>`, and macOS names the process
+ * after the target: a bare version such as `2.1.312`, or that path.
  */
 export function isClaudeCodeProgram(program: string | null): boolean {
-  return program?.slice(program.lastIndexOf('/') + 1) === 'claude'
+  if (!program) return false
+  const name = program.slice(program.lastIndexOf('/') + 1)
+  if (name === 'claude') return true
+  return (
+    NATIVE_BUILD.test(name) && (name === program || program.endsWith(`/claude/versions/${name}`))
+  )
 }
 
 /**

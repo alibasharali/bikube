@@ -714,6 +714,7 @@ test('#76: a long Commands list never makes the window itself scroll', async () 
     )
   }
   await claudeCard('agent', lines)
+  await group('Commands').getByTestId('agent-commands-show-all').click()
   await expect(commandRows()).toHaveCount(120)
 
   const pageScroll = (): Promise<{ height: number; client: number; top: number }> =>
@@ -887,6 +888,78 @@ test('#75 AC12: clicking a changed file opens it with the folder, as the Files t
   await file.click()
   await expect.poll(runs).toEqual(['run code', repo, join(repo, 'docs', 'x.md')])
   await expect(changes().getByTestId('agent-changes-open-error')).toHaveCount(0)
+})
+
+// #77: What changed and Commands show their first 10 rows, the rest behind Show all.
+test('#77: What changed and Commands cut at 10 rows with Show all and Show fewer', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const lines = [userPrompt('Write twelve', 100)]
+  for (let i = 0; i < 12; i++) {
+    const name = `f${String(i).padStart(2, '0')}.ts`
+    lines.push(
+      toolUse(
+        `w${i}`,
+        'Write',
+        { file_path: join(repo, 'src', name), content: 'a\n' },
+        101 + 2 * i
+      ),
+      bashResult(`w${i}`, 'File created successfully', 102 + 2 * i, false, {
+        type: 'create',
+        filePath: join(repo, 'src', name)
+      })
+    )
+  }
+  for (let i = 0; i < 12; i++) {
+    lines.push(
+      bashUse(`c${i}`, `echo ${i}`, `Echo ${i}`, 200 + 2 * i),
+      bashResult(`c${i}`, `${i}`, 201 + 2 * i)
+    )
+  }
+  await claudeCard('agent', lines)
+
+  // AC1: 10 of the 12 files, the heading still all of them.
+  const changesAll = changes().getByTestId('agent-changes-show-all')
+  await expect(changeRows()).toHaveCount(10)
+  await expect(changes().getByTestId('agent-changes-heading')).toHaveText('12 files · +12 −0')
+  await expect(group('What changed').getByTestId('agent-tab-group-count')).toHaveText('10')
+  await expect(changesAll).toHaveText('Show all (2 more)')
+  await changesAll.click()
+  await expect(changeRows()).toHaveCount(12)
+  await expect(group('What changed').getByTestId('agent-tab-group-count')).toHaveText('12')
+  await expect(changesAll).toHaveText('Show fewer')
+  await changesAll.click()
+  await expect(changeRows()).toHaveCount(10)
+
+  // AC4: another view after Show all starts cut again.
+  await changesAll.click()
+  await changes().getByTestId('agent-changes-view').selectOption({ label: 'Whole session' })
+  await expect(changeRows()).toHaveCount(10)
+  await expect(changesAll).toHaveText('Show all (2 more)')
+
+  // AC2: the newest 10 commands.
+  const commandsAll = group('Commands').getByTestId('agent-commands-show-all')
+  await expect(commandRows()).toHaveCount(10)
+  await expect(commandTitles().first()).toHaveText('Echo 11')
+  await expect(commandsAll).toHaveText('Show all (2 more)')
+  await commandsAll.click()
+  await expect(commandRows()).toHaveCount(12)
+  await expect(commandsAll).toHaveText('Show fewer')
+  await commandsAll.click()
+  await expect(commandRows()).toHaveCount(10)
+})
+
+// #77 AC3: lists within the limit show no button.
+test('#77 AC3: 10 or fewer rows show no Show all', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', changesFixture())
+  await expect(changeRows()).toHaveCount(2)
+  await expect(commandRows()).toHaveCount(1)
+  await expect(changes().getByTestId('agent-changes-show-all')).toHaveCount(0)
+  await expect(group('Commands').getByTestId('agent-commands-show-all')).toHaveCount(0)
 })
 
 test('#75 AC17: at 200 px the tab has no sideways scroll, and its colours are the theme’s', async () => {

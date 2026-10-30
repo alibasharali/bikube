@@ -199,3 +199,22 @@ export function changesView(summary: AgentSummary, folder: string, view: ChangeV
           : 'No file changes in this prompt.'
   }
 }
+
+/**
+ * `shown` cut to its first `limit` files in the order it lists them (#77 C1), folders left empty
+ * dropped; `more` is the files left out. The heading and count stay the whole view's.
+ */
+export function limitChanges(
+  shown: ChangesShown,
+  limit: number
+): { groups: ChangeGroup[]; more: number } {
+  const groups: ChangeGroup[] = []
+  let left = limit
+  for (const group of shown.groups) {
+    if (left <= 0) break
+    const files = group.files.slice(0, left)
+    left -= files.length
+    groups.push(files.length === group.files.length ? group : { ...group, files })
+  }
+  return { groups, more: Math.max(0, shown.count - limit) }
+}

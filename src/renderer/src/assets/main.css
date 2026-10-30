@@ -2872,6 +2872,7 @@ button.dev-server-chip:focus-visible {
 }
 
 .agent-tab-show-all {
+  align-self: flex-start;
   margin-top: var(--space-1);
 }
 

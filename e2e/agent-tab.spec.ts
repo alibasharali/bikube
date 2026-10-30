@@ -700,6 +700,37 @@ test('#75 AC9: a background command runs in Agents and reads Background in Comma
   await expect(commandRows().first().getByTestId('agent-command-status')).toHaveText('Background')
 })
 
+// #76: a long Agent tab scrolls only in the panel. Each command's status word is visually hidden
+// (absolute at its place in the list), so the panel must keep them, or they make the page taller.
+test('#76: a long Commands list never makes the window itself scroll', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const lines: string[] = []
+  for (let i = 0; i < 120; i++) {
+    lines.push(
+      bashUse(`c${i}`, `echo ${i}`, `Echo ${i}`, 2 * i),
+      bashResult(`c${i}`, `${i}`, 2 * i + 1)
+    )
+  }
+  await claudeCard('agent', lines)
+  await expect(commandRows()).toHaveCount(120)
+
+  const pageScroll = (): Promise<{ height: number; client: number; top: number }> =>
+    page.evaluate(() => {
+      const root = document.scrollingElement!
+      return { height: root.scrollHeight, client: root.clientHeight, top: root.scrollTop }
+    })
+  const before = await pageScroll()
+  expect(before.height).toBe(before.client)
+
+  // The wheel over the sidebar, which doesn't scroll, reaches nothing below it.
+  await page.getByTestId('sidebar').hover()
+  await page.mouse.wheel(0, 2000)
+  await page.waitForTimeout(300)
+  expect((await pageScroll()).top).toBe(0)
+})
+
 // S4 (#75 D9): What changed, from the prompts and the edit tools and simple commands in them.
 
 const userPrompt = (text: string, seconds: number): string =>

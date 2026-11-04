@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 
-/** The Agent tab's groups (#75 D6), in order under its header. */
+/** The Agent tab's groups (#75 D6, #79 D3), in order under its header. */
 export const AGENT_TAB_GROUPS = [
   { id: 'agents', name: 'Agents' },
   { id: 'changes', name: 'What changed' },
+  { id: 'outputs', name: 'Files and artifacts' },
   { id: 'commands', name: 'Commands' }
 ] as const
 

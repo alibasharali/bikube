@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_TAB_GROUPS, collapsedAgentGroups, toggleAgentGroup } from './agent-tab-groups'
 
-describe("the Agent tab's groups (#75 D6)", () => {
-  it('lists Agents, What changed and Commands, all open the first time', () => {
-    expect(AGENT_TAB_GROUPS.map((g) => g.name)).toEqual(['Agents', 'What changed', 'Commands'])
+describe("the Agent tab's groups (#75 D6, #79 D3)", () => {
+  it('lists Agents, What changed, Files and artifacts and Commands, all open the first time', () => {
+    expect(AGENT_TAB_GROUPS.map((g) => g.name)).toEqual([
+      'Agents',
+      'What changed',
+      'Files and artifacts',
+      'Commands'
+    ])
     expect(collapsedAgentGroups().size).toBe(0)
   })
 

@@ -49,3 +49,13 @@ describe('outputPaths (#79 D6)', () => {
     expect(outputPaths('/tmpfiles/a.pdf')).toEqual(['/tmpfiles/a.pdf'])
   })
 })
+
+describe('outputPaths on a long line (#79 D6)', () => {
+  it('reads a 100 KB line of many starts quickly, with a path at the 300 cut unchanged', () => {
+    const path = `/${'a'.repeat(295)}.pdf`
+    const line = `${'/x '.repeat(33_000)}${path}. ${path}x`
+    const began = performance.now()
+    expect(outputPaths(line)).toEqual([path])
+    expect(performance.now() - began).toBeLessThan(100)
+  })
+})

@@ -78,8 +78,10 @@ export function outputPaths(text: string): string[] {
   const found: string[] = []
   for (const start of text.matchAll(START)) {
     const from = start.index
-    const lineEnd = text.indexOf('\n', from)
-    const line = text.slice(from, lineEnd === -1 ? undefined : lineEnd)
+    // Room for a 300-character path and the two characters its end looks at, so work stays linear.
+    const window = text.slice(from, from + MAX_PATH + 2)
+    const lineEnd = window.indexOf('\n')
+    const line = lineEnd === -1 ? window : window.slice(0, lineEnd)
     const end = END.exec(line)
     if (!end) continue
     const length = end.index + end[0].length

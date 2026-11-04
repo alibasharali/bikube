@@ -806,6 +806,32 @@ describe("the agent summary's files and artifacts (#79 D8)", () => {
     ])
   })
 
+  it('adds no link from listings, Read or other tools, only from tools on one artifact (D4)', () => {
+    const summary = read([
+      tool('l1', 'Artifact', { action: 'list' }, 1),
+      result('l1', `${PAGE}\n${OTHER}`, 2, false, { artifacts: [{ url: PAGE }, { url: OTHER }] }),
+      tool('r1', 'Read', { file_path: '/home/u/notes.md' }, 3),
+      result('r1', `See ${PAGE}`, 4),
+      tool('g1', 'WebFetch', { url: PAGE }, 5),
+      result('g1', `Fetched ${PAGE}`, 6),
+      tool('q1', 'mcp__claude_ai_Claude_Docs__query', { query: 'plans' }, 7),
+      result('q1', JSON.stringify({ results: [{ url: OTHER }] }), 8),
+      tool(
+        'd1',
+        'mcp__claude_ai_Claude_Docs__update',
+        { container: { kind: 'project', id: 'c-1' } },
+        9
+      ),
+      result('d1', JSON.stringify({ frame: { url: DOC } }), 10),
+      tool('u1', 'Artifact', { action: 'update', url: OTHER }, 11),
+      result('u1', 'Updated', 12, false, { url: OTHER, title: 'Notes' })
+    ])
+    expect(summary.outputs).toEqual([
+      { kind: 'artifact', url: DOC, type: 'doc', at: T0 + 10_000 },
+      { kind: 'artifact', url: OTHER, title: 'Notes', at: T0 + 12_000 }
+    ])
+  })
+
   it("titles a Docs call by an earlier Artifact open's artifact id", () => {
     const summary = read([
       tool('a1', 'Artifact', { action: 'open', url: DOC }, 1),

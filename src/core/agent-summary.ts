@@ -170,6 +170,8 @@ interface PendingChange {
 interface PendingOutput {
   /** A `Write`'s or foreground `Bash`'s document paths, kept when it succeeds. */
   paths: string[]
+  /** A tool acting on one artifact, whose result's links count (D4); listings and others never. */
+  links: boolean
   /** `page` for an `Artifact` publish, `doc` for a Claude Docs tool, else null. */
   type: 'doc' | 'page' | null
   /** A Claude Docs tool's container: the title it creates, the id it names. */
@@ -919,21 +921,35 @@ function addOutput(state: TranscriptState, output: AgentOutput): void {
 
 const CLAUDE_DOCS = /^mcp__.*Claude_Docs__/
 
+/** The `Artifact` actions on one artifact (D4); `undefined` is a publish. */
+const ONE_ARTIFACT_ACTIONS = new Set<unknown>([undefined, 'publish', 'open', 'read', 'update'])
+
 /** A main-agent tool use that may name outputs: kept pending until its result (#79 D8). */
 function outputUse(state: TranscriptState, use: Json, at: number | null): void {
   if (typeof use.id !== 'string' || typeof use.name !== 'string') return
   const input = isObject(use.input) ? use.input : {}
-  const pending: PendingOutput = { paths: [], type: null, title: null, containerId: null, at }
+  const pending: PendingOutput = {
+    paths: [],
+    links: false,
+    type: null,
+    title: null,
+    containerId: null,
+    at
+  }
   if (use.name === 'Write' && typeof input.file_path === 'string') {
     const path = input.file_path.length <= SUMMARY_LIMITS.path ? outputPath(input.file_path) : null
     if (path !== null) pending.paths = [path]
   } else if (use.name === 'Bash' && typeof input.command === 'string') {
     if (input.run_in_background !== true) pending.paths = outputPaths(input.command)
   } else if (use.name === 'Artifact') {
+    if (!ONE_ARTIFACT_ACTIONS.has(input.action)) return
+    pending.links = true
     // Only a publish makes a page; open and read name one that may be a doc.
     if (input.action === undefined || input.action === 'publish') pending.type = 'page'
   } else if (CLAUDE_DOCS.test(use.name)) {
     const container = isObject(input.container) ? input.container : {}
+    if (!isObject(container.create) && container.id === undefined) return
+    pending.links = true
     pending.type = 'doc'
     pending.title = isObject(container.create)
       ? text(container.create.name, Number.MAX_SAFE_INTEGER)
@@ -950,7 +966,7 @@ function resultObject(content: string): Json | null {
   return isObject(value) ? value : null
 }
 
-/** A main-agent tool result: its pending paths if it succeeded, and every artifact link in it. */
+/** A main-agent tool result: its pending paths if it succeeded, and its links if it acts on one artifact. */
 function outputResult(
   state: TranscriptState,
   result: Json,
@@ -968,25 +984,26 @@ function outputResult(
   if (pending && !failed) {
     for (const path of pending.paths) addOutput(state, { kind: 'file', path, at: pending.at })
   }
+  if (!pending?.links) return
   const info = isObject(extra) ? extra : (resultObject(content) ?? {})
   const named = text(info.title, Number.MAX_SAFE_INTEGER)
   const frame = isObject(info.frame) ? info.frame : {}
   for (const id of [text(info.artifact_id, 200), text(frame.slug, 200)]) {
-    const title = named ?? pending?.title ?? null
+    const title = named ?? pending.title ?? null
     if (id !== null && title !== null) state.docTitles.set(id, title)
   }
   const extraText = extra === undefined || typeof extra === 'string' ? '' : JSON.stringify(extra)
   const title =
     named ??
-    pending?.title ??
-    (pending?.containerId ? state.docTitles.get(pending.containerId) : undefined) ??
+    pending.title ??
+    (pending.containerId ? state.docTitles.get(pending.containerId) : undefined) ??
     null
   for (const url of artifactUrls(`${content}\n${extraText}`)) {
     addOutput(state, {
       kind: 'artifact',
       url,
       ...(title !== null && { title }),
-      ...(pending?.type && { type: pending.type }),
+      ...(pending.type && { type: pending.type }),
       at
     })
   }

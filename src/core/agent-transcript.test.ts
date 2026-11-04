@@ -454,4 +454,24 @@ describe("the summary's files checked on disk (#79 D9)", () => {
     expect(await isOutputFile(folder)).toBe(false)
     expect(await isOutputFile(join(root, 'missing.pdf'))).toBe(false)
   })
+
+  it('checks at most 8 files at a time, so a stalled mount ties up few threads', async () => {
+    const names = Array.from({ length: 30 }, (_, i) => `~/Downloads/f${i}.pdf`)
+    writeFileSync(writeTranscript(), reply(`Saved ${names.join(' and ')}`))
+    let running = 0
+    let most = 0
+    const slow = async <T>(answer: T): Promise<T> => {
+      most = Math.max(most, ++running)
+      await new Promise((done) => setTimeout(done, 2))
+      running--
+      return answer
+    }
+    const file = { isFile: () => true, isSymbolicLink: () => false }
+    const tailer = new TranscriptTailer({
+      outputFs: { lstat: () => slow(file), stat: () => slow(file) }
+    })
+    const read = await tailer.read(transcriptPath(home, folder, SESSION), undefined, home)
+    expect(outputsOf(read)).toEqual(names)
+    expect(most).toBe(8)
+  })
 })

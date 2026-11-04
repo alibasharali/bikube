@@ -78,19 +78,27 @@ export async function isOutputFile(path: string, fs: OutputFs = nodeOutputFs): P
   }
 }
 
-/** `outputs` without the files not on disk (#79 D9), all checked at once. */
+/** How many files are checked at once: a stalled mount then holds few of libuv's threads (#26). */
+const CHECKS_AT_ONCE = 8
+
+/** `outputs` without the files not on disk (#79 D9), at most 8 checked at a time. */
 async function outputsOnDisk(
   outputs: readonly AgentOutput[],
   home: string,
   fs: OutputFs
 ): Promise<AgentOutput[]> {
-  const kept = await Promise.all(
-    outputs.map(async (output) => {
-      if (output.kind !== 'file') return true
+  const kept = outputs.map((output) => output.kind !== 'file')
+  let next = 0
+  const worker = async (): Promise<void> => {
+    while (next < outputs.length) {
+      const i = next++
+      const output = outputs[i]
+      if (output.kind !== 'file') continue
       const path = outputFilePath(output.path, home)
-      return path !== null && (await isOutputFile(path, fs))
-    })
-  )
+      kept[i] = path !== null && (await isOutputFile(path, fs))
+    }
+  }
+  await Promise.all(Array.from({ length: CHECKS_AT_ONCE }, worker))
   return outputs.filter((_, i) => kept[i])
 }
 

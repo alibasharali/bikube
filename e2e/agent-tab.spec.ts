@@ -178,7 +178,7 @@ test('#75 AC2, AC3: a plain card, the Default shell and a Claude Code card with 
   await expect(windowPanel.getByTestId('agent-tab-message')).toHaveText('No conversation yet.')
 })
 
-test("#75 D6: a Claude Code card's transcript shows the three groups, collapsed for the run", async () => {
+test("#75 D6, #79 D3: a Claude Code card's transcript shows the four groups, collapsed for the run", async () => {
   await launch()
   await createWorkspace(repo, 'repo')
   await agentTab().click()
@@ -1092,11 +1092,7 @@ test('#75 AC17: at 200 px the tab has no sideways scroll, and its colours are th
 
 // #79: Files and artifacts, the documents and claude.ai links the main agent made, newest first.
 
-/**
- * A fake home outside the temp folders (D7 leaves `/tmp` and `/var/folders` out, so a `Write` of
- * `<home>/Downloads/a.pdf` there would never count), in the gitignored `test-results`; its
- * `Downloads` made. Replaces `fake`, so the card's transcript goes there too.
- */
+// Under test-results since D7 drops /tmp and /var/folders; a checkout under a hidden folder would drop it too.
 function outsideHome(): string {
   const base = join(process.cwd(), 'test-results')
   mkdirSync(base, { recursive: true })
@@ -1241,7 +1237,7 @@ test('#79 AC4: a file opens with the default app and reveals; unlisted and delet
 
   // Reveal shows on hover and focus, and is always in the Tab order.
   const reveal = outputRows().getByTestId('agent-output-reveal')
-  await expect(reveal).toHaveAttribute('aria-label', 'Reveal')
+  await expect(reveal).toHaveAttribute('aria-label', 'Reveal a.pdf')
   await page.mouse.move(0, 0)
   await outputRows().getByTestId('agent-output-open').focus()
   await expect(reveal).toHaveCSS('opacity', '0')

@@ -121,7 +121,7 @@ function FileRow({
         type="button"
         className="icon-btn agent-output-reveal"
         data-testid="agent-output-reveal"
-        aria-label="Reveal"
+        aria-label={`Reveal ${row.name}`}
         title={`Show ${row.name} in the file manager`}
         onClick={() => onReveal(row.path)}
       >

@@ -16,6 +16,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-11-04 S1: artifact links from any tool result, or from single-artifact results only? → single-artifact results and the reply text (D4 amended).
 - 2026-11-04 S1: store `$HOME/` as `~/`? → yes (D6 amended).
+- 2026-11-04 S2: what should Open do with a symlink? → open only if its target is a regular file with a listed extension (D10 amended).
 
 ## Verification
 

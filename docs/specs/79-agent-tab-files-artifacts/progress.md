@@ -6,8 +6,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 – Parsing | running | | | |
-| S2 – Main | todo | | | |
+| S1 – Parsing | done | `82e7765..919d574` | fixed r1 (+2 rulings) | `src/core/agent-outputs.ts`: `OUTPUT_EXTENSIONS`, `outputPath(path)`, `outputPaths(text)`, `artifactUrls(text)`. `agent-summary.ts`: `SUMMARY_LIMITS.outputs = 200`; `AgentSummary.outputs?: AgentOutput[]` oldest first; `AgentOutput = {kind:'file', path, at: number\|null} \| {kind:'artifact', url, title?, type?: 'doc'\|'page', at}`; file paths absolute or `~/`-prefixed |
+| S2 – Main | running | | | |
 | S3 – The group | todo | | | |
 
 ## Rulings

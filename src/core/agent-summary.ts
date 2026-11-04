@@ -8,9 +8,10 @@
  * `addTranscriptLine` with `agent` null, each subagent transcript's through `addSubagentLine`
  * with its file's name; a subagent file is matched to its `Task` tool use by the agent id the
  * tool's result names, else by its first prompt, and its commands are tagged with the subagent's
- * name.
+ * name. #79 D8 adds the main agent's outputs: document files and claude.ai artifacts.
  */
 import { commandFileChanges, diffCount, lineCount, patchCount } from './agent-file-changes'
+import { artifactUrls, outputPath, outputPaths } from './agent-outputs'
 
 /** D11's caps on what the summary carries. */
 export const SUMMARY_LIMITS = {
@@ -33,7 +34,9 @@ export const SUMMARY_LIMITS = {
   /** File changes, across the session. */
   changes: 5000,
   /** A file change's path (and a rename's new path): Linux's PATH_MAX; a longer one is dropped. */
-  path: 4096
+  path: 4096,
+  /** Files and artifacts (#79 D8), dropping the oldest. */
+  outputs: 200
 } as const
 
 /**
@@ -117,6 +120,15 @@ export interface FileChange {
   removed: number
 }
 
+/**
+ * A file or artifact the main agent made (#79 D8): a document's path as named (`~/` for the home,
+ * which main expands), or a claude.ai link with the title and kind its tool gave. `at` is the
+ * naming entry's timestamp (ms).
+ */
+export type AgentOutput =
+  | { kind: 'file'; path: string; at: number | null }
+  | { kind: 'artifact'; url: string; title?: string; type?: 'doc' | 'page'; at: number | null }
+
 export interface AgentSummary {
   /** The main agent's latest assistant entry's model. */
   model: string | null
@@ -130,6 +142,8 @@ export interface AgentSummary {
   prompts?: AgentPrompt[]
   /** Every file change, oldest first; absent while there are none. */
   changes?: FileChange[]
+  /** Files and artifacts, oldest first (one per path or link, at its latest naming); absent while none. */
+  outputs?: AgentOutput[]
 }
 
 /** A file change as read: its tool use's time and the order it was committed in, for sorting. */
@@ -150,6 +164,18 @@ interface PendingChange {
   at: number | null
   /** The subagent transcript it came from, or null. */
   file: string | null
+}
+
+/** A main-agent tool use whose result decides its outputs (#79 D8). */
+interface PendingOutput {
+  /** A `Write`'s or foreground `Bash`'s document paths, kept when it succeeds. */
+  paths: string[]
+  /** `page` for an `Artifact` publish, `doc` for a Claude Docs tool, else null. */
+  type: 'doc' | 'page' | null
+  /** A Claude Docs tool's container: the title it creates, the id it names. */
+  title: string | null
+  containerId: string | null
+  at: number | null
 }
 
 /** A subagent transcript read so far. */
@@ -204,6 +230,11 @@ export interface TranscriptState {
   changes: ChangeRead[]
   pendingChanges: Map<string, PendingChange>
   changeSeq: number
+  /** The main agent's files and artifacts by path or link, oldest first. */
+  outputs: Map<string, AgentOutput>
+  pendingOutputs: Map<string, PendingOutput>
+  /** Titles by Claude Docs container id or artifact id, for later calls naming only the id. */
+  docTitles: Map<string, string>
 }
 
 export function newTranscriptState(): TranscriptState {
@@ -225,7 +256,10 @@ export function newTranscriptState(): TranscriptState {
     promptCount: 0,
     changes: [],
     pendingChanges: new Map(),
-    changeSeq: 0
+    changeSeq: 0,
+    outputs: new Map(),
+    pendingOutputs: new Map(),
+    docTitles: new Map()
   }
 }
 
@@ -704,10 +738,13 @@ function addLine(
     for (const use of blocks(entry, 'tool_use')) {
       toolUse(state, use, at, agent, file)
       changeUse(state, use, at, file, cwd)
+      if (main) outputUse(state, use, at)
     }
+    if (main) for (const reply of blocks(entry, 'text')) replyOutputs(state, reply.text, at)
   } else if (entry.type === 'user') {
     for (const result of blocks(entry, 'tool_result')) {
       toolResult(state, result, at, entry.toolUseResult)
+      if (main) outputResult(state, result, at, entry.toolUseResult)
     }
   }
 }
@@ -859,6 +896,109 @@ function changeResult(state: TranscriptState, result: Json, content: string, ext
   }
 }
 
+/** Adds or moves an output to newest; a known title or type replaces the old one, an unknown keeps it. */
+function addOutput(state: TranscriptState, output: AgentOutput): void {
+  const key = output.kind === 'file' ? output.path : output.url
+  const old = state.outputs.get(key)
+  let added = output
+  if (old?.kind === 'artifact' && output.kind === 'artifact') {
+    const title = output.title ?? old.title
+    const type = output.type ?? old.type
+    added = {
+      ...output,
+      ...(title !== undefined && { title }),
+      ...(type !== undefined && { type })
+    }
+  }
+  state.outputs.delete(key)
+  state.outputs.set(key, added)
+  if (state.outputs.size > SUMMARY_LIMITS.outputs) {
+    state.outputs.delete(state.outputs.keys().next().value as string)
+  }
+}
+
+const CLAUDE_DOCS = /^mcp__.*Claude_Docs__/
+
+/** A main-agent tool use that may name outputs: kept pending until its result (#79 D8). */
+function outputUse(state: TranscriptState, use: Json, at: number | null): void {
+  if (typeof use.id !== 'string' || typeof use.name !== 'string') return
+  const input = isObject(use.input) ? use.input : {}
+  const pending: PendingOutput = { paths: [], type: null, title: null, containerId: null, at }
+  if (use.name === 'Write' && typeof input.file_path === 'string') {
+    const path = input.file_path.length <= SUMMARY_LIMITS.path ? outputPath(input.file_path) : null
+    if (path !== null) pending.paths = [path]
+  } else if (use.name === 'Bash' && typeof input.command === 'string') {
+    if (input.run_in_background !== true) pending.paths = outputPaths(input.command)
+  } else if (use.name === 'Artifact') {
+    // Only a publish makes a page; open and read name one that may be a doc.
+    if (input.action === undefined || input.action === 'publish') pending.type = 'page'
+  } else if (CLAUDE_DOCS.test(use.name)) {
+    const container = isObject(input.container) ? input.container : {}
+    pending.type = 'doc'
+    pending.title = isObject(container.create)
+      ? text(container.create.name, Number.MAX_SAFE_INTEGER)
+      : null
+    pending.containerId = text(container.id, Number.MAX_SAFE_INTEGER)
+  } else return
+  state.pendingOutputs.set(use.id, pending)
+}
+
+/** The JSON object a tool result's text is, if it is one. */
+function resultObject(content: string): Json | null {
+  if (!content.trimStart().startsWith('{')) return null
+  const value = parse(content)
+  return isObject(value) ? value : null
+}
+
+/** A main-agent tool result: its pending paths if it succeeded, and every artifact link in it. */
+function outputResult(
+  state: TranscriptState,
+  result: Json,
+  at: number | null,
+  extra: unknown
+): void {
+  if (typeof result.tool_use_id !== 'string') return
+  const content = resultText(result.content)
+  const pending = state.pendingOutputs.get(result.tool_use_id)
+  state.pendingOutputs.delete(result.tool_use_id)
+  const failed =
+    result.is_error === true ||
+    isDenial(content, extra) ||
+    (isObject(extra) && extra.interrupted === true)
+  if (pending && !failed) {
+    for (const path of pending.paths) addOutput(state, { kind: 'file', path, at: pending.at })
+  }
+  const info = isObject(extra) ? extra : (resultObject(content) ?? {})
+  const named = text(info.title, Number.MAX_SAFE_INTEGER)
+  const frame = isObject(info.frame) ? info.frame : {}
+  for (const id of [text(info.artifact_id, 200), text(frame.slug, 200)]) {
+    const title = named ?? pending?.title ?? null
+    if (id !== null && title !== null) state.docTitles.set(id, title)
+  }
+  const extraText = extra === undefined || typeof extra === 'string' ? '' : JSON.stringify(extra)
+  const title =
+    named ??
+    pending?.title ??
+    (pending?.containerId ? state.docTitles.get(pending.containerId) : undefined) ??
+    null
+  for (const url of artifactUrls(`${content}\n${extraText}`)) {
+    addOutput(state, {
+      kind: 'artifact',
+      url,
+      ...(title !== null && { title }),
+      ...(pending?.type && { type: pending.type }),
+      at
+    })
+  }
+}
+
+/** The main agent's reply text: the documents and artifact links it names (#79 D6). */
+function replyOutputs(state: TranscriptState, reply: unknown, at: number | null): void {
+  if (typeof reply !== 'string') return
+  for (const path of outputPaths(reply)) addOutput(state, { kind: 'file', path, at })
+  for (const url of artifactUrls(reply)) addOutput(state, { kind: 'artifact', url, at })
+}
+
 /** The prompt a change at `at` was made in, by the prompts' start times. */
 function promptAt(state: TranscriptState, at: number | null): number {
   if (at === null) return state.promptCount
@@ -919,5 +1059,6 @@ export function agentSummary(state: TranscriptState): AgentSummary {
   }
   if (state.prompts.length > 0) summary.prompts = state.prompts.map((p) => ({ ...p }))
   if (changes.length > 0) summary.changes = changes
+  if (state.outputs.size > 0) summary.outputs = [...state.outputs.values()].map((o) => ({ ...o }))
   return summary
 }

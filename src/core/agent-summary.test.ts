@@ -648,3 +648,192 @@ describe("the agent summary's prompts and file changes (#75 D9, AC10)", () => {
     expect(summary.changes?.[0].path).toBe('/r/3')
   })
 })
+
+describe("the agent summary's files and artifacts (#79 D8)", () => {
+  const write = (id: string, filePath: string, seconds = 0): Entry =>
+    assistant(
+      [{ type: 'tool_use', id, name: 'Write', input: { file_path: filePath, content: 'x' } }],
+      seconds
+    )
+
+  it("keeps a Write's document once its result came, never a code file's", () => {
+    const state = newTranscriptState()
+    expect(read([write('w1', '/home/u/Downloads/a.pdf', 1)], state).outputs).toBeUndefined()
+    const summary = read(
+      [
+        result('w1', 'File created successfully', 2),
+        write('w2', '/home/u/repo/src/x.ts', 3),
+        result('w2', 'File created successfully', 4)
+      ],
+      state
+    )
+    expect(summary.outputs).toEqual([
+      { kind: 'file', path: '/home/u/Downloads/a.pdf', at: T0 + 1000 }
+    ])
+  })
+
+  it("keeps a foreground Bash's paths once its result is OK, never a failed or denied one's", () => {
+    const save = (id: string, name: string, seconds: number): Entry =>
+      bash(
+        id,
+        `OUT="$HOME/Downloads/${name}.pdf"; render > "$OUT" && test -e "$OUT"`,
+        'Save',
+        seconds
+      )
+    const summary = read([
+      save('b1', 'Cost report - v2', 1),
+      result('b1', '', 2),
+      save('b2', 'failed', 3),
+      result('b2', 'Exit code 1', 4, true),
+      save('b3', 'denied', 5),
+      result('b3', DENIAL, 6, true, 'User rejected tool use'),
+      bash('b4', 'render > ~/Downloads/bg.pdf', 'Render', 7, { run_in_background: true }),
+      result('b4', 'Command running in background with ID: bash_1', 8)
+    ])
+    expect(summary.outputs).toEqual([
+      { kind: 'file', path: '~/Downloads/Cost report - v2.pdf', at: T0 + 1000 }
+    ])
+  })
+
+  it("reads the main agent's reply text, leaving scratch and Claude's own files out anywhere", () => {
+    const state = newTranscriptState()
+    read(
+      [
+        assistant(
+          [
+            { type: 'text', text: "I've saved it to /home/u/Downloads/b.xlsx. Preview: /tmp/c.png" }
+          ],
+          1
+        ),
+        write('w1', '/home/u/.claude/d.png', 2),
+        result('w1', 'File created successfully', 3),
+        bash('b1', 'cp x.png /tmp/c.png && cp x.png ~/.claude/d.png', 'Copy', 4),
+        result('b1', '', 5)
+      ],
+      state
+    )
+    addTranscriptLine(
+      state,
+      JSON.stringify(assistant([{ type: 'text', text: 'Wrote /home/u/sub.pdf' }], 6)),
+      'Explore'
+    )
+    addSubagentLine(
+      state,
+      'agent-a1',
+      JSON.stringify(assistant([{ type: 'text', text: 'Wrote /home/u/sub.pdf' }], 7))
+    )
+    addTranscriptLine(
+      state,
+      JSON.stringify({
+        ...assistant([{ type: 'text', text: 'Wrote /home/u/side.pdf' }], 8),
+        isSidechain: true
+      }),
+      null
+    )
+    expect(agentSummary(state).outputs).toEqual([
+      { kind: 'file', path: '/home/u/Downloads/b.xlsx', at: T0 + 1000 }
+    ])
+  })
+
+  const tool = (id: string, name: string, input: unknown, seconds: number): Entry =>
+    assistant([{ type: 'tool_use', id, name, input }], seconds)
+  const PAGE = 'https://claude.ai/code/artifact/0f0e8c3a-1111-4222-8333-944455556666'
+  const DOC = 'https://claude.ai/artifact/JDcHaxCqUQd2Z5qSjCuhAD'
+  const OTHER = 'https://claude.ai/artifact/Zz9'
+
+  it('reads an Artifact publish as a Page, a Claude Docs batch as a Doc, a reply link alone', () => {
+    const summary = read([
+      tool('a1', 'Artifact', { file_path: '/home/u/report.html' }, 1),
+      result('a1', `Published to ${PAGE}`, 2, false, { url: PAGE, title: 'Cost report' }),
+      tool(
+        'd1',
+        'mcp__claude_ai_Claude_Docs__batch',
+        { container: { kind: 'project', create: { name: 'Plan' } }, batch: [] },
+        3
+      ),
+      result(
+        'd1',
+        [
+          {
+            type: 'text',
+            text: JSON.stringify({ verdict: 'allow', frame: { slug: 'c-1', url: DOC } })
+          }
+        ],
+        4
+      ),
+      assistant([{ type: 'text', text: `Here it is: ${OTHER}.` }], 5)
+    ])
+    expect(summary.outputs).toEqual([
+      { kind: 'artifact', url: PAGE, title: 'Cost report', type: 'page', at: T0 + 2000 },
+      { kind: 'artifact', url: DOC, title: 'Plan', type: 'doc', at: T0 + 4000 },
+      { kind: 'artifact', url: OTHER, at: T0 + 5000 }
+    ])
+  })
+
+  it('keeps one row per link or path at its newest place, a later title replacing the old', () => {
+    const summary = read([
+      tool(
+        'd1',
+        'mcp__claude_ai_Claude_Docs__batch',
+        { container: { kind: 'project', create: { name: 'Plan' } } },
+        1
+      ),
+      result('d1', JSON.stringify({ frame: { slug: 'c-1', url: DOC, artifactUrl: DOC } }), 2),
+      assistant([{ type: 'text', text: 'Saved /home/u/a.pdf' }], 3),
+      // A later Docs call names the container by id only: its title is still known.
+      tool(
+        'd2',
+        'mcp__claude_ai_Claude_Docs__update',
+        { container: { kind: 'project', id: 'c-1' } },
+        4
+      ),
+      result('d2', JSON.stringify({ frame: { url: DOC } }), 5),
+      tool('a1', 'Artifact', { action: 'open', url: OTHER }, 6),
+      result('a1', 'Opened', 7, false, {
+        opened: true,
+        url: OTHER,
+        artifact_id: 'c-2',
+        title: 'Old'
+      }),
+      assistant([{ type: 'text', text: `See ${DOC} and /home/u/a.pdf` }], 8),
+      tool('a2', 'Artifact', { action: 'open', url: OTHER }, 9),
+      result('a2', 'Opened', 10, false, { opened: true, url: OTHER, title: 'New' })
+    ])
+    expect(summary.outputs).toEqual([
+      { kind: 'file', path: '/home/u/a.pdf', at: T0 + 8000 },
+      { kind: 'artifact', url: DOC, title: 'Plan', type: 'doc', at: T0 + 8000 },
+      { kind: 'artifact', url: OTHER, title: 'New', at: T0 + 10_000 }
+    ])
+  })
+
+  it("titles a Docs call by an earlier Artifact open's artifact id", () => {
+    const summary = read([
+      tool('a1', 'Artifact', { action: 'open', url: DOC }, 1),
+      result('a1', 'Opened', 2, false, {
+        opened: true,
+        url: DOC,
+        artifact_id: 'c-9',
+        title: 'Plan'
+      }),
+      tool(
+        'd1',
+        'mcp__claude_ai_Claude_Docs__update',
+        { container: { kind: 'project', id: 'c-9' } },
+        3
+      ),
+      result('d1', `Updated ${DOC}`, 4)
+    ])
+    expect(summary.outputs).toEqual([
+      { kind: 'artifact', url: DOC, title: 'Plan', type: 'doc', at: T0 + 4000 }
+    ])
+  })
+
+  it('keeps the newest 200 outputs', () => {
+    const replies = Array.from({ length: SUMMARY_LIMITS.outputs + 3 }, (_, i) =>
+      assistant([{ type: 'text', text: `Saved /home/u/f${i}.pdf` }], i)
+    )
+    const outputs = read(replies).outputs ?? []
+    expect(outputs).toHaveLength(200)
+    expect(outputs[0]).toEqual({ kind: 'file', path: '/home/u/f3.pdf', at: T0 + 3000 })
+  })
+})

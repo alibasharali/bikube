@@ -20,5 +20,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: ALL PASS. AC1–AC7 checked by `e2e/agent-tab.spec.ts`'s #79 tests on the built app (24/24 Agent tab tests). Vitest's pr-status and shell-integration-scripts fail on this Mac on main too (macOS `/private` paths, card env).
+- UX review: done, CLEAN. Polish: name and folder line touch (0 px, Commands uses 2 px); file text 2 px right of artifact text; hidden Reveal keeps its 22 px; Reveal 22×22 under 24; an untitled artifact repeats claude.ai under its URL.

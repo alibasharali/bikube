@@ -3,15 +3,19 @@
  * transcript under `<home>/.claude/projects` tailed into its agent summary (`agent-summary.ts`).
  * fs is injected for Vitest; nothing outside that path is read.
  */
-import { open, readdir, stat } from 'node:fs/promises'
+import { lstat, open, readdir, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import {
   addSubagentLine,
   addTranscriptLine,
   agentSummary,
   newTranscriptState,
+  type AgentOutput,
+  type AgentSummary,
   type TranscriptState
 } from './agent-summary'
+import type { ListedOutputs } from './agent-output-open'
 import { isSessionId, type AgentSummaryRead } from './agent-tab'
 import { encodeProjectFolder } from './claude-stats'
 import { isDirectory, isPathArg } from './directories'
@@ -46,6 +50,50 @@ export interface TailFs {
 
 const nodeTailFs: TailFs = { stat, open: (path) => open(path, 'r'), readdir }
 
+export interface OutputFs {
+  lstat(path: string): Promise<{ isFile(): boolean; isSymbolicLink(): boolean }>
+  stat(path: string): Promise<{ isFile(): boolean }>
+}
+
+const nodeOutputFs: OutputFs = { lstat, stat }
+
+/**
+ * A file output's path on disk (#79 D9): `~/`, `$HOME/` or `${HOME}/` expanded with `home`, an
+ * absolute path normalized; null for anything else.
+ */
+export function outputFilePath(path: string, home: string): string | null {
+  const tilde = /^(?:~|\$HOME|\$\{HOME\})\//.exec(path)
+  if (tilde) return resolve(home, path.slice(tilde[0].length))
+  return path.startsWith('/') ? resolve(path) : null
+}
+
+/** Whether `path` is a regular file or a link to one (#79 D9); false on any error. */
+export async function isOutputFile(path: string, fs: OutputFs = nodeOutputFs): Promise<boolean> {
+  try {
+    const info = await fs.lstat(path)
+    if (info.isFile()) return true
+    return info.isSymbolicLink() && (await fs.stat(path)).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** `outputs` without the files not on disk (#79 D9), all checked at once. */
+async function outputsOnDisk(
+  outputs: readonly AgentOutput[],
+  home: string,
+  fs: OutputFs
+): Promise<AgentOutput[]> {
+  const kept = await Promise.all(
+    outputs.map(async (output) => {
+      if (output.kind !== 'file') return true
+      const path = outputFilePath(output.path, home)
+      return path !== null && (await isOutputFile(path, fs))
+    })
+  )
+  return outputs.filter((_, i) => kept[i])
+}
+
 /** The folder of a transcript's subagent transcripts (D3): `<session>/subagents` beside it. */
 export const subagentsFolder = (path: string): string =>
   join(dirname(path), basename(path, '.jsonl'), 'subagents')
@@ -75,7 +123,17 @@ interface Tail extends FileTail {
   state: TranscriptState
   version: number
   timer: ReturnType<typeof setTimeout> | undefined
+  /** The summary made at a version, kept until the next. */
+  summary?: { version: number; summary: AgentSummary }
+  /** The last reply's version, for the tail version and on-disk files it was given at (#79 D9). */
+  reply?: { version: number; tailVersion: number; files: string }
 }
+
+/** A read inside a path's queue: the tail and its summary, before the on-disk check. */
+type TailRead =
+  | { state: 'none' }
+  | { state: 'error'; reason: string }
+  | { state: 'read'; tail: Tail; summary: AgentSummary; tailVersion: number }
 
 /** A subagent transcript that shrank or was replaced: the conversation is read again. */
 class Restart extends Error {}
@@ -91,26 +149,46 @@ class Restart extends Error {}
  */
 export class TranscriptTailer {
   private readonly fs: TailFs
+  private readonly outputFs: OutputFs
   private readonly yieldToLoop: () => Promise<void>
   private readonly tails = new Map<string, Tail>()
   private readonly queues = new Map<string, Promise<unknown>>()
   private versions = 0
 
-  constructor(deps: { fs?: TailFs; yieldToLoop?: () => Promise<void> } = {}) {
+  constructor(deps: { fs?: TailFs; outputFs?: OutputFs; yieldToLoop?: () => Promise<void> } = {}) {
     this.fs = deps.fs ?? nodeTailFs
+    this.outputFs = deps.outputFs ?? nodeOutputFs
     this.yieldToLoop = deps.yieldToLoop ?? nextTurn
   }
 
-  /** The summary of `path`, or `unchanged` when `since` is the version it would carry. */
-  read(path: string, since?: number): Promise<AgentSummaryRead> {
+  /**
+   * The summary of `path` with its file outputs not on disk left out (#79 D9, `~` being `home`), or
+   * `unchanged` when `since` is the version it would carry; the version changes with the
+   * transcript and with the set of files on disk.
+   */
+  async read(path: string, since?: number, home: string = homedir()): Promise<AgentSummaryRead> {
     const previous = this.queues.get(path) ?? Promise.resolve()
-    const run = previous.then(() => this.readNow(path, since))
+    const run = previous.then(() => this.readNow(path))
     const queued = run.catch(() => undefined)
     this.queues.set(path, queued)
     void queued.then(() => {
       if (this.queues.get(path) === queued) this.queues.delete(path)
     })
-    return run
+    const read = await run
+    if (read.state !== 'read') return read
+    // Checked outside the queue, so a slow disk never holds the next read.
+    const { tail, summary, tailVersion } = read
+    const outputs = summary.outputs && (await outputsOnDisk(summary.outputs, home, this.outputFs))
+    const files = (outputs ?? []).flatMap((o) => (o.kind === 'file' ? [o.path] : [])).join('\0')
+    if (tail.reply?.tailVersion !== tailVersion || tail.reply.files !== files) {
+      tail.reply = { version: ++this.versions, tailVersion, files }
+    }
+    const version = tail.reply.version
+    if (since === version) return { state: 'unchanged' }
+    const shown = { ...summary }
+    if (outputs && outputs.length > 0) shown.outputs = outputs
+    else delete shown.outputs
+    return { state: 'conversation', version, summary: shown }
   }
 
   private drop(path: string): void {
@@ -119,7 +197,7 @@ export class TranscriptTailer {
     this.tails.delete(path)
   }
 
-  private async readNow(path: string, since?: number, again = false): Promise<AgentSummaryRead> {
+  private async readNow(path: string, again = false): Promise<TailRead> {
     let info: { isFile(): boolean; size: number; ino: number }
     try {
       info = await this.fs.stat(path)
@@ -168,11 +246,13 @@ export class TranscriptTailer {
     } catch (error) {
       // Half a read leaves the state unsure: the next request starts again.
       this.drop(path)
-      if (error instanceof Restart && !again) return this.readNow(path, since, true)
+      if (error instanceof Restart && !again) return this.readNow(path, true)
       return { state: 'error', reason: errorCode(error) ?? 'unreadable' }
     }
-    if (since === tail.version) return { state: 'unchanged' }
-    return { state: 'conversation', version: tail.version, summary: agentSummary(tail.state) }
+    if (tail.summary?.version !== tail.version) {
+      tail.summary = { version: tail.version, summary: agentSummary(tail.state) }
+    }
+    return { state: 'read', tail, summary: tail.summary.summary, tailVersion: tail.version }
   }
 
   /** Parses what was appended to each subagent transcript; whether any whole line was read. */
@@ -271,7 +351,7 @@ export class TranscriptTailer {
  */
 export async function readAgentSummary(
   request: { folder: unknown; sessionId: unknown; since?: unknown },
-  deps: { home: string; fs?: TranscriptFs; tailer?: TranscriptTailer }
+  deps: { home: string; fs?: TranscriptFs; tailer?: TranscriptTailer; listed?: ListedOutputs }
 ): Promise<AgentSummaryRead> {
   const fs = deps.fs ?? { stat }
   if (!isSessionId(request.sessionId)) return { state: 'error', reason: 'invalid session id' }
@@ -280,7 +360,9 @@ export async function readAgentSummary(
   }
   const path = transcriptPath(deps.home, resolve(request.folder), request.sessionId)
   const since = Number.isSafeInteger(request.since) ? (request.since as number) : undefined
-  return (deps.tailer ?? new TranscriptTailer()).read(path, since)
+  const read = await (deps.tailer ?? new TranscriptTailer()).read(path, since, deps.home)
+  deps.listed?.record(request.sessionId, read, deps.home)
+  return read
 }
 
 export interface LookupFs {
@@ -327,11 +409,15 @@ export async function findSessionTranscript(
  */
 export async function readSessionSummary(
   request: { sessionId: unknown; since?: unknown },
-  deps: { home: string; fs?: LookupFs; tailer?: TranscriptTailer }
+  deps: { home: string; fs?: LookupFs; tailer?: TranscriptTailer; listed?: ListedOutputs }
 ): Promise<AgentSummaryRead> {
   if (!isSessionId(request.sessionId)) return { state: 'error', reason: 'invalid session id' }
   const path = await findSessionTranscript(deps.home, request.sessionId.toLowerCase(), deps.fs)
-  if (path === null) return { state: 'none' }
   const since = Number.isSafeInteger(request.since) ? (request.since as number) : undefined
-  return (deps.tailer ?? new TranscriptTailer()).read(path, since)
+  const read: AgentSummaryRead =
+    path === null
+      ? { state: 'none' }
+      : await (deps.tailer ?? new TranscriptTailer()).read(path, since, deps.home)
+  deps.listed?.record(request.sessionId, read, deps.home)
+  return read
 }

@@ -99,6 +99,8 @@ export const IPC = {
   agentSetupStats: 'agentSetup:stats',
   agentTabSummary: 'agentTab:summary',
   agentTabSessionSummary: 'agentTab:sessionSummary',
+  agentTabOpenOutput: 'agentTab:openOutput',
+  agentTabRevealOutput: 'agentTab:revealOutput',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -368,6 +370,14 @@ export interface AgentTabApi {
    * `error` (nothing read) unless `sessionId` is a UUID; `since` as for `summary`.
    */
   sessionSummary(sessionId: string, since?: number): Promise<AgentSummaryRead>
+  /**
+   * Opens a file output with the OS default app (#79 D2, D10): `path` as the summary gave it
+   * (`~/…` or absolute); `refused` (nothing run) unless the last summary main sent for `sessionId`
+   * listed it and it is still a regular file. Its line is `listedFileErrorLine`'s.
+   */
+  openOutput(sessionId: string, path: string): Promise<OpenResult>
+  /** Shows a file output in the OS file manager (#79 D2, D10), as `openOutput` checks it; false when refused. */
+  revealOutput(sessionId: string, path: string): Promise<boolean>
 }
 
 export interface AgentSetupApi {

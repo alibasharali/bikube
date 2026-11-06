@@ -13,6 +13,7 @@ import { waitingCounts, waitingTooltip } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
+import { useClaudeCodeTerminals } from './card-terminals'
 import type { HeldNumbers } from './held-numbers'
 import { useOpenTerminals } from './open-terminals'
 import { useSettings } from './settings'
@@ -86,6 +87,8 @@ function Sidebar({
   const queue = useWaitingQueue()
   const waiting = useMemo(() => waitingCounts(queue, workspaces), [queue, workspaces])
   const terminals = useOpenTerminals(workspaces)
+  // D2's rule 2: a card or shell whose main pane runs Claude Code now is an agent row too.
+  const claudeCode = useClaudeCodeTerminals()
   // Split (#79 D3): agent rows leave their workspace for the Agents section below; collapsed,
   // the sidebar shows only the badges, as Nested does.
   const split = useSettings().sidebarLayout === 'split'
@@ -93,10 +96,10 @@ function Sidebar({
     () =>
       sidebarSections(
         workspaces.flatMap((w) => terminals.get(w.id) ?? []),
-        split ? (row) => isAgentRow(row) : () => false,
+        split ? (row) => isAgentRow(row, claudeCode.has(row.cardId)) : () => false,
         activeId
       ),
-    [workspaces, terminals, split, activeId]
+    [workspaces, terminals, split, activeId, claudeCode]
   )
   const numbers = heldNumbers === 'terminal' ? sections.numbers : null
 

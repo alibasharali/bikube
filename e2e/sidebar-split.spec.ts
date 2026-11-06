@@ -1,5 +1,13 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, cardView, expectCardOpen } from './card-view'
@@ -7,6 +15,7 @@ import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // The Split sidebar (#79): Settings' Sidebar layout and the palette rows, the workspaces above an
 // Agents section that lists every workspace's agents by Needs you, Working and Idle, each naming
@@ -282,4 +291,48 @@ test('AC11: held digits number the active workspace’s rows in both sections; C
   await expectCardOpen(page, 'Logs')
   await page.keyboard.up(TERMINAL_MOD)
   await expect(page.getByTestId('terminal-number')).toHaveCount(0)
+})
+
+// Like Claude Code as a shell sees it (#58 D1): focus reporting on and its probe while it runs,
+// waiting for a line on stdin, then focus reporting off as it exits.
+const FAKE_CLAUDE = `#!/bin/sh
+printf '\\033[?1004h\\033]7501;?\\007'
+echo claude-ready
+read line
+printf '\\033[?1004l'
+echo claude-done
+`
+
+test('AC5: a shell running Claude Code moves to the Agents section and back; a plain card’s activity puts it in Working', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'bikube-sidebar-split-claude-'))
+  dirs.push(root)
+  const claude = join(root, 'bin', 'claude')
+  mkdirSync(join(root, 'bin'))
+  writeFileSync(claude, FAKE_CLAUDE)
+  chmodSync(claude, 0o755)
+  ;({ app, page } = await launchApp({ dataDir: dataDirWith(SPLIT_SETTINGS) }))
+  await createWorkspace('A')
+  await newCard('Logs')
+  await showShells(page)
+  await page.getByTestId('shell').first().getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Default')
+  await expect.poll(nested).toEqual(['A: Logs, Default shell'])
+  await expect(agents().getByTestId('sidebar-agents-empty')).toBeVisible()
+
+  await run(`'${claude}'`)
+  await expect.poll(groups).toEqual(['Idle 1: Default shell (A)'])
+  await expect.poll(nested).toEqual(['A: Logs'])
+
+  await run('')
+  await expect(agents().getByTestId('sidebar-agents-empty')).toBeVisible()
+  await expect.poll(nested).toEqual(['A: Logs, Default shell'])
+  await expect(agents().getByTestId('agent-group')).toHaveCount(0)
+  await backToBoard(page)
+
+  await terminal(workspaceRow('A'), 'Logs').click()
+  await expectCardOpen(page, 'Logs')
+  await run('"$BIKUBE_BIN/board" activity . working')
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
+  await expect.poll(groups, { timeout: 15_000 }).toEqual(['Working 1: Logs (A)'])
+  await expect.poll(nested).toEqual(['A: Default shell'])
 })

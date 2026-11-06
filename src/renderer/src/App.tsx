@@ -348,6 +348,7 @@ function App(): React.JSX.Element {
       else if (action.id === 'settings') setSettingsOpen(true)
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
       else if (action.id === 'appTheme') settingsStore.update({ appTheme: action.appTheme })
+      else if (action.id === 'sidebarLayout') settingsStore.update({ sidebarLayout: action.layout })
       else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
       // The active workspace's view; its board shows in it, closing the card open there.
       else if (action.id === 'workspaceView') {

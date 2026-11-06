@@ -12,8 +12,11 @@ interface WorkspaceTerminalsProps {
   /** The card or shell open at full size in the active workspace, or null. */
   currentId: string | null
   onOpen: (workspaceId: string, cardId: string) => void
-  /** Whether each row shows its Ctrl+digit number (Alt+digit off macOS) in place of its logo. */
-  showNumbers: boolean
+  /**
+   * While the terminal modifier is held, each row's Ctrl+digit number (Alt+digit off macOS) by
+   * card id, shown in place of its logo; else null.
+   */
+  numbers: ReadonlyMap<string, number> | null
   /** The workspace's Agent setup row while that page is its view (#68 D3), else null. */
   agentSetup?: { current: boolean; onOpen: () => void } | null
 }
@@ -28,19 +31,19 @@ function WorkspaceTerminals({
   terminals,
   currentId,
   onOpen,
-  showNumbers,
+  numbers,
   agentSetup = null
 }: WorkspaceTerminalsProps): React.JSX.Element | null {
   if (terminals.length === 0 && !agentSetup) return null
   return (
     <ul className="workspace-terminals" data-testid="workspace-terminals">
-      {terminals.map((row, index) => (
+      {terminals.map((row) => (
         <TerminalRow
           key={row.cardId}
           row={row}
           current={row.cardId === currentId}
           onOpen={onOpen}
-          number={showNumbers && index < 9 ? index + 1 : null}
+          number={numbers?.get(row.cardId) ?? null}
         />
       ))}
       {agentSetup && <AgentSetupRow {...agentSetup} />}
@@ -78,16 +81,22 @@ function AgentSetupRow({
   )
 }
 
-function TerminalRow({
+/**
+ * A running card's or shell's row. In the Split sidebar's Agents section (#79 D5) it also names
+ * its workspace (`workspaceName`), under its title and in its tooltip.
+ */
+export function TerminalRow({
   row,
   current,
   onOpen,
-  number
+  number,
+  workspaceName
 }: {
   row: OpenTerminal
   current: boolean
   onOpen: WorkspaceTerminalsProps['onOpen']
   number: number | null
+  workspaceName?: string
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
@@ -103,7 +112,11 @@ function TerminalRow({
         data-testid="workspace-terminal"
         data-kind={row.kind}
         aria-current={current ? 'true' : undefined}
-        title={`${row.title} (${toolName(row)})`}
+        title={
+          workspaceName === undefined
+            ? `${row.title} (${toolName(row)})`
+            : `${row.title} (${toolName(row)}) · ${workspaceName}`
+        }
         onClick={() => onOpen(row.workspaceId, row.cardId)}
       >
         {number !== null ? (
@@ -115,9 +128,20 @@ function TerminalRow({
             <ToolIcon tool={row.tool} />
           </span>
         )}
-        <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
-          {row.title}
-        </span>
+        {workspaceName === undefined ? (
+          <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
+            {row.title}
+          </span>
+        ) : (
+          <span className="workspace-terminal-text">
+            <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
+              {row.title}
+            </span>
+            <span className="workspace-terminal-workspace" data-testid="agent-row-workspace">
+              {workspaceName}
+            </span>
+          </span>
+        )}
         {inWindow && (
           <span
             className="workspace-terminal-window"

@@ -312,6 +312,7 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'New card',
     'New shell',
     'View: Grid',
+    'Sidebar: Split',
     'New workspace',
     'Agent setup',
     'Open Settings',

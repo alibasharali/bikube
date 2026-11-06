@@ -5,12 +5,14 @@ import {
   FolderSync,
   Info,
   Keyboard,
+  ListTree,
   Minus,
   Monitor,
   Moon,
   Palette,
   Plus,
   RotateCw,
+  Rows2,
   SquareTerminal,
   Sun,
   Terminal as TerminalIcon,
@@ -47,6 +49,7 @@ import {
   type CursorStyle,
   type Editor,
   type ResolvedTheme,
+  type SidebarLayout,
   type Theme
 } from '../../core/settings'
 import { ANSI_COLOUR_NAMES, terminalPalette, withSymbols } from '../../core/terminal-appearance'
@@ -318,10 +321,41 @@ function AppearanceSection({
           </p>
         </div>
       </fieldset>
+      <fieldset className="settings-row">
+        <legend className="settings-label">Sidebar layout</legend>
+        <div className="settings-control">
+          <div className="segmented">
+            {SIDEBAR_LAYOUT_CHOICES.map(([layout, label, Icon]) => (
+              <label key={layout} className="radio">
+                <input
+                  type="radio"
+                  name={`${id}-sidebar-layout`}
+                  value={layout}
+                  data-testid={`settings-sidebar-${layout}`}
+                  checked={settings.sidebarLayout === layout}
+                  onChange={() => settingsStore.update({ sidebarLayout: layout })}
+                />
+                <Icon {...SMALL_ICON} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="field-hint">
+            Split lists every workspace&apos;s running agents in their own section below the
+            workspaces.
+          </p>
+        </div>
+      </fieldset>
       <CardsPerColumnRow />
     </>
   )
 }
+
+/** The Sidebar layout row's choices (#79 D1). */
+const SIDEBAR_LAYOUT_CHOICES: [SidebarLayout, string, LucideIcon][] = [
+  ['nested', 'Nested', ListTree],
+  ['split', 'Split', Rows2]
+]
 
 /**
  * Card display limit: how many cards a board column or grid section shows before its Show all button, 1 to 100,

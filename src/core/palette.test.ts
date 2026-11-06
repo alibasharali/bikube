@@ -63,6 +63,7 @@ function input(state: WorkspaceState, extra: Partial<PaletteInput> = {}): Palett
     theme: 'system',
     appTheme: 'default',
     defaultView: 'kanban',
+    sidebarLayout: 'nested',
     keymap: defaultKeymap('linux'),
     platform: 'linux',
     waiting: [],
@@ -195,6 +196,7 @@ describe('paletteItems actions (#40 D6)', () => {
     'New card',
     'New shell',
     'View: Grid',
+    'Sidebar: Split',
     'New workspace',
     'Agent setup',
     'Open Settings',
@@ -384,6 +386,7 @@ describe('paletteItems actions (#40 D6)', () => {
 
   it('offers only the app rows without workspaces, every theme but the current one', () => {
     expect(labels(input({ workspaces: [], activeId: null }, { theme: 'dark' }))).toEqual([
+      'Sidebar: Split',
       'New workspace',
       'Open Settings',
       'Theme: System',
@@ -487,7 +490,8 @@ describe('paletteItems Next waiting card (#41 D7)', () => {
     expect(shown.slice(shown.indexOf('New shell'), shown.indexOf('New workspace'))).toEqual([
       'New shell',
       'Next waiting card',
-      'View: Grid'
+      'View: Grid',
+      'Sidebar: Split'
     ])
     expect(paletteItems(i).actions.find((r) => r.label === 'Next waiting card')).toEqual({
       kind: 'action',
@@ -511,7 +515,7 @@ describe('paletteItems Next waiting card (#41 D7)', () => {
   it('is listed without an active workspace, where New shell would be', () => {
     const none: WorkspaceState = { workspaces: [alpha, beta], activeId: null }
     const shown = labels(input(none, { waiting: ['c2'] }))
-    expect(shown.slice(0, 2)).toEqual(['Next waiting card', 'New workspace'])
+    expect(shown.slice(0, 3)).toEqual(['Next waiting card', 'Sidebar: Split', 'New workspace'])
   })
 })
 
@@ -602,5 +606,32 @@ describe('paletteItems workspace view', () => {
     expect(
       paletteItems(input({ workspaces: [], activeId: null })).actions.map((r) => r.label)
     ).not.toContain('View: Grid')
+  })
+})
+
+describe('paletteItems sidebar layout (#79 D1)', () => {
+  const alpha = workspace('a', 'Alpha', [])
+  const state: WorkspaceState = { workspaces: [alpha], activeId: 'a' }
+  const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
+
+  it('offers the other layout right after the View row', () => {
+    const nested = paletteItems(input(state, { sidebarLayout: 'nested' })).actions
+    const row = nested.find((r) => r.action.id === 'sidebarLayout')
+    expect(row).toEqual({
+      kind: 'action',
+      action: { id: 'sidebarLayout', layout: 'split' },
+      label: 'Sidebar: Split'
+    })
+    const shown = labels(input(state, { sidebarLayout: 'nested' }))
+    expect(shown[shown.indexOf('View: Grid') + 1]).toBe('Sidebar: Split')
+    expect(shown).not.toContain('Sidebar: Nested')
+    const split = labels(input(state, { sidebarLayout: 'split' }))
+    expect(split).toContain('Sidebar: Nested')
+    expect(split).not.toContain('Sidebar: Split')
+  })
+
+  it('offers it without workspaces too, before New workspace', () => {
+    const shown = labels(input({ workspaces: [], activeId: null }, { sidebarLayout: 'split' }))
+    expect(shown.slice(0, 2)).toEqual(['Sidebar: Nested', 'New workspace'])
   })
 })

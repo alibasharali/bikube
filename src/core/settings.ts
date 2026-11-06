@@ -76,6 +76,9 @@ export const EDITORS = ['vscode', 'cursor', 'zed', 'system', 'custom'] as const
 export const SIDE_PANEL_TABS = ['files', 'shells', 'agent'] as const
 export type SidePanelTab = (typeof SIDE_PANEL_TABS)[number]
 export type Editor = (typeof EDITORS)[number]
+/** The sidebar's layouts (#79 D1): one tree, or workspaces above an Agents section. */
+export const SIDEBAR_LAYOUTS = ['nested', 'split'] as const
+export type SidebarLayout = (typeof SIDEBAR_LAYOUTS)[number]
 export const MAX_EDITOR_COMMAND_LENGTH = 4096
 
 /**
@@ -162,6 +165,8 @@ export interface Preferences {
   viewChosen: boolean
   /** How many cards a board column shows before its Show all button, 1 to 100. */
   columnCardLimit: number
+  /** The sidebar as one tree, or its agents in their own section below the workspaces (#79 D1). */
+  sidebarLayout: SidebarLayout
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -199,7 +204,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   appFontFamily: '',
   defaultView: 'kanban',
   viewChosen: false,
-  columnCardLimit: COLUMN_CARD_LIMIT
+  columnCardLimit: COLUMN_CARD_LIMIT,
+  sidebarLayout: 'nested'
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -265,7 +271,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
     !CONTROL_CHARS.test(v),
   defaultView: oneOf(WORKSPACE_VIEWS),
   viewChosen: isBoolean,
-  columnCardLimit: isColumnCardLimit
+  columnCardLimit: isColumnCardLimit,
+  sidebarLayout: oneOf(SIDEBAR_LAYOUTS)
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

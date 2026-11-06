@@ -867,3 +867,28 @@ describe('Use Ghostty config and the pane settings', () => {
     }
   })
 })
+
+describe('the sidebar layout preference (#79 D1)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('defaults to Nested, writing no key for it', () => {
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.sidebarLayout).toBe(
+      'nested'
+    )
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('sidebarLayout')
+  })
+
+  it('writes Split and reads it back', () => {
+    const text = serializeSettings({ ...base, sidebarLayout: 'split' })
+    expect(JSON.parse(text).settings.sidebarLayout).toBe('split')
+    expect(parseSettingsFile(text, 'linux').settings.sidebarLayout).toBe('split')
+  })
+
+  it('drops an unknown layout (AC2)', () => {
+    expect(validateSettings({ ...base, sidebarLayout: 'sideways' }, 'linux')).toBeNull()
+    const parsed = parseSettingsFile(file({ ...base, sidebarLayout: 'sideways' }), 'linux')
+    expect(parsed.settings.sidebarLayout).toBe('nested')
+    expect(parsed.replaced).toEqual(['sidebarLayout'])
+  })
+})

@@ -1,4 +1,12 @@
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,9 +15,13 @@ import type { AgentSummaryRead } from './agent-tab'
 import {
   TranscriptTailer,
   findSessionTranscript,
+  isOutputFile,
+  outputFilePath,
+  outputsOnDisk,
   readAgentSummary,
   readSessionSummary,
   transcriptPath,
+  type OutputFs,
   type TailFs,
   type TranscriptFs
 } from './agent-transcript'
@@ -365,5 +377,123 @@ describe("a shell's transcript, found by its session id (#75 D3a, D4)", () => {
       })
     }
     expect(asked).toEqual([])
+  })
+})
+
+describe("the summary's files checked on disk (#79 D9)", () => {
+  const reply = (text: string): string =>
+    `${JSON.stringify({
+      type: 'assistant',
+      timestamp: '2026-10-29T14:32:00.000Z',
+      message: { model: 'claude-opus-4-8', content: [{ type: 'text', text }] }
+    })}\n`
+  const outputsOf = (read: AgentSummaryRead): string[] =>
+    read.state === 'conversation'
+      ? (read.summary.outputs ?? []).map((o) => (o.kind === 'file' ? o.path : o.url))
+      : []
+  const versionOf = (read: AgentSummaryRead): number =>
+    read.state === 'conversation' ? read.version : -1
+
+  it('leaves out files not on disk, and the version follows the files that are', async () => {
+    const path = writeTranscript()
+    writeFileSync(
+      path,
+      reply('Saved ~/Downloads/a.pdf and ~/Downloads/b.pdf, see https://claude.ai/artifact/abc')
+    )
+    mkdirSync(join(home, 'Downloads'))
+    writeFileSync(join(home, 'Downloads', 'a.pdf'), 'pdf')
+    const tailer = new TranscriptTailer()
+    const first = await tailer.read(path, undefined, home)
+    expect(outputsOf(first)).toEqual(['~/Downloads/a.pdf', 'https://claude.ai/artifact/abc'])
+    expect(await tailer.read(path, versionOf(first), home)).toEqual({ state: 'unchanged' })
+
+    writeFileSync(join(home, 'Downloads', 'b.pdf'), 'pdf')
+    const second = await tailer.read(path, versionOf(first), home)
+    expect(outputsOf(second)).toEqual([
+      '~/Downloads/a.pdf',
+      '~/Downloads/b.pdf',
+      'https://claude.ai/artifact/abc'
+    ])
+    expect(await tailer.read(path, versionOf(second), home)).toEqual({ state: 'unchanged' })
+
+    rmSync(join(home, 'Downloads', 'a.pdf'))
+    const third = await tailer.read(path, versionOf(second), home)
+    expect(outputsOf(third)).toEqual(['~/Downloads/b.pdf', 'https://claude.ai/artifact/abc'])
+    expect(versionOf(third)).not.toBe(versionOf(first))
+  })
+
+  it("checks with the request's home in both requests", async () => {
+    const say = reply('Saved ~/Downloads/a.pdf')
+    writeFileSync(writeTranscript(), say)
+    writeFileSync(writeTranscript('/some/other/folder', SESSION), say)
+    mkdirSync(join(home, 'Downloads'))
+    writeFileSync(join(home, 'Downloads', 'a.pdf'), 'pdf')
+    const tailer = new TranscriptTailer()
+    expect(
+      outputsOf(await readAgentSummary({ folder, sessionId: SESSION }, { home, fs, tailer }))
+    ).toEqual(['~/Downloads/a.pdf'])
+    expect(outputsOf(await readSessionSummary({ sessionId: SESSION }, { home, tailer }))).toEqual([
+      '~/Downloads/a.pdf'
+    ])
+  })
+
+  it('expands ~ and $HOME with the home and takes a regular file or a link to one', async () => {
+    expect(outputFilePath('~/Downloads/a.pdf', '/h')).toBe('/h/Downloads/a.pdf')
+    expect(outputFilePath('$HOME/a.pdf', '/h')).toBe('/h/a.pdf')
+    expect(outputFilePath('${HOME}/a.pdf', '/h')).toBe('/h/a.pdf')
+    expect(outputFilePath('/x/../y/a.pdf', '/h')).toBe('/y/a.pdf')
+    expect(outputFilePath('a.pdf', '/h')).toBeNull()
+
+    const file = join(root, 'a.pdf')
+    writeFileSync(file, 'pdf')
+    symlinkSync(file, join(root, 'link.pdf'))
+    symlinkSync(folder, join(root, 'dir.pdf'))
+    symlinkSync(join(root, 'gone'), join(root, 'broken.pdf'))
+    expect(await isOutputFile(file)).toBe(true)
+    expect(await isOutputFile(join(root, 'link.pdf'))).toBe(true)
+    expect(await isOutputFile(join(root, 'dir.pdf'))).toBe(false)
+    expect(await isOutputFile(join(root, 'broken.pdf'))).toBe(false)
+    expect(await isOutputFile(folder)).toBe(false)
+    expect(await isOutputFile(join(root, 'missing.pdf'))).toBe(false)
+  })
+
+  it('shows a file written as ~/ and as its absolute path once, as its newest entry', async () => {
+    const isFile = { isFile: () => true, isSymbolicLink: () => false }
+    const disk: OutputFs = { lstat: async () => isFile, stat: async () => isFile }
+    const shown = await outputsOnDisk(
+      [
+        { kind: 'file', path: '~/Downloads/a.pdf', at: 1 },
+        { kind: 'artifact', url: 'https://claude.ai/artifact/abc', at: 2 },
+        { kind: 'file', path: '/h/Downloads/a.pdf', at: 3 },
+        { kind: 'file', path: '~/Downloads/b.pdf', at: 4 }
+      ],
+      '/h',
+      disk
+    )
+    expect(shown.map((o) => (o.kind === 'file' ? o.path : o.url))).toEqual([
+      'https://claude.ai/artifact/abc',
+      '/h/Downloads/a.pdf',
+      '~/Downloads/b.pdf'
+    ])
+  })
+
+  it('checks at most 8 files at a time, so a stalled mount ties up few threads', async () => {
+    const names = Array.from({ length: 30 }, (_, i) => `~/Downloads/f${i}.pdf`)
+    writeFileSync(writeTranscript(), reply(`Saved ${names.join(' and ')}`))
+    let running = 0
+    let most = 0
+    const slow = async <T>(answer: T): Promise<T> => {
+      most = Math.max(most, ++running)
+      await new Promise((done) => setTimeout(done, 2))
+      running--
+      return answer
+    }
+    const file = { isFile: () => true, isSymbolicLink: () => false }
+    const tailer = new TranscriptTailer({
+      outputFs: { lstat: () => slow(file), stat: () => slow(file) }
+    })
+    const read = await tailer.read(transcriptPath(home, folder, SESSION), undefined, home)
+    expect(outputsOf(read)).toEqual(names)
+    expect(most).toBe(8)
   })
 })

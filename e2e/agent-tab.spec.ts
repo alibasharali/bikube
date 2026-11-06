@@ -16,6 +16,7 @@ import { encodeProjectFolder } from '../src/core/claude-stats'
 import { pickAppTheme } from './app-theme'
 import { backToBoard, boardCard, cardView, closeCard, expectCardOpen } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
+import { openedPaths, recordOpenPath } from './editors'
 import { claudeLogLines } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -36,6 +37,8 @@ let dataDir: string
 let root: string
 let repo: string
 let fake: FakeSshHome
+/** #79's fake homes outside the temp folders, removed after each test. */
+const outsideRoots: string[] = []
 
 test.beforeEach(() => {
   dataDir = newDataDir()
@@ -52,6 +55,7 @@ test.afterEach(async () => {
   removeDataDirs()
   removeRemoteForwards(fake.sshLog)
   rmSync(root, { recursive: true, force: true })
+  for (const dir of outsideRoots.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
 async function launch(): Promise<void> {
@@ -174,7 +178,7 @@ test('#75 AC2, AC3: a plain card, the Default shell and a Claude Code card with 
   await expect(windowPanel.getByTestId('agent-tab-message')).toHaveText('No conversation yet.')
 })
 
-test("#75 D6: a Claude Code card's transcript shows the three groups, collapsed for the run", async () => {
+test("#75 D6, #79 D3: a Claude Code card's transcript shows the four groups, collapsed for the run", async () => {
   await launch()
   await createWorkspace(repo, 'repo')
   await agentTab().click()
@@ -193,9 +197,10 @@ test("#75 D6: a Claude Code card's transcript shows the three groups, collapsed 
   await expect(panel().getByTestId('agent-tab-group-name')).toHaveText([
     'Agents',
     'What changed',
+    'Files and artifacts',
     'Commands'
   ])
-  for (const name of ['Agents', 'What changed', 'Commands']) {
+  for (const name of ['Agents', 'What changed', 'Files and artifacts', 'Commands']) {
     await expect(groupToggle(name)).toHaveAttribute('aria-expanded', 'true')
   }
   await groupToggle('Commands').click()
@@ -1068,6 +1073,365 @@ test('#75 AC17: at 200 px the tab has no sideways scroll, and its colours are th
   }
 
   await expect(changeRows().first()).toBeVisible()
+  await expectThemed()
+  const darkText = (await colours()).name[1]
+
+  const settings = page.getByTestId('settings-dialog')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  await settings.getByRole('radio', { name: 'Light' }).check()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+  await expect.poll(async () => (await colours()).name[1]).not.toBe(darkText)
+  await expectThemed()
+  const lightText = (await colours()).name[1]
+
+  await pickAppTheme(page, 'Nord')
+  await expect.poll(async () => (await colours()).name[1]).not.toBe(lightText)
+  await expectThemed()
+})
+
+// #79: Files and artifacts, the documents and claude.ai links the main agent made, newest first.
+
+// Under test-results since D7 drops /tmp and /var/folders; a checkout under a hidden folder would drop it too.
+function outsideHome(): string {
+  const base = join(process.cwd(), 'test-results')
+  mkdirSync(base, { recursive: true })
+  const dir = mkdtempSync(join(base, 'agent-outputs-'))
+  outsideRoots.push(dir)
+  fake = fakeSshHome(dir)
+  const downloads = join(fake.home, 'Downloads')
+  mkdirSync(downloads)
+  return downloads
+}
+
+/** A `Write` of `path` and its result. */
+const writeFile = (id: string, path: string, seconds: number): string[] => [
+  toolUse(id, 'Write', { file_path: path, content: 'x' }, seconds),
+  bashResult(id, 'File created successfully', seconds + 1, false, {
+    type: 'create',
+    filePath: path
+  })
+]
+
+const reply = (text: string, seconds: number): string =>
+  assistant([{ type: 'text', text }], seconds)
+
+const outputs = (): Locator => group('Files and artifacts')
+const outputRows = (): Locator => outputs().getByTestId('agent-output')
+const outputNames = (): Locator => outputRows().getByTestId('agent-output-name')
+const outputsEmpty = (): Locator => outputs().getByTestId('agent-outputs-empty')
+
+/** Each row as `<name> <muted line> <badge>`, the badge empty when it shows none. */
+const shownOutputs = (): Promise<string[]> =>
+  outputRows().evaluateAll((rows) =>
+    rows.map((row) =>
+      [
+        row.querySelector('[data-testid=agent-output-name]')?.textContent,
+        row.querySelector('[data-testid=agent-output-detail]')?.textContent,
+        row.querySelector('[data-testid=agent-output-badge]')?.textContent ?? ''
+      ].join(' ')
+    )
+  )
+
+test('#79 AC1: a Write of a document in Downloads shows it under ~/Downloads, code shows nothing', async () => {
+  const downloads = outsideHome()
+  writeFileSync(join(downloads, 'a.pdf'), 'pdf')
+  mkdirSync(join(repo, 'src'))
+  writeFileSync(join(repo, 'src', 'x.ts'), 'x')
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  const id = await claudeCard('agent', HEADER_FIXTURE)
+  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  await expect(outputsEmpty()).toHaveText('No files or artifacts yet.')
+  await expect(outputs().getByTestId('agent-tab-group-count')).toHaveText('0')
+
+  appendFileSync(
+    transcriptOf(id),
+    [
+      ...writeFile('w1', join(repo, 'src', 'x.ts'), 10),
+      ...writeFile('w2', join(downloads, 'a.pdf'), 12)
+    ].join('')
+  )
+  await expect.poll(shownOutputs, { timeout: 3000 }).toEqual(['a.pdf ~/Downloads '])
+  await expect(outputs().getByTestId('agent-tab-group-count')).toHaveText('1')
+  await expect(outputsEmpty()).toHaveCount(0)
+  await expect(outputRows().getByTestId('files-icon')).toHaveAttribute('data-icon', /pdf/)
+})
+
+test('#79 AC2: a Bash command saving to $HOME/Downloads shows its file once it exists', async () => {
+  const downloads = outsideHome()
+  writeFileSync(join(downloads, 'denied.pdf'), 'pdf')
+  writeFileSync(join(downloads, 'failed.pdf'), 'pdf')
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', [
+    ...HEADER_FIXTURE,
+    bashUse(
+      'b1',
+      'OUT="$HOME/Downloads/Cost report - v2.pdf"; python3 make.py "$OUT"',
+      'Make the report',
+      10
+    ),
+    bashResult('b1', '', 11),
+    bashUse('b2', 'cp a.pdf "$HOME/Downloads/denied.pdf"', 'Copy denied', 12),
+    bashResult('b2', DENIAL, 13, true, 'User rejected tool use'),
+    bashUse('b3', 'cp a.pdf "$HOME/Downloads/failed.pdf"', 'Copy failed', 14),
+    bashResult('b3', 'Exit code 1', 15, true, 'Error: Exit code 1')
+  ])
+  await expect(commandRows()).toHaveCount(3)
+  await expect(outputsEmpty()).toHaveText('No files or artifacts yet.')
+  await page.waitForTimeout(1500)
+  await expect(outputRows()).toHaveCount(0)
+
+  writeFileSync(join(downloads, 'Cost report - v2.pdf'), 'pdf')
+  await expect.poll(shownOutputs, { timeout: 3000 }).toEqual(['Cost report - v2.pdf ~/Downloads '])
+})
+
+test('#79 AC3: a document named in the reply shows; scratch and Claude state files never', async () => {
+  const downloads = outsideHome()
+  writeFileSync(join(downloads, 'b.xlsx'), 'xlsx')
+  mkdirSync(join(fake.home, '.claude'), { recursive: true })
+  writeFileSync(join(fake.home, '.claude', 'd.png'), 'png')
+  const scratch = `/tmp/bikube-79-${randomUUID()}.png`
+  writeFileSync(scratch, 'png')
+  try {
+    await launch()
+    await createWorkspace(repo, 'repo')
+    await agentTab().click()
+    await claudeCard('agent', [
+      ...HEADER_FIXTURE,
+      reply(`I've saved it to ${join(downloads, 'b.xlsx')}.`, 10),
+      reply(`The chart is at ${scratch} and a copy at ~/.claude/d.png.`, 11)
+    ])
+    await expect.poll(shownOutputs).toEqual(['b.xlsx ~/Downloads '])
+  } finally {
+    rmSync(scratch, { force: true })
+  }
+})
+
+test('#79 AC4: a file opens with the default app and reveals; unlisted and deleted files open nothing', async () => {
+  const downloads = outsideHome()
+  const pdf = join(downloads, 'a.pdf')
+  writeFileSync(pdf, 'pdf')
+  writeFileSync(join(downloads, 'other.pdf'), 'pdf')
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await recordOpenPath(app!)
+  await app!.evaluate(({ shell }) => {
+    const revealed: string[] = []
+    ;(globalThis as { revealedPaths?: string[] }).revealedPaths = revealed
+    shell.showItemInFolder = (path: string) => {
+      revealed.push(path)
+    }
+  })
+  const revealedPaths = (): Promise<string[]> =>
+    app!.evaluate(() => [...((globalThis as { revealedPaths?: string[] }).revealedPaths ?? [])])
+  await agentTab().click()
+  const id = await claudeCard('agent', [...HEADER_FIXTURE, ...writeFile('w1', pdf, 10)])
+
+  await outputRows().getByTestId('agent-output-open').click()
+  await expect.poll(() => openedPaths(app!)).toEqual([pdf])
+  await expect(outputs().getByTestId('agent-outputs-open-error')).toHaveCount(0)
+
+  // Reveal shows on hover and focus, and is always in the Tab order.
+  const reveal = outputRows().getByTestId('agent-output-reveal')
+  await expect(reveal).toHaveAttribute('aria-label', 'Reveal a.pdf')
+  await page.mouse.move(0, 0)
+  await outputRows().getByTestId('agent-output-open').focus()
+  await expect(reveal).toHaveCSS('opacity', '0')
+  await page.keyboard.press('Tab')
+  await expect(reveal).toBeFocused()
+  await expect(reveal).toHaveCSS('opacity', '1')
+  await page.keyboard.press('Enter')
+  await expect.poll(revealedPaths).toEqual([pdf])
+
+  // A path the summary never listed, asked for from the page: nothing opens or reveals.
+  const asked = await page.evaluate(
+    async ([session, path]) => {
+      const api = (
+        window as unknown as {
+          bikube: {
+            agentTab: {
+              openOutput: (sessionId: string, path: string) => Promise<unknown>
+              revealOutput: (sessionId: string, path: string) => Promise<boolean>
+            }
+          }
+        }
+      ).bikube.agentTab
+      return [await api.openOutput(session, path), await api.revealOutput(session, path)]
+    },
+    [id, join(downloads, 'other.pdf')] as const
+  )
+  expect(asked).toEqual([{ ok: false, reason: 'refused' }, false])
+  expect(await openedPaths(app!)).toEqual([pdf])
+  expect(await revealedPaths()).toEqual([pdf])
+
+  // Deleted after it was listed: gone within 3 s.
+  rmSync(pdf)
+  await expect(outputRows()).toHaveCount(0, { timeout: 3000 })
+  await expect(outputsEmpty()).toHaveText('No files or artifacts yet.')
+})
+
+test('#79 AC5: artifacts from Artifact and Claude Docs results and the reply open their links', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const opened = await (async () => {
+    await app!.evaluate(({ shell }) => {
+      const links: string[] = []
+      ;(globalThis as { openedLinks?: string[] }).openedLinks = links
+      shell.openExternal = async (url: string) => {
+        links.push(url)
+      }
+    })
+    return () =>
+      app!.evaluate(() => [...((globalThis as { openedLinks?: string[] }).openedLinks ?? [])])
+  })()
+  await agentTab().click()
+  const page1 = 'https://claude.ai/code/artifact/0b3c9d1e-5f2a-4c7b-9e8d-1a2b3c4d5e6f'
+  const doc = 'https://claude.ai/artifact/plan123'
+  const linked = 'https://claude.ai/artifact/linked456'
+  await claudeCard('agent', [
+    ...HEADER_FIXTURE,
+    toolUse('a1', 'Artifact', { file_path: 'report.html' }, 10),
+    bashResult('a1', JSON.stringify({ url: page1, title: 'Cost report' }), 11, false, {
+      url: page1,
+      title: 'Cost report'
+    }),
+    toolUse(
+      'd1',
+      'mcp__claude_ai_Claude_Docs__batch',
+      { container: { kind: 'project', create: { name: 'Plan' } }, batch: [] },
+      12
+    ),
+    bashResult('d1', JSON.stringify({ frame: { url: doc, slug: 'plan123' } }), 13),
+    reply(`Here it is: ${linked}`, 14),
+    // The same Artifact link again: one row, now the newest.
+    reply(`Open ${page1} again.`, 15)
+  ])
+  await expect
+    .poll(shownOutputs)
+    .toEqual(['Cost report claude.ai Page', `${linked} claude.ai `, 'Plan claude.ai Doc'])
+
+  await outputRows().filter({ hasText: 'Plan' }).getByTestId('agent-output-open').click()
+  await expect.poll(opened).toEqual([doc])
+  await expect(outputRows().getByTestId('agent-output-reveal')).toHaveCount(0)
+})
+
+test('#79 AC6: 12 outputs show 10 with Show all, and the group stays collapsed across cards', async () => {
+  const downloads = outsideHome()
+  const lines = [...HEADER_FIXTURE]
+  for (let i = 0; i < 12; i++) {
+    const path = join(downloads, `r${String(i).padStart(2, '0')}.pdf`)
+    writeFileSync(path, 'pdf')
+    lines.push(...writeFile(`w${i}`, path, 10 + 2 * i))
+  }
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await agentTab().click()
+  await claudeCard('agent', lines)
+
+  const all = outputs().getByTestId('agent-outputs-show-all')
+  await expect(outputRows()).toHaveCount(10)
+  await expect(outputNames().first()).toHaveText('r11.pdf')
+  await expect(outputs().getByTestId('agent-tab-group-count')).toHaveText('10')
+  await expect(all).toHaveText('Show all (2 more)')
+  await all.click()
+  await expect(outputRows()).toHaveCount(12)
+  await expect(outputs().getByTestId('agent-tab-group-count')).toHaveText('12')
+  await expect(all).toHaveText('Show fewer')
+  await all.click()
+  await expect(outputRows()).toHaveCount(10)
+
+  await groupToggle('Files and artifacts').click()
+  await expect(groupToggle('Files and artifacts')).toHaveAttribute('aria-expanded', 'false')
+  await expect(outputRows().first()).toBeHidden()
+  await backToBoard(page)
+  await claudeCard('second', lines)
+  await expect(panel().getByTestId('agent-tab-model')).toHaveText('claude-opus-4-8')
+  await expect(groupToggle('Files and artifacts')).toHaveAttribute('aria-expanded', 'false')
+  await expect(groupToggle('Commands')).toHaveAttribute('aria-expanded', 'true')
+})
+
+test('#79 AC7: at 200 px a long file name truncates, and the rows use the theme’s colours', async () => {
+  const downloads = outsideHome()
+  const long = join(
+    downloads,
+    'A very long report name that goes on and on and on past the panel edge - final v2.pdf'
+  )
+  writeFileSync(long, 'pdf')
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false,"sidePanelWidth":200,"sidePanelTab":"agent"}}'
+  )
+  await launch()
+  await page.emulateMedia({ colorScheme: null })
+  await createWorkspace(repo, 'repo')
+  await claudeCard('agent', [
+    ...HEADER_FIXTURE,
+    toolUse('a1', 'Artifact', { file_path: 'report.html' }, 10),
+    bashResult('a1', 'ok', 11, false, { url: 'https://claude.ai/artifact/p1', title: 'Page one' }),
+    toolUse(
+      'd1',
+      'mcp__claude_ai_Claude_Docs__batch',
+      { container: { kind: 'project', create: { name: 'Plan' } }, batch: [] },
+      12
+    ),
+    bashResult('d1', JSON.stringify({ frame: { url: 'https://claude.ai/artifact/d1' } }), 13),
+    ...writeFile('w1', long, 14)
+  ])
+  await expect(outputRows()).toHaveCount(3)
+  await expect(panel()).toHaveCSS('width', '200px')
+
+  const name = outputRows().first().getByTestId('agent-output-name')
+  await expect(name).toHaveCSS('text-overflow', 'ellipsis')
+  expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+
+  const body = panel().getByTestId('agent-tab')
+  const noSideways = (): Promise<boolean> =>
+    panel()
+      .locator('.side-panel-body')
+      .evaluate(
+        (el) =>
+          el.scrollWidth <= el.clientWidth &&
+          (el.querySelector('[data-testid=agent-tab]') as HTMLElement).scrollWidth <=
+            (el.querySelector('[data-testid=agent-tab]') as HTMLElement).clientWidth
+      )
+  const colours = (): Promise<Record<string, [string, string]>> =>
+    body.evaluate((tab) => {
+      const resolve = (token: string): string => {
+        const probe = document.createElement('span')
+        probe.style.color = `var(${token})`
+        document.body.append(probe)
+        const colour = getComputedStyle(probe).color
+        probe.remove()
+        return colour
+      }
+      const color = (selector: string): string => {
+        const el = tab.querySelector(selector)
+        return el ? getComputedStyle(el).color : 'missing'
+      }
+      return {
+        name: [color('[data-testid=agent-output-name]'), resolve('--text')],
+        detail: [color('[data-testid=agent-output-detail]'), resolve('--text-muted')],
+        doc: [
+          color('[data-testid=agent-output-badge][data-badge=Doc]'),
+          resolve('--pill-working-text')
+        ],
+        page: [
+          color('[data-testid=agent-output-badge][data-badge=Page]'),
+          resolve('--pill-waiting-text')
+        ]
+      }
+    })
+  const expectThemed = async (): Promise<void> => {
+    await expect.poll(noSideways).toBe(true)
+    for (const [what, [shown, token]] of Object.entries(await colours())) {
+      expect(shown, what).toBe(token)
+    }
+  }
+
   await expectThemed()
   const darkText = (await colours()).name[1]
 

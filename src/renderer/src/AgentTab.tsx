@@ -12,6 +12,7 @@ import { useEffect, useId, useState } from 'react'
 import type { Activity } from '../../core/activity'
 import { changesView, limitChanges, valueOfView, type ChangeView } from '../../core/agent-changes'
 import { clockTime, formatDuration } from '../../core/agent-format'
+import { outputRows } from '../../core/agent-outputs-view'
 import {
   AGENT_ROW_STATUS_LABELS,
   agentDuration,
@@ -33,7 +34,9 @@ import {
 } from './agent-tab-groups'
 import { useCardRunState, useCardStatus } from './card-terminals'
 import { ChangesList } from './AgentChanges'
+import { OutputsList } from './AgentOutputs'
 import { ContextBar } from './CardLines'
+import { homeDir } from './home'
 import { SMALL_ICON } from './icons'
 import { ShowAllButton } from './ShowAllButton'
 import { useShellAgent } from './shell-agents'
@@ -45,6 +48,8 @@ const POLL_MS = 1000
 const SHOWN_COMMANDS = 10
 /** How many of What changed's files show before `Show all` (#77 C1). */
 const SHOWN_CHANGES = 10
+/** How many of the newest files and artifacts show before `Show all` (#79 D3). */
+const SHOWN_OUTPUTS = 10
 
 /**
  * The side panel's Agent tab (#75): with a local Claude Code card in front, its current session's
@@ -92,6 +97,7 @@ function AgentTab({
             key={`${folder}\0${sessionId}`}
             summary={read.summary}
             folder={folder ?? ''}
+            sessionId={sessionId ?? ''}
             usage={shell ? shellReport?.usage : cardUsage}
             activity={activity}
             running={running}
@@ -173,10 +179,11 @@ function useAgentSummary(
   return answer && answer.key === key ? answer.shown : undefined
 }
 
-/** The header and the three groups under it (D6), collapsed ones kept for the run of the app. */
+/** The header and the groups under it (D6), collapsed ones kept for the run of the app. */
 function AgentView({
   summary,
   folder,
+  sessionId,
   usage,
   activity,
   running
@@ -184,6 +191,8 @@ function AgentView({
   summary: AgentSummary
   /** The card's or shell's folder: What changed groups by it and opens files in it (D9). */
   folder: string
+  /** The session the summary was read for: Files and artifacts' opens name it (#79 D10). */
+  sessionId: string
   /** The card's usage as the board card shows it, or the shell's kept usage (D7, D3a). */
   usage: ClaudeUsage | undefined
   /** The card's or shell's activity (#31), for the main agent's status (D8). */
@@ -205,9 +214,13 @@ function AgentView({
   const allChanges = allChangesFor === changeKey
   const changes = changesView(summary, folder, changeView)
   const cutChanges = limitChanges(changes, SHOWN_CHANGES)
+  const [allOutputs, setAllOutputs] = useState(false)
+  const outputs = outputRows(summary.outputs, homeDir())
+  const shownOutputs = allOutputs ? outputs : outputs.slice(0, SHOWN_OUTPUTS)
   const counts: Record<AgentTabGroupId, number> = {
     agents: shown.length + (allAgents ? finished.length : 0),
     changes: allChanges ? changes.count : changes.count - cutChanges.more,
+    outputs: shownOutputs.length,
     commands: shownCommands.length
   }
   return (
@@ -244,6 +257,15 @@ function AgentView({
                 more={cutChanges.more}
                 all={allChanges}
                 onToggleAll={() => setAllChangesFor(allChanges ? null : changeKey)}
+              />
+            )}
+            {group.id === 'outputs' && (
+              <OutputsList
+                sessionId={sessionId}
+                rows={shownOutputs}
+                more={Math.max(0, outputs.length - SHOWN_OUTPUTS)}
+                all={allOutputs}
+                onToggleAll={() => setAllOutputs(!allOutputs)}
               />
             )}
             {group.id === 'commands' && (

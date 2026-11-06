@@ -1,5 +1,5 @@
 import { AppWindow, Blocks } from 'lucide-react'
-import { ACTIVITY_LABELS } from '../../core/activity'
+import { statusLabel } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
 import { formatAge } from '../../core/status-time'
@@ -183,9 +183,13 @@ function toolName(row: OpenTerminal): string {
 }
 
 /** The terminal's status icon (`StatusIcon`), named by tooltip. */
-function StatusMark({ activity }: { activity: OpenTerminal['activity'] }): React.JSX.Element {
+export function StatusMark({
+  activity
+}: {
+  activity: OpenTerminal['activity']
+}): React.JSX.Element {
   const status = activity ?? 'running'
-  const label = activity ? ACTIVITY_LABELS[activity] : 'Running'
+  const label = statusLabel(activity)
   return (
     <span
       className="workspace-terminal-activity"

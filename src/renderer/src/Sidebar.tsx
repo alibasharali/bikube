@@ -17,7 +17,7 @@ import { useClaudeCodeTerminals } from './card-terminals'
 import type { HeldNumbers } from './held-numbers'
 import { useOpenTerminals } from './open-terminals'
 import { useSettings } from './settings'
-import SidebarAgents from './SidebarAgents'
+import SidebarAgents, { SidebarAgentIcons } from './SidebarAgents'
 import { useGroupStamps } from './status-times'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
@@ -58,7 +58,8 @@ interface SidebarProps {
 
 /**
  * The workspace list as a tree: under each workspace its running cards and shells
- * (`WorkspaceTerminals`); in Split (#79), only its plain terminals, its agents in `SidebarAgents`. A workspace row's click or Enter shows its board; dragging it, or Alt+Up/Down while it has focus, moves it to
+ * (`WorkspaceTerminals`); in Split (#79), only its plain terminals, its agents in `SidebarAgents`,
+ * or collapsed as `SidebarAgentIcons` after the badges. A workspace row's click or Enter shows its board; dragging it, or Alt+Up/Down while it has focus, moves it to
  * another place, with a line showing where it would land (#32 D4, D5).
  */
 function Sidebar({
@@ -91,7 +92,7 @@ function Sidebar({
   // D2's rule 2: a card or shell whose main pane runs Claude Code now is an agent row too.
   const claudeCode = useClaudeCodeTerminals()
   // Split (#79 D3): agent rows leave their workspace for the Agents section below; collapsed,
-  // the sidebar shows only the badges, as Nested does.
+  // they are icons after the badges (D7).
   const split = useSettings().sidebarLayout === 'split'
   const rows = useMemo(
     () => workspaces.flatMap((w) => terminals.get(w.id) ?? []),
@@ -240,7 +241,7 @@ function Sidebar({
       </div>
       <ul
         ref={listRef}
-        className={split && !collapsed ? 'workspace-list workspace-list-split' : 'workspace-list'}
+        className={split ? 'workspace-list workspace-list-split' : 'workspace-list'}
         onDragEnter={onDragOver}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -328,6 +329,16 @@ function Sidebar({
           onOpen={onOpenTerminal}
           numbers={numbers}
           stamps={stamps}
+        />
+      )}
+      {split && collapsed && sections.agents.length > 0 && (
+        <SidebarAgentIcons
+          groups={sections.agents}
+          workspaces={workspaces}
+          activeId={activeId}
+          openId={openId}
+          onOpen={onOpenTerminal}
+          numbers={numbers}
         />
       )}
       <div className="sidebar-footer">

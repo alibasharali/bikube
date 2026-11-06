@@ -601,6 +601,8 @@ button {
 .workspace-list.workspace-list-split {
   flex: 0 1 auto;
   max-height: 50%;
+  /* Half the sidebar with its padding, not half plus it. */
+  box-sizing: border-box;
 }
 
 .sidebar-agents {
@@ -671,6 +673,74 @@ button {
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 400;
+}
+
+/* The collapsed Split sidebar's agents (#79 D7): after a divider below the badges, one icon per
+   agent row, its logo in its kind's colour and its status mark over the logo's corner. */
+.sidebar-agent-icons {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  /* Narrow sides, so the icons fit beside a scrollbar in the 56 px sidebar. */
+  padding: var(--space-2) var(--space-1);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.agent-icon {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.agent-icon:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.agent-icon.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.agent-icon.needs-you {
+  color: var(--text);
+}
+
+.sidebar-agent-icons > li[data-kind]:not([data-kind='shell']) .agent-icon-kind {
+  color: var(--kind);
+}
+
+.agent-icon-kind {
+  display: inline-flex;
+}
+
+.agent-icon-kind.held-number {
+  color: var(--text);
+}
+
+.agent-icon .workspace-terminal-activity {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  background: var(--surface);
 }
 
 /* A running terminal's status (`StatusIcon`), in the sidebar tree and on the board card. Running

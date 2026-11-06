@@ -1,7 +1,9 @@
 import { useId } from 'react'
+import { statusLabel } from '../../core/activity'
 import type { AgentGroup } from '../../core/sidebar-sections'
 import type { Workspace } from '../../core/workspace-store'
-import { TerminalRow } from './WorkspaceTerminals'
+import { ToolIcon } from './AgentLogo'
+import { StatusMark, TerminalRow } from './WorkspaceTerminals'
 
 interface SidebarAgentsProps {
   /** The groups in D4's order, an empty one left out. */
@@ -69,6 +71,62 @@ function SidebarAgents({
         ))
       )}
     </section>
+  )
+}
+
+/**
+ * The collapsed Split sidebar's agents (#79 D7): after a divider below the badges, one icon button
+ * per agent row in the groups' order, with no headings: its tool's logo (or its held number, D9)
+ * with its status mark over the corner, named `<title> · <workspace> · <status>`.
+ */
+export function SidebarAgentIcons({
+  groups,
+  workspaces,
+  activeId,
+  openId,
+  onOpen,
+  numbers
+}: Omit<SidebarAgentsProps, 'stamps'>): React.JSX.Element {
+  const names = new Map(workspaces.map((w) => [w.id, w.name]))
+  return (
+    <ul className="sidebar-agent-icons" data-testid="sidebar-agent-icons" aria-label="Agents">
+      {groups.flatMap((group) =>
+        group.rows.map((row) => {
+          const current = row.workspaceId === activeId && row.cardId === openId
+          const needsYou = row.activity === 'waiting' || row.activity === 'question'
+          const number = numbers?.get(row.cardId) ?? null
+          const classes = ['agent-icon']
+          if (current) classes.push('active')
+          if (needsYou) classes.push('needs-you')
+          const label = `${row.title} · ${names.get(row.workspaceId) ?? ''} · ${statusLabel(row.activity)}`
+          return (
+            <li key={row.cardId} data-kind={row.tool}>
+              <button
+                type="button"
+                className={classes.join(' ')}
+                data-testid="agent-icon"
+                data-kind={row.kind}
+                aria-current={current ? 'true' : undefined}
+                aria-label={label}
+                title={label}
+                onClick={() => onOpen(row.workspaceId, row.cardId)}
+              >
+                {number !== null ? (
+                  <span className="agent-icon-kind held-number" data-testid="terminal-number">
+                    {number}
+                  </span>
+                ) : (
+                  <span className="agent-icon-kind" data-testid="workspace-terminal-kind">
+                    <ToolIcon tool={row.tool} size={16} />
+                  </span>
+                )}
+                <StatusMark activity={row.activity} />
+              </button>
+            </li>
+          )
+        })
+      )}
+    </ul>
   )
 }
 

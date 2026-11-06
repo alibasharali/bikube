@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { backToBoard, cardView, expectCardOpen } from './card-view'
+import { pickAppTheme } from './app-theme'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -358,4 +359,182 @@ test('AC6: an agent row shows how long it has been in its group, from its last g
   await expect.poll(groups).toEqual(['Needs you 1: Fix (A)', 'Idle 1: Port (B)'])
   await expect(age('Fix')).toHaveText('now')
   await expect(age('Port')).toHaveText('3m')
+})
+
+/** The collapsed Split sidebar's agent icons, in order. */
+const agentIcons = (): Locator => page.getByTestId('sidebar-agent-icons').getByTestId('agent-icon')
+
+test('AC10: collapsed, Split shows a divider and one icon per agent after the badges; Nested none', async () => {
+  await threeCards()
+  await setActivity('Fix', 'working')
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
+  await expect.poll(groups, { timeout: 15_000 }).toEqual(['Working 1: Fix (A)', 'Idle 1: Port (B)'])
+  await setActivity('Port', 'question')
+  await expect.poll(groups).toEqual(['Needs you 1: Port (B)', 'Working 1: Fix (A)'])
+
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
+  await expect(agents()).toHaveCount(0)
+  const icons = page.getByTestId('sidebar-agent-icons')
+  await expect(icons).toBeVisible()
+  // After the badges, with a divider (its top border) between.
+  const list = await page.locator('.workspace-list').boundingBox()
+  const box = await icons.boundingBox()
+  expect(box!.y).toBeGreaterThanOrEqual(list!.y + list!.height - 1)
+  expect(await icons.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('solid')
+  await expect(agentIcons()).toHaveCount(2)
+  await expect(agentIcons().nth(0)).toHaveAttribute('title', 'Port · B · Needs your answer')
+  await expect(agentIcons().nth(0)).toHaveClass(/needs-you/)
+  await expect(agentIcons().nth(1)).toHaveAttribute('title', 'Fix · A · Working')
+  await expect(agentIcons().nth(0).getByTestId('workspace-terminal-activity')).toHaveAttribute(
+    'data-activity',
+    'question'
+  )
+  await expect(agentIcons().nth(1).getByTestId('workspace-terminal-activity')).toHaveAttribute(
+    'data-activity',
+    'working'
+  )
+  await expect(agentIcons().nth(1).getByTestId('workspace-terminal-kind')).toBeVisible()
+
+  await agentIcons().nth(1).click()
+  await expect(activeWorkspace()).toHaveAttribute('aria-label', 'A')
+  await expectCardOpen(page, 'Fix')
+  await expect(agentIcons().nth(1)).toHaveAttribute('aria-current', 'true')
+  await expect(agentIcons().nth(0)).not.toHaveAttribute('aria-current', 'true')
+  // Held, the active workspace's agent shows its digit on its icon too (D9).
+  await backToBoard(page)
+  await page.keyboard.down(TERMINAL_MOD)
+  await expect(agentIcons().nth(1).getByTestId('terminal-number')).toHaveText('1')
+  await expect(agentIcons().nth(0).getByTestId('terminal-number')).toHaveCount(0)
+  await page.keyboard.up(TERMINAL_MOD)
+
+  await openPaletteAt('Sidebar: Nested')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true')
+  await expect(page.getByTestId('sidebar-agent-icons')).toHaveCount(0)
+  await expect(page.getByTestId('agent-icon')).toHaveCount(0)
+})
+
+/** Picks Settings' Theme `name` (Dark or Light) and closes Settings. */
+async function pickTheme(name: 'Dark' | 'Light'): Promise<void> {
+  const settings = page.getByTestId('settings-dialog')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma')
+  await settings.getByRole('radio', { name, exact: true }).check()
+  await page.keyboard.press('Escape')
+  await expect(settings).toHaveCount(0)
+}
+
+const LONG = 'A workspace with a name far too long for the sidebar'
+
+test('AC12: the workspaces scroll within half the sidebar, the agents on their own; no row scrolls sideways; theme tokens', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'bikube-sidebar-split-layout-'))
+  dirs.push(root)
+  const fake = fakeAgentsHome(root)
+  ;({ app, page } = await launchApp({ env: fake.env, dataDir: dataDirWith(SPLIT_SETTINGS) }))
+  await page.emulateMedia({ colorScheme: null })
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 720))
+  for (let i = 1; i <= 12; i++) {
+    await createWorkspace(i === 12 ? LONG : `W${i}`)
+    // 8 agent rows: a Claude Code card is one while it runs (D2 rule 1).
+    if (i <= 8)
+      await newCard(
+        i === 1 ? 'An agent card whose title is far too long' : `Agent ${i}`,
+        'Claude Code'
+      )
+  }
+  await expect.poll(() => claudeLogLines(fake.log).length).toBe(8)
+  await expect.poll(groups).toEqual([expect.stringMatching(/^Idle 8: /)])
+  await page.mouse.move(900, 700)
+
+  const sidebar = page.getByTestId('sidebar')
+  const list = page.locator('.workspace-list')
+  const layout = (): Promise<Record<string, number>> =>
+    sidebar.evaluate((nav) => {
+      const list = nav.querySelector('.workspace-list') as HTMLElement
+      const agents = nav.querySelector('[data-testid=sidebar-agents]') as HTMLElement
+      return {
+        sidebar: nav.clientHeight,
+        list: list.getBoundingClientRect().height,
+        listBottom: list.getBoundingClientRect().bottom,
+        listOverflow: list.scrollHeight - list.clientHeight,
+        agentsTop: agents.getBoundingClientRect().top,
+        agentsOverflow: agents.scrollHeight - agents.clientHeight
+      }
+    })
+  await expect.poll(async () => (await layout()).sidebar).toBeGreaterThan(600)
+  const box = await layout()
+  expect(box.listOverflow).toBeGreaterThan(0)
+  expect(box.list).toBeLessThanOrEqual(box.sidebar / 2 + 1)
+  expect(box.agentsTop).toBeGreaterThanOrEqual(box.listBottom - 1)
+  expect(box.agentsOverflow).toBeGreaterThan(0)
+  // Each scrolls on its own.
+  await agents().evaluate((el) => el.scrollBy(0, 1000))
+  expect(await agents().evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(0)
+
+  // At the minimum window width, nothing in the sidebar scrolls sideways, expanded or collapsed.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(320, 720))
+  const noSideways = (): Promise<string[]> =>
+    sidebar.evaluate((nav) =>
+      [
+        nav,
+        ...nav.querySelectorAll<HTMLElement>(
+          '.workspace-list, .sidebar-agents, .sidebar-agent-icons, .workspace-item, .workspace-terminal, .agent-icon'
+        )
+      ]
+        .filter(
+          (el) =>
+            el.scrollWidth > el.clientWidth ||
+            el.getBoundingClientRect().right > document.documentElement.clientWidth
+        )
+        .map((el) => el.className || el.tagName)
+    )
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(320)
+  await expect.poll(noSideways).toEqual([])
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(page.getByTestId('agent-icon')).toHaveCount(8)
+  // Once its width's transition has ended.
+  await expect(sidebar).toHaveCSS('width', '56px')
+  await expect.poll(noSideways).toEqual([])
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(agents()).toBeVisible()
+
+  /** The headings', workspace names' and times' colours, each with its token's resolved colour. */
+  const colours = (): Promise<Record<string, [string, string]>> =>
+    sidebar.evaluate((nav) => {
+      const resolve = (token: string): string => {
+        const probe = document.createElement('span')
+        probe.style.color = `var(${token})`
+        document.body.append(probe)
+        const colour = getComputedStyle(probe).color
+        probe.remove()
+        return colour
+      }
+      const color = (selector: string): string => {
+        const el = nav.querySelector(selector)
+        return el ? getComputedStyle(el).color : 'missing'
+      }
+      const muted = resolve('--text-muted')
+      return {
+        agents: [color('.sidebar-section-title'), muted],
+        group: [color('[data-testid=agent-group-heading]'), muted],
+        workspace: [color('[data-testid=agent-row-workspace]'), muted],
+        time: [color('[data-testid=agent-row-time]'), muted],
+        title: [color('.sidebar-title'), muted]
+      }
+    })
+  const expectThemed = async (): Promise<string> => {
+    const shown = await colours()
+    for (const [what, [colour, token]] of Object.entries(shown)) expect(colour, what).toBe(token)
+    return shown.agents[1]
+  }
+
+  await pickTheme('Dark')
+  const dark = await expectThemed()
+  await pickTheme('Light')
+  await expect.poll(async () => (await colours()).agents[1]).not.toBe(dark)
+  const light = await expectThemed()
+  await pickAppTheme(page, 'Nord')
+  await expect.poll(async () => (await colours()).agents[1]).not.toBe(light)
+  await expectThemed()
 })

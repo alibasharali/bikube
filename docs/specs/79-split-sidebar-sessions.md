@@ -2,7 +2,7 @@
 item: 79
 type: feature
 title: Split Workspaces and Agents/sessions option
-status: draft
+status: approved
 branch: claude/79-split-workspaces-sessions
 ---
 

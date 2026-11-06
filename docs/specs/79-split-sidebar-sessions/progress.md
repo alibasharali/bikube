@@ -18,4 +18,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 ## Verification
 
 - done (ALL PASS)
-- UX review: running
+- UX review: 1 must-fix

@@ -515,11 +515,17 @@ test('AC12: the workspaces scroll within half the sidebar, the agents on their o
         return el ? getComputedStyle(el).color : 'missing'
       }
       const muted = resolve('--text-muted')
+      const text = resolve('--text')
+      const other = '[data-testid=workspace-terminal]:not([aria-current])'
+      const current = '[data-testid=workspace-terminal][aria-current=true]'
       return {
         agents: [color('.sidebar-section-title'), muted],
         group: [color('[data-testid=agent-group-heading]'), muted],
-        workspace: [color('[data-testid=agent-row-workspace]'), muted],
-        time: [color('[data-testid=agent-row-time]'), muted],
+        workspace: [color(`${other} [data-testid=agent-row-workspace]`), muted],
+        time: [color(`${other} [data-testid=agent-row-time]`), muted],
+        // The current row's on the accent tint, where muted text falls short of 4.5:1.
+        currentWorkspace: [color(`${current} [data-testid=agent-row-workspace]`), text],
+        currentTime: [color(`${current} [data-testid=agent-row-time]`), text],
         title: [color('.sidebar-title'), muted]
       }
     })
@@ -529,6 +535,10 @@ test('AC12: the workspaces scroll within half the sidebar, the agents on their o
     return shown.agents[1]
   }
 
+  // One agent row current, its card open, the pointer off every row.
+  await terminal(agents(), 'Agent 2').click()
+  await expect(terminal(agents(), 'Agent 2')).toHaveAttribute('aria-current', 'true')
+  await page.mouse.move(900, 700)
   await pickTheme('Dark')
   const dark = await expectThemed()
   await pickTheme('Light')

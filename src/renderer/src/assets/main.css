@@ -675,6 +675,13 @@ button {
   font-weight: 400;
 }
 
+/* On the current agent row the accent tint leaves muted text short of 4.5:1 in some themes, so its
+   workspace name and time take the body text (#79 D5). */
+.workspace-terminal.active .workspace-terminal-workspace,
+.workspace-terminal.active .workspace-terminal-time {
+  color: var(--text);
+}
+
 /* The collapsed Split sidebar's agents (#79 D7): after a divider below the badges, one icon per
    agent row, its logo in its kind's colour and its status mark over the logo's corner. */
 .sidebar-agent-icons {

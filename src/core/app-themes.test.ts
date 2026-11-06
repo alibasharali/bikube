@@ -146,6 +146,9 @@ describe('contrast in every version (#64 D5, AC1)', () => {
     need('text-muted on surface-hover', t['text-muted'], t['surface-hover'], 4.5)
     const selectedTab = composite(t['accent-soft'], t.surface)
     need('text on accent-soft over surface', t.text, selectedTab, 4.5)
+    // The Split sidebar's current agent row (#79 D5): its workspace name and time in the body
+    // text on the accent tint over the sidebar, since muted text there falls short.
+    need('agent row workspace and time on accent-soft over surface', t.text, selectedTab, 4.5)
     need('pill-question-text on surface', t['pill-question-text'], t.surface, 4.5)
     // The Agent tab's expanded command (#75 D10): quoted strings in the waiting green on the panel.
     need('pill-waiting-text on surface', t['pill-waiting-text'], t.surface, 4.5)

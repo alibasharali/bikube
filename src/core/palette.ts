@@ -6,7 +6,7 @@
 import { ACTIVITY_LABELS, type Activity } from './activity'
 import { APP_THEMES, type AppThemeId } from './app-themes'
 import { SHORTCUT_LABELS, type Keymap } from './keymap'
-import type { Theme } from './settings'
+import type { SidebarLayout, Theme } from './settings'
 import { MAX_PANES } from './split-tree'
 import { nextWaitingCard } from './waiting'
 import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
@@ -119,6 +119,7 @@ export type PaletteAction =
   | { id: 'switchWorkspace'; workspaceId: string }
   | { id: 'workspaceView'; view: WorkspaceView }
   | { id: 'agentSetup' }
+  | { id: 'sidebarLayout'; layout: SidebarLayout }
 
 /** An action row (D6): its label and, when it has one, its shortcut as D7 text. */
 export interface ActionRow {
@@ -167,6 +168,8 @@ export interface PaletteInput {
   appTheme: AppThemeId
   /** Settings' Default view, which a workspace without its own follows. */
   defaultView: WorkspaceView
+  /** Settings' Sidebar layout (#79 D1): the palette offers the other one. */
+  sidebarLayout: SidebarLayout
   keymap: Keymap
   platform: string
   /** The waiting cards' and shells' ids, oldest first (#41 D2). */
@@ -233,6 +236,7 @@ type KeymapAction = Exclude<
   | 'switchWorkspace'
   | 'workspaceView'
   | 'agentSetup'
+  | 'sidebarLayout'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -315,6 +319,13 @@ function actionRows(input: PaletteInput): ActionRow[] {
       label: other === 'grid' ? 'View: Grid' : 'View: Kanban'
     })
   }
+  // The other sidebar layout, beside the View row, as Settings' radio sets it (#79 D1).
+  const layout: SidebarLayout = input.sidebarLayout === 'split' ? 'nested' : 'split'
+  rows.push({
+    kind: 'action',
+    action: { id: 'sidebarLayout', layout },
+    label: layout === 'split' ? 'Sidebar: Split' : 'Sidebar: Nested'
+  })
   rows.push({ kind: 'action', action: { id: 'newWorkspace' }, label: 'New workspace' })
   // The active workspace's Agent setup page, unless it is in front (#68 D2).
   if (active && !input.agentSetup) {

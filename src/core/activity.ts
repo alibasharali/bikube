@@ -11,6 +11,11 @@ export type ActivityValue = Activity | 'none'
 
 export const ACTIVITY_VALUES: readonly ActivityValue[] = ['working', 'waiting', 'question', 'none']
 
+/** A running terminal's status as the sidebar names it: its activity's label, else `Running`. */
+export function statusLabel(activity: Activity | undefined): string {
+  return activity ? ACTIVITY_LABELS[activity] : 'Running'
+}
+
 export function isActivityValue(value: unknown): value is ActivityValue {
   return typeof value === 'string' && (ACTIVITY_VALUES as readonly string[]).includes(value)
 }

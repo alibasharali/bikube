@@ -8,12 +8,17 @@ import {
   workspaceMoveKey,
   type WorkspaceHover
 } from '../../core/workspace-drops'
+import { isAgentRow, sidebarSections } from '../../core/sidebar-sections'
 import { waitingCounts, waitingTooltip } from '../../core/waiting'
 import type { Workspace } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { useBranch } from './branches'
+import { useClaudeCodeTerminals } from './card-terminals'
 import type { HeldNumbers } from './held-numbers'
 import { useOpenTerminals } from './open-terminals'
+import { useSettings } from './settings'
+import SidebarAgents, { SidebarAgentIcons } from './SidebarAgents'
+import { useGroupStamps } from './status-times'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
 import { ICON, SMALL_ICON } from './icons'
@@ -53,7 +58,8 @@ interface SidebarProps {
 
 /**
  * The workspace list as a tree: under each workspace its running cards and shells
- * (`WorkspaceTerminals`). A workspace row's click or Enter shows its board; dragging it, or Alt+Up/Down while it has focus, moves it to
+ * (`WorkspaceTerminals`); in Split (#79), only its plain terminals, its agents in `SidebarAgents`,
+ * or collapsed as `SidebarAgentIcons` after the badges. A workspace row's click or Enter shows its board; dragging it, or Alt+Up/Down while it has focus, moves it to
  * another place, with a line showing where it would land (#32 D4, D5).
  */
 function Sidebar({
@@ -83,6 +89,27 @@ function Sidebar({
   const queue = useWaitingQueue()
   const waiting = useMemo(() => waitingCounts(queue, workspaces), [queue, workspaces])
   const terminals = useOpenTerminals(workspaces)
+  // D2's rule 2: a card or shell whose main pane runs Claude Code now is an agent row too.
+  const claudeCode = useClaudeCodeTerminals()
+  // Split (#79 D3): agent rows leave their workspace for the Agents section below; collapsed,
+  // they are icons after the badges (D7).
+  const split = useSettings().sidebarLayout === 'split'
+  const rows = useMemo(
+    () => workspaces.flatMap((w) => terminals.get(w.id) ?? []),
+    [workspaces, terminals]
+  )
+  // When each running row's group last changed (D6), kept in either layout.
+  const stamps = useGroupStamps(rows)
+  const sections = useMemo(
+    () =>
+      sidebarSections(
+        rows,
+        split ? (row) => isAgentRow(row, claudeCode.has(row.cardId)) : () => false,
+        activeId
+      ),
+    [rows, split, activeId, claudeCode]
+  )
+  const numbers = heldNumbers === 'terminal' ? sections.numbers : null
 
   useLayoutEffect(() => {
     const id = focusAfterMove.current
@@ -214,7 +241,12 @@ function Sidebar({
       </div>
       <ul
         ref={listRef}
-        className="workspace-list"
+        className={
+          // Capped at half only while something follows it: collapsed, the agent icons (#79 D3).
+          split && (!collapsed || sections.agents.length > 0)
+            ? 'workspace-list workspace-list-split'
+            : 'workspace-list'
+        }
         onDragEnter={onDragOver}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -223,6 +255,8 @@ function Sidebar({
         {workspaces.map((w, index) => {
           const active = w.id === activeId
           const count = waiting.get(w.id) ?? 0
+          // Its agents aren't under it in Split, so the dot shows expanded too (#79 D8).
+          const dot = collapsed || split ? count : 0
           return (
             <li
               key={w.id}
@@ -259,10 +293,13 @@ function Sidebar({
                   {/* Collapsed, the tree is hidden: the badge's dot counts what waits. */}
                   <WorkspaceBadge
                     workspace={w}
-                    waiting={collapsed ? count : 0}
+                    waiting={dot}
                     number={heldNumbers === 'workspace' && index < 9 ? index + 1 : null}
                   />
                   {!collapsed && <WorkspaceName workspace={w} />}
+                  {!collapsed && dot > 0 && (
+                    <span className="visually-hidden">, {waitingTooltip(dot)}</span>
+                  )}
                   {!collapsed && w.host !== undefined && (
                     <Server className="workspace-ssh" {...SMALL_ICON} />
                   )}
@@ -270,7 +307,7 @@ function Sidebar({
               </div>
               {!collapsed && (
                 <WorkspaceTerminals
-                  terminals={terminals.get(w.id) ?? []}
+                  terminals={sections.nested.get(w.id) ?? []}
                   currentId={active ? openId : null}
                   onOpen={onOpenTerminal}
                   agentSetup={
@@ -281,13 +318,34 @@ function Sidebar({
                         }
                       : null
                   }
-                  showNumbers={active && heldNumbers === 'terminal'}
+                  numbers={numbers}
                 />
               )}
             </li>
           )
         })}
       </ul>
+      {split && !collapsed && (
+        <SidebarAgents
+          groups={sections.agents}
+          workspaces={workspaces}
+          activeId={activeId}
+          openId={openId}
+          onOpen={onOpenTerminal}
+          numbers={numbers}
+          stamps={stamps}
+        />
+      )}
+      {split && collapsed && sections.agents.length > 0 && (
+        <SidebarAgentIcons
+          groups={sections.agents}
+          workspaces={workspaces}
+          activeId={activeId}
+          openId={openId}
+          onOpen={onOpenTerminal}
+          numbers={numbers}
+        />
+      )}
       <div className="sidebar-footer">
         <UpdateButton collapsed={collapsed} />
         {!collapsed && syncStatus !== null && (

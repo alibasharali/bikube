@@ -17,6 +17,7 @@ import { runningCount } from '../../core/card-deletes'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
 import { CardSessions, type CardScreen, type OutputKeeper } from '../../core/card-sessions'
+import { ClaudeCodeTerminals } from '../../core/claude-code-terminals'
 import { keptRange } from '../../core/kept-output'
 import { SessionRouter } from '../../core/session-router'
 import { MAIN_PANE, type PaneLayout } from '../../core/split-tree'
@@ -232,6 +233,8 @@ export class XtermScreen implements CardScreen {
   private focusChanges = 0
   /** The program in this screen's session's foreground, from main; set where the screen is made. */
   foregroundProgram: () => Promise<string | null> = async () => null
+  /** Told when #58's signal may have changed (`claudeCodeInPane`), e.g. by the sidebar (#79). */
+  private readonly claudeCodeListeners = new Set<() => void>()
   /**
    * The shell integration marks of this start (#45 D1, D2): its commands, prompts and last
    * directory, gone with the screen. Rows are xterm markers, forgotten as they leave the scrollback.
@@ -311,6 +314,7 @@ export class XtermScreen implements CardScreen {
     // Both handlers return false, so xterm's own still see the sequence (D3).
     this.term.parser.registerOscHandler(CLAUDE_CODE_PROBE_OSC, () => {
       this.sawProbe = true
+      this.claudeCodeMayHaveChanged()
       return false
     })
     this.term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
@@ -318,6 +322,7 @@ export class XtermScreen implements CardScreen {
         this.sawProbe = false
         this.claudeForeground = false
         this.focusChanges++
+        this.claudeCodeMayHaveChanged()
       }
       return false
     })
@@ -328,8 +333,11 @@ export class XtermScreen implements CardScreen {
       void this.foregroundProgram()
         .catch(() => null)
         .then((program) => {
-          if (change === this.focusChanges) this.claudeForeground = isClaudeCodeProgram(program)
+          if (change !== this.focusChanges) return
+          this.claudeForeground = isClaudeCodeProgram(program)
+          this.claudeCodeMayHaveChanged()
         })
+      this.claudeCodeMayHaveChanged()
       return false
     })
     // Shell integration marks (#45 D1), watched the same way: never swallowed, never answered.
@@ -398,6 +406,37 @@ export class XtermScreen implements CardScreen {
       this.term.modes.sendFocusMode,
       this.sawProbe || this.claudeForeground
     )
+  }
+
+  /**
+   * Whether Claude Code runs in this pane now by #58's signal alone: its probe seen or `claude` in
+   * the foreground, with focus reporting on; a Claude Code card's start doesn't count (#79 D2's
+   * rule 2).
+   */
+  claudeCodeInPane(): boolean {
+    return shiftEnterIsNewLine(
+      false,
+      this.term.modes.sendFocusMode,
+      this.sawProbe || this.claudeForeground
+    )
+  }
+
+  /** Calls `listener` when `claudeCodeInPane` may have changed; returns an unsubscribe function. */
+  onClaudeCodeChange(listener: () => void): () => void {
+    this.claudeCodeListeners.add(listener)
+    return () => this.claudeCodeListeners.delete(listener)
+  }
+
+  /**
+   * Tells the listeners after the sequence being parsed has been applied: xterm's own handler,
+   * which sets focus reporting's mode, runs after these.
+   */
+  private claudeCodeMayHaveChanged(): void {
+    if (this.claudeCodeListeners.size === 0) return
+    queueMicrotask(() => {
+      if (this.disposed) return
+      for (const listener of this.claudeCodeListeners) listener()
+    })
   }
 
   get cols(): number {
@@ -909,6 +948,8 @@ const cellKey = (b: TerminalAppearance['behaviour']): string =>
   `${b.lineHeight}/${b.letterSpacing}/${b.fontWeight}`
 
 let router: SessionRouter | undefined
+/** The cards and shells whose main pane runs Claude Code now (#79 D2's rule 2). */
+const claudeCodeMainPanes = new ClaudeCodeTerminals()
 let registry: CardSessions<XtermScreen> | undefined
 let paneRegistry: CardPanes<XtermScreen> | undefined
 
@@ -974,6 +1015,14 @@ export function cardTerminals(): CardSessions<XtermScreen> {
       (cardId) => {
         const screen = new XtermScreen(startsClaudeCode(cardId))
         screen.foregroundProgram = () => foregroundProgram(registry?.sessionId(cardId))
+        // A new start's main pane runs no Claude Code until it says so (#79 D2's rule 2).
+        claudeCodeMainPanes.set(cardId, false)
+        screen.onClaudeCodeChange(() => {
+          // A stopped start's late sequence leaves its card as its end set it.
+          if (registry?.screen(cardId) !== screen) return
+          const running = registry.runState(cardId)?.kind === 'running'
+          claudeCodeMainPanes.set(cardId, running && screen.claudeCodeInPane())
+        })
         return created(screen, cardId, MAIN_PANE)
       },
       sessionRouter(),
@@ -984,7 +1033,10 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     )
     // When the main pane's shell stops or couldn't start, every extra pane ends with it
     // (#11 D1, D6).
-    registry.onEnded((cardId) => cardPanes().dispose(cardId))
+    registry.onEnded((cardId) => {
+      cardPanes().dispose(cardId)
+      claudeCodeMainPanes.set(cardId, false)
+    })
     // A local main pane's output shows its dev servers' chips (#49 D2, D5, D6).
     registry.watchOutput({
       output: (cardId, data) => devServers().output(cardId, MAIN_PANE, data),
@@ -1034,6 +1086,17 @@ export function cardPanes(): CardPanes<XtermScreen> {
     })
   }
   return paneRegistry
+}
+
+/**
+ * The ids of the cards and shells whose main pane runs Claude Code now, by #58's signal (#79 D2's
+ * rule 2), re-rendering when one changes; never an extra pane's.
+ */
+export function useClaudeCodeTerminals(): ReadonlySet<string> {
+  return useSyncExternalStore(
+    (listener) => claudeCodeMainPanes.subscribe(listener),
+    () => claudeCodeMainPanes.snapshot()
+  )
 }
 
 /** The card's panes and which is focused (#11 D2, D3), re-rendering when they change. */

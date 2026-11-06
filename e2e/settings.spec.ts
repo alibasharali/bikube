@@ -932,6 +932,7 @@ test('#66 AC6: Appearance has no terminal font rows; Terminal has them above the
     'App theme',
     'App font',
     'Default view',
+    'Sidebar layout',
     'Card display limit'
   ])
 

@@ -138,7 +138,7 @@ function CommandPalette({
   // The open view's actions follow its panes and whether it runs (D6).
   const runState = useCardRunState(open?.cardId ?? '')
   const layout = usePaneLayout(open?.cardId ?? '')
-  const { theme, appTheme, defaultView } = useSettings()
+  const { theme, appTheme, defaultView, sidebarLayout } = useSettings()
   const [query, setQuery] = useState('')
   const listId = useId()
   const ids = terminalIds(state)
@@ -157,6 +157,7 @@ function CommandPalette({
           theme,
           appTheme,
           defaultView,
+          sidebarLayout,
           keymap: currentKeymap(),
           platform: window.bikube?.platform ?? '',
           waiting
@@ -174,6 +175,7 @@ function CommandPalette({
       theme,
       appTheme,
       defaultView,
+      sidebarLayout,
       query,
       statusKey,
       waiting

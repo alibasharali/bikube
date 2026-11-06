@@ -2,10 +2,12 @@ import { AppWindow, Blocks } from 'lucide-react'
 import { ACTIVITY_LABELS } from '../../core/activity'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
+import { formatAge } from '../../core/status-time'
 import { ToolIcon } from './AgentLogo'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 import StatusIcon from './StatusIcon'
+import { useRedrawClock } from './status-times'
 
 interface WorkspaceTerminalsProps {
   terminals: readonly OpenTerminal[]
@@ -83,20 +85,23 @@ function AgentSetupRow({
 
 /**
  * A running card's or shell's row. In the Split sidebar's Agents section (#79 D5) it also names
- * its workspace (`workspaceName`), under its title and in its tooltip.
+ * its workspace (`workspaceName`), under its title and in its tooltip, and how long it has been
+ * in its group (`since`, D6) before its status mark.
  */
 export function TerminalRow({
   row,
   current,
   onOpen,
   number,
-  workspaceName
+  workspaceName,
+  since
 }: {
   row: OpenTerminal
   current: boolean
   onOpen: WorkspaceTerminalsProps['onOpen']
   number: number | null
   workspaceName?: string
+  since?: number
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
@@ -152,9 +157,20 @@ export function TerminalRow({
             <AppWindow {...SMALL_ICON} />
           </span>
         )}
+        {workspaceName !== undefined && since !== undefined && <AgentTime since={since} />}
         <StatusMark activity={row.activity} />
       </button>
     </li>
+  )
+}
+
+/** How long an agent row has been in its group (#79 D5), redrawn every 30 s. */
+function AgentTime({ since }: { since: number }): React.JSX.Element {
+  const now = useRedrawClock()
+  return (
+    <span className="workspace-terminal-time" data-testid="agent-row-time">
+      {formatAge(now - since)}
+    </span>
   )
 }
 

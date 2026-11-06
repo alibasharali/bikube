@@ -13,11 +13,13 @@ interface SidebarAgentsProps {
   onOpen: (workspaceId: string, cardId: string) => void
   /** While the terminal modifier is held, the active workspace's rows' numbers; else null. */
   numbers: ReadonlyMap<string, number> | null
+  /** When each row's group last changed, by card id (D6). */
+  stamps: ReadonlyMap<string, number>
 }
 
 /**
  * The Split sidebar's Agents section (#79 D3–D5): every workspace's agent rows under Needs you,
- * Working and Idle, each naming its workspace, scrolling on its own below the workspaces.
+ * Working and Idle, each naming its workspace and how long it has been in its group, scrolling on its own below the workspaces.
  */
 function SidebarAgents({
   groups,
@@ -25,7 +27,8 @@ function SidebarAgents({
   activeId,
   openId,
   onOpen,
-  numbers
+  numbers,
+  stamps
 }: SidebarAgentsProps): React.JSX.Element {
   const id = useId()
   const names = new Map(workspaces.map((w) => [w.id, w.name]))
@@ -58,6 +61,7 @@ function SidebarAgents({
                   onOpen={onOpen}
                   number={numbers?.get(row.cardId) ?? null}
                   workspaceName={names.get(row.workspaceId) ?? ''}
+                  since={stamps.get(row.cardId)}
                 />
               ))}
             </ul>

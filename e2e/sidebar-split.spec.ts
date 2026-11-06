@@ -132,13 +132,15 @@ async function run(line: string): Promise<void> {
 /**
  * AC3's board in Split: A runs Claude Code card `Fix` then plain card `Logs`, B runs Codex card
  * `Port`. Each fake agent waits for a line on stdin: one empty line ends it, leaving its card's
- * shell running for `board` lines.
+ * shell running for `board` lines. With `clock`, the page's clock is faked (time still flowing)
+ * from launch, before the rows' redraw timer starts, so `page.clock.fastForward` fires it.
  */
-async function threeCards(): Promise<void> {
+async function threeCards({ clock = false } = {}): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'bikube-sidebar-split-agents-'))
   dirs.push(root)
   const fake = fakeAgentsHome(root)
   ;({ app, page } = await launchApp({ env: fake.env, dataDir: dataDirWith(SPLIT_SETTINGS) }))
+  if (clock) await page.clock.install()
   await createWorkspace('A')
   await newCard('Fix', 'Claude Code')
   await newCard('Logs')
@@ -335,4 +337,25 @@ test('AC5: a shell running Claude Code moves to the Agents section and back; a p
   // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect.poll(groups, { timeout: 15_000 }).toEqual(['Working 1: Logs (A)'])
   await expect.poll(nested).toEqual(['A: Default shell'])
+})
+
+/** Agent row `title`'s time in its group, as shown. */
+const age = (title: string): Locator => terminal(agents(), title).getByTestId('agent-row-time')
+
+test('AC6: an agent row shows how long it has been in its group, from its last group change', async () => {
+  await threeCards({ clock: true })
+  await expect(age('Fix')).toHaveText('now')
+  await setActivity('Fix', 'working')
+  // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
+  await expect.poll(groups, { timeout: 15_000 }).toEqual(['Working 1: Fix (A)', 'Idle 1: Port (B)'])
+  await expect(age('Fix')).toHaveText('now')
+
+  await page.clock.fastForward('03:00')
+  await expect(age('Fix')).toHaveText('3m')
+  await expect(age('Port')).toHaveText('3m')
+
+  await setActivity('Fix', 'waiting')
+  await expect.poll(groups).toEqual(['Needs you 1: Fix (A)', 'Idle 1: Port (B)'])
+  await expect(age('Fix')).toHaveText('now')
+  await expect(age('Port')).toHaveText('3m')
 })

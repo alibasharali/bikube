@@ -18,6 +18,7 @@ import type { HeldNumbers } from './held-numbers'
 import { useOpenTerminals } from './open-terminals'
 import { useSettings } from './settings'
 import SidebarAgents from './SidebarAgents'
+import { useGroupStamps } from './status-times'
 import { workspaceStore } from './store'
 import UpdateButton from './UpdateButton'
 import { ICON, SMALL_ICON } from './icons'
@@ -92,14 +93,20 @@ function Sidebar({
   // Split (#79 D3): agent rows leave their workspace for the Agents section below; collapsed,
   // the sidebar shows only the badges, as Nested does.
   const split = useSettings().sidebarLayout === 'split'
+  const rows = useMemo(
+    () => workspaces.flatMap((w) => terminals.get(w.id) ?? []),
+    [workspaces, terminals]
+  )
+  // When each running row's group last changed (D6), kept in either layout.
+  const stamps = useGroupStamps(rows)
   const sections = useMemo(
     () =>
       sidebarSections(
-        workspaces.flatMap((w) => terminals.get(w.id) ?? []),
+        rows,
         split ? (row) => isAgentRow(row, claudeCode.has(row.cardId)) : () => false,
         activeId
       ),
-    [workspaces, terminals, split, activeId, claudeCode]
+    [rows, split, activeId, claudeCode]
   )
   const numbers = heldNumbers === 'terminal' ? sections.numbers : null
 
@@ -320,6 +327,7 @@ function Sidebar({
           openId={openId}
           onOpen={onOpenTerminal}
           numbers={numbers}
+          stamps={stamps}
         />
       )}
       <div className="sidebar-footer">

@@ -415,6 +415,28 @@ test('AC10: collapsed, Split shows a divider and one icon per agent after the ba
   await expect(page.getByTestId('agent-icon')).toHaveCount(0)
 })
 
+test('AC12: collapsed with no agents, the workspaces use the whole sidebar, not half', async () => {
+  ;({ app, page } = await launchApp({ dataDir: dataDirWith(SPLIT_SETTINGS) }))
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 720))
+  for (let i = 1; i <= 15; i++) await createWorkspace(`W${i}`)
+  const sidebar = page.getByTestId('sidebar')
+  await page.getByTestId('sidebar-toggle').click()
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'true')
+  await expect(page.getByTestId('sidebar-agent-icons')).toHaveCount(0)
+  const layout = (): Promise<{ sidebar: number; list: number }> =>
+    sidebar.evaluate((nav) => ({
+      sidebar: nav.clientHeight,
+      list: (nav.querySelector('.workspace-list') as HTMLElement).getBoundingClientRect().height
+    }))
+  await expect.poll(async () => (await layout()).sidebar).toBeGreaterThan(600)
+  await expect
+    .poll(async () => {
+      const box = await layout()
+      return box.list > box.sidebar / 2 + 50
+    })
+    .toBe(true)
+})
+
 /** Picks Settings' Theme `name` (Dark or Light) and closes Settings. */
 async function pickTheme(name: 'Dark' | 'Light'): Promise<void> {
   const settings = page.getByTestId('settings-dialog')

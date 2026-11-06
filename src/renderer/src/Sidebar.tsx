@@ -241,7 +241,12 @@ function Sidebar({
       </div>
       <ul
         ref={listRef}
-        className={split ? 'workspace-list workspace-list-split' : 'workspace-list'}
+        className={
+          // Capped at half only while something follows it: collapsed, the agent icons (#79 D3).
+          split && (!collapsed || sections.agents.length > 0)
+            ? 'workspace-list workspace-list-split'
+            : 'workspace-list'
+        }
         onDragEnter={onDragOver}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}

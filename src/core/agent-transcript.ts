@@ -82,20 +82,27 @@ export async function isOutputFile(path: string, fs: OutputFs = nodeOutputFs): P
 const CHECKS_AT_ONCE = 8
 
 /** `outputs` without the files not on disk (#79 D9), at most 8 checked at a time. */
-async function outputsOnDisk(
+export async function outputsOnDisk(
   outputs: readonly AgentOutput[],
   home: string,
   fs: OutputFs
 ): Promise<AgentOutput[]> {
   const kept = outputs.map((output) => output.kind !== 'file')
+  // One row per file however it was written (`~/a.pdf`, `/Users/me/a.pdf`): the newest wins.
+  const paths = outputs.map((output) =>
+    output.kind === 'file' ? outputFilePath(output.path, home) : null
+  )
+  const newest = new Map<string, number>()
+  paths.forEach((path, i) => {
+    if (path !== null) newest.set(path, i)
+  })
   let next = 0
   const worker = async (): Promise<void> => {
     while (next < outputs.length) {
       const i = next++
-      const output = outputs[i]
-      if (output.kind !== 'file') continue
-      const path = outputFilePath(output.path, home)
-      kept[i] = path !== null && (await isOutputFile(path, fs))
+      const path = paths[i]
+      if (outputs[i].kind !== 'file' || path === null || newest.get(path) !== i) continue
+      kept[i] = await isOutputFile(path, fs)
     }
   }
   await Promise.all(Array.from({ length: CHECKS_AT_ONCE }, worker))

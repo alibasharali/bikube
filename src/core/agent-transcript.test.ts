@@ -17,9 +17,11 @@ import {
   findSessionTranscript,
   isOutputFile,
   outputFilePath,
+  outputsOnDisk,
   readAgentSummary,
   readSessionSummary,
   transcriptPath,
+  type OutputFs,
   type TailFs,
   type TranscriptFs
 } from './agent-transcript'
@@ -453,6 +455,26 @@ describe("the summary's files checked on disk (#79 D9)", () => {
     expect(await isOutputFile(join(root, 'broken.pdf'))).toBe(false)
     expect(await isOutputFile(folder)).toBe(false)
     expect(await isOutputFile(join(root, 'missing.pdf'))).toBe(false)
+  })
+
+  it('shows a file written as ~/ and as its absolute path once, as its newest entry', async () => {
+    const isFile = { isFile: () => true, isSymbolicLink: () => false }
+    const disk: OutputFs = { lstat: async () => isFile, stat: async () => isFile }
+    const shown = await outputsOnDisk(
+      [
+        { kind: 'file', path: '~/Downloads/a.pdf', at: 1 },
+        { kind: 'artifact', url: 'https://claude.ai/artifact/abc', at: 2 },
+        { kind: 'file', path: '/h/Downloads/a.pdf', at: 3 },
+        { kind: 'file', path: '~/Downloads/b.pdf', at: 4 }
+      ],
+      '/h',
+      disk
+    )
+    expect(shown.map((o) => (o.kind === 'file' ? o.path : o.url))).toEqual([
+      'https://claude.ai/artifact/abc',
+      '/h/Downloads/a.pdf',
+      '~/Downloads/b.pdf'
+    ])
   })
 
   it('checks at most 8 files at a time, so a stalled mount ties up few threads', async () => {

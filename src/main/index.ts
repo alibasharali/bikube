@@ -225,20 +225,26 @@ function startApp(): void {
     const syncBusy = sync.busy()
     const synced = sync.flush()
     if (holds > 0) terminals.forceKillAll()
-    const hold = quitHold({ holds, liveShells: terminals.sessionCount > 0, syncBusy })
+    const hold = quitHold({
+      holds,
+      liveShells: terminals.sessionCount > 0,
+      syncBusy,
+      transcriptsBusy: transcripts.busy()
+    })
     busyAtLastQuit = syncBusy
     if (!hold.hold) return
     holds++
     event.preventDefault()
     // The transcript backups the renderer sent before `quitSaved` (#80 D9) are copied with async
-    // fs: they finish before the shells stop, within the same wait.
-    const saved = told
-      ? boundedWait(
-          quitSaved.then(() => transcripts.idle()),
-          QUIT_SAVE_WAIT_MS
-        )
-      : Promise.resolve()
-    const done = hold.shells ? Promise.all([saved.then(() => terminals.killAll()), synced]) : synced
+    // fs: they finish before the shells stop, within the same wait, and a quit with no shell is
+    // held for them (and those sent earlier) as well.
+    const saved = boundedWait(
+      (told ? quitSaved : Promise.resolve()).then(() => transcripts.idle()),
+      QUIT_SAVE_WAIT_MS
+    )
+    const done = hold.shells
+      ? Promise.all([saved.then(() => terminals.killAll()), synced])
+      : Promise.all([saved, synced])
     void boundedWait(done, QUIT_WAIT_MS).then(() => app.quit())
   })
 

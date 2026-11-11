@@ -223,6 +223,38 @@ describe('backup', () => {
     expect(await second).toBe('unchanged')
   })
 
+  it('goes on with a card’s queue after a task that threw, and is busy only while one runs', async () => {
+    putTranscript('{}\n')
+    let fail = true
+    const base = recordingFs()
+    const failing: BackupFs = {
+      ...base,
+      promises: {
+        ...base.promises,
+        mkdir: (path, options) =>
+          fail ? Promise.reject(new Error('disk full')) : base.promises.mkdir(path, options)
+      }
+    }
+    const throwing = new TranscriptBackups({
+      dir,
+      home: () => home,
+      fs: failing,
+      log: () => {
+        throw new Error('log broke')
+      }
+    })
+    expect(throwing.busy()).toBe(false)
+    const first = throwing.backup(CARD, folder, SESSION)
+    expect(throwing.busy()).toBe(true)
+    fail = true
+    const second = throwing.backup(CARD, folder, SESSION).finally(() => (fail = false))
+    await expect(first).rejects.toThrow('log broke')
+    await expect(second).rejects.toThrow('log broke')
+    expect(await throwing.backup(CARD, folder, SESSION)).toBe('copied')
+    await throwing.idle()
+    expect(throwing.busy()).toBe(false)
+  })
+
   it('refuses a session id that isn’t a UUID, a relative or missing folder, reading nothing', async () => {
     putTranscript('{}\n')
     expect(await backups.backup(CARD, folder, '../x')).toBe('refused')

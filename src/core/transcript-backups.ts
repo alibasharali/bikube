@@ -112,6 +112,11 @@ export class TranscriptBackups {
     return join(this.options.dir, backupFolderName(cardId))
   }
 
+  /** Whether any card's task (backup, delete, restore) is queued or running. */
+  busy(): boolean {
+    return this.queues.size > 0
+  }
+
   /** Settles once every task queued so far (backups, deletes, restores) is done. */
   async idle(): Promise<void> {
     await Promise.allSettled([...this.queues.values()])

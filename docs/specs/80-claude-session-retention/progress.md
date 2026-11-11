@@ -21,4 +21,4 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 ## Verification
 
 - done (ALL PASS, e2e against the built app)
-- UX review: running
+- UX review: done (2 must-fix fixed in r1, re-check CLEAN)

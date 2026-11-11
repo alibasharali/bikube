@@ -17,6 +17,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-11-11 S4: D12's `<n>` outside `low` read with D5's definition (the set value, or 30 when unset); `ok` carries its days.
 - 2026-11-11 S4: spec's test note corrected: sync.spec AC6's local card on machine B is unchanged (claudeStarted false after sync, so D11 skips the check).
+- 2026-11-11 ship review: fixed as guards the spec is silent on: restored transcripts get the current time (else Claude Code's cleanup deletes them again at the resume), a smaller transcript of the same session never replaces its backup (`kept`), symlinked folders tried by real path too, per-turn backups async on a per-card queue with the quit held for them.
+- 2026-11-11 retro: spec misreads (D8's worktree path, sync's claudeStarted) corrected in the spec; one-offs, the facts now live in AGENTS.md and the spec.
 
 ## Verification
 

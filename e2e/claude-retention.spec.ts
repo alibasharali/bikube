@@ -15,7 +15,10 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { encodeProjectFolder } from '../src/core/claude-stats'
+import { FIRST_PROMPT } from '../src/core/startup-command'
 import { backToBoard, boardCard, closeCard, expectCardOpen } from './card-view'
+import { addFakeAgents } from './fake-agents'
+import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -25,7 +28,9 @@ import { plainCards } from './plain-cards'
 // view (D5) whose buttons raise the setting (D4), hide it for the run or turn the offer off (D6).
 // The home is a fake one (`BIKUBE_HOME_DIR`) with the fake `claude` and `ssh` on its login PATH.
 // S3: a local Claude Code card's transcript is backed up into `<userData>/transcripts` after each
-// `board usage` and when its main pane stops (D8–D10).
+// `board usage` and when its main pane stops (D8–D10). S4: opening a card that resumes Claude Code
+// puts its transcript back from the backup when Claude Code deleted it (D11), or asks when neither
+// is here (D12).
 
 const REMOTE_DIR = '/tmp/bikube-remote'
 const NOTICE =
@@ -325,15 +330,18 @@ test('#80 AC5: a file made invalid after the notice showed is left alone, with t
   expect(readFileSync(settingsFile, 'utf8')).toBe('{ nope')
 })
 
-/** Card `title`'s id and session id, from the saved state file. */
-async function cardOf(title: string): Promise<{ id: string; agentSessionId: string }> {
-  let card: { id: string; agentSessionId: string } | undefined
+type SavedCard = { id: string; title: string; agentSessionId: string; claudeStarted: boolean }
+
+/** Card `title`'s id and session id, from the saved state file, in any workspace. */
+async function cardOf(title: string): Promise<SavedCard> {
+  let card: SavedCard | undefined
   await expect
     .poll(() => {
       try {
         const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
-        const cards: { id: string; title: string; agentSessionId: string }[] =
-          saved.state.workspaces[0].cards
+        const cards: SavedCard[] = saved.state.workspaces.flatMap(
+          (w: { cards: SavedCard[] }) => w.cards
+        )
         card = cards.find((c) => c.title === title)
       } catch {
         card = undefined
@@ -471,4 +479,150 @@ test('#80 AC11: a new session keeps only its files; a card not on the board lose
   expect(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')).not.toContain('transcripts')
   await expect.poll(() => existsSync(join(syncDir, 'bikube-board.json'))).toBe(true)
   expect(readFileSync(join(syncDir, 'bikube-board.json'), 'utf8')).not.toContain('transcripts')
+})
+
+const GONE = "This card's Claude Code conversation isn't on this machine."
+
+/** The fake claude's log lines. */
+const logLines = (): string[] => claudeLogLines(fake.log)
+
+/** Closes the open running card: it is Stopped on the board. */
+async function stopCard(title: string): Promise<void> {
+  await closeCard(page)
+  await page.getByTestId('confirm-close').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(boardCard(page, title).getByTestId('card-status-label')).toHaveText('Stopped')
+}
+
+test('#80 AC9: a deleted transcript is put back from the backup before claude resumes it', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const card = await startedClaudeCard('agent')
+  const transcript = transcriptOf(card.agentSessionId)
+  const sessionFolder = transcript.slice(0, -'.jsonl'.length)
+  mkdirSync(join(sessionFolder, 'subagents'), { recursive: true })
+  writeFileSync(join(sessionFolder, 'subagents', 'agent-a.jsonl'), '{"sub":1}\n')
+  appendFileSync(transcript, '{"type":"assistant","kept":true}\n')
+  const kept = contents(transcript)
+  await stopCard('agent')
+  const copy = join(backupFolder(card.id), `${card.agentSessionId}.jsonl`)
+  await expect.poll(() => contents(copy)).toBe(kept)
+
+  // Claude Code's cleanup deleted the conversation.
+  rmSync(transcript)
+  rmSync(sessionFolder, { recursive: true })
+  const before = logLines().length
+  await openCard('agent')
+  await expect.poll(logLines).toHaveLength(before + 1)
+  // Back with the backup's two lines when claude was asked to resume it (the fake writes one).
+  expect(contents(transcript)).toBe(kept)
+  expect(contents(join(sessionFolder, 'subagents', 'agent-a.jsonl'))).toBe('{"sub":1}\n')
+  expect(logLines().at(-1)).toBe(`${SETTINGS_ARGS} --resume ${card.agentSessionId}`)
+  await expect(page.getByTestId('conversation-gone')).toHaveCount(0)
+  await backToBoard(page)
+  await expect(boardCard(page, 'agent').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('#80 AC10: with neither a transcript nor a backup the card asks; Back leaves it Stopped, Start a new conversation starts it fresh', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await page
+    .getByTestId('column')
+    .filter({ has: page.getByRole('heading', { name: 'Backlog', exact: true }) })
+    .getByTestId('new-card')
+    .click()
+  await page.getByTestId('new-card-input').fill('agent')
+  await page.getByTestId('new-card-description').fill('# Goal\nFix the login bug')
+  await page.getByTestId('new-card-startup').selectOption({ label: 'Claude Code' })
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'agent')
+  await claudeStarted()
+  const card = await cardOf('agent')
+  await page.keyboard.type('hello')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => existsSync(transcriptOf(card.agentSessionId))).toBe(true)
+  await stopCard('agent')
+  await expect.poll(() => existsSync(backupFolder(card.id))).toBe(true)
+  rmSync(join(fake.home, '.claude', 'projects'), { recursive: true })
+  rmSync(backupFolder(card.id), { recursive: true })
+  const before = logLines().length
+
+  await openCard('agent')
+  const gone = page.getByTestId('conversation-gone')
+  await expect(gone).toContainText(GONE)
+  await expect(gone).toContainText(
+    'Claude Code deletes conversations after 30 days, or it ran on another machine.'
+  )
+  await expect(page.getByTestId('card-view').getByTestId('terminal')).toHaveCount(0)
+  await page.getByTestId('conversation-gone-back').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(boardCard(page, 'agent').getByTestId('card-status-label')).toHaveText('Stopped')
+
+  // Opening it again checks again.
+  await openCard('agent')
+  await expect(gone).toContainText(GONE)
+  expect(logLines()).toHaveLength(before)
+  await page.getByTestId('conversation-gone-start').click()
+  await expect.poll(logLines).toHaveLength(before + 1)
+  expect(logLines().at(-1)).toBe(
+    `${SETTINGS_ARGS} --session-id ${card.agentSessionId} ${FIRST_PROMPT}`
+  )
+  await claudeStarted()
+  await expect(gone).toHaveCount(0)
+})
+
+test('#80 AC12: SSH, Codex and plain cards are never backed up or asked; a new Claude Code card starts at once', async () => {
+  addFakeAgents(fake.home, join(root, 'agents.log'))
+  await launch()
+  await createWorkspace(repo, 'repo')
+  // A Claude Code card that never started Claude Code runs at once, with no check.
+  await newCard('fresh')
+  await claudeStarted()
+  await expect(page.getByTestId('conversation-check')).toHaveCount(0)
+  await backToBoard(page)
+
+  await newCard('plain', false)
+  await stopCard('plain')
+  await page
+    .getByTestId('column')
+    .filter({ has: page.getByRole('heading', { name: 'Backlog', exact: true }) })
+    .getByTestId('new-card')
+    .click()
+  await page.getByTestId('new-card-input').fill('cx')
+  await page.getByTestId('new-card-startup').selectOption({ label: 'Codex' })
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'cx')
+  await expect.poll(terminalText, { timeout: 15_000 }).toContain('fake-codex')
+  await stopCard('cx')
+
+  await createWorkspace(REMOTE_DIR, 'remote', 'devbox')
+  await newCard('remote agent')
+  await claudeStarted()
+  await page.keyboard.type('hello')
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => (await cardOf('remote agent')).claudeStarted).toBe(true)
+  const remote = await cardOf('remote agent')
+  // Its conversation is nowhere here, and it still resumes as before.
+  rmSync(join(fake.home, '.claude', 'projects'), { recursive: true, force: true })
+  await stopCard('remote agent')
+  await openCard('remote agent')
+  await expect
+    .poll(() => logLines().at(-1))
+    .toMatch(new RegExp(`--resume ${remote.agentSessionId}$`))
+  await expect(page.getByTestId('conversation-gone')).toHaveCount(0)
+  await backToBoard(page)
+
+  await page.getByTestId('workspace-item').filter({ hasText: 'repo' }).click()
+  for (const title of ['plain', 'cx']) {
+    await openCard(title)
+    await expect(page.getByTestId('conversation-gone')).toHaveCount(0)
+    await expect.poll(terminalText, { timeout: 15_000 }).not.toBe('')
+    await backToBoard(page)
+  }
+  const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+  const ids: string[] = saved.state.workspaces.flatMap(
+    (w: { cards: { id: string; title: string }[] }) =>
+      w.cards.filter((c) => c.title !== 'fresh').map((c) => c.id)
+  )
+  for (const id of ids) expect(existsSync(backupFolder(id))).toBe(false)
 })

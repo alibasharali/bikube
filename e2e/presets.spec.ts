@@ -7,6 +7,7 @@ import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { backToBoard, belowSeparator, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { encodeProjectFolder } from '../src/core/claude-stats'
 import { FIRST_PROMPT } from '../src/core/startup-command'
 
 // Agent resume presets (#21, Pi #65): Codex, Gemini CLI, OpenCode and Pi in every startup command
@@ -453,6 +454,10 @@ test('AC7: a state file from before #21 loads every card, and Claude Code resume
     }
   }
   writeFileSync(join(dataDir, 'bikube-state.json'), JSON.stringify(old))
+  // Its conversation, so the resume finds it (#80 D11).
+  const projects = join(home, '.claude', 'projects', encodeProjectFolder(dir))
+  mkdirSync(projects, { recursive: true })
+  writeFileSync(join(projects, `${u}.jsonl`), '{"type":"summary"}\n')
   await launch()
 
   for (const title of ['sh', 'agent', 'custom']) {

@@ -5,7 +5,7 @@ import type {
   SettingsWriteResult
 } from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
-import type { ClaudeRetention } from '../core/claude-retention-types'
+import type { ClaudeRetention, ConversationPrepare } from '../core/claude-retention-types'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AgentSummaryRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
@@ -106,6 +106,7 @@ export const IPC = {
   claudeRetentionSet: 'claudeRetention:set',
   transcriptsBackup: 'transcripts:backup',
   transcriptsDelete: 'transcripts:delete',
+  transcriptsPrepare: 'transcripts:prepare',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -240,6 +241,11 @@ export interface TranscriptsApi {
   backup(cardId: string, folder: string, sessionId: string): void
   /** Removes the card's backups, if any. */
   delete(cardId: string): void
+  /**
+   * Before a resume (#80 D11): whether the session's transcript is in Claude Code's projects for
+   * `folder`, put back there from the card's backup when it isn't, or missing.
+   */
+  prepare(cardId: string, folder: string, sessionId: string): Promise<ConversationPrepare>
 }
 
 /** App-wide settings, stored by main in `userData/bikube-settings.json` (#10 D6). */

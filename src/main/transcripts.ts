@@ -1,7 +1,8 @@
-import { app, ipcMain, type IpcMainEvent } from 'electron'
+import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import {
   chmodSync,
   copyFileSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   readdirSync,
@@ -11,6 +12,7 @@ import {
   utimesSync
 } from 'node:fs'
 import { join } from 'node:path'
+import type { ConversationPrepare } from '../core/claude-retention-types'
 import { TranscriptBackups } from '../core/transcript-backups'
 import { IPC } from '../shared/api'
 import { userHome } from './home'
@@ -35,11 +37,12 @@ export function registerTranscripts(): TranscriptBackups {
       utimesSync,
       renameSync,
       rmSync,
-      readdirSync
+      readdirSync,
+      linkSync
     }
   })
 
-  const fromMainFrame = (event: IpcMainEvent): boolean =>
+  const fromMainFrame = (event: IpcMainEvent | IpcMainInvokeEvent): boolean =>
     event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
 
   ipcMain.on(IPC.transcriptsBackup, (event, cardId: unknown, folder: unknown, id: unknown) => {
@@ -48,5 +51,11 @@ export function registerTranscripts(): TranscriptBackups {
   ipcMain.on(IPC.transcriptsDelete, (event, cardId: unknown) => {
     if (fromMainFrame(event)) backups.delete(cardId)
   })
+  // Before a resume (D11): the transcript there, put back from the backup, or missing.
+  ipcMain.handle(
+    IPC.transcriptsPrepare,
+    (event, cardId: unknown, folder: unknown, id: unknown): ConversationPrepare =>
+      fromMainFrame(event) ? backups.prepare(cardId, folder, id) : 'refused'
+  )
   return backups
 }

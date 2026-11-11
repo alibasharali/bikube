@@ -51,7 +51,8 @@ const recordingFs = (): BackupFs => ({
   utimesSync: fs.utimesSync,
   renameSync: fs.renameSync,
   rmSync: (path, options) => fs.rmSync(path, options),
-  readdirSync: (path) => fs.readdirSync(path)
+  readdirSync: (path) => fs.readdirSync(path),
+  linkSync: fs.linkSync
 })
 
 /** Writes the session's transcript in the fake home. */
@@ -170,5 +171,70 @@ describe('delete and prune', () => {
     writeFileSync(join(dir, 'stray.tmp'), '')
     backups.prune([CARD])
     expect(readdirSync(dir)).toEqual([sha(CARD)])
+  })
+})
+
+describe('prepare (D11)', () => {
+  it('answers present when the transcript is there, touching nothing', () => {
+    putTranscript('{"a":1}\n')
+    expect(backups.prepare(CARD, folder, SESSION)).toBe('present')
+    expect(copies).toEqual([])
+  })
+
+  it('restores the backed-up transcript and its folder when the transcript is gone', () => {
+    putTranscript('{"a":1}\n')
+    mkdirSync(join(projectDir(), SESSION, 'subagents'), { recursive: true })
+    writeFileSync(join(projectDir(), SESSION, 'subagents', 'agent-a.jsonl'), '{"sub":1}\n')
+    expect(backups.backup(CARD, folder, SESSION)).toBe('copied')
+    rmSync(join(home, '.claude'), { recursive: true, force: true })
+
+    expect(backups.prepare(CARD, folder, SESSION)).toBe('restored')
+    expect(readFileSync(transcript(), 'utf8')).toBe('{"a":1}\n')
+    expect(readFileSync(join(projectDir(), SESSION, 'subagents', 'agent-a.jsonl'), 'utf8')).toBe(
+      '{"sub":1}\n'
+    )
+    expect(readdirSync(projectDir()).sort()).toEqual([SESSION, `${SESSION}.jsonl`])
+    // The restored copy reads unchanged: the next backup copies nothing.
+    copies = []
+    expect(backups.backup(CARD, folder, SESSION)).toBe('unchanged')
+  })
+
+  it('answers missing with no transcript and no backup of that session', () => {
+    expect(backups.prepare(CARD, folder, SESSION)).toBe('missing')
+    putTranscript('{}\n', OTHER)
+    backups.backup(CARD, folder, OTHER)
+    rmSync(transcript(OTHER))
+    expect(backups.prepare(CARD, folder, SESSION)).toBe('missing')
+    expect(existsSync(transcript())).toBe(false)
+  })
+
+  it('never overwrites a transcript or folder that appeared meanwhile', () => {
+    putTranscript('{"old":1}\n')
+    mkdirSync(join(projectDir(), SESSION))
+    writeFileSync(join(projectDir(), SESSION, 'a.json'), 'old')
+    backups.backup(CARD, folder, SESSION)
+    rmSync(transcript())
+    writeFileSync(join(projectDir(), SESSION, 'a.json'), 'new')
+    // The transcript appears between the check and the copy: a link onto it fails.
+    const fsWithRace: BackupFs = {
+      ...recordingFs(),
+      linkSync: (from, to) => {
+        writeFileSync(to, '{"new":1}\n')
+        fs.linkSync(from, to)
+      }
+    }
+    const racing = new TranscriptBackups({ dir, home: () => home, fs: fsWithRace, log: () => {} })
+    expect(racing.prepare(CARD, folder, SESSION)).toBe('present')
+    expect(readFileSync(transcript(), 'utf8')).toBe('{"new":1}\n')
+    expect(readFileSync(join(projectDir(), SESSION, 'a.json'), 'utf8')).toBe('new')
+    expect(readdirSync(projectDir()).sort()).toEqual([SESSION, `${SESSION}.jsonl`])
+  })
+
+  it('refuses what backup refuses, reading nothing', () => {
+    expect(backups.prepare(CARD, folder, '../x')).toBe('refused')
+    expect(backups.prepare(CARD, 'repo', SESSION)).toBe('refused')
+    expect(backups.prepare(CARD, join(root, 'gone'), SESSION)).toBe('refused')
+    expect(backups.prepare('', folder, SESSION)).toBe('refused')
+    expect(existsSync(join(home, '.claude'))).toBe(false)
   })
 })

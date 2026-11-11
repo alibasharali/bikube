@@ -17,3 +17,14 @@ export const retentionNotice = (days: number): string =>
 /** Agent setup's warning (#80 D7) for the days in effect. */
 export const retentionWarning = (days: number): string =>
   `Claude Code deletes conversations older than ${days} days; Bikube cards can't resume them after that.`
+
+/**
+ * What main's prepare before a resume found (#80 D11): the transcript `present`, `restored` from
+ * the card's backup, or `missing` with no backup (D12's panel); `refused` (a card id, folder or
+ * session id that doesn't check) and `failed` start the card as today.
+ */
+export type ConversationPrepare = 'present' | 'restored' | 'missing' | 'refused' | 'failed'
+
+/** The card view's text for a card whose conversation is gone (#80 D12). */
+export const conversationGoneText = (days: number): string =>
+  `This card's Claude Code conversation isn't on this machine. Claude Code deletes conversations after ${days} days, or it ran on another machine.`

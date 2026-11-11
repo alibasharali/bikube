@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -292,7 +293,7 @@ test('AC3/AC4: claude quits to a shell; exit stops the card; opening it resumes'
   await expect.poll(bufferLines).toContain(dir)
 })
 
-test('AC5: with nothing to resume, claude starts fresh with the same session id', async () => {
+test('AC5: a resume that fails starts claude fresh with the same session id', async () => {
   const dir = makeDir('alpha')
   const u = await claudeAgent(dir)
   await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
@@ -310,6 +311,27 @@ test('AC5: with nothing to resume, claude starts fresh with the same session id'
   expect(lines.at(-1)).toBe(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
   await back()
   await expect(card('agent').getByTestId('card-status-label')).toHaveText('Running')
+})
+
+test('AC5 (#80 D12): with neither a transcript nor a backup, the card asks before starting fresh', async () => {
+  const dir = makeDir('alpha')
+  const u = await claudeAgent(dir)
+  await stopAgent(dir)
+  // Claude Code's conversation and Bikube's backup of it are both gone.
+  const userData = await app.evaluate(({ app }) => app.getPath('userData'))
+  rmSync(join(home, '.claude', 'projects'), { recursive: true, force: true })
+  rmSync(join(userData, 'transcripts'), { recursive: true, force: true })
+
+  await openCard('agent')
+  await expect(page.getByTestId('conversation-gone')).toContainText(
+    "This card's Claude Code conversation isn't on this machine."
+  )
+  expect(logLines()).toHaveLength(1)
+  await page.getByTestId('conversation-gone-start').click()
+  await expect
+    .poll(logLines)
+    .toEqual([`${SETTINGS_ARGS} --session-id ${u}`, `${SETTINGS_ARGS} --session-id ${u}`])
+  await expect.poll(bufferLines).toContain(`fake-claude ${SETTINGS_ARGS} --session-id ${u}`)
 })
 
 type HookSettings = { hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]> }

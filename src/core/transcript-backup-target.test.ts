@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { transcriptBackupTarget } from './transcript-backup-target'
+import { conversationCheckTarget, transcriptBackupTarget } from './transcript-backup-target'
 import type { Card } from './workspace-store'
 
 const SESSION = '0b6f1c1e-5d2a-4c1b-9a8e-3f1d2c4b5a69'
@@ -36,5 +36,18 @@ describe('transcriptBackupTarget (#80 D8)', () => {
     expect(
       transcriptBackupTarget(card({ startup: { kind: 'custom', command: 'claude' } }))
     ).toBeNull()
+  })
+})
+
+describe('conversationCheckTarget (#80 D11, AC12)', () => {
+  it('checks a local Claude Code card that started Claude Code', () => {
+    expect(conversationCheckTarget(card())).toEqual({ folder: '/repo', sessionId: SESSION })
+  })
+
+  it('skips a card that never started Claude Code, SSH cards, plain cards and presets', () => {
+    expect(conversationCheckTarget(card({ claudeStarted: false }))).toBeNull()
+    expect(conversationCheckTarget(card({ host: 'dev' }))).toBeNull()
+    expect(conversationCheckTarget(card({ startup: { kind: 'shell' } }))).toBeNull()
+    expect(conversationCheckTarget(card({ startup: { kind: 'codex' } }))).toBeNull()
   })
 })

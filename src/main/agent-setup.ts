@@ -8,6 +8,7 @@ import {
   type FileActionDeps
 } from '../core/agent-setup-open'
 import { readAgentSetup } from '../core/agent-setup-reader'
+import { readClaudeRetention } from '../core/claude-retention'
 import type { AgentSetupRead, SettingsWriteResult } from '../core/agent-setup-snapshot'
 import {
   agentSetupConfigWrite,
@@ -85,10 +86,15 @@ export function registerAgentSetup(
     const folder = resolve(requested)
     let read = reading.get(folder)
     if (!read) {
-      read = readAgentSetup({ folder, home: userHome(), bikubeSettings: claudeSettingsPath() })
-        .then((snapshot): AgentSetupRead => {
+      const home = userHome()
+      read = Promise.all([
+        readAgentSetup({ folder, home, bikubeSettings: claudeSettingsPath() }),
+        // #80 D7: the warning follows D3's read, which tells a link from a file.
+        readClaudeRetention(home)
+      ])
+        .then(([snapshot, claudeRetention]): AgentSetupRead => {
           listed.set(folder, snapshot.paths)
-          return { ok: true, snapshot }
+          return { ok: true, snapshot: { ...snapshot, claudeRetention } }
         })
         .finally(() => reading.delete(folder))
       reading.set(folder, read)

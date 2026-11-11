@@ -411,6 +411,11 @@ export interface WorkspaceStore {
   /** Records that `claude --session-id` was typed for this card (#5 D5). */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
   /**
+   * Start a new conversation (#80 D12): the card types its first-start line again, under the same
+   * session id.
+   */
+  clearClaudeStarted(workspaceId: string, cardId: string): Result<Card>
+  /**
    * The Claude Code session the card resumes from now on, reported by Bikube's hooks once it has
    * a conversation (a message sent, a `/resume`): its agent session id, and started.
    */
@@ -942,6 +947,13 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return this.updateCard(workspaceId, cardId, (card) => ({
       ok: true,
       value: { ...card, claudeStarted: true }
+    }))
+  }
+
+  clearClaudeStarted(workspaceId: string, cardId: string): Result<Card> {
+    return this.updateCard(workspaceId, cardId, (card) => ({
+      ok: true,
+      value: { ...card, claudeStarted: false }
     }))
   }
 

@@ -7,13 +7,16 @@
  * or holds the edited key in another form) is never written. Plain TS with no Electron imports: the
  * file system is injected (Node's by default), so Vitest drives real temporary folders.
  *
+ * `writeSettingsJson` is the same write for any Claude settings file, also used for the user's
+ * `~/.claude/settings.json` (#80 D4, `claude-retention.ts`).
+ *
  * Which edits are allowed (D28: a listed plugin, a `.mcp.json` server, a boolean or number setting)
  * is the caller's check; this module only applies them.
  */
 
 import { randomBytes } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { SettingsWriteResult } from './agent-setup-snapshot'
 
 /** One change to settings.local.json. */
@@ -134,8 +137,40 @@ export async function writeSettingsLocal(
   edit: SettingsEdit,
   fs: SettingsFs = nodeSettingsFs
 ): Promise<SettingsWriteResult> {
-  const dir = join(folder, '.claude')
-  const file = settingsLocalPath(folder)
+  return writeSettingsJson(
+    join(folder, '.claude'),
+    NAME,
+    (settings) => applyEdit(settings, edit),
+    fs,
+    // Removing a key from a file that isn't there changes nothing.
+    edit.kind !== 'remove'
+  )
+}
+
+/**
+ * What a change does to the settings object, which it edits in place: `null` to write it,
+ * `'unchanged'` to write nothing and succeed, or the failure to return without writing.
+ */
+export type SettingsChange = (
+  settings: Record<string, unknown>
+) => SettingsWriteResult | 'unchanged' | null
+
+/**
+ * Applies `change` to `<dir>/<name>` (#68 D23, #80 D4): the file read again just before, every
+ * other key and their order kept, 2-space JSON and a final newline written to a `.tmp` in `dir`
+ * and renamed over it, `dir` created when missing. Nothing is written through a link (`dir` or the
+ * file), to a file that isn't a regular one, or over invalid JSON or a non-object; each failure's
+ * `message` names the file. `createMissing` false: a missing file stays missing.
+ */
+export async function writeSettingsJson(
+  dir: string,
+  name: string,
+  change: SettingsChange,
+  fs: SettingsFs = nodeSettingsFs,
+  createMissing = true
+): Promise<SettingsWriteResult> {
+  const file = join(dir, name)
+  const dirName = basename(dir)
   // Never through a link, and never read or replace anything but a regular file (D28).
   const kind = async (path: string): Promise<'missing' | 'link' | 'file' | 'other' | Error> => {
     try {
@@ -146,38 +181,39 @@ export async function writeSettingsLocal(
     }
   }
   const dirKind = await kind(dir)
-  if (dirKind === 'link') return failure('link', "Couldn't save: .claude is a link")
+  if (dirKind === 'link') return failure('link', `Couldn't save: ${dirName} is a link`)
   if (dirKind instanceof Error) {
-    return failure('failed', `Couldn't save ${NAME}: ${dirKind.message}`)
+    return failure('failed', `Couldn't save ${name}: ${dirKind.message}`)
   }
   const fileKind = await kind(file)
-  if (fileKind === 'link') return failure('link', `Couldn't save: ${NAME} is a link`)
-  if (fileKind === 'other') return failure('link', `Couldn't save: ${NAME} is not a regular file`)
+  if (fileKind === 'link') return failure('link', `Couldn't save: ${name} is a link`)
+  if (fileKind === 'other') return failure('link', `Couldn't save: ${name} is not a regular file`)
   if (fileKind instanceof Error) {
-    return failure('failed', `Couldn't save ${NAME}: ${fileKind.message}`)
+    return failure('failed', `Couldn't save ${name}: ${fileKind.message}`)
   }
   let text: string | null = null
   try {
     text = await fs.readFile(file, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      return failure('failed', `Couldn't save ${NAME}: ${(error as Error).message}`)
+      return failure('failed', `Couldn't save ${name}: ${(error as Error).message}`)
     }
   }
-  if (text === null && edit.kind === 'remove') return { ok: true }
+  if (text === null && !createMissing) return { ok: true }
   let settings: unknown = {}
   if (text !== null) {
     try {
       settings = JSON.parse(text) as unknown
     } catch {
-      return failure('invalid-json', `Couldn't save: ${NAME} is not valid JSON`)
+      return failure('invalid-json', `Couldn't save: ${name} is not valid JSON`)
     }
   }
   if (!isRecord(settings)) {
-    return failure('not-object', `Couldn't save: ${NAME} is not a JSON object`)
+    return failure('not-object', `Couldn't save: ${name} is not a JSON object`)
   }
-  const refused = applyEdit(settings, edit)
-  if (refused) return refused
+  const outcome = change(settings)
+  if (outcome === 'unchanged') return { ok: true }
+  if (outcome) return outcome
 
   let mode = 0o644
   if (text !== null) {
@@ -187,14 +223,14 @@ export async function writeSettingsLocal(
       // Written with the default mode.
     }
   }
-  const temp = join(dir, `.${NAME}.${randomBytes(6).toString('hex')}.tmp`)
+  const temp = join(dir, `.${name}.${randomBytes(6).toString('hex')}.tmp`)
   try {
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(temp, JSON.stringify(settings, null, 2) + '\n', { mode, flag: 'wx' })
     await fs.rename(temp, file)
   } catch (error) {
     await fs.unlink(temp).catch(() => {})
-    return failure('failed', `Couldn't save ${NAME}: ${(error as Error).message}`)
+    return failure('failed', `Couldn't save ${name}: ${(error as Error).message}`)
   }
   return { ok: true }
 }

@@ -82,6 +82,13 @@ const api: BikubeApi = {
     delete: (cardId) => ipcRenderer.send(IPC.scrollbackDelete, cardId),
     quitSaved: () => ipcRenderer.send(IPC.scrollbackQuitSaved)
   },
+  transcripts: {
+    backup: (cardId, folder, sessionId) =>
+      ipcRenderer.send(IPC.transcriptsBackup, cardId, folder, sessionId),
+    delete: (cardId) => ipcRenderer.send(IPC.transcriptsDelete, cardId),
+    prepare: (cardId, folder, sessionId) =>
+      ipcRenderer.invoke(IPC.transcriptsPrepare, cardId, folder, sessionId)
+  },
   settings: {
     load: () => ipcRenderer.invoke(IPC.settingsLoad),
     save: (settings) => ipcRenderer.send(IPC.settingsSave, settings),
@@ -142,6 +149,10 @@ const api: BikubeApi = {
     openFile: (folder, path) => ipcRenderer.invoke(IPC.agentSetupOpen, folder, path),
     reveal: (folder, path) => ipcRenderer.invoke(IPC.agentSetupReveal, folder, path),
     stats: (folder, extra) => ipcRenderer.invoke(IPC.agentSetupStats, folder, extra)
+  },
+  claudeRetention: {
+    read: () => ipcRenderer.invoke(IPC.claudeRetentionRead),
+    set: () => ipcRenderer.invoke(IPC.claudeRetentionSet)
   },
   agentTab: {
     summary: (folder, sessionId, since) =>

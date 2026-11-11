@@ -8,6 +8,7 @@ import type {
 import { worktreeFolders, type ClaudeStats } from '../../core/claude-stats-types'
 import type { ClaudeVersion } from '../../core/claude-version'
 import type { Workspace } from '../../core/workspace-store'
+import { keepClaudeConversations } from './claude-retention'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /**
@@ -226,6 +227,20 @@ export function saveConfig(folder: string, edit: AgentSetupConfigEdit): Promise<
       ? { key: switchKey({ kind: 'config', key: edit.key }), state: edit.value }
       : null
   return save(folder, asked, () => window.bikube.agentSetup.editConfig(folder, edit))
+}
+
+/**
+ * Keep for 10 years from the page (#80 D7): main sets `~/.claude/settings.json`'s
+ * `cleanupPeriodDays` to 3650 as the card view's notice does (so its notice goes too), then the
+ * page reads again, showing the row at 3650 from User with no warning; a failed write shows its
+ * line as the page's error line.
+ */
+export async function keepConversations(folder: string): Promise<void> {
+  const data = dataOf(folder)
+  const error = await keepClaudeConversations()
+  data.saveError = error
+  changed(data)
+  if (error === null) await refreshAgentSetup(folder)
 }
 
 /**

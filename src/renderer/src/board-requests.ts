@@ -4,6 +4,7 @@ import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
 import { workspaceStore } from './store'
+import { backupTranscript } from './transcript-backups'
 import { setCardUsage } from './usage'
 
 /** Whether `id` is one of the workspaces' shells (the Default one included), not a card. */
@@ -15,7 +16,8 @@ const isWorkspaceShell = (id: string): boolean =>
  * so a move shows at once on the board and in the sidebar and is saved like any change; a
  * status shows on the card's status line, and an activity as its pill, until cleared or the card
  * stops (#9 D8, #31 D12). A setup's `ok` types the card's start line, its `failed` shows on the
- * card (#39 D4, D5). A usage is kept for the card's usage line, runtime only (#50 D7).
+ * card (#39 D4, D5). A usage is kept for the card's usage line, runtime only (#50 D7), and backs
+ * up a local Claude Code card's transcript (#80 D9).
  * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
  * forgotten each time it stops (#75 D3a).
@@ -50,7 +52,10 @@ export function listenForBoardRequests(): () => void {
       },
       (id, usage) => {
         if (isWorkspaceShell(id)) setShellUsage(id, usage)
-        else setCardUsage(id, usage)
+        else {
+          setCardUsage(id, usage)
+          backupTranscript(id)
+        }
       },
       (id) => {
         const running = cardTerminals().runState(id)?.kind === 'running'

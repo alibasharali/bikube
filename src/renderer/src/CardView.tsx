@@ -2,15 +2,24 @@ import { X } from 'lucide-react'
 import { markOpened } from './background-shells'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SPAWN_REFUSAL } from '../../core/spawn-refusals'
+import { conversationGoneText, retentionDays } from '../../core/claude-retention-types'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
-import { requestCloseCard, runPendingInWorkspaceFolder, startCard } from './card-actions'
+import {
+  requestCloseCard,
+  runPendingInWorkspaceFolder,
+  startCard,
+  startNewConversation
+} from './card-actions'
+import { checkClaudeRetention, useClaudeRetention } from './claude-retention'
+import { useConversationCheck, type ConversationCheck } from './conversation-checks'
 import { usePendingWorktree, type PendingWorktreeRun } from './pending-worktrees'
 import CloseCardDialog from './CloseCardDialog'
 import DescriptionDialog from './DescriptionDialog'
 import RenameCardDialog from './RenameCardDialog'
 import RemoveWorktreeDialog from './RemoveWorktreeDialog'
+import RetentionBanner from './RetentionBanner'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
 import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
@@ -118,6 +127,51 @@ function PendingWorktreeView({
           onClick={onRetry}
         >
           Retry
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A resuming local Claude Code card's conversation check (#80 D11, D12), in place of its panes:
+ * being checked, or gone with Start a new conversation and Back (the card stays Stopped).
+ */
+function ConversationCheckView({
+  check,
+  onStartNew,
+  onBack
+}: {
+  check: ConversationCheck
+  onStartNew: () => void
+  onBack: () => void
+}): React.JSX.Element {
+  const { retention } = useClaudeRetention()
+  useEffect(() => checkClaudeRetention(), [])
+  if (check.kind === 'checking') {
+    return (
+      <div className="empty-state" data-testid="conversation-check" role="status">
+        <p>Checking its Claude Code conversation…</p>
+      </div>
+    )
+  }
+  // The days in effect (the set value), else Claude Code's default.
+  const days = retentionDays(retention)
+  return (
+    <div className="empty-state" data-testid="conversation-gone">
+      <h1>Conversation not found</h1>
+      <p>{conversationGoneText(days)}</p>
+      <div className="modal-actions">
+        <button type="button" className="btn" data-testid="conversation-gone-back" onClick={onBack}>
+          Back
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="conversation-gone-start"
+          onClick={onStartNew}
+        >
+          Start a new conversation
         </button>
       </div>
     </div>
@@ -352,9 +406,13 @@ function CardView({
   // Its pending worktree being made or failed (#69 D10): the card isn't started yet.
   const pendingRun = usePendingWorktree(card.id)
   const awaitingWorktree = pendingRun !== undefined && runState.kind !== 'running'
+  // Its Claude Code conversation being checked, or gone (#80 D11, D12): not started either.
+  const conversation = useConversationCheck(card.id)
+  const awaitingConversation = conversation !== undefined && runState.kind !== 'running'
 
   // When the shell exits the card is Stopped and the view goes back to the board (#5 D6).
-  const stopped = runState.kind === 'stopped' && pendingRun === undefined
+  const stopped =
+    runState.kind === 'stopped' && pendingRun === undefined && conversation === undefined
   useEffect(() => {
     if (stopped) onBack()
   }, [stopped, onBack])
@@ -469,6 +527,15 @@ function CardView({
   return (
     <div className="card-layout">
       <section className="card-view" data-testid="card-view" aria-label={card.title}>
+        {/* A local Claude Code card's one-time retention notice (#80 D5), above its panes. */}
+        {card.startup.kind === 'claude' && card.host === undefined && (
+          <RetentionBanner
+            cardId={card.id}
+            onDone={() =>
+              focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
+            }
+          />
+        )}
         <div
           className="card-view-terminal"
           data-testid="card-terminal"
@@ -486,6 +553,12 @@ function CardView({
               branch={card.pendingWorktree?.branch}
               onRetry={() => startCard(workspaceId, card.id)}
               onRunInFolder={() => runPendingInWorkspaceFolder(workspaceId, card.id)}
+            />
+          ) : awaitingConversation ? (
+            <ConversationCheckView
+              check={conversation}
+              onStartNew={() => startNewConversation(workspaceId, card.id)}
+              onBack={onBack}
             />
           ) : (
             <PaneTree

@@ -5,6 +5,8 @@ export interface QuitState {
   liveShells: boolean
   /** Whether the sync folder has a pending board or a queued or running operation. */
   syncBusy: boolean
+  /** Whether transcript backups (#80 D9) are queued or being copied. */
+  transcriptsBusy?: boolean
 }
 
 /** Whether to hold a quit and, when held, whether it waits for the shells to exit too. */
@@ -14,10 +16,14 @@ export type QuitHold = { hold: false } | { hold: true; shells: boolean }
  * Decides a quit (#18 D2, #26 D5). The first is held while shells are live (waiting for them to
  * exit, and for the sync folder's flush) or the sync folder is busy (waiting for its flush). A
  * later one (the caller SIGKILLs any shells left) is held once more only while the sync folder is
- * still busy; a third goes through. Each hold is bounded by the caller (`QUIT_WAIT_MS`).
+ * still busy; a third goes through. The first is also held while transcript backups are copied
+ * (#80 D9), which the caller waits for within `QUIT_SAVE_WAIT_MS`. Each hold is bounded by the
+ * caller (`QUIT_WAIT_MS`).
  */
-export function quitHold({ holds, liveShells, syncBusy }: QuitState): QuitHold {
-  if (holds === 0 && (liveShells || syncBusy)) return { hold: true, shells: liveShells }
+export function quitHold({ holds, liveShells, syncBusy, transcriptsBusy }: QuitState): QuitHold {
+  if (holds === 0 && (liveShells || syncBusy || transcriptsBusy === true)) {
+    return { hold: true, shells: liveShells }
+  }
   if (holds === 1 && syncBusy) return { hold: true, shells: false }
   return { hold: false }
 }

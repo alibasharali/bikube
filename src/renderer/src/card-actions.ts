@@ -3,6 +3,7 @@ import type { Workspace, Card } from '../../core/workspace-store'
 import type { FirstStart } from '../../core/startup-command'
 import { findShellCard, shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
+import { forgetConversationCheck, startCheckingConversation } from './conversation-checks'
 import { forgetPendingWorktree, makePendingWorktree } from './pending-worktrees'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
@@ -12,7 +13,8 @@ import { clearCardUsage } from './usage'
 /**
  * Starts the card if its shell isn't running, with its current startup command (#5 D7, D8);
  * a running card is left as it is. Opening a card, and creating one, goes through here, so a
- * card with a pending worktree (#69 D10) gets it made first, by whichever path opens it.
+ * card with a pending worktree (#69 D10) gets it made first, and a resuming Claude Code card its
+ * conversation checked (#80 D11), by whichever path opens it.
  */
 export function startCard(workspaceId: string, cardId: string): void {
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
@@ -20,8 +22,14 @@ export function startCard(workspaceId: string, cardId: string): void {
   const card =
     workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return
-  const start = (starting: Card): void =>
-    cardTerminals().start(starting, recordFirstStart(workspaceId, cardId))
+  // A local Claude Code card resuming gets its conversation checked first (#80 D11); a running
+  // card types no resume line, so it is never checked.
+  const start = (starting: Card): void => {
+    const launch = (checked: Card): void =>
+      cardTerminals().start(checked, recordFirstStart(workspaceId, cardId))
+    if (cardTerminals().runState(starting.id)?.kind === 'running') launch(starting)
+    else startCheckingConversation(workspaceId, starting, launch)
+  }
   if (
     card.pendingWorktree &&
     card.host === undefined &&
@@ -45,6 +53,16 @@ export function runPendingInWorkspaceFolder(workspaceId: string, cardId: string)
   workspaceStore.clearPendingWorktree(workspaceId, cardId)
   startCard(workspaceId, cardId)
   forgetPendingWorktree(cardId)
+}
+
+/**
+ * Start a new conversation (#80 D12): the card's conversation is gone, so it starts its session id
+ * fresh, typing the first-start line (with #69's first prompt when it has a description).
+ */
+export function startNewConversation(workspaceId: string, cardId: string): void {
+  workspaceStore.clearClaudeStarted(workspaceId, cardId)
+  forgetConversationCheck(cardId)
+  startCard(workspaceId, cardId)
 }
 
 /**
@@ -109,13 +127,14 @@ export function requestCloseCard(cardId: string, ask: () => void): void {
 
 /**
  * Stops every pane's process of a card being deleted and frees its screens (#11 D6), and removes
- * its kept output (#46 D7; a shell has none, and removing none does nothing) and its usage
- * (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
+ * its kept output (#46 D7; a shell has none, and removing none does nothing), its transcript
+ * backup (#80 D10) and its usage (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
  */
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
   window.bikube.scrollback.delete(cardId)
+  window.bikube.transcripts.delete(cardId)
   clearCardUsage(cardId)
   clearShellAgent(cardId)
 }

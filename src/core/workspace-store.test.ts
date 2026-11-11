@@ -633,6 +633,18 @@ describe('startup commands (#5 D2, D4, D10)', () => {
     expect(s.getState().workspaces[0].cards[0].claudeStarted).toBe(true)
   })
 
+  it('clears Claude started for a new conversation under the same session id (#80 D12)', () => {
+    const s = makeWithIds()
+    const w = create(s, 'alpha')
+    const agent = ok(s.createCard(w.id, w.columns[0].id, 'agent', { kind: 'claude' }))
+    ok(s.markClaudeStarted(w.id, agent.id))
+    expect(ok(s.clearClaudeStarted(w.id, agent.id))).toEqual(agent)
+    expect(s.clearClaudeStarted(w.id, 'nope')).toMatchObject({
+      ok: false,
+      error: { field: 'card' }
+    })
+  })
+
   it('defaults to random UUIDs v4 for agent session ids', () => {
     const s = make()
     const w = create(s, 'alpha')

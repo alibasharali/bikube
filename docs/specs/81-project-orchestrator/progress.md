@@ -6,7 +6,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
-| S1 Remove the Default shell | todo | | | |
+| S1 Remove the Default shell | done | `a44df3b..4bc34f2` | CLEAN | `newShell(workspaceId)` (temporary-shells.ts) adds+returns a temporary shell id; `shellCard(ws, shell)` needs a WorkspaceShell; `findShellCard` covers named+temporary only; e2e `openTerminal(page)`/`NEW_SHELL` in e2e/card-view.ts; sidebar `workspace-terminal-status` shows a shell's `board status` |
 | S2 The Orchestrator terminal | todo | | | |
 | S3 Orchestrator socket and instructions | todo | | | |
 | S4 Start, open, terminal and orchestrated cards | todo | | | |

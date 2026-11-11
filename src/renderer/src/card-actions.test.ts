@@ -5,6 +5,7 @@ import type { Card, Workspace } from '../../core/workspace-store'
 
 const state = vi.hoisted(() => ({ workspaces: [] as Workspace[] }))
 const started = vi.hoisted(() => [] as Card[])
+const run = vi.hoisted(() => ({ kind: 'stopped' }))
 
 const cleared = vi.hoisted(() => [] as string[])
 
@@ -22,7 +23,7 @@ vi.mock('./store', () => ({
 }))
 vi.mock('./card-terminals', () => ({
   cardTerminals: () => ({
-    runState: () => ({ kind: 'stopped' }),
+    runState: () => run,
     start: (card: Card) => started.push(card)
   }),
   cardPanes: () => ({})
@@ -46,6 +47,7 @@ const prepare = vi.fn<(...args: unknown[]) => Promise<string>>(async () => 'pres
 beforeEach(() => {
   started.length = 0
   cleared.length = 0
+  run.kind = 'stopped'
   prepare.mockReset()
   prepare.mockImplementation(async () => 'present')
   vi.stubGlobal('window', {
@@ -128,6 +130,15 @@ describe('startCard of a Claude Code card that started Claude Code', () => {
     startNewConversation('w1', 'c1')
     expect(cleared).toEqual(['c1'])
     expect(started).toEqual([claude({ claudeStarted: false })])
+    expect(conversationCheck('c1')).toBeUndefined()
+  })
+
+  it('checks nothing for a running card: opening it types no resume line', () => {
+    run.kind = 'running'
+    show(claude())
+    startCard('w1', 'c1')
+    expect(prepare).not.toHaveBeenCalled()
+    expect(started).toEqual([claude()])
     expect(conversationCheck('c1')).toBeUndefined()
   })
 

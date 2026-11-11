@@ -22,11 +22,14 @@ export function startCard(workspaceId: string, cardId: string): void {
   const card =
     workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return
-  // A local Claude Code card resuming gets its conversation checked first (#80 D11).
-  const start = (starting: Card): void =>
-    startCheckingConversation(workspaceId, starting, (checked) =>
+  // A local Claude Code card resuming gets its conversation checked first (#80 D11); a running
+  // card types no resume line, so it is never checked.
+  const start = (starting: Card): void => {
+    const launch = (checked: Card): void =>
       cardTerminals().start(checked, recordFirstStart(workspaceId, cardId))
-    )
+    if (cardTerminals().runState(starting.id)?.kind === 'running') launch(starting)
+    else startCheckingConversation(workspaceId, starting, launch)
+  }
   if (
     card.pendingWorktree &&
     card.host === undefined &&

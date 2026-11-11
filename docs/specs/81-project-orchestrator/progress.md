@@ -19,6 +19,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 - 2026-11-11 S4 (orchestrator, from D17): a start still pending past the relay limit must not read as success → S5 makes timeouts per command (start/open/terminal ~60 s) and prints `<title> is still starting` if still undecided. e2e uses `Backlog` (AC9) and `echo ready` (AC11) as test setup only.
 - 2026-11-11 S5 (orchestrator, following #69 D5's stdin trim): `board send <card> -` trims stdin's trailing new lines; an argument's text is sent as given.
 
+- 2026-11-11 ship review: fixed per-session orchestrator token (D16), `orchestrator:` ids dropped from state/sync, guide examples and title-resolution note, New conversation names the running agent, interrupted `board wait` cancelled. Open for the developer: (a) `board wait` right after `board send` returns the stale `waiting`; (b) the token is readable by same-user processes (/proc environ).
+
 ## Verification
 
 - done: ALL PASS (AC1, AC3, AC8, AC11, AC12, AC14 observed directly; the rest via e2e)

@@ -61,7 +61,7 @@ Build in this order. Each slice is vertical and ends with green checks.
 | AC7, AC8, AC11 | Vitest for the backup store (temp folders, injected fs); e2e in `e2e/claude-retention.spec.ts` typing `board usage .` | Card with a fixture transcript; type `board usage .`; read `<userData>/transcripts` |
 | AC9, AC10, AC12 | Vitest for the prepare decision; e2e with the fake `claude` log | Delete the transcript, reopen the card; delete the backup too, reopen; click each button |
 
-Existing resume tests (`e2e/startup.spec.ts` AC3, AC4, AC5, #31 AC12; `e2e/persistence.spec.ts` AC4; `e2e/sync.spec.ts` AC6's local card) depend on D13's fake transcript; `startup.spec.ts` AC5 ("nothing to resume starts fresh with the same session id") and `sync.spec.ts` AC6's local card on machine B change to AC10's panel and its Start a new conversation. Update them in the slice that changes their behaviour (S4), and AGENTS.md's test list with the new spec file.
+Existing resume tests (`e2e/startup.spec.ts` AC3, AC4, AC5, #31 AC12; `e2e/persistence.spec.ts` AC4; `e2e/sync.spec.ts` AC6's local card) depend on D13's fake transcript; `startup.spec.ts` AC5 ("nothing to resume starts fresh with the same session id") changes to AC10's panel and its Start a new conversation; `sync.spec.ts` AC6's local card on machine B is unchanged, since sync gives local cards `claudeStarted: false` on the other machine (#13 D6), so they skip the check (D11, AC12). Update them in the slice that changes their behaviour (S4), and AGENTS.md's test list with the new spec file.
 
 ## Stack changes
 

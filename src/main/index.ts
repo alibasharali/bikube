@@ -230,7 +230,14 @@ function startApp(): void {
     if (!hold.hold) return
     holds++
     event.preventDefault()
-    const saved = told ? boundedWait(quitSaved, QUIT_SAVE_WAIT_MS) : Promise.resolve()
+    // The transcript backups the renderer sent before `quitSaved` (#80 D9) are copied with async
+    // fs: they finish before the shells stop, within the same wait.
+    const saved = told
+      ? boundedWait(
+          quitSaved.then(() => transcripts.idle()),
+          QUIT_SAVE_WAIT_MS
+        )
+      : Promise.resolve()
     const done = hold.shells ? Promise.all([saved.then(() => terminals.killAll()), synced]) : synced
     void boundedWait(done, QUIT_WAIT_MS).then(() => app.quit())
   })

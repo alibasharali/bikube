@@ -1314,7 +1314,7 @@ function OrchestratorAgentField(): React.JSX.Element {
 
 /**
  * Your orchestrator instructions (#81 D14): the user's own text, which `board guide` prints after
- * the shipped guide. Saved on blur, its trailing whitespace trimmed; an orchestrator reads it at
+ * the shipped guide. Saved as typed, its trailing whitespace trimmed (shown trimmed on blur); an orchestrator reads it at
  * its next start, resume or `/clear`.
  */
 function OrchestratorInstructionsField(): React.JSX.Element {
@@ -1339,12 +1339,12 @@ function OrchestratorInstructionsField(): React.JSX.Element {
           rows={5}
           placeholder="Always use worktrees."
           spellCheck={false}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => {
-            const trimmed = text.trimEnd()
-            setText(trimmed)
-            settingsStore.update({ orchestratorInstructions: trimmed })
+          onChange={(e) => {
+            setText(e.target.value)
+            // Saved as typed, trimmed, so closing Settings with Esc loses nothing.
+            settingsStore.update({ orchestratorInstructions: e.target.value.trimEnd() })
           }}
+          onBlur={() => setText(text.trimEnd())}
         />
         <p className="field-hint" id={hintId}>
           Added to every orchestrator&rsquo;s instructions. Applies at its next start or resume.

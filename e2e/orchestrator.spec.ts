@@ -321,10 +321,15 @@ test('AC6: board guide prints the guide and Your orchestrator instructions, as t
   await page.getByTestId('settings-section-agents').click()
   const field = page.getByTestId('settings-orchestrator-instructions')
   await expect(field).toHaveValue('')
-  await field.fill('Always use worktrees.\n\n')
-  await field.blur()
-  await expect(field).toHaveValue('Always use worktrees.')
+  // Typed, then Settings closed with Esc at once: saved as typed, trailing whitespace trimmed.
+  await field.click()
+  await field.pressSequentially('Always use worktrees.\n\n')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('settings-dialog')).toHaveCount(0)
   await expect.poll(settingsFile).toContain('"orchestratorInstructions":"Always use worktrees."')
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-agents').click()
+  await expect(field).toHaveValue('Always use worktrees.')
   await page.keyboard.press('Escape')
 
   await createWorkspace(repo, 'Proj')

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CLAUDE_RETENTION_DAYS, readClaudeRetention, setClaudeRetention } from './claude-retention'
+import { retentionDays } from './claude-retention-types'
 
 // Claude Code's `cleanupPeriodDays` in the user's settings (#80 D2, D3, D4), on real temp folders.
 
@@ -48,9 +49,9 @@ describe('readClaudeRetention', () => {
     put('{"cleanupPeriodDays":60}')
     expect(await readClaudeRetention(home)).toEqual({ state: 'low', days: 60 })
     put('{"cleanupPeriodDays":3650}')
-    expect(await readClaudeRetention(home)).toEqual({ state: 'ok' })
+    expect(await readClaudeRetention(home)).toEqual({ state: 'ok', days: 3650 })
     put('{"cleanupPeriodDays":5000}')
-    expect(await readClaudeRetention(home)).toEqual({ state: 'ok' })
+    expect(await readClaudeRetention(home)).toEqual({ state: 'ok', days: 5000 })
   })
 
   it('reads unknown for a non-number value, invalid JSON or a non-object', async () => {
@@ -152,5 +153,14 @@ describe('setClaudeRetention', () => {
       message: "Couldn't save: .claude is a link"
     })
     expect(readdirSync(dots)).toEqual([])
+  })
+})
+
+describe('retentionDays (#80 D12)', () => {
+  it('names the set value, low or ok, and 30 when unknown or not read', () => {
+    expect(retentionDays({ state: 'low', days: 60 })).toBe(60)
+    expect(retentionDays({ state: 'ok', days: 5000 })).toBe(5000)
+    expect(retentionDays({ state: 'unknown' })).toBe(30)
+    expect(retentionDays(null)).toBe(30)
   })
 })

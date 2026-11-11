@@ -8,12 +8,10 @@
 import { join } from 'node:path'
 import type { SettingsWriteResult } from './agent-setup-snapshot'
 import { nodeSettingsFs, writeSettingsJson, type SettingsFs } from './settings-local-writer'
-import type { ClaudeRetention } from './claude-retention-types'
+import { CLAUDE_RETENTION_DAYS, type ClaudeRetention } from './claude-retention-types'
 
 export type { ClaudeRetention } from './claude-retention-types'
-
-/** The value Bikube sets (D3): about ten years. */
-export const CLAUDE_RETENTION_DAYS = 3650
+export { CLAUDE_RETENTION_DAYS } from './claude-retention-types'
 
 /** Claude Code's own default when nothing sets it. */
 export const CLAUDE_DEFAULT_CLEANUP_DAYS = 30
@@ -31,7 +29,9 @@ const isNumber = (value: unknown): value is number =>
 function retentionOf(value: unknown): ClaudeRetention {
   if (value === undefined) return { state: 'low', days: CLAUDE_DEFAULT_CLEANUP_DAYS }
   if (!isNumber(value)) return { state: 'unknown' }
-  return value < CLAUDE_RETENTION_DAYS ? { state: 'low', days: value } : { state: 'ok' }
+  return value < CLAUDE_RETENTION_DAYS
+    ? { state: 'low', days: value }
+    : { state: 'ok', days: value }
 }
 
 /**

@@ -241,7 +241,11 @@ describe('setupWarnings: Claude Code retention (#80 D7)', () => {
   })
 
   it('D3: nothing when ok, unknown or not read', () => {
-    for (const claudeRetention of [{ state: 'ok' }, { state: 'unknown' }, undefined] as const) {
+    for (const claudeRetention of [
+      { state: 'ok', days: 3650 },
+      { state: 'unknown' },
+      undefined
+    ] as const) {
       expect(setupWarnings(snapshot(claudeRetention ? { claudeRetention } : {}))).toEqual([])
     }
   })
@@ -824,7 +828,7 @@ describe('configRows', () => {
     expect(configRows(s, 'cleanup').map((r) => r.key)).toEqual(['cleanupPeriodDays'])
     expect(configRows(s, '', { kind: 'project' })).toEqual([])
     // None while the setting isn't low.
-    for (const claudeRetention of [{ state: 'ok' }, { state: 'unknown' }] as const) {
+    for (const claudeRetention of [{ state: 'ok', days: 3650 }, { state: 'unknown' }] as const) {
       expect(
         configRows({ ...s, claudeRetention }, '').map((r) => [r.key, r.retentionWarning])
       ).toEqual([['model', undefined]])

@@ -382,6 +382,9 @@ async function startedClaudeCard(title: string): Promise<{ id: string; agentSess
   await page.keyboard.type('hello')
   await page.keyboard.press('Enter')
   await expect.poll(() => existsSync(transcriptOf(card.agentSessionId))).toBe(true)
+  // The fake writes the transcript before `board session` reports it: wait for the report too, or
+  // the card hasn't started Claude Code yet as far as the board knows.
+  await expect.poll(async () => (await cardOf(card.title)).claudeStarted).toBe(true)
   return card
 }
 
@@ -524,6 +527,8 @@ test('#80 AC9: a deleted transcript is put back from the backup before claude re
 })
 
 test('#80 AC10: with neither a transcript nor a backup the card asks; Back leaves it Stopped, Start a new conversation starts it fresh', async () => {
+  // Kept long, so the panel names the set value (D5's `<n>`), and no banner shows.
+  putSettings('{"cleanupPeriodDays":5000}')
   await launch()
   await createWorkspace(repo, 'repo')
   await page
@@ -541,8 +546,14 @@ test('#80 AC10: with neither a transcript nor a backup the card asks; Back leave
   await page.keyboard.type('hello')
   await page.keyboard.press('Enter')
   await expect.poll(() => existsSync(transcriptOf(card.agentSessionId))).toBe(true)
+  // The fake writes the transcript before `board session` reports it: wait for the report too, or
+  // the card hasn't started Claude Code yet as far as the board knows.
+  await expect.poll(async () => (await cardOf(card.title)).claudeStarted).toBe(true)
   await stopCard('agent')
-  await expect.poll(() => existsSync(backupFolder(card.id))).toBe(true)
+  // The copy made at the stop, complete, before both are removed.
+  await expect
+    .poll(() => contents(join(backupFolder(card.id), `${card.agentSessionId}.jsonl`)))
+    .toBe(contents(transcriptOf(card.agentSessionId)))
   rmSync(join(fake.home, '.claude', 'projects'), { recursive: true })
   rmSync(backupFolder(card.id), { recursive: true })
   const before = logLines().length
@@ -551,7 +562,7 @@ test('#80 AC10: with neither a transcript nor a backup the card asks; Back leave
   const gone = page.getByTestId('conversation-gone')
   await expect(gone).toContainText(GONE)
   await expect(gone).toContainText(
-    'Claude Code deletes conversations after 30 days, or it ran on another machine.'
+    'Claude Code deletes conversations after 5000 days, or it ran on another machine.'
   )
   await expect(page.getByTestId('card-view').getByTestId('terminal')).toHaveCount(0)
   await page.getByTestId('conversation-gone-back').click()

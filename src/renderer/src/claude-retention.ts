@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { ClaudeRetention } from '../../core/claude-retention-types'
+import { CLAUDE_RETENTION_DAYS, type ClaudeRetention } from '../../core/claude-retention-types'
 
 /**
  * Claude Code's conversation retention as the card view's notice uses it (#80 D5): main's last read
@@ -55,7 +55,7 @@ export async function keepClaudeConversations(): Promise<string | null> {
   }
   update(
     error === null
-      ? { saving: false, error: null, retention: { state: 'ok' } }
+      ? { saving: false, error: null, retention: { state: 'ok', days: CLAUDE_RETENTION_DAYS } }
       : { saving: false, error }
   )
   return error

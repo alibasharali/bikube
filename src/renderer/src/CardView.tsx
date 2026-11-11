@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { markOpened } from './background-shells'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SPAWN_REFUSAL } from '../../core/spawn-refusals'
-import { conversationGoneText } from '../../core/claude-retention-types'
+import { conversationGoneText, retentionDays } from '../../core/claude-retention-types'
 import { keymapAction } from '../../core/keymap'
 import { canSplit, MAIN_PANE, paneIds, type SplitTree } from '../../core/split-tree'
 import type { Card } from '../../core/workspace-store'
@@ -155,8 +155,8 @@ function ConversationCheckView({
       </div>
     )
   }
-  // The days in effect when the setting reads low, else Claude Code's default.
-  const days = retention?.state === 'low' ? retention.days : 30
+  // The days in effect (the set value), else Claude Code's default.
+  const days = retentionDays(retention)
   return (
     <div className="empty-state" data-testid="conversation-gone">
       <h1>Conversation not found</h1>

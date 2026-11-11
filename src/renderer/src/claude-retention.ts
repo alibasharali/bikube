@@ -66,6 +66,11 @@ export function dismissClaudeRetention(): void {
   update({ dismissed: true, error: null })
 }
 
+/** A card view or card window opened: the last failed write's line goes (it was about that try). */
+export function clearClaudeRetentionError(): void {
+  if (state.error !== null) update({ error: null })
+}
+
 /** The notice's state, re-rendering as it changes. */
 export function useClaudeRetention(): RetentionState {
   return useSyncExternalStore(

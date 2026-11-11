@@ -196,6 +196,47 @@ test('#80 AC2: with no .claude folder, Keep for 10 years creates settings.json w
   expect(readFileSync(settingsFile, 'utf8')).toBe('{\n  "cleanupPeriodDays": 3650\n}\n')
 })
 
+test('#80 AC1: in a narrow card view the notice wraps; its buttons stay inside it and nothing scrolls sideways', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await newCard('narrow')
+  await expect(banner().getByTestId('retention-banner-text')).toHaveText(NOTICE)
+  // 768 with the sidebar and side panel at their defaults, then 320 with both collapsed.
+  for (const width of [768, 320]) {
+    if (width === 320) {
+      await page.getByTestId('sidebar-toggle').click()
+      await page.getByTestId('titlebar-panel').click()
+    }
+    await app!.evaluate(
+      ({ BrowserWindow }, w) => BrowserWindow.getAllWindows()[0]?.setSize(w, 720),
+      width
+    )
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(width)
+    await expect
+      .poll(async () => {
+        const view = await page.getByTestId('card-view').boundingBox()
+        const buttons = await Promise.all(
+          (await banner().getByRole('button').all()).map((b) => b.boundingBox())
+        )
+        return (
+          view !== null &&
+          buttons.length === 3 &&
+          buttons.every(
+            (b) => b !== null && b.x >= view.x - 0.5 && b.x + b.width <= view.x + view.width + 0.5
+          )
+        )
+      })
+      .toBe(true)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true)
+    expect(await banner().evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  }
+  // Keep for 10 years is clickable there, not covered by the side panel.
+  await banner().getByRole('button', { name: 'Keep for 10 years' }).click()
+  await expect(banner()).toHaveCount(0)
+})
+
 test('#80 AC1: the notice shows in a card window too, with the days the file sets', async () => {
   putSettings('{"cleanupPeriodDays":60}')
   await launch()

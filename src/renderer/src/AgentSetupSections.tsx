@@ -287,8 +287,11 @@ function RetentionWarning({
   const { saving } = useClaudeRetention()
   return (
     <span className="agent-setup-row-warnings agent-setup-retention">
-      <span className="agent-setup-warning" data-testid="agent-setup-row-warning">
-        ⚠ {message}
+      <span
+        className="agent-setup-warning agent-setup-warning-block"
+        data-testid="agent-setup-row-warning"
+      >
+        <span aria-hidden="true">⚠</span> <span>{message}</span>
       </span>
       <button
         type="button"

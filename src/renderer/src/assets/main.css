@@ -6155,6 +6155,20 @@ button.dev-server-chip:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* A warning long enough to wrap (#80 D7's retention line): a box with a small radius and vertical
+   padding in place of the pill, the ⚠ on the first line beside the text. */
+.agent-setup-warning-block {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.agent-setup-warning-block > :last-child {
+  min-width: 0;
+}
+
 .agent-setup-row-more {
   color: var(--text-muted);
 }
@@ -6897,9 +6911,19 @@ button.dev-server-chip:focus-visible {
   color: var(--danger);
 }
 
+/* Shrinks to the card view's width and wraps its buttons onto more lines (no flex: none, which kept
+   them at their full width past a narrow card view). */
 .retention-banner-actions {
-  flex: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.retention-banner-actions .btn {
+  max-width: 100%;
+  white-space: normal;
 }

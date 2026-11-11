@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { retentionNotice } from '../../core/claude-retention-types'
 import {
   checkClaudeRetention,
+  clearClaudeRetentionError,
   dismissClaudeRetention,
   keepClaudeConversations,
   useClaudeRetention
@@ -25,6 +26,9 @@ function RetentionBanner({
 }): React.JSX.Element | null {
   const { offerClaudeRetention } = useSettings()
   const { retention, dismissed, saving, error } = useClaudeRetention()
+  useEffect(() => {
+    clearClaudeRetentionError()
+  }, [cardId])
   useEffect(() => {
     if (offerClaudeRetention) checkClaudeRetention()
   }, [cardId, offerClaudeRetention])

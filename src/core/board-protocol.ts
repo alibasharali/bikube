@@ -61,8 +61,15 @@ export function answerTimeoutMs(command: BoardCommand): number {
 /** How long main waits for the window's answer: 1 s under the CLI, so the CLI hears why (#9 D9). */
 export const relayTimeoutMs = (command: BoardCommand): number => answerTimeoutMs(command) - 1000
 
-/** A request as sent: the calling card's id plus one command. */
-export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand
+/**
+ * A request as sent: the calling card's id plus one command, and on an Orchestrator's socket its
+ * session's secret `token` (#81 D16), which never goes further than that socket.
+ */
+export type BoardRequest = {
+  v: typeof BOARD_PROTOCOL_VERSION
+  cardId: string
+  token?: string
+} & BoardCommand
 
 /** `output`, when present, is what the CLI prints to stdout (`board list`, `board create`). */
 export type BoardReply = { ok: true; output?: string } | { ok: false; error: string }
@@ -75,9 +82,10 @@ export const MAX_REPLY_OUTPUT_LENGTH = 1_000_000
 
 export type ParsedRequest = { ok: true; request: BoardRequest } | { ok: false; error: string }
 
-/** The request line the CLI writes, newline included. */
-export function serializeRequest(cardId: string, command: BoardCommand): string {
-  return `${JSON.stringify({ v: BOARD_PROTOCOL_VERSION, cardId, ...command })}\n`
+/** The request line the CLI writes, newline included; `token` only when given (#81 D16). */
+export function serializeRequest(cardId: string, command: BoardCommand, token?: string): string {
+  const secret = token === undefined ? {} : { token }
+  return `${JSON.stringify({ v: BOARD_PROTOCOL_VERSION, cardId, ...secret, ...command })}\n`
 }
 
 /** Whether `text` is over `limit` bytes in UTF-8. */
@@ -215,12 +223,14 @@ export function parseRequestLine(line: string): ParsedRequest {
   const known = (key: string): boolean =>
     key === 'v' ||
     key === 'cardId' ||
+    key === 'token' ||
     key === 'command' ||
     required.includes(key) ||
     optional.includes(key) ||
     otherFields(name).includes(key)
   const shaped =
     typeof value.cardId === 'string' &&
+    (value.token === undefined || typeof value.token === 'string') &&
     keys.every(known) &&
     required.every((f) => f in value && (f === 'usage' || typeof value[f] === 'string')) &&
     optional.every((f) => value[f] === undefined || typeof value[f] === 'string')
@@ -235,7 +245,11 @@ export function parseRequestLine(line: string): ParsedRequest {
   })
   if (overLong) return { ok: false, error: REQUEST_TOO_LONG }
   const request = asRequest(name, value as Record<string, unknown>)
-  return request ? { ok: true, request } : { ok: false, error: INVALID_REQUEST }
+  if (!request) return { ok: false, error: INVALID_REQUEST }
+  return {
+    ok: true,
+    request: typeof value.token === 'string' ? { ...request, token: value.token } : request
+  }
 }
 
 /** The request in a shaped value, its fields checked per command; null when one is wrong. */

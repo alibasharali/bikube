@@ -770,3 +770,15 @@ describe('orchestrated cards in the saved state (#81 D18)', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 })
+
+describe("cards and shells claiming an Orchestrator's id (#81 D16)", () => {
+  it('drops them from a state file, keeping everything else', () => {
+    const state = fullState()
+    const text = fileWith((s) => {
+      const ws = s.workspaces[0]
+      ws.cards.push({ ...ws.cards[0], id: 'orchestrator:x' })
+      ws.shells.push({ id: 'orchestrator:y', name: 'Fake', command: '', autostart: false })
+    })
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+})

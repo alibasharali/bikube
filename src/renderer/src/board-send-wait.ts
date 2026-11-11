@@ -24,8 +24,15 @@ export function sendToCard(cardId: string, text: string): Promise<void> {
   })
 }
 
-/** Waits until the card is stopped, waiting for the user or asking, `seconds` at most. */
-export function waitOnCard(cardId: string, seconds: number): Promise<WaitResult | 'timeout'> {
+/**
+ * Waits until the card is stopped, waiting for the user or asking, `seconds` at most; at once
+ * when `signal` aborts (the asking `board wait` was interrupted).
+ */
+export function waitOnCard(
+  cardId: string,
+  seconds: number,
+  signal?: AbortSignal
+): Promise<WaitResult | 'timeout'> {
   const terminals = cardTerminals()
   return waitForCard(
     {
@@ -38,6 +45,7 @@ export function waitOnCard(cardId: string, seconds: number): Promise<WaitResult 
       setTimer: (run, ms) => setTimeout(run, ms),
       clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>)
     },
-    seconds
+    seconds,
+    signal
   )
 }

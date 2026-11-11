@@ -15,16 +15,19 @@ const request: BoardRequest = { v: 1, cardId: 'c1', command: 'move', card: '.', 
 
 let owners: Map<string, Win | null>
 let sent: { owner: Win; requestId: string; cardId: string; command: BoardCommand }[]
+let cancelled: { owner: Win; requestId: string }[]
 let relay: BoardRelay<Win>
 
 beforeEach(() => {
   vi.useFakeTimers()
   owners = new Map([['c1', win]])
   sent = []
+  cancelled = []
   relay = new BoardRelay<Win>(
     (cardId) => owners.get(cardId),
     (owner, requestId, cardId, command) => sent.push({ owner, requestId, cardId, command }),
-    1000
+    1000,
+    (owner, requestId) => cancelled.push({ owner, requestId })
   )
 })
 
@@ -163,6 +166,35 @@ describe('BoardRelay', () => {
       1000
     )
     await expect(relay.handle(request)).resolves.toEqual({ ok: false, error: NO_WINDOW })
+  })
+})
+
+describe('BoardRelay: a client that leaves before its reply (#81 D20)', () => {
+  const wait: BoardRequest = { v: 1, cardId: 'c1', command: 'wait', card: 'x' }
+
+  it('drops the pending request and tells its window to cancel it', async () => {
+    const gone = new AbortController()
+    const reply = relay.handle(wait, gone.signal)
+    const { requestId } = sent[0]
+    gone.abort()
+    expect(cancelled).toEqual([{ owner: win, requestId }])
+    await expect(reply).resolves.toEqual({ ok: false, error: NO_ANSWER })
+    // Its answer arrives too late to be taken, and its timer is gone.
+    expect(relay.answer(win, requestId, { ok: true })).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('cancels nothing once answered, or for a client already gone', async () => {
+    const gone = new AbortController()
+    const reply = relay.handle(wait, gone.signal)
+    relay.answer(win, sent[0].requestId, { ok: true, output: 'waiting\n' })
+    gone.abort()
+    await expect(reply).resolves.toEqual({ ok: true, output: 'waiting\n' })
+    const left = new AbortController()
+    left.abort()
+    await expect(relay.handle(wait, left.signal)).resolves.toEqual({ ok: false, error: NO_ANSWER })
+    expect(sent).toHaveLength(1)
+    expect(cancelled).toEqual([])
   })
 })
 

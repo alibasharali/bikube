@@ -56,6 +56,7 @@ export const IPC = {
   settingsGhosttyConfig: 'settings:ghosttyConfig',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer',
+  boardCancel: 'board:cancel',
   syncStatus: 'sync:status',
   syncStatusChanged: 'sync:statusChanged',
   syncSetFolder: 'sync:setFolder',
@@ -277,9 +278,17 @@ export interface ShellChoices {
  * each one against its store and returns the reply the CLI prints; preload sends it back.
  */
 export interface BoardApi {
-  /** `listener` answers one command run by the card `cardId`. Returns an unsubscribe function. */
+  /**
+   * `listener` answers one command run by the card `cardId`. `onCancel` registers what to run if
+   * the command's client leaves before the answer (an interrupted `board wait`, #81 D20), so what
+   * it waits on can be dropped. Returns an unsubscribe function.
+   */
   onRequest(
-    listener: (cardId: string, command: BoardCommand) => BoardReply | Promise<BoardReply>
+    listener: (
+      cardId: string,
+      command: BoardCommand,
+      onCancel: (cancel: () => void) => void
+    ) => BoardReply | Promise<BoardReply>
   ): () => void
 }
 

@@ -73,6 +73,23 @@ describe('runBoard', () => {
     })
   })
 
+  it("sends the Orchestrator session's BIKUBE_ORCHESTRATOR_TOKEN with the request (#81 D16)", async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    const env = {
+      BIKUBE_CARD_ID: 'orchestrator:w1',
+      BIKUBE_SOCKET: socketPath,
+      BIKUBE_ORCHESTRATOR_TOKEN: 'ab'.repeat(32)
+    }
+    expect(await board(['guide'], env)).toEqual({ code: 0, stdout: '', stderr: '' })
+    expect(handler).toHaveBeenCalledWith({
+      v: 1,
+      cardId: 'orchestrator:w1',
+      token: 'ab'.repeat(32),
+      command: 'guide'
+    })
+  })
+
   it("prints a reply's output to stdout (list, create)", async () => {
     const handler = vi.fn(async () => ({ ok: true, output: 'c-new\n' }) as BoardReply)
     await serve(handler)

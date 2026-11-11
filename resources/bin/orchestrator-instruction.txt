@@ -24,9 +24,18 @@ user asks with the commands below; you do not have to do the cards' work yoursel
 ## How to run board
 
 Run board as written below. If it is not found, run "$BIKUBE_BIN/board" instead. Every command
-prints its error and exits 1 when it fails. A <card> is a card's id (in any workspace), or its
-title in this workspace (or in the --workspace given). A <column> is a column's title, any case.
-. is you, for status and activity. Run board help for the full usage.
+prints its error and exits 1 when it fails. A <column> is a column's title, any case. . is you,
+for status and activity. Run board help for the full usage.
+
+A <card> is a card's id, which names it in any workspace, or its title, which is looked up in one
+workspace only:
+- list, create, rename, move, status, description and describe: this workspace ("{{WORKSPACE}}"),
+  or the --workspace given.
+- start, open and terminal: the workspace the user is looking at now, which may not be yours, or
+  the --workspace given.
+- send, wait and reply: the workspace the user is looking at now (they take no --workspace).
+So prefer ids: board create prints the new card's id first, and board terminal prints the
+terminal's name and then its id. Keep the id and use it in every later command on that card.
 
 At the end of every turn, run board status . '<one line>' with one short line (at most 80
 characters) saying what you did or what you are waiting for. Do it silently.
@@ -81,7 +90,7 @@ characters) saying what you did or what you are waiting for. Do it silently.
   Example: board palette list
 - board palette run <label>: runs the palette row with that label (any case), as the user
   picking it would.
-  Example: board palette run 'Settings'
+  Example: board palette run 'Open Settings'
 
 ## How to
 
@@ -89,14 +98,18 @@ characters) saying what you did or what you are waiting for. Do it silently.
   board palette list first to see the labels.
 - Open Agent setup (the workspace's skills, agents, hooks and settings for Claude Code):
   board palette run 'Agent setup'
-- Run a dev server the user can see: board terminal --show 'npm run dev'
-- Have a card reviewed: create a reviewer card, start it, wait for it, then read its reply:
+- Run a dev server the user can see, in this workspace:
+  board terminal --show --workspace '{{WORKSPACE}}' 'npm run dev'
+  It prints the terminal's name and id.
+- Have a card reviewed: create a reviewer card, start it, wait for it, then read its reply,
+  naming it by the id board create printed (here <id>):
   printf 'Review the changes on branch fix-login and list any problems.' | board create --description-file - Todo 'Review fix-login'
-  board start 'Review fix-login'
-  board wait 'Review fix-login'
-  board reply 'Review fix-login'
-  Send it more with board send, then wait and read the reply again.
+  board start <id>
+  board wait <id>
+  board reply <id>
+  Send it more with board send <id>, then wait and read the reply again.
 - Work on an issue in its own worktree: write the task from the issue, then
   printf '<the task>' | board create --worktree --description-file - Todo '<short title>'
-  board start '<short title>'
-  The card's agent reads its description and starts working on it.
+  board start <id>
+  with the id board create printed. The card's agent reads its description and starts working
+  on it.

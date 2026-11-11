@@ -26,6 +26,24 @@ export const DRAIN_MS = 1000
 
 export type BoardHandler = (request: BoardRequest) => Promise<BoardReply>
 
+/** Each served request's signal, aborted when its client leaves before the reply. */
+const signals = new WeakMap<BoardRequest, AbortSignal>()
+
+/**
+ * The signal that aborts when `request`'s client closes its connection before the reply (an
+ * interrupted `board wait`, #81 D20), so whatever the answer waits on can be dropped; undefined
+ * for a request no server read.
+ */
+export const requestSignal = (request: BoardRequest): AbortSignal | undefined =>
+  signals.get(request)
+
+/** Gives `to`, a copy of `from` a handler passes on, `from`'s signal. */
+export function keepSignal(from: BoardRequest, to: BoardRequest): BoardRequest {
+  const signal = signals.get(from)
+  if (signal && to !== from) signals.set(to, signal)
+  return to
+}
+
 export interface BoardServerOptions {
   lineTimeoutMs?: number
   drainMs?: number
@@ -132,14 +150,21 @@ function serveConnection(
   // main re-encode the whole buffer each time.
   let bufferedBytes = 0
   let answered = false
+  let replied = false
+  const gone = new AbortController()
   socket.setEncoding('utf8')
   socket.on('error', () => socket.destroy())
   const timer = setTimeout(() => socket.destroy(), lineTimeoutMs)
-  socket.once('close', () => clearTimeout(timer))
+  socket.once('close', () => {
+    clearTimeout(timer)
+    // The client left before its reply: the handler may drop what it waits on.
+    if (!replied) gone.abort()
+  })
 
   // After the reply, unread input is drained (closing on it could reset the reply away) until
   // the client closes, or for `drainMs` at most (#9 D5).
   const reply = (answer: BoardReply): void => {
+    replied = true
     if (socket.destroyed || !socket.writable) return
     socket.end(serializeReply(answer))
     setTimeout(() => socket.destroy(), drainMs).unref()
@@ -167,6 +192,7 @@ function serveConnection(
       reply({ ok: false, error: parsed.error })
       return
     }
+    signals.set(parsed.request, gone.signal)
     handler(parsed.request).then(reply, () => reply(HANDLER_FAILED))
   })
 }

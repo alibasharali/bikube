@@ -34,11 +34,17 @@ export interface WaitDeps {
 
 /**
  * Resolves with the card's `waitResult`, checked at once and on each change, or `timeout` after
- * `seconds`; nothing is left subscribed or timed either way.
+ * `seconds`; nothing is left subscribed or timed either way. When `signal` aborts (the `board
+ * wait` that asked was interrupted) it ends at once as `timeout`, which nobody reads.
  */
-export function waitForCard(deps: WaitDeps, seconds: number): Promise<WaitResult | 'timeout'> {
+export function waitForCard(
+  deps: WaitDeps,
+  seconds: number,
+  signal?: AbortSignal
+): Promise<WaitResult | 'timeout'> {
   const now = waitResult(deps.read())
   if (now) return Promise.resolve(now)
+  if (signal?.aborted) return Promise.resolve('timeout')
   return new Promise((resolve) => {
     let done = false
     const finish = (result: WaitResult | 'timeout'): void => {
@@ -46,12 +52,15 @@ export function waitForCard(deps: WaitDeps, seconds: number): Promise<WaitResult
       done = true
       unsubscribe()
       deps.clearTimer(timer)
+      signal?.removeEventListener('abort', cancelled)
       resolve(result)
     }
+    const cancelled = (): void => finish('timeout')
     const unsubscribe = deps.subscribe(() => {
       const result = waitResult(deps.read())
       if (result) finish(result)
     })
     const timer = deps.setTimer(() => finish('timeout'), seconds * 1000)
+    signal?.addEventListener('abort', cancelled, { once: true })
   })
 }

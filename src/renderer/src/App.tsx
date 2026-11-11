@@ -32,7 +32,7 @@ import {
 import { shellCards } from '../../core/workspace-shells'
 import { hasOrchestrator, isOrchestratorId, orchestratorId } from '../../core/orchestrator'
 import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
-import { findTerminal, orchestratorStartup } from './orchestrator'
+import { findTerminal, orchestratorStartupOf } from './orchestrator'
 import { workspaceView, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import {
@@ -593,7 +593,7 @@ function App(): React.JSX.Element {
       {newConversation !== null && (
         <ConfirmDialog
           title="New conversation"
-          message={`Start a new orchestrator conversation? The current one is kept by ${agentName()} but the orchestrator won’t resume it.`}
+          message={`Start a new orchestrator conversation? The current one is kept by ${agentName(newConversation)} but the orchestrator won’t resume it.`}
           confirmLabel="New conversation"
           confirmTestId="confirm-new-conversation"
           onCancel={() => setNewConversation(null)}
@@ -621,9 +621,12 @@ function App(): React.JSX.Element {
   )
 }
 
-/** The Orchestrator agent's name in New conversation's question (#81 D11). */
-function agentName(): string {
-  const { kind } = orchestratorStartup()
+/**
+ * The name of the agent the workspace's Orchestrator runs (or ran) in New conversation's question
+ * (#81 D7, D11), which the setting may no longer name.
+ */
+function agentName(workspaceId: string): string {
+  const { kind } = orchestratorStartupOf(orchestratorId(workspaceId))
   if (kind === 'claude') return 'Claude Code'
   return isAgentKind(kind) ? AGENT_PRESETS[kind].label : 'its agent'
 }

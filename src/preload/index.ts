@@ -227,20 +227,42 @@ const api: BikubeApi = {
   },
   board: {
     onRequest: (listener) => {
+      // Each outstanding request: whether main said its client left (#81 D20), and what the
+      // listener asked to run then (registered at any time before its answer).
+      const outstanding = new Map<string, { cancelled: boolean; cancel?: () => void }>()
       const handler = (
         _: unknown,
         requestId: string,
         cardId: string,
         command: BoardCommand
       ): void => {
-        const answer = (reply: BoardReply): void =>
-          ipcRenderer.send(IPC.boardAnswer, requestId, reply)
+        const request: { cancelled: boolean; cancel?: () => void } = { cancelled: false }
+        outstanding.set(requestId, request)
+        const answer = (reply: BoardReply): void => {
+          outstanding.delete(requestId)
+          if (!request.cancelled) ipcRenderer.send(IPC.boardAnswer, requestId, reply)
+        }
+        const onCancel = (cancel: () => void): void => {
+          if (request.cancelled) cancel()
+          else request.cancel = cancel
+        }
         Promise.resolve()
-          .then(() => listener(cardId, command))
+          .then(() => listener(cardId, command, onCancel))
           .then(answer, () => answer({ ok: false, error: NO_ANSWER }))
       }
+      const cancel = (_: unknown, requestId: unknown): void => {
+        const request = typeof requestId === 'string' ? outstanding.get(requestId) : undefined
+        if (!request || request.cancelled) return
+        request.cancelled = true
+        request.cancel?.()
+      }
       ipcRenderer.on(IPC.boardRequest, handler)
-      return () => ipcRenderer.removeListener(IPC.boardRequest, handler)
+      ipcRenderer.on(IPC.boardCancel, cancel)
+      return () => {
+        ipcRenderer.removeListener(IPC.boardRequest, handler)
+        ipcRenderer.removeListener(IPC.boardCancel, cancel)
+        outstanding.clear()
+      }
     }
   }
 }

@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sendBoardRequest } from './board-client'
-import { INVALID_REQUEST, serializeRequest, type BoardReply } from './board-protocol'
+import {
+  INVALID_REQUEST,
+  serializeRequest,
+  type BoardReply,
+  type BoardRequest
+} from './board-protocol'
 import { ONLY_ORCHESTRATOR } from './board-commands'
 import {
   orchestratorSockets,
@@ -176,6 +181,7 @@ describe("the Orchestrator's sockets (#81 D16)", () => {
     sockets = orchestratorSockets(boardDir, handler)
     const session = await sockets.open(orchestrator)
     const path = session.forward.localSocket!
+    const token = session.token!
     expect(path).toMatch(new RegExp(`^${boardDir}/o-[0-9a-f]{16}\\.sock$`))
     for (const command of [
       { command: 'guide' as const },
@@ -183,18 +189,52 @@ describe("the Orchestrator's sockets (#81 D16)", () => {
       { command: 'workspaces' as const, format: 'text' as const },
       { command: 'status' as const, card: '.', text: 'x' }
     ]) {
-      expect(await sendBoardRequest(path, serializeRequest(orchestrator, command))).toEqual({
+      expect(await sendBoardRequest(path, serializeRequest(orchestrator, command, token))).toEqual({
         ok: true
       })
     }
     expect(handler).toHaveBeenCalledTimes(4)
     for (const cardId of ['card-1', 'orchestrator:w2']) {
-      expect(await sendBoardRequest(path, serializeRequest(cardId, { command: 'guide' }))).toEqual({
+      const line = serializeRequest(cardId, { command: 'guide' }, token)
+      expect(await sendBoardRequest(path, line)).toEqual({
         ok: false,
         error: INVALID_REQUEST
       })
     }
     expect(handler).toHaveBeenCalledTimes(4)
+  })
+
+  it("refuses its own Orchestrator's id without its session's token (D16)", async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    sockets = orchestratorSockets(boardDir, handler)
+    const session = await sockets.open(orchestrator)
+    const other = await sockets.open(orchestrator)
+    const path = session.forward.localSocket!
+    expect(session.token).toMatch(/^[0-9a-f]{64}$/)
+    expect(other.token).not.toBe(session.token)
+    for (const token of [
+      undefined,
+      '',
+      other.token!,
+      session.token!.slice(0, 63),
+      'x'.repeat(64)
+    ]) {
+      const line = serializeRequest(orchestrator, { command: 'guide' }, token)
+      expect(await sendBoardRequest(path, line)).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('never hands the token on to the window', async () => {
+    const received: BoardRequest[] = []
+    sockets = orchestratorSockets(boardDir, async (request) => {
+      received.push(request)
+      return { ok: true }
+    })
+    const session = await sockets.open(orchestrator)
+    const line = serializeRequest(orchestrator, { command: 'guide' }, session.token)
+    expect(await sendBoardRequest(session.forward.localSocket!, line)).toEqual({ ok: true })
+    expect(received).toEqual([{ v: 1, cardId: orchestrator, command: 'guide' }])
   })
 
   it('is closed when its session exits, like an SSH session socket', async () => {
@@ -227,6 +267,20 @@ describe("board.sock's refusals (#81 D16)", () => {
         error: ONLY_ORCHESTRATOR
       })
     }
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('refuses any request carrying a token as invalid', async () => {
+    handler.mockClear()
+    expect(
+      await shared({
+        v: 1,
+        cardId: 'card-1',
+        token: 'a'.repeat(64),
+        command: 'list',
+        format: 'text'
+      })
+    ).toEqual({ ok: false, error: INVALID_REQUEST })
     expect(handler).not.toHaveBeenCalled()
   })
 

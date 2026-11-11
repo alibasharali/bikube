@@ -4,18 +4,20 @@
  * `/tmp/bikube-<32 hex>.sock` on the host to it. Each socket serves only its own card: any other
  * card id is answered `board: invalid request` and never reaches the window. Each Orchestrator
  * session gets one the same way (#81 D16), `o-<16 hex>.sock`, given to its shell as
- * `BIKUBE_SOCKET`: it serves every command, only for its Orchestrator. The shared `board.sock`
+ * `BIKUBE_SOCKET` with a secret `token` of its own as `BIKUBE_ORCHESTRATOR_TOKEN`: it serves every
+ * command, only for its Orchestrator and only with that token, since any card's shell can list the
+ * `board` directory. The token is taken off before the request goes on. The shared `board.sock`
  * refuses what only the Orchestrator may do (`sharedSocketHandler`). Plain Node, no Electron:
  * main injects the handler that relays requests to the window.
  */
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lstatSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { ORCHESTRATOR_ONLY_COMMANDS } from './board-args'
 import { ONLY_ORCHESTRATOR, servesRemoteCard } from './board-commands'
 import { isOrchestratorId } from './orchestrator'
-import { INVALID_REQUEST, type BoardReply, type BoardRequest } from './board-protocol'
-import { startBoardServer, type BoardHandler, type BoardServer } from './board-server'
+import { INVALID_REQUEST, type BoardRequest } from './board-protocol'
+import { keepSignal, startBoardServer, type BoardHandler, type BoardServer } from './board-server'
 import type { BoardForward } from './ssh-command'
 
 export interface SessionSocketsOptions {
@@ -28,14 +30,18 @@ export interface SessionSocketsOptions {
 interface SocketKind {
   /** The file name's prefix: `s` for SSH sessions, `o` for the Orchestrator's (#81 D16). */
   prefix: 's' | 'o'
-  /** Whether the socket opened for `cardId` serves `request`. */
-  serves: (request: BoardRequest, cardId: string) => boolean
+  /** Whether each socket gets a secret token its requests must carry (#81 D16). */
+  token: boolean
+  /** Whether the socket opened for `cardId`, with `token` if it has one, serves `request`. */
+  serves: (request: BoardRequest, cardId: string, token: string | undefined) => boolean
 }
 
 /** One SSH session's socket, before and after its session exists. */
 export interface SessionSocket {
   /** What the SSH line needs; `localSocket` is null when main couldn't listen (D7). */
   readonly forward: BoardForward
+  /** The secret its requests carry, for the Orchestrator's sockets only (#81 D16). */
+  readonly token?: string
   /** Ties the socket to the session it serves: it closes when that session exits. */
   attach(sessionId: string): void
   /** Closes the socket now; for a session that never started. */
@@ -77,12 +83,32 @@ function servesOwnCard(request: BoardRequest, cardId: string): boolean {
 
 const defaultRandomHex = (bytes: number): string => randomBytes(bytes).toString('hex')
 
-const SSH_SOCKETS: SocketKind = { prefix: 's', serves: servesOwnCard }
+const SSH_SOCKETS: SocketKind = { prefix: 's', token: false, serves: servesOwnCard }
 
-/** The Orchestrator's socket serves every command, from that Orchestrator only (#81 D16). */
+/** Whether `given` is `expected`, compared in constant time. */
+function sameSecret(given: string | undefined, expected: string | undefined): boolean {
+  if (typeof given !== 'string' || typeof expected !== 'string') return false
+  const a = Buffer.from(given, 'utf8')
+  const b = Buffer.from(expected, 'utf8')
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/**
+ * The Orchestrator's socket serves every command, from that Orchestrator only, with its session's
+ * token (#81 D16).
+ */
 const ORCHESTRATOR_SOCKETS: SocketKind = {
   prefix: 'o',
-  serves: (request, cardId) => request.cardId === cardId
+  token: true,
+  serves: (request, cardId, token) => request.cardId === cardId && sameSecret(request.token, token)
+}
+
+/** The request without its token, as the window gets it. */
+function withoutToken(request: BoardRequest): BoardRequest {
+  if (request.token === undefined) return request
+  const rest = { ...request }
+  delete rest.token
+  return rest
 }
 
 /** Whether `request` names an Orchestrator, as its caller or its card. */
@@ -96,7 +122,10 @@ const namesOrchestrator = (request: BoardRequest): boolean =>
  */
 export function sharedSocketHandler(handler: BoardHandler): BoardHandler {
   return (request) => {
-    if (namesOrchestrator(request)) return Promise.resolve({ ok: false, error: INVALID_REQUEST })
+    // Only an Orchestrator's own socket takes a token (D16).
+    if (namesOrchestrator(request) || request.token !== undefined) {
+      return Promise.resolve({ ok: false, error: INVALID_REQUEST })
+    }
     if (ORCHESTRATOR_ONLY_COMMANDS.has(request.command)) {
       return Promise.resolve({ ok: false, error: ONLY_ORCHESTRATOR })
     }
@@ -136,9 +165,10 @@ export class SessionSockets {
   async open(cardId: string): Promise<SessionSocket> {
     const localPath = join(this.dir, `${this.kind.prefix}-${this.randomHex(8)}.sock`)
     const remoteSocket = `/tmp/bikube-${this.randomHex(16)}.sock`
-    const scoped = (request: BoardRequest): Promise<BoardReply> =>
-      this.kind.serves(request, cardId)
-        ? this.handler(request)
+    const token = this.kind.token ? this.randomHex(32) : undefined
+    const scoped: BoardHandler = (request) =>
+      this.kind.serves(request, cardId, token)
+        ? this.handler(keepSignal(request, withoutToken(request)))
         : Promise.resolve({ ok: false, error: INVALID_REQUEST })
     let server: BoardServer | null = null
     try {
@@ -157,6 +187,7 @@ export class SessionSockets {
     }
     return {
       forward: { cardId, remoteSocket, localSocket: server ? localPath : null },
+      ...(token !== undefined && { token }),
       attach: (sessionId) => {
         if (server && this.servers.has(server)) this.bySession.set(sessionId, server)
       },

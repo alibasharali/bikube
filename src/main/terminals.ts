@@ -180,6 +180,9 @@ export function registerTerminals(
               ? {
                   ...shellEnv(cardId),
                   ...(ownSocket && { BIKUBE_SOCKET: ownSocket }),
+                  // The secret only its own socket takes (D16).
+                  ...(ownSocket &&
+                    orchestrator?.token && { BIKUBE_ORCHESTRATOR_TOKEN: orchestrator.token }),
                   ...(shell && { SHELL: shell }),
                   // Read by the Claude Code session start hook (claude-hooks.ts).
                   BIKUBE_CLAUDE_STATUS: claudeStatus() ? '1' : '0',

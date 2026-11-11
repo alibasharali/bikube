@@ -33,7 +33,10 @@ const isWorkspaceShell = (id: string): boolean =>
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
-  return window.bikube.board.onRequest(async (cardId, request) => {
+  return window.bikube.board.onRequest(async (cardId, request, onCancel) => {
+    // Main says when the asking client left (an interrupted `board wait`, #81 D20).
+    const gone = new AbortController()
+    onCancel(() => gone.abort())
     const checked = await checkCreateWorktree(
       workspaceStore.getState(),
       cardId,
@@ -80,7 +83,7 @@ export function listenForBoardRequests(): () => void {
         open: openForBoard,
         // `board send`, `wait` and `reply` (#81 D19–D21); main reads the transcript.
         send: sendToCard,
-        wait: waitOnCard,
+        wait: (id, seconds) => waitOnCard(id, seconds, gone.signal),
         reply: (folder, sessionId) => window.bikube.agentTab.reply(folder, sessionId),
         // `board palette` (#81 D23): the palette's rows for the view the app shows, run as picked.
         palette: boardPaletteItems,

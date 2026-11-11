@@ -365,6 +365,24 @@ describe('shells in the sync file', () => {
   })
 })
 
+describe("cards and shells claiming an Orchestrator's id in the sync file (#81 D16)", () => {
+  it('drops them, reading the rest', () => {
+    const shell = { id: 's1', name: 'Dev', command: '', autostart: false, type: 'shell' as const }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('k', 'w-backlog'), card('orchestrator:w', 'w-backlog')],
+          shells: [shell, { ...shell, id: 'orchestrator:s' }]
+        })
+      ]
+    }
+    const read = parseSyncFile(serializeSyncFile(toSyncBoard(state, HOME), new Date(0)), HOME)
+    expect(read.ok && read.workspaces[0]!.cards.map((c) => c.id)).toEqual(['k'])
+    expect(read.ok && read.workspaces[0]!.shells).toEqual([shell])
+  })
+})
+
 describe("a card's pending setup is not synced (#39 D8, AC12)", () => {
   it('writes no setup on any card, and reads a card the file gives one as having none', () => {
     const state: WorkspaceState = {

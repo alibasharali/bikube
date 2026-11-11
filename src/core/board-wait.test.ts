@@ -17,6 +17,7 @@ function fakeCard(initial: WaitedCard): {
   set(running: boolean, activity: Activity | null): void
   tick(ms: number): void
   listeners: Set<() => void>
+  timers: () => number
   deps: Parameters<typeof waitForCard>[0]
 } {
   let card = initial
@@ -26,6 +27,7 @@ function fakeCard(initial: WaitedCard): {
   let nextTimer = 1
   return {
     listeners,
+    timers: () => timers.size,
     set(running, activity) {
       card = { running, activity }
       for (const listener of [...listeners]) listener()
@@ -97,6 +99,27 @@ describe('waitForCard (#81 D20)', () => {
     await Promise.resolve()
     expect(result).toBe('timeout')
     expect(fake.listeners.size).toBe(0)
+  })
+
+  it('stops waiting when cancelled, its client gone, unsubscribed and with no timer left', async () => {
+    const fake = fakeCard({ running: true, activity: 'working' })
+    const gone = new AbortController()
+    const done = waitForCard(fake.deps, 3600, gone.signal)
+    expect(fake.listeners.size).toBe(1)
+    expect(fake.timers()).toBe(1)
+    gone.abort()
+    expect(await done).toBe('timeout')
+    expect(fake.listeners.size).toBe(0)
+    expect(fake.timers()).toBe(0)
+  })
+
+  it('subscribes to nothing when already cancelled', async () => {
+    const fake = fakeCard({ running: true, activity: 'working' })
+    const gone = new AbortController()
+    gone.abort()
+    expect(await waitForCard(fake.deps, 5, gone.signal)).toBe('timeout')
+    expect(fake.listeners.size).toBe(0)
+    expect(fake.timers()).toBe(0)
   })
 
   it('words the timeout as D20 does', () => {

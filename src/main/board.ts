@@ -98,6 +98,12 @@ export function registerBoard(
     (cardId) => terminals.ownerOfCard(cardId),
     (owner, requestId, cardId, command) => {
       owner.send(IPC.boardRequest, requestId, cardId, command)
+    },
+    undefined,
+    // A client that left before its answer (an interrupted `board wait`, #81 D20): the page drops
+    // what the request waits on.
+    (owner, requestId) => {
+      if (!owner.isDestroyed()) owner.send(IPC.boardCancel, requestId)
     }
   )
   terminals.onWindowGone((owner) => relay.release(owner))

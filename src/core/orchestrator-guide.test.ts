@@ -24,6 +24,17 @@ describe("the orchestrator's guide (#81 D12, D13)", () => {
     )
   })
 
+  it("quotes the workspace's name for the shell where a command names it, a ' included", () => {
+    const guide = orchestratorGuide("Bob's app", '/x/proj', '')
+    expect(guide).toContain('workspace "Bob\'s app"')
+    expect(guide).toContain("board terminal --show --workspace 'Bob'\\''s app' 'npm run dev'")
+    expect(orchestratorGuide('Proj', '/x', '')).toContain(
+      "board terminal --show --workspace 'Proj' 'npm run dev'"
+    )
+    // A name holding a placeholder is put in as written there too.
+    expect(orchestratorGuide('{{FOLDER}}', '/x', '')).toContain("--workspace '{{FOLDER}}'")
+  })
+
   it("appends the user's instructions under their heading, and nothing when there are none (D13)", () => {
     const guide = orchestratorGuide('Proj', '/x/proj', 'Always use worktrees.')
     expect(guide).toBe(

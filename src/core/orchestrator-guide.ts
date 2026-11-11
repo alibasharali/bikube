@@ -12,11 +12,17 @@ export const ORCHESTRATOR_INSTRUCTION_FILE = 'orchestrator-instruction.txt'
 export const MAX_ORCHESTRATOR_INSTRUCTIONS = 20_000
 
 const WORKSPACE = '{{WORKSPACE}}'
+/** The workspace's name single-quoted for a POSIX shell, where a command names it. */
+const WORKSPACE_ARG = '{{WORKSPACE_ARG}}'
 const FOLDER = '{{FOLDER}}'
+
+/** `text` single-quoted for a POSIX shell: taken literally, `'` included. */
+const shellQuoted = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`
 
 /**
  * The guide, with `{{WORKSPACE}}` and `{{FOLDER}}` where `board guide` puts the workspace's name
- * and folder. No backslash, so any shell prints it as it is.
+ * and folder, and `{{WORKSPACE_ARG}}` where it puts the name quoted for the shell. No backslash,
+ * so any shell prints it as it is.
  */
 export const ORCHESTRATOR_GUIDE = `# Bikube orchestrator
 
@@ -119,7 +125,7 @@ characters) saying what you did or what you are waiting for. Do it silently.
 - Open Agent setup (the workspace's skills, agents, hooks and settings for Claude Code):
   board palette run 'Agent setup'
 - Run a dev server the user can see, in this workspace:
-  board terminal --show --workspace '${WORKSPACE}' 'npm run dev'
+  board terminal --show --workspace ${WORKSPACE_ARG} 'npm run dev'
   It prints the terminal's name and id.
 - Have a card reviewed: create a reviewer card, start it, wait for it, then read its reply,
   naming it by the id board create printed (here <id>):
@@ -140,9 +146,16 @@ characters) saying what you did or what you are waiting for. Do it silently.
  * `instructions` aren't empty, `## Your instructions` and that text.
  */
 export function orchestratorGuide(name: string, folder: string, instructions: string): string {
-  const guide = ORCHESTRATOR_GUIDE.split(WORKSPACE)
-    .map((part) => part.split(FOLDER).join(folder))
-    .join(name)
+  // One pass, so a name or folder holding a placeholder is put in as written.
+  const values: Record<string, string> = {
+    [WORKSPACE]: name,
+    [WORKSPACE_ARG]: shellQuoted(name),
+    [FOLDER]: folder
+  }
+  const guide = ORCHESTRATOR_GUIDE.replace(
+    /\{\{(?:WORKSPACE|WORKSPACE_ARG|FOLDER)\}\}/g,
+    (placeholder) => values[placeholder]
+  )
   const own = instructions.trimEnd()
   return own ? `${guide}\n## Your instructions\n\n${own}\n` : guide
 }

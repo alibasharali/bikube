@@ -99,7 +99,7 @@ characters) saying what you did or what you are waiting for. Do it silently.
 - Open Agent setup (the workspace's skills, agents, hooks and settings for Claude Code):
   board palette run 'Agent setup'
 - Run a dev server the user can see, in this workspace:
-  board terminal --show --workspace '{{WORKSPACE}}' 'npm run dev'
+  board terminal --show --workspace {{WORKSPACE_ARG}} 'npm run dev'
   It prints the terminal's name and id.
 - Have a card reviewed: create a reviewer card, start it, wait for it, then read its reply,
   naming it by the id board create printed (here <id>):

@@ -15,7 +15,7 @@ import { plainCards } from './plain-cards'
 // Claude Code start and resume with kept output, the Orchestrator agent setting, New
 // conversation, and its signals (waiting, Split's Agents, the Agent tab); `board guide` (S3);
 // `board start`, `open` and `terminal`, and an orchestrated card's first prompt (S4); `board send`,
-// `wait` and `reply` (S5). The fake `claude` and
+// `wait` and `reply` (S5); `board palette` (S6). The fake `claude` and
 // agents run on the login PATH of a fake home, which is also BIKUBE_HOME_DIR.
 
 const darwin = process.platform === 'darwin'
@@ -554,4 +554,40 @@ test('AC10: board send types into a card, board wait waits on its activity, boar
   await run('board reply Plain; echo "plain rc=$?"')
   await expect.poll(bufferLines).toContain('plain rc=1')
   expect(await bufferLines()).toContain('board: "Plain" is not a Claude Code card')
+})
+
+test("AC12: board palette lists the palette's rows but the open view's, and runs one by its label", async () => {
+  await launch()
+  await createWorkspace(repo, 'A')
+  const other = join(root, 'other')
+  mkdirSync(other)
+  await createWorkspace(other, 'B')
+  // Each workspace's sidebar item is titled with its folder.
+  await page.locator(`[data-testid=workspace-item][title="${repo}"]`).click()
+  await expect(activeWorkspace()).toHaveAttribute('title', repo)
+  await openFromToolbar()
+  await expect.poll(claudeLog).toHaveLength(1)
+  await run('hello')
+  await expect.poll(() => savedOrchestrator()?.claudeStarted).toBe(true)
+
+  const listed = join(root, 'palette.txt')
+  await run(`board palette list > ${listed}; echo "list rc=$?"`)
+  await expect.poll(bufferLines).toContain('list rc=0')
+  const labels = readText(listed).trimEnd().split('\n')
+  expect(labels).toEqual(
+    expect.arrayContaining(['Agent setup', 'Switch to workspace B', 'Open Settings'])
+  )
+  for (const label of ['Close card', 'Split right', 'Back to board', 'Orchestrator']) {
+    expect(labels).not.toContain(label)
+  }
+
+  // The view moves to B at once; the next commands run in A's Orchestrator, now out of view.
+  const result = join(root, 'run.txt')
+  await run(
+    `board palette run 'switch to workspace b' && board palette run 'Agent setup' && ` +
+      `board palette run nope 2> ${result}; echo "nope rc=$?" >> ${result}`
+  )
+  await expect(activeWorkspace()).toHaveAttribute('title', other)
+  await expect(page.getByTestId('agent-setup-subtitle')).toContainText(other)
+  await expect.poll(() => readText(result)).toBe('board: no palette row "nope"\nnope rc=1\n')
 })

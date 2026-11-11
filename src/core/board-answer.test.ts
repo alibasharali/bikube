@@ -7,6 +7,7 @@ import {
   type RepoBranches
 } from './board-answer'
 import type { BoardCommand } from './board-args'
+import type { ActionRow, PaletteAction, PaletteItems } from './palette'
 import {
   NOT_IN_A_CARD,
   ONLY_ORCHESTRATOR,
@@ -1358,6 +1359,68 @@ describe('board guide (#81 D13, D16)', () => {
           error: ONLY_ORCHESTRATOR
         })
       }
+    }
+  })
+})
+
+describe('board palette (#81 D23, AC12)', () => {
+  const action = (id: 'agentSetup' | 'back' | 'settings', label: string): ActionRow => ({
+    kind: 'action',
+    action: { id },
+    label
+  })
+  const items: PaletteItems = {
+    cards: [],
+    shells: [],
+    actions: [
+      action('back', 'Back to board'),
+      action('agentSetup', 'Agent setup'),
+      action('settings', 'Open Settings')
+    ]
+  }
+  function ask(
+    command: BoardCommand,
+    from = 'orchestrator:alpha'
+  ): { reply: unknown; ran: PaletteAction[] } {
+    const store = setup()
+    store.ensureOrchestrator('alpha')
+    const ran: PaletteAction[] = []
+    const reply = answerBoardCommand(
+      store,
+      from,
+      command,
+      running,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { palette: () => items, runPalette: (a) => ran.push(a) }
+    )
+    return { reply, ran }
+  }
+
+  it("lists the palette's rows for the Orchestrator, one label per line, Back left out", () => {
+    expect(ask({ command: 'palette', action: 'list' })).toEqual({
+      reply: { ok: true, output: 'Agent setup\nOpen Settings\n' },
+      ran: []
+    })
+  })
+
+  it('runs the row its label names, in any case after trimming, printing nothing', () => {
+    expect(ask({ command: 'palette', action: 'run', label: ' agent SETUP ' })).toEqual({
+      reply: { ok: true },
+      ran: [{ id: 'agentSetup' }]
+    })
+  })
+
+  it('refuses a label no listed row has, running nothing', () => {
+    for (const label of ['nope', 'Back to board']) {
+      expect(ask({ command: 'palette', action: 'run', label })).toEqual({
+        reply: { ok: false, error: `board: no palette row "${label}"` },
+        ran: []
+      })
     }
   })
 })

@@ -1,5 +1,6 @@
 import { answerBoardRequest, checkCreateWorktree } from '../../core/board-answer'
 import { findShellCard } from '../../core/workspace-shells'
+import { boardPaletteItems, runBoardPalette } from './board-palette'
 import { sendToCard, waitOnCard } from './board-send-wait'
 import { openForBoard, startForBoard } from './board-starts'
 import { continueAfterSetup } from './card-actions'
@@ -27,7 +28,8 @@ const isWorkspaceShell = (id: string): boolean =>
  * Settings' Your orchestrator instructions (#81 D13); its `board start`, `open` and `terminal`
  * start in the background and answer once the start is over (#81 D17, D22); its `board send`
  * types into a card, `wait` waits on its activity and `reply` asks main for its last reply
- * (D19–D21).
+ * (D19–D21); its `board palette` lists and runs the command palette's rows as the app shows them
+ * (D23).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
@@ -79,7 +81,10 @@ export function listenForBoardRequests(): () => void {
         // `board send`, `wait` and `reply` (#81 D19–D21); main reads the transcript.
         send: sendToCard,
         wait: waitOnCard,
-        reply: (folder, sessionId) => window.bikube.agentTab.reply(folder, sessionId)
+        reply: (folder, sessionId) => window.bikube.agentTab.reply(folder, sessionId),
+        // `board palette` (#81 D23): the palette's rows for the view the app shows, run as picked.
+        palette: boardPaletteItems,
+        runPalette: runBoardPalette
       }
     )
   })

@@ -418,3 +418,37 @@ export function filterPalette(items: PaletteItems, query: string): PaletteItems 
     actions: filterRows(items.actions, query, (row) => [row.label, row.label])
   }
 }
+
+/**
+ * What `board palette` leaves out (#81 D23): the rows acting on the open card or pane. Card and
+ * shell rows are left out too (`board open` covers those).
+ */
+const OPEN_VIEW_ACTIONS: ReadonlySet<PaletteAction['id']> = new Set<PaletteAction['id']>([
+  'back',
+  'splitRight',
+  'splitDown',
+  'closePane',
+  'closeCard',
+  'find',
+  'copyCommandOutput',
+  'moveCard',
+  'zoomPane',
+  'focusNextPane',
+  'focusPreviousPane',
+  'equalizePanes',
+  'renameCard',
+  'openInWindow',
+  'editDescription'
+])
+
+/** The Orchestrator's `board palette list` (#81 D23): `items`' action rows, in order, but D23's. */
+export function orchestratorPaletteRows(items: PaletteItems): ActionRow[] {
+  return items.actions.filter((row) => !OPEN_VIEW_ACTIONS.has(row.action.id))
+}
+
+/** The row `board palette run` runs (#81 D23): its label equal to `label`'s, trimmed, in any case. */
+export function findPaletteRow(rows: readonly ActionRow[], label: string): ActionRow | undefined {
+  const wanted = label.trim().toLowerCase()
+  if (!wanted) return undefined
+  return rows.find((row) => row.label.toLowerCase() === wanted)
+}

@@ -19,6 +19,8 @@ import { nextWaitingCard } from '../../core/waiting'
 import { showViewPrompt } from '../../core/view-prompt'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { startInBackground } from './background-shells'
+import { onBoardPalette } from './board-palette'
+import { currentPaletteItems, type OpenTerminal } from './palette-input'
 import { onBoardOpen } from './board-starts'
 import { newShell } from './temporary-shells'
 import {
@@ -414,6 +416,26 @@ function App(): React.JSX.Element {
     setPaletteOpen(false)
   }, [])
 
+  // The view the palette's rows are built for: the card or shell open at full size, if any.
+  const paletteView: OpenTerminal | null =
+    active && openCard
+      ? { kind: openOnBoard ? 'card' : 'shell', workspaceId: active.id, cardId: openCard.id }
+      : null
+  const paletteFor = useRef({ view: paletteView, agentSetup })
+  useEffect(() => {
+    paletteFor.current = { view: paletteView, agentSetup }
+  })
+  // The Orchestrator's `board palette` (#81 D23): the rows the palette would show now, each run
+  // at once exactly as picking it would, whatever the user is looking at.
+  useEffect(
+    () =>
+      onBoardPalette({
+        items: () => currentPaletteItems(paletteFor.current.view, paletteFor.current.agentSetup),
+        run: (action) => runAction.current(action)
+      }),
+    []
+  )
+
   // Mod+1…9 select the 1st…9th workspace in sidebar order (#31 D18), anywhere no dialog owns the
   // keyboard, swallowed whole even with no workspace at that number; once per press (D7).
   const workspaceIds = workspaces.map((w) => w.id).join('\n')
@@ -549,15 +571,7 @@ function App(): React.JSX.Element {
       </div>
       {paletteOpen && (
         <CommandPalette
-          open={
-            active && openCard
-              ? {
-                  kind: openOnBoard ? 'card' : 'shell',
-                  workspaceId: active.id,
-                  cardId: openCard.id
-                }
-              : null
-          }
+          open={paletteView}
           agentSetup={agentSetup}
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}

@@ -47,6 +47,12 @@ import { waitTimedOut, type WaitResult } from './board-wait'
 import { transcriptBackupTarget } from './transcript-backup-target'
 import type { ClaudeUsage } from './claude-usage-types'
 import { orchestratorGuide } from './orchestrator-guide'
+import {
+  findPaletteRow,
+  orchestratorPaletteRows,
+  type PaletteAction,
+  type PaletteItems
+} from './palette'
 import type { Card, Workspace, WorkspaceState, WorkspaceStore } from './workspace-store'
 import { branchProblem, suggestBranch } from './worktree-names'
 
@@ -159,6 +165,10 @@ export interface OrchestratorAnswers {
   wait?: (cardId: string, seconds: number) => Promise<WaitResult | 'timeout'>
   /** Main's read of the last reply in the Claude Code session's transcript in `folder` (D21). */
   reply?: (folder: string, sessionId: string) => Promise<ReplyRead>
+  /** The palette's rows for the user's current view, as the palette would show them (D23). */
+  palette?: () => PaletteItems
+  /** Runs an action row exactly as picking it in the palette would (D23). */
+  runPalette?: (action: PaletteAction) => void
 }
 
 /** The orchestrator-only `command` from the Orchestrator of `workspace` (#81 D16). */
@@ -179,7 +189,9 @@ const startFailed = (title: string, reason: string): BoardReply => ({
 /**
  * An orchestrator-only command from the Orchestrator of `workspace`: `guide` prints the guide
  * with the workspace's name and folder and the user's instructions (D13); `start`, `open`,
- * `terminal`, `send`, `wait` and `reply` are `answerBoardRequest`'s; `palette` comes with S6.
+ * `terminal`, `send`, `wait` and `reply` are `answerBoardRequest`'s. `palette list` prints the
+ * palette's action rows but those acting on the open card or pane, one label a line; `palette run`
+ * runs the one its label names, at once, and prints nothing (D23).
  */
 function answerOrchestratorOnly(
   workspace: Workspace,
@@ -193,6 +205,18 @@ function answerOrchestratorOnly(
       answers.instructions?.() ?? ''
     )
     return { ok: true, output }
+  }
+  if (command.command === 'palette') {
+    const rows = orchestratorPaletteRows(
+      answers.palette?.() ?? { cards: [], shells: [], actions: [] }
+    )
+    if (command.action === 'list') {
+      return { ok: true, output: rows.map((row) => `${row.label}\n`).join('') }
+    }
+    const row = findPaletteRow(rows, command.label)
+    if (!row) return { ok: false, error: `board: no palette row "${command.label}"` }
+    answers.runPalette?.(row.action)
+    return { ok: true }
   }
   return { ok: false, error: `board: ${command.command} is not available yet` }
 }

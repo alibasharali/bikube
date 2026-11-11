@@ -27,6 +27,7 @@ import { registerPorts } from './ports'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { cardIds, registerScrollback } from './scrollback'
+import { registerTranscripts } from './transcripts'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
@@ -174,6 +175,9 @@ function startApp(): void {
       : scrollback.store.clear()
   )
   settings.onKeepOutputOff(() => scrollback.store.clear())
+  // Transcript backups of cards on neither board go too (#80 D10).
+  const transcripts = registerTranscripts()
+  void sync.launched.then(() => transcripts.prune(cardIds(localBoard, state.load())))
   registerClipboard()
   registerLinks()
   registerPorts()

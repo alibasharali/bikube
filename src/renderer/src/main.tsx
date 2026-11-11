@@ -11,6 +11,7 @@ import { startTemporaryShells } from './temporary-shells'
 import { startInstalledAgents } from './installed-agents'
 import { startInstalledEditors } from './installed-editors'
 import { listenForBoardRequests } from './board-requests'
+import { startTranscriptBackups } from './transcript-backups'
 import { loadGhosttyConfig } from './ghostty'
 import { loadHomeDir } from './home'
 import { loadSettingsStore, settingsStore } from './settings'
@@ -38,6 +39,7 @@ void Promise.all([
   followAppTheme()
   followAppFont()
   listenForBoardRequests()
+  startTranscriptBackups()
   listenForSyncBoards()
   startAttention()
   startInstalledAgents()

@@ -82,6 +82,11 @@ const api: BikubeApi = {
     delete: (cardId) => ipcRenderer.send(IPC.scrollbackDelete, cardId),
     quitSaved: () => ipcRenderer.send(IPC.scrollbackQuitSaved)
   },
+  transcripts: {
+    backup: (cardId, folder, sessionId) =>
+      ipcRenderer.send(IPC.transcriptsBackup, cardId, folder, sessionId),
+    delete: (cardId) => ipcRenderer.send(IPC.transcriptsDelete, cardId)
+  },
   settings: {
     load: () => ipcRenderer.invoke(IPC.settingsLoad),
     save: (settings) => ipcRenderer.send(IPC.settingsSave, settings),

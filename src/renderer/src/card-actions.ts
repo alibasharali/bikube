@@ -109,13 +109,14 @@ export function requestCloseCard(cardId: string, ask: () => void): void {
 
 /**
  * Stops every pane's process of a card being deleted and frees its screens (#11 D6), and removes
- * its kept output (#46 D7; a shell has none, and removing none does nothing) and its usage
- * (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
+ * its kept output (#46 D7; a shell has none, and removing none does nothing), its transcript
+ * backup (#80 D10) and its usage (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
  */
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
   cardTerminals().dispose(cardId)
   window.bikube.scrollback.delete(cardId)
+  window.bikube.transcripts.delete(cardId)
   clearCardUsage(cardId)
   clearShellAgent(cardId)
 }

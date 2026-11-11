@@ -1047,10 +1047,23 @@ export function cardTerminals(): CardSessions<XtermScreen> {
     const cards = registry
     window.bikube.app.onQuitting(() => {
       cards.keepRunning()
+      for (const save of quitSaves) save()
       window.bikube.scrollback.quitSaved()
     })
   }
   return registry
+}
+
+/** What else is sent as the app starts quitting, before `scrollback.quitSaved`. */
+const quitSaves: Array<() => void> = []
+
+/**
+ * Runs `save` as the app starts quitting, after the running cards' kept output and before main
+ * is told the quit saves were sent, so whatever it sends main handles before stopping the shells
+ * (#80 D9's transcript backups at quit).
+ */
+export function onQuitSave(save: () => void): void {
+  quitSaves.push(save)
 }
 
 /** The app-wide extra panes of cards (#11 D1), with their layouts. */

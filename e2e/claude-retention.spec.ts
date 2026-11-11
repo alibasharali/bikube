@@ -1,16 +1,21 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { createHash, randomUUID } from 'node:crypto'
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, boardCard, expectCardOpen } from './card-view'
+import { encodeProjectFolder } from '../src/core/claude-stats'
+import { backToBoard, boardCard, closeCard, expectCardOpen } from './card-view'
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -19,6 +24,8 @@ import { plainCards } from './plain-cards'
 // `~/.claude/settings.json` keeps conversations less than 3650 days shows a banner over the card
 // view (D5) whose buttons raise the setting (D4), hide it for the run or turn the offer off (D6).
 // The home is a fake one (`BIKUBE_HOME_DIR`) with the fake `claude` and `ssh` on its login PATH.
+// S3: a local Claude Code card's transcript is backed up into `<userData>/transcripts` after each
+// `board usage` and when its main pane stops (D8–D10).
 
 const REMOTE_DIR = '/tmp/bikube-remote'
 const NOTICE =
@@ -316,4 +323,152 @@ test('#80 AC5: a file made invalid after the notice showed is left alone, with t
   )
   await expect(banner().getByTestId('retention-banner-text')).toHaveText(NOTICE)
   expect(readFileSync(settingsFile, 'utf8')).toBe('{ nope')
+})
+
+/** Card `title`'s id and session id, from the saved state file. */
+async function cardOf(title: string): Promise<{ id: string; agentSessionId: string }> {
+  let card: { id: string; agentSessionId: string } | undefined
+  await expect
+    .poll(() => {
+      try {
+        const saved = JSON.parse(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8'))
+        const cards: { id: string; title: string; agentSessionId: string }[] =
+          saved.state.workspaces[0].cards
+        card = cards.find((c) => c.title === title)
+      } catch {
+        card = undefined
+      }
+      return card !== undefined
+    })
+    .toBe(true)
+  return card!
+}
+
+/** Claude Code's transcript of `sessionId` for the repo, in the fake home. */
+const transcriptOf = (sessionId: string): string =>
+  join(fake.home, '.claude', 'projects', encodeProjectFolder(repo), `${sessionId}.jsonl`)
+
+/** The card's backup folder, `<userData>/transcripts/<sha256 of the card id>`. */
+const backupFolder = (cardId: string): string =>
+  join(dataDir, 'transcripts', createHash('sha256').update(cardId).digest('hex'))
+
+const contents = (path: string): string => (existsSync(path) ? readFileSync(path, 'utf8') : '')
+const modeOf = (path: string): number => statSync(path).mode & 0o777
+
+/** Types `line` at the open card's prompt and waits until it has run. */
+async function run(line: string): Promise<void> {
+  const marker = join(root, `ran-${randomUUID()}`)
+  await page.keyboard.type(`${line}; touch ${marker}`)
+  await page.keyboard.press('Enter')
+  await expect.poll(() => existsSync(marker), { timeout: 15_000 }).toBe(true)
+}
+
+/**
+ * Creates the Claude Code card `title` and sends the fake `claude` a message: it writes its
+ * one-line transcript (D13), reports its session and exits to the card's shell prompt.
+ */
+async function startedClaudeCard(title: string): Promise<{ id: string; agentSessionId: string }> {
+  await newCard(title)
+  await claudeStarted()
+  const card = await cardOf(title)
+  await page.keyboard.type('hello')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => existsSync(transcriptOf(card.agentSessionId))).toBe(true)
+  return card
+}
+
+test('#80 AC7: board usage backs up the transcript and its folder, and again once it grew', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const card = await startedClaudeCard('agent')
+  const transcript = transcriptOf(card.agentSessionId)
+  // The fake claude's transcript (D13).
+  expect(contents(transcript)).toBe('{"type":"summary","summary":"fake claude"}\n')
+  const subagents = join(transcript.slice(0, -'.jsonl'.length), 'subagents')
+  mkdirSync(subagents, { recursive: true })
+  writeFileSync(join(subagents, 'agent-a.jsonl'), '{"sub":1}\n')
+
+  const folder = backupFolder(card.id)
+  const copy = join(folder, `${card.agentSessionId}.jsonl`)
+  await run(`board usage . ${transcript}`)
+  await expect.poll(() => contents(copy)).toBe(contents(transcript))
+  expect(modeOf(join(dataDir, 'transcripts'))).toBe(0o700)
+  expect(modeOf(folder)).toBe(0o700)
+  expect(modeOf(copy)).toBe(0o600)
+  expect(contents(join(folder, card.agentSessionId, 'subagents', 'agent-a.jsonl'))).toBe(
+    '{"sub":1}\n'
+  )
+
+  appendFileSync(transcript, '{"type":"user"}\n')
+  await run(`board usage . ${transcript}`)
+  await expect.poll(() => contents(copy)).toBe(contents(transcript))
+  expect(contents(copy).split('\n')).toHaveLength(3)
+})
+
+test('#80 AC8, AC11: closing the card backs up the last line; deleting it removes the backup', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const card = await startedClaudeCard('agent')
+  const transcript = transcriptOf(card.agentSessionId)
+  const copy = join(backupFolder(card.id), `${card.agentSessionId}.jsonl`)
+  await run(`board usage . ${transcript}`)
+  await expect.poll(() => contents(copy)).toBe(contents(transcript))
+
+  appendFileSync(transcript, '{"type":"assistant","last":true}\n')
+  await closeCard(page)
+  await page.getByTestId('confirm-close').click()
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+  await expect.poll(() => contents(copy)).toContain('"last":true')
+
+  await backToBoard(page)
+  await boardCard(page, 'agent').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-delete').click()
+  await expect(boardCard(page, 'agent')).toHaveCount(0)
+  await expect.poll(() => existsSync(backupFolder(card.id))).toBe(false)
+})
+
+test('#80 D9: quitting backs up a running card before its shell is stopped', async () => {
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const card = await startedClaudeCard('agent')
+  const transcript = transcriptOf(card.agentSessionId)
+  const copy = join(backupFolder(card.id), `${card.agentSessionId}.jsonl`)
+  appendFileSync(transcript, '{"type":"assistant","atQuit":true}\n')
+  await app!.close()
+  app = undefined
+  expect(contents(copy)).toBe(contents(transcript))
+})
+
+test('#80 AC11: a new session keeps only its files; a card not on the board loses its backup at launch; no state or sync file mentions them', async () => {
+  const syncDir = join(root, 'sync')
+  mkdirSync(syncDir)
+  writeFileSync(
+    join(dataDir, 'bikube-settings.json'),
+    JSON.stringify({ version: 1, settings: { syncFolder: syncDir } })
+  )
+  await launch()
+  await createWorkspace(repo, 'repo')
+  const card = await startedClaudeCard('agent')
+  const folder = backupFolder(card.id)
+  await run(`board usage . ${transcriptOf(card.agentSessionId)}`)
+  await expect.poll(() => existsSync(join(folder, `${card.agentSessionId}.jsonl`))).toBe(true)
+
+  // `board session .` gives the card a new conversation; its next backup replaces the old one's.
+  const next = randomUUID()
+  writeFileSync(transcriptOf(next), '{"next":1}\n')
+  await run(`board session . ${next}`)
+  await expect.poll(async () => (await cardOf('agent')).agentSessionId).toBe(next)
+  await run(`board usage . ${transcriptOf(next)}`)
+  await expect.poll(() => readdirSync(folder)).toEqual([`${next}.jsonl`])
+
+  const stray = backupFolder('not-on-the-board')
+  mkdirSync(stray, { recursive: true })
+  writeFileSync(join(stray, `${next}.jsonl`), '{}\n')
+  await restart()
+  await expect.poll(() => existsSync(stray)).toBe(false)
+  expect(readdirSync(folder)).toEqual([`${next}.jsonl`])
+
+  expect(readFileSync(join(dataDir, 'bikube-state.json'), 'utf8')).not.toContain('transcripts')
+  await expect.poll(() => existsSync(join(syncDir, 'bikube-board.json'))).toBe(true)
+  expect(readFileSync(join(syncDir, 'bikube-board.json'), 'utf8')).not.toContain('transcripts')
 })

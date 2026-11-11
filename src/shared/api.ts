@@ -104,6 +104,8 @@ export const IPC = {
   agentTabRevealOutput: 'agentTab:revealOutput',
   claudeRetentionRead: 'claudeRetention:read',
   claudeRetentionSet: 'claudeRetention:set',
+  transcriptsBackup: 'transcripts:backup',
+  transcriptsDelete: 'transcripts:delete',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -222,6 +224,22 @@ export interface ScrollbackApi {
    * after a bound.
    */
   quitSaved(): void
+}
+
+/**
+ * Local Claude Code cards' transcript backups (#80 D8–D10), kept by main in
+ * `<userData>/transcripts`, one folder per card: the renderer names a card id, its folder and
+ * its session id, never a backup path.
+ */
+export interface TranscriptsApi {
+  /**
+   * Copies the session's transcript (and its folder) from Claude Code's projects for `folder`
+   * when it changed since the last copy, removing the card's other sessions' copies. Sent in
+   * order with `scrollback.quitSaved`, so a backup sent before it is made before the shells stop.
+   */
+  backup(cardId: string, folder: string, sessionId: string): void
+  /** Removes the card's backups, if any. */
+  delete(cardId: string): void
 }
 
 /** App-wide settings, stored by main in `userData/bikube-settings.json` (#10 D6). */
@@ -573,6 +591,7 @@ export interface BikubeApi {
   dialog: DialogApi
   state: StateApi
   scrollback: ScrollbackApi
+  transcripts: TranscriptsApi
   settings: SettingsApi
   board: BoardApi
   sync: SyncApi

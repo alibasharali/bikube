@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ORCHESTRATOR_FIRST_PROMPT } from '../src/core/orchestrator'
+import { FIRST_PROMPT, ORCHESTRATED_FIRST_PROMPT } from '../src/core/startup-command'
 import { orchestratorGuide } from '../src/core/orchestrator-guide'
 import { backToBoard, cardView, expectCardOpen, splitRight } from './card-view'
 import { agentLogLines, fakeAgentsHome, type FakeAgentsHome } from './fake-agents'
@@ -12,7 +13,8 @@ import { plainCards } from './plain-cards'
 
 // The workspace's Orchestrator (#81 S2): the toolbar button, its shortcut and palette rows, its
 // Claude Code start and resume with kept output, the Orchestrator agent setting, New
-// conversation, and its signals (waiting, Split's Agents, the Agent tab). The fake `claude` and
+// conversation, and its signals (waiting, Split's Agents, the Agent tab); `board guide` (S3);
+// `board start`, `open` and `terminal`, and an orchestrated card's first prompt (S4). The fake `claude` and
 // agents run on the login PATH of a fake home, which is also BIKUBE_HOME_DIR.
 
 const darwin = process.platform === 'darwin'
@@ -49,9 +51,14 @@ async function launch(extra: Record<string, string> = {}): Promise<void> {
   }))
 }
 
-async function createWorkspace(directory: string, name: string): Promise<void> {
+async function createWorkspace(
+  directory: string,
+  name: string,
+  startup?: 'Claude Code'
+): Promise<void> {
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
+  if (startup) await page.getByTestId('workspace-startup').selectOption({ label: startup })
   await page.getByTestId('workspace-directory').fill(directory)
   await page.getByTestId('workspace-name').fill(name)
   await page.getByTestId('workspace-submit').click()
@@ -372,4 +379,111 @@ test('AC6: board guide prints the guide and Your orchestrator instructions, as t
   await expect.poll(() => readText(`${guide}.2`)).toBe(orchestratorGuide('Proj', repo, ''))
   expect(readText(sockets).trim()).toMatch(/\/board\/o-[0-9a-f]{16}\.sock$/)
   expect(`sock=${readText(sockets).trim()}`).not.toBe(mainSocket)
+})
+
+/** The running terminals the sidebar lists under the workspace named `name`. */
+const rowsOf = (name: string): Locator =>
+  page
+    .locator('[data-workspace-id]')
+    .filter({ has: page.getByTestId('workspace-item').filter({ hasText: name }) })
+    .getByTestId('workspace-terminal-title')
+
+const activeWorkspace = (): Locator =>
+  page.locator('[data-testid=workspace-item][aria-current=true]')
+
+/** Opens Alpha's Orchestrator and ends its fake claude, leaving its shell to type `board` into. */
+async function orchestratorShell(): Promise<void> {
+  await page.getByTestId('workspace-item').filter({ hasText: 'Alpha' }).click()
+  await expect(activeWorkspace()).toContainText('Alpha')
+  await openFromToolbar()
+  await expect.poll(claudeLog).toHaveLength(1)
+  await run('hello')
+  await expect.poll(() => savedOrchestrator()?.claudeStarted).toBe(true)
+}
+
+test("AC8: board start starts another workspace's card in the background; board open shows it", async () => {
+  await launch()
+  await createWorkspace(repo, 'Alpha')
+  const other = join(root, 'other')
+  mkdirSync(other)
+  await createWorkspace(other, 'Beta')
+  await orchestratorShell()
+  const ids = join(root, 'ids.txt')
+  await run(`board create --workspace Beta Backlog Review > ${ids}; echo "create rc=$?"`)
+  await expect.poll(bufferLines).toContain('create rc=0')
+  const id = readText(ids).split(' ')[0]!
+  expect(readText(ids)).toBe(`${id} Beta\n`)
+  await expect(rowsOf('Beta')).toHaveCount(0)
+
+  await run(`board start ${id}; echo "start rc=$?"`)
+  await expect.poll(bufferLines).toContain('start rc=0')
+  await expect(rowsOf('Beta')).toHaveText(['Review'])
+  // The view is unchanged.
+  await expectCardOpen(page, 'Orchestrator')
+  await expect(activeWorkspace()).toContainText('Alpha')
+
+  await run(`board start ${id}; echo "again rc=$?"`)
+  await expect.poll(bufferLines).toContain('again rc=0')
+  expect(await bufferLines()).toContain('Review is already running')
+
+  await run(`board open ${id}`)
+  await expectCardOpen(page, 'Review')
+  await expect(activeWorkspace()).toContainText('Beta')
+})
+
+test("AC9: an orchestrated card's fresh start passes the start-working prompt; a hand-made one #69's", async () => {
+  await launch()
+  await createWorkspace(repo, 'Alpha', 'Claude Code')
+  await orchestratorShell()
+  await run(
+    'printf \'Review the branch\' | board create --description-file - Backlog Review; echo "create rc=$?"'
+  )
+  await expect.poll(bufferLines).toContain('create rc=0')
+  await run('board start Review; echo "start rc=$?"')
+  await expect.poll(bufferLines).toContain('start rc=0')
+  await expect.poll(claudeLog).toHaveLength(2)
+  expect(claudeLog()[1]).toMatch(
+    new RegExp(
+      `^${SETTINGS_ARGS} --session-id [0-9a-f-]{36} ${escapeRegExp(ORCHESTRATED_FIRST_PROMPT)}$`
+    )
+  )
+  expect(ORCHESTRATED_FIRST_PROMPT).toBe(
+    'This card has a task description. Read it with: board description .  Then start working on it.'
+  )
+
+  // A card made by hand with a description asks first (#69 D2).
+  await backToBoard(page)
+  await page.getByTestId('column').filter({ hasText: 'Backlog' }).getByTestId('new-card').click()
+  await page.getByTestId('new-card-input').fill('Mine')
+  await page.getByTestId('new-card-description').fill('Fix the login bug')
+  await page.getByTestId('new-card-input').press('Enter')
+  await expectCardOpen(page, 'Mine')
+  await expect.poll(claudeLog).toHaveLength(3)
+  expect(claudeLog()[2]).toMatch(
+    new RegExp(`^${SETTINGS_ARGS} --session-id [0-9a-f-]{36} ${escapeRegExp(FIRST_PROMPT)}$`)
+  )
+})
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+test('AC11: board terminal adds a running Terminal N in the background; --show opens it', async () => {
+  await launch()
+  await createWorkspace(repo, 'Alpha')
+  await orchestratorShell()
+  // `echo`, not AC11's `printf ready`: bash's prompt overwrites a line with no newline.
+  await run('board terminal \'echo ready\'; echo "terminal rc=$?"')
+  await expect.poll(bufferLines).toContain('terminal rc=0')
+  const printed = (await bufferLines()).find((l) => /^Terminal 1 \S+$/.test(l))
+  expect(printed).toBeDefined()
+  await expect(rowsOf('Alpha')).toHaveText(['Orchestrator', 'Terminal 1'])
+  await expectCardOpen(page, 'Orchestrator')
+
+  await run("board terminal --show 'exec sleep 60'")
+  await expectCardOpen(page, 'Terminal 2')
+  await expect(rowsOf('Alpha')).toHaveText(['Orchestrator', 'Terminal 1', 'Terminal 2'])
+
+  // Terminal 1 ran its command.
+  await rowsOf('Alpha').filter({ hasText: 'Terminal 1' }).click()
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(bufferLines).toContain('ready')
 })

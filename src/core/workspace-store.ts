@@ -130,6 +130,11 @@ export interface Card {
    */
   unopened?: true
   /**
+   * Created by the Orchestrator's `board create` (#81 D18): its fresh agent start with a
+   * description is told to start working on it. Saved and synced; absent when false.
+   */
+  orchestrated?: true
+  /**
    * Its last `board status` text (cleaned), shown on it once Stopped, also after a restart: saved,
    * never synced, since every status would write the sync file. Absent when none or cleared.
    */
@@ -168,6 +173,8 @@ export interface NewCardOptions {
   unopened?: boolean
   /** Its own worktree at its first open (#69 D10): a local workspace's card only. */
   pendingWorktree?: PendingWorktree
+  /** Marks it `orchestrated`: made by the Orchestrator (#81 D18). */
+  orchestrated?: boolean
 }
 
 export interface Workspace {
@@ -412,7 +419,11 @@ export interface WorkspaceStore {
    * Adds a temporary plain shell (#66 D2) named by `temporaryShellName` at the end of the
    * workspace's shells.
    */
-  createTemporaryShell(workspaceId: string): Result<WorkspaceShell>
+  /**
+   * A temporary `Terminal N` (#66 D2), typing `command` (one line, checked like a named shell's)
+   * after its start when given (#81 D22).
+   */
+  createTemporaryShell(workspaceId: string, command?: string): Result<WorkspaceShell>
   updateShell(workspaceId: string, shellId: string, input: ShellInput): Result<WorkspaceShell>
   /**
    * Where the shell runs from its next start: a worktree card of the workspace, or null for the
@@ -781,7 +792,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       // Its worktree is new: the workspace's setup runs first, until it succeeds (#39 D2, D7).
       ...(worktree && ws.host === undefined && ws.worktreeSetup && { setup: ws.worktreeSetup }),
       ...(this.now && { createdAt: this.now() }),
-      ...(options.unopened && { unopened: true as const })
+      ...(options.unopened && { unopened: true as const }),
+      ...(options.orchestrated && { orchestrated: true as const })
     }
     this.replace({
       ...ws,
@@ -856,13 +868,16 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return { ok: true, value: shell }
   }
 
-  createTemporaryShell(workspaceId: string): Result<WorkspaceShell> {
+  createTemporaryShell(workspaceId: string, command = ''): Result<WorkspaceShell> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
+    const name = temporaryShellName(ws.shells)
+    const checked = checkShell({ name, command, autostart: false })
+    if (!checked.ok) return checked
     const shell: WorkspaceShell = {
       id: this.generateId(),
-      name: temporaryShellName(ws.shells),
-      command: '',
+      name,
+      command: checked.value.command,
       autostart: false,
       type: 'shell',
       temporary: true

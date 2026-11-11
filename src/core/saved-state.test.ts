@@ -751,3 +751,22 @@ describe("the Orchestrator's conversation in the saved state (#81 D8)", () => {
     }
   })
 })
+
+describe('orchestrated cards in the saved state (#81 D18)', () => {
+  it('writes orchestrated only on a card marked, reads it back, and drops a bad value only', () => {
+    const state = fullState()
+    state.workspaces[0]!.cards[0] = { ...state.workspaces[0]!.cards[0]!, orchestrated: true }
+    const text = serializeSavedState(state)
+    const [first, second] = JSON.parse(text).state.workspaces[0].cards
+    expect(first.orchestrated).toBe(true)
+    expect('orchestrated' in second).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+    const read = parseSavedState(
+      fileWith((f) => {
+        f.workspaces[0].cards[0].orchestrated = 'yes'
+        f.workspaces[0].cards[1].orchestrated = false
+      })
+    )
+    expect(read).toEqual({ ok: true, value: fullState() })
+  })
+})

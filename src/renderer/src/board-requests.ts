@@ -1,5 +1,6 @@
-import { answerBoardCommand, checkCreateWorktree } from '../../core/board-answer'
+import { answerBoardRequest, checkCreateWorktree } from '../../core/board-answer'
 import { findShellCard } from '../../core/workspace-shells'
+import { openForBoard, startForBoard } from './board-starts'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
@@ -22,7 +23,8 @@ const isWorkspaceShell = (id: string): boolean =>
  * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
  * forgotten each time it stops (#75 D3a). The Orchestrator's `board guide` prints the guide with
- * Settings' Your orchestrator instructions (#81 D13).
+ * Settings' Your orchestrator instructions (#81 D13); its `board start`, `open` and `terminal`
+ * start in the background and answer once the start is over (#81 D17, D22).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
@@ -35,7 +37,7 @@ export function listenForBoardRequests(): () => void {
     )
     if (!checked.ok) return checked
     const command = checked.command
-    return answerBoardCommand(
+    return answerBoardRequest(
       workspaceStore,
       cardId,
       command,
@@ -65,8 +67,13 @@ export function listenForBoardRequests(): () => void {
         return { running, activity: status?.activity, status: status?.agentStatus }
       },
       setShellSession,
-      // Read at each `board guide`, so an edit reaches every orchestrator (#81 D14).
-      { instructions: () => settingsStore.get().orchestratorInstructions }
+      {
+        // Read at each `board guide`, so an edit reaches every orchestrator (#81 D14).
+        instructions: () => settingsStore.get().orchestratorInstructions,
+        // `board start`, `open` and `terminal` (#81 D17, D22).
+        start: startForBoard,
+        open: openForBoard
+      }
     )
   })
 }

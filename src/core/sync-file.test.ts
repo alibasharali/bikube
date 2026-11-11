@@ -634,3 +634,27 @@ describe("the Orchestrator's conversation in the sync file (#81 D8, AC15)", () =
     expect(bad.ok && bad.workspaces[0]!).not.toHaveProperty('orchestrator')
   })
 })
+
+describe('orchestrated cards in the sync file (#81 D18)', () => {
+  it('writes orchestrated only on a card marked, reads it back, and drops a bad value', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('a', 'w-backlog', { orchestrated: true }), card('b', 'w-backlog')]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.orchestrated).toBe(true)
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('orchestrated')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.orchestrated).toBe(true)
+    expect(read.ok && read.workspaces[0]!.cards[1]!).not.toHaveProperty('orchestrated')
+    file.board.workspaces[0].cards[0].orchestrated = 1
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('orchestrated')
+  })
+})

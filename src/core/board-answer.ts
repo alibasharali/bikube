@@ -35,6 +35,7 @@ import {
   resolveColumn
 } from './board-commands'
 import { INVALID_REQUEST, type BoardReply } from './board-protocol'
+import type { StartOutcome } from './board-start'
 import type { ClaudeUsage } from './claude-usage-types'
 import { orchestratorGuide } from './orchestrator-guide'
 import type { Card, Workspace, WorkspaceState, WorkspaceStore } from './workspace-store'
@@ -130,6 +131,16 @@ function answerShell(
 export interface OrchestratorAnswers {
   /** Settings' Your orchestrator instructions (D14), read at each `board guide`. */
   instructions?: () => string
+  /**
+   * Starts a stopped card or shell in the background exactly as opening it would (D17: a pending
+   * worktree first, a conversation check), changing no view; resolves with how its start ended.
+   */
+  start?: (workspaceId: string, cardId: string) => Promise<StartOutcome>
+  /**
+   * Shows a running card or shell (D17, D22): makes its workspace active and opens it at full size,
+   * in its own window if it has one, as any open does (clearing `New`).
+   */
+  open?: (workspaceId: string, cardId: string) => void
 }
 
 /** The orchestrator-only `command` from the Orchestrator of `workspace` (#81 D16). */
@@ -141,10 +152,16 @@ type OrchestratorOnly = Extract<
 const isOrchestratorOnly = (command: BoardCommand): command is OrchestratorOnly =>
   ORCHESTRATOR_ONLY_COMMANDS.has(command.command)
 
+/** The refusal for a card or terminal whose start failed (#81 D17). */
+const startFailed = (title: string, reason: string): BoardReply => ({
+  ok: false,
+  error: `board: "${title}" couldn't start: ${reason}`
+})
+
 /**
  * An orchestrator-only command from the Orchestrator of `workspace`: `guide` prints the guide
- * with the workspace's name and folder and the user's instructions (D13); the others come with
- * later slices.
+ * with the workspace's name and folder and the user's instructions (D13); `start`, `open` and
+ * `terminal` are `answerBoardRequest`'s; the others come with later slices.
  */
 function answerOrchestratorOnly(
   workspace: Workspace,
@@ -160,6 +177,66 @@ function answerOrchestratorOnly(
     return { ok: true, output }
   }
   return { ok: false, error: `board: ${command.command} is not available yet` }
+}
+
+/** The commands answered once something has happened, not at once (#81 D17, D22). */
+type AwaitedCommand = Extract<BoardCommand, { command: 'start' | 'open' | 'terminal' }>
+
+const isAwaited = (command: BoardCommand): command is AwaitedCommand =>
+  command.command === 'start' || command.command === 'open' || command.command === 'terminal'
+
+/**
+ * `start` and `open` act on a card by id in any workspace, or by title in the active workspace or
+ * `--workspace`'s (D17); `terminal` adds a temporary terminal typing its command to
+ * `--workspace`'s workspace, else the active one, starts it and, with `--show`, opens it (D22).
+ * Each answers once the start is over, refusing a failed one with its reason.
+ */
+function answerAwaited(
+  state: WorkspaceState,
+  store: Pick<WorkspaceStore, 'createTemporaryShell'>,
+  workspace: Workspace,
+  callingCardId: string,
+  command: AwaitedCommand,
+  isRunning: (cardId: string) => boolean,
+  answers: OrchestratorAnswers
+): BoardReply | Promise<BoardReply> {
+  // The workspace `--workspace` names, else the active one (the user's, not the Orchestrator's).
+  const named =
+    command.workspace !== undefined
+      ? resolveWorkspace(state, command.workspace)
+      : {
+          ok: true as const,
+          value: state.workspaces.find((w) => w.id === state.activeId) ?? workspace
+        }
+  if (!named.ok) return named
+  const start =
+    answers.start ?? (async (): Promise<StartOutcome> => ({ ok: false, reason: 'not available' }))
+  const open = answers.open ?? (() => {})
+  if (command.command === 'terminal') {
+    const added = store.createTemporaryShell(named.value.id, command.line)
+    if (!added.ok) return { ok: false, error: `board: ${added.error.message}` }
+    const shell = added.value
+    return start(named.value.id, shell.id).then((started) => {
+      if (!started.ok) return startFailed(shell.name, started.reason)
+      if (command.show) open(named.value.id, shell.id)
+      return { ok: true, output: `${shell.name} ${shell.id}\n` }
+    })
+  }
+  const placed = resolveAnyCard(state, named.value, callingCardId, command.card)
+  if (!placed.ok) return placed
+  const { workspace: ws, card } = placed.value
+  if (isRunning(card.id)) {
+    if (command.command === 'start') {
+      return { ok: true, output: `${card.title} is already running\n` }
+    }
+    open(ws.id, card.id)
+    return { ok: true }
+  }
+  return start(ws.id, card.id).then((started) => {
+    if (!started.ok) return startFailed(card.title, started.reason)
+    if (command.command === 'open') open(ws.id, card.id)
+    return { ok: true }
+  })
 }
 
 /**
@@ -196,6 +273,33 @@ function answerOrchestrator(
   return { ok: true }
 }
 
+/** `answerBoardCommand`'s and `answerBoardRequest`'s arguments. */
+type AnswerArgs = [
+  store: Pick<
+    WorkspaceStore,
+    | 'getState'
+    | 'moveCard'
+    | 'setAgentSession'
+    | 'clearCardSetup'
+    | 'createCard'
+    | 'renameCard'
+    | 'setCardLastStatus'
+    | 'setCardLastUsage'
+    | 'setCardDescription'
+    | 'createTemporaryShell'
+  >,
+  callingCardId: string,
+  command: BoardCommand,
+  isRunning: (cardId: string) => boolean,
+  setAgentStatus: (cardId: string, text: string) => void,
+  setActivity?: (cardId: string, activity: Activity | null) => void,
+  setupAnswered?: (card: Card, result: SetupResult) => void,
+  setUsage?: (cardId: string, usage: ClaudeUsage) => void,
+  runtime?: (cardId: string) => CardRuntime,
+  setShellSession?: (shellId: string, sessionId: string) => void,
+  orchestrator?: OrchestratorAnswers
+]
+
 /**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
@@ -212,20 +316,10 @@ function answerOrchestrator(
  * renames one. Both save through the store like any board change. `description` answers with
  * the card's description and one newline, or nothing; `describe` replaces it through the store,
  * which trims it, removes it when empty and refuses one over the cap (#69 D5).
+ * `start`, `open` and `terminal` from the Orchestrator are answered by `answerBoardRequest`.
  */
 export function answerBoardCommand(
-  store: Pick<
-    WorkspaceStore,
-    | 'getState'
-    | 'moveCard'
-    | 'setAgentSession'
-    | 'clearCardSetup'
-    | 'createCard'
-    | 'renameCard'
-    | 'setCardLastStatus'
-    | 'setCardLastUsage'
-    | 'setCardDescription'
-  >,
+  store: AnswerArgs[0],
   callingCardId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
@@ -301,6 +395,8 @@ export function answerBoardCommand(
       command.description,
       {
         unopened: titles.id !== calling.id,
+        // Its fresh start is told to start working (#81 D18).
+        orchestrated: kind === 'orchestrator',
         ...(command.worktree &&
           command.branch !== undefined && { pendingWorktree: { branch: command.branch } })
       }
@@ -392,4 +488,29 @@ export function answerBoardCommand(
   if (!target) return { ok: true }
   const moved = store.moveCard(ws.id, card.value.id, target.columnId, target.index)
   return moved.ok ? { ok: true } : { ok: false, error: `board: ${moved.error.message}` }
+}
+
+/**
+ * `answerBoardCommand` for every request, with the Orchestrator's `start`, `open` and `terminal`
+ * (#81 D17, D22) answered once the start they make is over, as a promise.
+ */
+export function answerBoardRequest(...args: AnswerArgs): BoardReply | Promise<BoardReply> {
+  const [store, callingCardId, command, isRunning] = args
+  const calling = findCallingWorkspace(store.getState(), callingCardId)
+  if (
+    !isAwaited(command) ||
+    !calling.ok ||
+    callingTerminal(calling.value, callingCardId).kind !== 'orchestrator'
+  ) {
+    return answerBoardCommand(...args)
+  }
+  return answerAwaited(
+    store.getState(),
+    store,
+    calling.value,
+    callingCardId,
+    command,
+    isRunning,
+    args[10] ?? {}
+  )
 }

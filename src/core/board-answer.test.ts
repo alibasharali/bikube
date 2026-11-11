@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './board-answer'
+import {
+  answerBoardCommand,
+  answerBoardRequest,
+  checkCreateWorktree,
+  type RepoBranches
+} from './board-answer'
+import type { BoardCommand } from './board-args'
 import {
   NOT_IN_A_CARD,
   ONLY_ORCHESTRATOR,
   ORCHESTRATOR_NOT_A_CARD,
   SHELL_NOT_A_CARD
 } from './board-commands'
+import type { StartOutcome } from './board-start'
 import { orchestratorGuide } from './orchestrator-guide'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
@@ -1351,5 +1358,174 @@ describe('board guide (#81 D13, D16)', () => {
         })
       }
     }
+  })
+})
+
+describe('board start, open and terminal (#81 D17, D22)', () => {
+  const FROM = 'orchestrator:alpha'
+  type Command = BoardCommand
+  const orchestratorStore = (): InMemoryWorkspaceStore => {
+    const store = setup()
+    store.ensureOrchestrator('alpha')
+    return store
+  }
+  /** Answers `command` from the Orchestrator, recording its starts and opens. */
+  function asker(
+    store: InMemoryWorkspaceStore,
+    outcome: StartOutcome = { ok: true },
+    isRunning: (id: string) => boolean = (id) => id === 'c-web'
+  ): {
+    ask: (command: Command) => Promise<unknown>
+    starts: string[]
+    opens: string[]
+  } {
+    const starts: string[] = []
+    const opens: string[] = []
+    const ask = async (command: Command): Promise<unknown> =>
+      answerBoardRequest(
+        store,
+        FROM,
+        command,
+        isRunning,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          start: async (workspaceId, cardId) => {
+            starts.push(`${workspaceId}/${cardId}`)
+            return outcome
+          },
+          open: (workspaceId, cardId) => opens.push(`${workspaceId}/${cardId}`)
+        }
+      )
+    return { ask, starts, opens }
+  }
+
+  it('starts a stopped card by id in any workspace, never opening it', async () => {
+    const { ask, starts, opens } = asker(orchestratorStore())
+    expect(await ask({ command: 'start', card: 'c-other' })).toEqual({ ok: true })
+    expect(starts).toEqual(['beta/c-other'])
+    expect(opens).toEqual([])
+  })
+
+  it("resolves a title in the active workspace, or --workspace's", async () => {
+    const { ask, starts } = asker(orchestratorStore())
+    // beta is active.
+    expect(await ask({ command: 'start', card: 'other' })).toEqual({ ok: true })
+    expect(await ask({ command: 'start', card: 'api' })).toMatchObject({ ok: false })
+    expect(await ask({ command: 'start', card: 'api', workspace: 'alpha' })).toEqual({ ok: true })
+    expect(starts).toEqual(['beta/c-other', 'alpha/c-api'])
+  })
+
+  it('prints that a running card is already running, starting nothing', async () => {
+    const { ask, starts } = asker(orchestratorStore())
+    expect(await ask({ command: 'start', card: 'c-web' })).toEqual({
+      ok: true,
+      output: 'web is already running\n'
+    })
+    expect(starts).toEqual([])
+  })
+
+  it("refuses a start that fails, with its reason, and doesn't open it", async () => {
+    const { ask, opens } = asker(orchestratorStore(), { ok: false, reason: 'no such folder' })
+    const refused = { ok: false, error: 'board: "other" couldn\'t start: no such folder' }
+    expect(await ask({ command: 'start', card: 'c-other' })).toEqual(refused)
+    expect(await ask({ command: 'open', card: 'c-other' })).toEqual(refused)
+    expect(opens).toEqual([])
+  })
+
+  it('opens a card after starting it, and a running one at once', async () => {
+    const { ask, starts, opens } = asker(orchestratorStore())
+    expect(await ask({ command: 'open', card: 'c-other' })).toEqual({ ok: true })
+    expect(await ask({ command: 'open', card: 'c-web' })).toEqual({ ok: true })
+    expect(starts).toEqual(['beta/c-other'])
+    expect(opens).toEqual(['beta/c-other', 'alpha/c-web'])
+  })
+
+  it('adds a temporary terminal typing the command in the active workspace, started', async () => {
+    const store = orchestratorStore()
+    const { ask, starts, opens } = asker(store)
+    const reply = (await ask({ command: 'terminal', line: 'printf ready' })) as {
+      ok: true
+      output: string
+    }
+    const shell = store.getState().workspaces[1].shells[0]
+    expect(shell).toMatchObject({ name: 'Terminal 1', command: 'printf ready', temporary: true })
+    expect(reply).toEqual({ ok: true, output: `Terminal 1 ${shell.id}\n` })
+    expect(starts).toEqual([`beta/${shell.id}`])
+    expect(opens).toEqual([])
+  })
+
+  it("opens it with --show, in --workspace's workspace", async () => {
+    const store = orchestratorStore()
+    const { ask, opens } = asker(store)
+    await ask({ command: 'terminal', line: 'exec sleep 60', workspace: 'alpha', show: true })
+    const shell = store.getState().workspaces[0].shells[0]
+    expect(shell.name).toBe('Terminal 1')
+    expect(opens).toEqual([`alpha/${shell.id}`])
+  })
+
+  it('refuses a command on two lines, and a terminal that fails to start', async () => {
+    const store = orchestratorStore()
+    expect(await asker(store).ask({ command: 'terminal', line: 'a\nb' })).toEqual({
+      ok: false,
+      error: 'board: Command must be one line'
+    })
+    expect(store.getState().workspaces[1].shells).toEqual([])
+    const failing = asker(store, { ok: false, reason: 'spawn failed' })
+    expect(await failing.ask({ command: 'terminal', line: 'ls', show: true })).toEqual({
+      ok: false,
+      error: 'board: "Terminal 1" couldn\'t start: spawn failed'
+    })
+    expect(failing.opens).toEqual([])
+  })
+
+  it('refuses them from a card, starting nothing', async () => {
+    const store = orchestratorStore()
+    const starts: string[] = []
+    const reply = await answerBoardRequest(
+      store,
+      'c-api',
+      { command: 'start', card: 'c-other' },
+      running,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        start: async (_, id) => {
+          starts.push(id)
+          return { ok: true }
+        }
+      }
+    )
+    expect(reply).toEqual({ ok: false, error: ONLY_ORCHESTRATOR })
+    expect(starts).toEqual([])
+  })
+
+  it("marks the cards it creates orchestrated, and no other caller's (D18)", () => {
+    const store = orchestratorStore()
+    answerBoardCommand(
+      store,
+      FROM,
+      { command: 'create', column: 'Backlog', title: 'Review' },
+      running,
+      () => {}
+    )
+    answerBoardCommand(
+      store,
+      'c-api',
+      { command: 'create', column: 'Backlog', title: 'Mine' },
+      running,
+      () => {}
+    )
+    const cards = store.getState().workspaces[0].cards
+    expect(cards.find((c) => c.title === 'Review')?.orchestrated).toBe(true)
+    expect(cards.find((c) => c.title === 'Mine')).not.toHaveProperty('orchestrated')
   })
 })

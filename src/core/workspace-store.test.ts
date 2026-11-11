@@ -1465,6 +1465,18 @@ describe('temporary shells (#66 D2, D3)', () => {
     expect(s.createTemporaryShell('nope')).toMatchObject({ ok: false })
   })
 
+  it("types a command given as its startup, checked like a named shell's (#81 D22)", () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const t = ok(s.createTemporaryShell(w.id, '  npm run dev  '))
+    expect(t).toMatchObject({ name: 'Terminal 1', command: 'npm run dev', type: 'shell' })
+    expect(s.createTemporaryShell(w.id, 'a\nb')).toMatchObject({
+      ok: false,
+      error: { field: 'command', message: 'Command must be one line' }
+    })
+    expect(s.getState().workspaces[0].shells).toHaveLength(1)
+  })
+
   it('stays temporary when edited', () => {
     const s = make()
     const w = create(s, 'alpha')
@@ -1561,6 +1573,19 @@ describe('workspace views and card open times', () => {
     const opened = ok(s.markCardOpened(w.id, created.id, 7))
     expect(opened.lastOpenedAt).toBe(7)
     expect('unopened' in opened).toBe(false)
+  })
+
+  it('creates a card marked orchestrated when asked, kept when opened (#81 D18)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const created = ok(
+      s.createCard(w.id, w.columns[0].id, 'Review', undefined, undefined, undefined, {
+        orchestrated: true
+      })
+    )
+    expect(created.orchestrated).toBe(true)
+    expect('orchestrated' in card(s, w, 'plain')).toBe(false)
+    expect(ok(s.markCardOpened(w.id, created.id, 7)).orchestrated).toBe(true)
   })
 
   it("keeps a card's last status and usage, '' and no tokens forgetting them, the same saving nothing", () => {

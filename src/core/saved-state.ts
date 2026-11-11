@@ -222,6 +222,8 @@ function readCard(raw: unknown): Card | string {
     ...(isTime(raw.lastOpenedAt) && { lastOpenedAt: raw.lastOpenedAt }),
     // Anything but true is dropped, as if the card had no New mark (#69 D11).
     ...(raw.unopened === true && { unopened: true as const }),
+    // Likewise anything but true reads as a card the Orchestrator didn't make (#81 D18).
+    ...(raw.orchestrated === true && { orchestrated: true as const }),
     ...readLastSeen(raw)
   }
 }

@@ -39,6 +39,11 @@ export interface StartupState {
    */
   description?: string
   /**
+   * Made by the Orchestrator (#81 D18): with a description, its fresh start passes
+   * `ORCHESTRATED_FIRST_PROMPT` instead of `FIRST_PROMPT`.
+   */
+  orchestrated?: true
+  /**
    * The prompt a fresh agent start passes instead of `FIRST_PROMPT`, with or without a
    * description: the Orchestrator's (#81 D15). Never stored on a card.
    */
@@ -54,15 +59,26 @@ export const FIRST_PROMPT =
   'few lines and ask me whether to start on it. Do not start working on it until I say so.'
 
 /**
+ * `FIRST_PROMPT`'s place for a card the Orchestrator made (#81 D18): it starts working at once.
+ * Quoted the same way, so it holds no single quote, backslash or `$` either.
+ */
+export const ORCHESTRATED_FIRST_PROMPT =
+  'This card has a task description. Read it with: board description .  Then start working on it.'
+
+/**
  * `text` single-quoted for sh, bash, zsh and fish: a `'` inside closes the quote, adds `\'` and
  * opens it again, which every one of them reads as a quote.
  */
 const quoted = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`
 
-/** The prompt a fresh agent start of `card` passes, quoted, or null for none (#69 D2, #81 D15). */
+/**
+ * The prompt a fresh agent start of `card` passes, quoted, or null for none (#69 D2, #81 D15,
+ * D18).
+ */
 function freshPrompt(card: StartupState): string | null {
   if (card.firstPrompt !== undefined) return quoted(card.firstPrompt)
-  return card.description ? quoted(FIRST_PROMPT) : null
+  if (!card.description) return null
+  return quoted(card.orchestrated ? ORCHESTRATED_FIRST_PROMPT : FIRST_PROMPT)
 }
 
 /** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */

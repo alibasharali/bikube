@@ -19,6 +19,7 @@ import { nextWaitingCard } from '../../core/waiting'
 import { showViewPrompt } from '../../core/view-prompt'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { startInBackground } from './background-shells'
+import { onBoardOpen } from './board-starts'
 import { newShell } from './temporary-shells'
 import {
   markCardOpened,
@@ -237,6 +238,22 @@ function App(): React.JSX.Element {
       if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
     },
     [activeId, openedId, setViews]
+  )
+
+  // `board open` and `board terminal --show` (#81 D17, D22): the card or shell, already started,
+  // opens as a palette pick does, its workspace made active; one in its own window has that window
+  // brought forward, its workspace made active here too, and its New mark cleared.
+  useEffect(
+    () =>
+      onBoardOpen((workspaceId, cardId) => {
+        if (focusCardWindow(cardId)) {
+          markCardOpened(workspaceId, cardId)
+          if (workspaceId !== activeId) onSelectWorkspace(workspaceId)
+          return
+        }
+        onPaletteOpen(workspaceId, cardId)
+      }),
+    [activeId, onPaletteOpen, onSelectWorkspace]
   )
 
   // Open orchestrator (#81 D6): the active workspace's Orchestrator, started when it isn't running,

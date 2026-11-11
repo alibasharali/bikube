@@ -1698,3 +1698,68 @@ describe('pending worktree (#69 D10)', () => {
     expect(s.getState()).toBe(state)
   })
 })
+
+describe("the Orchestrator's conversation (#81 D8, D11)", () => {
+  const ids = (): InMemoryWorkspaceStore => {
+    let n = 0
+    return new InMemoryWorkspaceStore({ generateSessionId: () => `session-${++n}` })
+  }
+
+  it('is absent until ensured, then kept as it is', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    expect(w.orchestrator).toBeUndefined()
+    expect(ok(s.ensureOrchestrator(w.id))).toEqual({
+      agentSessionId: 'session-1',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    const state = s.getState()
+    ok(s.ensureOrchestrator(w.id))
+    expect(s.getState()).toBe(state)
+    expect(s.getState().workspaces[0].orchestrator?.agentSessionId).toBe('session-1')
+  })
+
+  it('takes the card session changes by its id', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    const id = `orchestrator:${w.id}`
+    ok(s.ensureOrchestrator(w.id))
+    ok(s.markAgentStarted(w.id, id, 'codex'))
+    ok(s.markClaudeStarted(w.id, id))
+    expect(s.getState().workspaces[0].orchestrator).toEqual({
+      agentSessionId: 'session-1',
+      claudeStarted: true,
+      startedAgents: ['codex']
+    })
+    ok(s.clearClaudeStarted(w.id, id))
+    expect(s.getState().workspaces[0].orchestrator?.claudeStarted).toBe(false)
+    ok(s.setAgentSession(w.id, id, 'session-x'))
+    expect(s.getState().workspaces[0].orchestrator).toMatchObject({
+      agentSessionId: 'session-x',
+      claudeStarted: true
+    })
+  })
+
+  it("is refused for an SSH workspace or another workspace's id", () => {
+    const s = ids()
+    const ssh = ok(s.createWorkspace({ name: 'r', directory: '~', host: 'box' }))
+    expect(s.ensureOrchestrator(ssh.id).ok).toBe(false)
+    const w = create(s, 'a')
+    expect(s.setAgentSession(w.id, `orchestrator:${ssh.id}`, 'x').ok).toBe(false)
+  })
+
+  it('a new conversation gets a new session id with nothing started (D11)', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    ok(s.ensureOrchestrator(w.id))
+    ok(s.markAgentStarted(w.id, `orchestrator:${w.id}`, 'codex'))
+    ok(s.setAgentSession(w.id, `orchestrator:${w.id}`, 'session-x'))
+    expect(ok(s.newOrchestratorConversation(w.id))).toEqual({
+      agentSessionId: 'session-2',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(s.getState().workspaces[0].orchestrator?.agentSessionId).toBe('session-2')
+  })
+})

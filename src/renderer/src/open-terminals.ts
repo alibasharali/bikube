@@ -1,14 +1,20 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { Activity } from '../../core/activity'
 import { openTerminals, type OpenTerminal } from '../../core/open-terminals'
+import { hasOrchestrator, orchestratorId } from '../../core/orchestrator'
 import { shellCards } from '../../core/workspace-shells'
 import type { Workspace } from '../../core/workspace-store'
 import { useOpenedVersion, wasOpened } from './background-shells'
 import { cardTerminals } from './card-terminals'
+import { useOrchestratorStartup } from './orchestrator'
 
-/** Every card's and shell's id in `workspaces`. */
+/** Every card's, shell's and Orchestrator's (#81 D5) id in `workspaces`. */
 function terminalIds(workspaces: readonly Workspace[]): string[] {
-  return workspaces.flatMap((w) => [...w.cards.map((c) => c.id), ...shellCards(w).map((s) => s.id)])
+  return workspaces.flatMap((w) => [
+    ...(hasOrchestrator(w) ? [orchestratorId(w.id)] : []),
+    ...w.cards.map((c) => c.id),
+    ...shellCards(w).map((s) => s.id)
+  ])
 }
 
 const isRunning = (cardId: string): boolean => cardTerminals().runState(cardId)?.kind === 'running'
@@ -41,13 +47,20 @@ export function useOpenTerminals(
       .join('\n')
   )
   const openedVersion = useOpenedVersion()
+  const orchestratorStartup = useOrchestratorStartup()
   return useMemo(() => {
     const byWorkspace = new Map<string, OpenTerminal[]>()
-    for (const row of openTerminals(workspaces, isRunning, activityOf, wasOpened)) {
+    for (const row of openTerminals(
+      workspaces,
+      isRunning,
+      activityOf,
+      wasOpened,
+      orchestratorStartup
+    )) {
       byWorkspace.set(row.workspaceId, [...(byWorkspace.get(row.workspaceId) ?? []), row])
     }
     return byWorkspace
     // `key` stands for the running states and activities read here, `openedVersion` for opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaces, key, openedVersion])
+  }, [workspaces, key, openedVersion, orchestratorStartup])
 }

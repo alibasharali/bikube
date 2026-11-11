@@ -323,6 +323,8 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'Toggle panel',
     'New card',
     'New shell',
+    // A local workspace's Orchestrator (#81 D5).
+    'Open orchestrator',
     'View: Grid',
     'Sidebar: Split',
     'New workspace',

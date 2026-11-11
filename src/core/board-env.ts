@@ -3,6 +3,7 @@
  * passes the paths it resolved for dev or the packaged app.
  */
 import { CLAUDE_SETTINGS_FILE } from './claude-hooks'
+import { isOrchestratorId } from './orchestrator'
 
 export interface BoardEnvInput {
   /** The card the shell runs for. */
@@ -25,7 +26,8 @@ export interface BoardEnvInput {
  * executable and module the wrapper needs (#9 D4). `ELECTRON_RUN_AS_NODE` is set only inside
  * the wrapper: in the shell it would turn every Electron app the card starts into Node.
  * `BIKUBE_CLAUDE_SETTINGS` names the Claude settings file beside `board`, which a Claude Code
- * card's start line passes to `claude --settings` (#31 D14).
+ * card's start line passes to `claude --settings` (#31 D14). The Orchestrator's shell also gets
+ * `BIKUBE_ORCHESTRATOR=1` (#81 D15), in its main pane and every extra pane.
  */
 export function boardShellEnv(input: BoardEnvInput): Record<string, string> {
   return {
@@ -35,6 +37,7 @@ export function boardShellEnv(input: BoardEnvInput): Record<string, string> {
     BIKUBE_EXECUTABLE: input.executable,
     BIKUBE_BOARD_CLI: input.cliPath,
     BIKUBE_CLAUDE_SETTINGS: `${input.binDir}/${CLAUDE_SETTINGS_FILE}`,
-    PATH: input.path ? `${input.binDir}:${input.path}` : input.binDir
+    PATH: input.path ? `${input.binDir}:${input.path}` : input.binDir,
+    ...(isOrchestratorId(input.cardId) && { BIKUBE_ORCHESTRATOR: '1' })
   }
 }

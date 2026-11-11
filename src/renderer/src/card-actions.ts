@@ -1,9 +1,11 @@
 import { keyMoveTarget, type CardMoveDirection } from '../../core/card-moves'
 import type { Workspace, Card } from '../../core/workspace-store'
 import type { FirstStart } from '../../core/startup-command'
-import { findShellCard, shellCards } from '../../core/workspace-shells'
+import { isOrchestratorId, orchestratorId } from '../../core/orchestrator'
+import { shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { forgetConversationCheck, startCheckingConversation } from './conversation-checks'
+import { findTerminal } from './orchestrator'
 import { forgetPendingWorktree, makePendingWorktree } from './pending-worktrees'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
@@ -17,10 +19,14 @@ import { clearCardUsage } from './usage'
  * conversation checked (#80 D11), by whichever path opens it.
  */
 export function startCard(workspaceId: string, cardId: string): void {
+  // The Orchestrator gets its conversation at its first start (#81 D8).
+  if (isOrchestratorId(cardId) && cardTerminals().runState(cardId)?.kind !== 'running') {
+    workspaceStore.ensureOrchestrator(workspaceId)
+  }
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
-  // A shell starts like a card: in the folder it runs in.
-  const card =
-    workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
+  // A shell starts like a card: in the folder it runs in; so does the Orchestrator, with
+  // Settings' Orchestrator agent.
+  const card = workspace && findTerminal(workspace, cardId)
   if (!card) return
   // A local Claude Code card resuming gets its conversation checked first (#80 D11); a running
   // card types no resume line, so it is never checked.
@@ -190,7 +196,36 @@ export function restartCard(workspaceId: string, cardId: string): void {
 export function removeWorkspace(workspace: Workspace): void {
   workspace.cards.forEach((card) => disposeCard(card.id))
   shellCards(workspace).forEach((shell) => disposeCard(shell.id))
+  disposeCard(orchestratorId(workspace.id))
   workspaceStore.deleteWorkspace(workspace.id)
+}
+
+/**
+ * New conversation (#81 D11): the Orchestrator stops if it runs (as Close does), gets a new
+ * session id with nothing started and loses its kept output, then `open` opens and starts it.
+ */
+export function newOrchestratorConversation(
+  workspaceId: string,
+  open: (cardId: string) => void
+): void {
+  const id = orchestratorId(workspaceId)
+  const fresh = (): void => {
+    if (!workspaceStore.newOrchestratorConversation(workspaceId).ok) return
+    // After the stop's own save of its output, which goes first (#46 D2).
+    window.bikube.scrollback.delete(id)
+    forgetConversationCheck(id)
+    open(id)
+  }
+  if (cardTerminals().runState(id)?.kind !== 'running') {
+    fresh()
+    return
+  }
+  const stop = cardTerminals().subscribe(id, () => {
+    if (cardTerminals().runState(id)?.kind === 'running') return
+    stop()
+    setTimeout(fresh, 0)
+  })
+  closeCard(id)
 }
 
 /** The card whose open button takes focus at its next render, after a keyboard or menu move. */

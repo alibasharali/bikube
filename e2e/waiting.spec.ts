@@ -388,6 +388,8 @@ test('AC9: the palette lists Next waiting card while a card waits, with its shor
   const actions = await paletteActions()
   expect(actions.slice(actions.indexOf('New shell'), actions.indexOf('New workspace'))).toEqual([
     'New shell',
+    // A local workspace's Orchestrator (#81 D5).
+    'Open orchestrator',
     'Next waiting card',
     'View: Grid',
     'Sidebar: Split'

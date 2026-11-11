@@ -141,8 +141,20 @@ function readWorkspace(raw: unknown): Workspace | string {
     ...(autoMove !== null && { autoMove }),
     ...(isWorkspaceView(raw.view) && { view: raw.view }),
     // Missing is the manual order; anything but `recent` is too, dropping only the key (#69 D12).
-    ...(raw.sort === 'recent' && { sort: 'recent' as const })
+    ...(raw.sort === 'recent' && { sort: 'recent' as const }),
+    // Missing until its first start; a bad one is dropped, as if it had none (#81 D8).
+    ...readOrchestrator(raw.orchestrator)
   }
+}
+
+/** `{ orchestrator }` for a valid Orchestrator conversation (#81 D8); else `{}`. */
+function readOrchestrator(raw: unknown): Pick<Workspace, 'orchestrator'> {
+  if (!isObject(raw)) return {}
+  const { agentSessionId, claudeStarted } = raw
+  if (!isId(agentSessionId) || typeof claudeStarted !== 'boolean') return {}
+  const startedAgents = readStartedAgents(raw.startedAgents)
+  if (!startedAgents) return {}
+  return { orchestrator: { agentSessionId, claudeStarted, startedAgents } }
 }
 
 /** The workspace's shells; missing, as in files from before shells, is none. */

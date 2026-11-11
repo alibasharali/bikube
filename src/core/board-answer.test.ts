@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './board-answer'
-import { NOT_IN_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
+import { NOT_IN_A_CARD, ORCHESTRATOR_NOT_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
   InMemoryWorkspaceStore,
@@ -1188,6 +1188,107 @@ describe('answerBoardCommand from a workspace shell', () => {
         ok: false,
         error: NOT_IN_A_CARD
       })
+    }
+  })
+})
+
+describe('answerBoardCommand from the Orchestrator (#81 D8, D9, D16)', () => {
+  const FROM = 'orchestrator:alpha'
+  const SESSION = '0B8C3A1E-1111-4222-8333-444455556666'
+  const orchestratorStore = (): InMemoryWorkspaceStore => {
+    const store = setup()
+    store.ensureOrchestrator('alpha')
+    return store
+  }
+
+  it("lists its workspace and creates with the target workspace's default agent", () => {
+    const store = orchestratorStore()
+    store.updateWorkspace('beta', { defaultStartup: { kind: 'codex' } })
+    const answer = (command: Parameters<typeof answerBoardCommand>[2]): unknown =>
+      answerBoardCommand(store, FROM, command, running, () => {})
+    const listed = answer({ command: 'list', format: 'json' }) as { ok: true; output: string }
+    expect(JSON.parse(listed.output).workspace.id).toBe('alpha')
+    expect(answer({ command: 'create', column: 'Backlog', title: 'Docs' })).toMatchObject({
+      ok: true
+    })
+    expect(
+      answer({ command: 'create', column: 'Backlog', title: 'Other', workspace: 'beta' })
+    ).toMatchObject({ ok: true })
+    const docs = store.getState().workspaces[0].cards.find((c) => c.title === 'Docs')
+    expect(docs?.startup).toEqual({ kind: 'claude' })
+    const other = store.getState().workspaces[1].cards.find((c) => c.title === 'Other')
+    expect(other?.startup).toEqual({ kind: 'codex' })
+    expect(other?.unopened).toBe(true)
+  })
+
+  it('sets its own status, activity and usage at runtime and its session in the store', () => {
+    const store = orchestratorStore()
+    const statuses: [string, string][] = []
+    const activities: [string, string | null][] = []
+    const usages: string[] = []
+    const usage: ClaudeUsage = {
+      input: 1,
+      output: 2,
+      cacheWrite: 0,
+      cacheRead: 0,
+      tokens: 3,
+      context: 1,
+      model: null
+    }
+    const ask = (command: Parameters<typeof answerBoardCommand>[2]): unknown =>
+      answerBoardCommand(
+        store,
+        FROM,
+        command,
+        () => true,
+        (id, text) => statuses.push([id, text]),
+        (id, activity) => activities.push([id, activity]),
+        () => {},
+        (id) => usages.push(id)
+      )
+    expect(ask({ command: 'status', card: '.', text: 'Planning' })).toEqual({ ok: true })
+    expect(ask({ command: 'activity', card: '.', activity: 'waiting' })).toEqual({ ok: true })
+    expect(ask({ command: 'usage', card: '.', usage })).toEqual({ ok: true })
+    expect(ask({ command: 'description', card: '.' })).toEqual({ ok: true })
+    expect(ask({ command: 'session', card: '.', session: SESSION })).toEqual({ ok: true })
+    expect(statuses).toEqual([[FROM, 'Planning']])
+    expect(activities).toEqual([[FROM, 'waiting']])
+    expect(usages).toEqual([FROM])
+    expect(store.getState().workspaces[0].orchestrator).toMatchObject({
+      agentSessionId: SESSION.toLowerCase(),
+      claudeStarted: true
+    })
+    expect(store.getState().workspaces[0].cards.every((c) => c.lastStatus === undefined)).toBe(true)
+  })
+
+  it('moves a named card but refuses moving, renaming or describing `.`', () => {
+    const store = orchestratorStore()
+    const answer = (command: Parameters<typeof answerBoardCommand>[2]): unknown =>
+      answerBoardCommand(store, FROM, command, running, () => {})
+    expect(answer({ command: 'move', card: 'api', column: 'Done' })).toEqual({ ok: true })
+    expect(columnOf(store, 'c-api')).toBe('done')
+    for (const command of [
+      { command: 'move', card: '.', column: 'Done' },
+      { command: 'rename', card: '.', title: 'x' },
+      { command: 'describe', card: '.', description: 'x' }
+    ] as const) {
+      expect(answer(command)).toEqual({ ok: false, error: ORCHESTRATOR_NOT_A_CARD })
+    }
+  })
+
+  it("refuses an SSH workspace's or an unknown workspace's Orchestrator id", () => {
+    const store = setup()
+    store.updateWorkspace('beta', { host: 'box', directory: '~' })
+    for (const from of ['orchestrator:beta', 'orchestrator:gone']) {
+      expect(
+        answerBoardCommand(
+          store,
+          from,
+          { command: 'workspaces', format: 'text' },
+          running,
+          () => {}
+        )
+      ).toEqual({ ok: false, error: NOT_IN_A_CARD })
     }
   })
 })

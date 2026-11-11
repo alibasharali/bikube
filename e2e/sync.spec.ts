@@ -1007,3 +1007,40 @@ test('#69 AC10: a pending worktree reaches B, B makes it at its first open, and 
   })
   await expect(card(a.page, 'Port X').getByTestId('card-pending-worktree')).toHaveCount(0)
 })
+
+test("#81 AC15: B's state holds A's Orchestrator session, and B's Orchestrator runs it", async () => {
+  const folder = makeDir('F')
+  const fakeA = fakeSshHome(makeDir('a'))
+  const fakeB = fakeSshHome(makeDir('b'))
+  mkdirSync(join(fakeA.home, 'api'))
+  mkdirSync(join(fakeB.home, 'api'))
+  const a = await launch(fakeA.home, newDataDir(), fakeA.env)
+  await createWorkspace(a.page, join(fakeA.home, 'api'), 'api')
+  await setSyncFolder(a.page, folder)
+  await closeSettings(a.page)
+  const b = await launch(fakeB.home, newDataDir(), fakeB.env)
+  await setSyncFolder(b.page, folder)
+  await closeSettings(b.page)
+  await expect.poll(() => workspaceNames(b.page)).toEqual(['api'])
+
+  await a.page.getByTestId('toolbar-orchestrator').click()
+  await expect(a.page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Orchestrator')
+  await expect.poll(() => claudeLogLines(fakeA.log), { timeout: 15_000 }).toHaveLength(1)
+  const id = /--session-id (\S+)$/.exec(claudeLogLines(fakeA.log)[0]!)![1]!
+  const bOrchestrator = (): string | undefined => {
+    try {
+      const saved = JSON.parse(readFileSync(join(b.dataDir, 'bikube-state.json'), 'utf8'))
+      return saved.state.workspaces[0].orchestrator?.agentSessionId
+    } catch {
+      return undefined
+    }
+  }
+  await expect.poll(bOrchestrator, { timeout: 10_000 }).toBe(id)
+
+  await b.page.getByTestId('toolbar-orchestrator').click()
+  await expect(b.page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Orchestrator')
+  // As a synced local card: its session id, started fresh here or resumed where it exists (#13 D6).
+  await expect
+    .poll(() => claudeLogLines(fakeB.log), { timeout: 15_000 })
+    .toEqual([`${SETTINGS_ARGS} --session-id ${id}`])
+})

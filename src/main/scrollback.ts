@@ -13,6 +13,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
+import { hasOrchestrator, orchestratorId } from '../core/orchestrator'
 import { ScrollbackStore } from '../core/scrollback-store'
 import type { WorkspaceState } from '../core/workspace-store'
 import { IPC } from '../shared/api'
@@ -76,7 +77,15 @@ export function registerScrollback(keeps: () => boolean): MainScrollback {
   }
 }
 
-/** The ids of every card on the given boards, whose saves the launch prune keeps (#46 D7). */
+/**
+ * The ids of every card on the given boards and of every local workspace's Orchestrator (#81 D9),
+ * whose saves the launch prune keeps (#46 D7).
+ */
 export function cardIds(...boards: WorkspaceState[]): string[] {
-  return boards.flatMap((board) => board.workspaces.flatMap((w) => w.cards.map((c) => c.id)))
+  return boards.flatMap((board) =>
+    board.workspaces.flatMap((w) => [
+      ...w.cards.map((c) => c.id),
+      ...(hasOrchestrator(w) ? [orchestratorId(w.id)] : [])
+    ])
+  )
 }

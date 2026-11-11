@@ -7,6 +7,7 @@ import type { BoardAgent, BoardCommand } from './board-args'
 import type { CardMoveTarget } from './card-moves'
 import type { StartupCommand } from './startup-command'
 import { stripEscapes } from './card-status'
+import { findOrchestratorCard } from './orchestrator'
 import { findShellCard } from './workspace-shells'
 import {
   cardsInColumn,
@@ -22,6 +23,10 @@ export const NOT_IN_A_CARD = 'board: not running inside a Bikube card'
 /** `.` from a workspace shell, which is a terminal but no card on the board. */
 export const SHELL_NOT_A_CARD = 'board: this is a shell, not a card; name a card by its id or title'
 
+/** `.` from the Orchestrator (#81 D4), which has no board card. */
+export const ORCHESTRATOR_NOT_A_CARD =
+  'board: this is the orchestrator, not a card; name a card by its id or title'
+
 /** Longest agent status, in characters (#9 D8). */
 export const MAX_AGENT_STATUS_LENGTH = 200
 
@@ -29,32 +34,44 @@ export const MAX_AGENT_STATUS_LENGTH = 200
 export const CALLING_CARD = '.'
 
 /**
- * The workspace holding the calling card, or the shell (a named or temporary one, #81 D3)
- * the request came from, whichever workspace is active (#9 D2, D3): every Bikube terminal
- * gets `board`.
+ * The workspace holding the calling card, or the shell (a named or temporary one, #81 D3) or
+ * Orchestrator (#81 D4) the request came from, whichever workspace is active (#9 D2, D3): every
+ * Bikube terminal gets `board`.
  */
 export function findCallingWorkspace(
   state: WorkspaceState,
   callingCardId: string
 ): BoardResult<Workspace> {
   const workspace = state.workspaces.find(
-    (w) => w.cards.some((c) => c.id === callingCardId) || findShellCard(w, callingCardId)
+    (w) =>
+      w.cards.some((c) => c.id === callingCardId) ||
+      findShellCard(w, callingCardId) ||
+      findOrchestratorCard(w, callingCardId)
   )
   return workspace ? { ok: true, value: workspace } : { ok: false, error: NOT_IN_A_CARD }
 }
 
+/** What called `board`: a card on the board, a workspace shell, or the Orchestrator. */
+export type CallingKind = 'card' | 'shell' | 'orchestrator'
+
 /**
- * What called `board` in `workspace` (found by `findCallingWorkspace`): its card, or its shell as
- * the card-shaped record the terminals use, with `shell` set.
+ * What called `board` in `workspace` (found by `findCallingWorkspace`): its card, or its shell or
+ * Orchestrator as the card-shaped record the terminals use, with `shell` set for a shell and
+ * `kind` saying which.
  */
 export function callingTerminal(
   workspace: Workspace,
   callingCardId: string
-): { card: Card; shell: boolean } {
+): { card: Card; shell: boolean; kind: CallingKind } {
   const card = workspace.cards.find((c) => c.id === callingCardId)
-  return card
-    ? { card, shell: false }
-    : { card: findShellCard(workspace, callingCardId)!, shell: true }
+  if (card) return { card, shell: false, kind: 'card' }
+  const shell = findShellCard(workspace, callingCardId)
+  if (shell) return { card: shell, shell: true, kind: 'shell' }
+  return {
+    card: findOrchestratorCard(workspace, callingCardId)!,
+    shell: false,
+    kind: 'orchestrator'
+  }
 }
 
 /**

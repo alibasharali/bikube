@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { conversationCheckTarget } from '../../core/transcript-backup-target'
 import type { Card } from '../../core/workspace-store'
-import { workspaceStore } from './store'
+import { findTerminalIn } from './orchestrator'
 
 /**
  * A local Claude Code card's conversation check before it resumes (#80 D11): being checked, or
@@ -33,11 +33,9 @@ export function useConversationCheck(cardId: string): ConversationCheck | undefi
   return useSyncExternalStore(subscribe, () => conversationCheck(cardId))
 }
 
+/** The card as it now is: one on the board, or the workspace's Orchestrator (#81 D8). */
 const findCard = (workspaceId: string, cardId: string): Card | undefined =>
-  workspaceStore
-    .getState()
-    .workspaces.find((w) => w.id === workspaceId)
-    ?.cards.find((c) => c.id === cardId)
+  findTerminalIn(workspaceId, cardId)
 
 /**
  * Starts the card, first asking main to prepare its Claude Code conversation when it is a local

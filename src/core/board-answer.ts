@@ -27,6 +27,7 @@ import {
   callingTerminal,
   CALLING_CARD,
   SHELL_NOT_A_CARD,
+  ORCHESTRATOR_NOT_A_CARD,
   noSetupError,
   notRunningError,
   resolveCard,
@@ -121,6 +122,40 @@ function answerShell(
 }
 
 /**
+ * `command` naming `.` from the Orchestrator (#81 D9): its status, activity and usage are handed
+ * on for it at runtime (it has no board card to keep them on), its session is saved as its
+ * conversation (D8), `description` prints nothing, and anything else is refused.
+ */
+function answerOrchestrator(
+  store: Pick<WorkspaceStore, 'setAgentSession'>,
+  workspaceId: string,
+  orchestrator: Card,
+  command: BoardCommand,
+  isRunning: (cardId: string) => boolean,
+  reports: Omit<ShellReports, 'setShellSession'>
+): BoardReply {
+  const id = orchestrator.id
+  if (command.command === 'description') return { ok: true }
+  if (command.command === 'session') {
+    const set = store.setAgentSession(workspaceId, id, command.session.toLowerCase())
+    return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
+  }
+  if (
+    command.command !== 'status' &&
+    command.command !== 'activity' &&
+    command.command !== 'usage'
+  ) {
+    return { ok: false, error: ORCHESTRATOR_NOT_A_CARD }
+  }
+  if (!isRunning(id)) return { ok: false, error: notRunningError(orchestrator) }
+  if (command.command === 'status') reports.setAgentStatus(id, cleanAgentStatus(command.text))
+  else if (command.command === 'activity') {
+    reports.setActivity(id, command.activity === 'none' ? null : command.activity)
+  } else reports.setUsage(id, command.usage)
+  return { ok: true }
+}
+
+/**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
  * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it, and keeps
@@ -165,7 +200,8 @@ export function answerBoardCommand(
   if (!workspace.ok) return workspace
   const calling = workspace.value
   // A workspace shell may call too: it lists, creates and acts on named cards, never on `.`.
-  const { card: callingCard, shell } = callingTerminal(calling, callingCardId)
+  // So may the Orchestrator (#81 D16).
+  const { card: callingCard, shell, kind } = callingTerminal(calling, callingCardId)
   // An SSH card's session socket serves only its own card's workspace (#69 D9).
   const remote = callingCard.host !== undefined
   if (remote && !servesRemoteCard(command)) return { ok: false, error: INVALID_REQUEST }
@@ -201,8 +237,13 @@ export function answerBoardCommand(
     if (command.worktree && command.branch === undefined) {
       return { ok: false, error: INVALID_REQUEST }
     }
+    // The Orchestrator has no agent of its own to pass on: the target workspace's default (D16).
     const startup =
-      command.agent !== undefined ? agentStartup(command.agent) : inheritedStartup(callingCard)
+      command.agent !== undefined
+        ? agentStartup(command.agent)
+        : kind === 'orchestrator'
+          ? undefined
+          : inheritedStartup(callingCard)
     const created = store.createCard(
       titles.id,
       column.value.id,
@@ -227,6 +268,13 @@ export function answerBoardCommand(
       setAgentStatus,
       setActivity,
       setShellSession,
+      setUsage
+    })
+  }
+  if (kind === 'orchestrator' && command.card === CALLING_CARD) {
+    return answerOrchestrator(store, calling.id, callingCard, command, isRunning, {
+      setAgentStatus,
+      setActivity,
       setUsage
     })
   }

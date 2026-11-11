@@ -2,7 +2,7 @@ import { PanelLeftOpen } from 'lucide-react'
 import { useEffect } from 'react'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
-import { findShellCard } from '../../core/workspace-shells'
+import { findTerminal } from './orchestrator'
 import { isCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import { openCardWindow } from './card-windows'
@@ -44,8 +44,7 @@ function CardWindow({
   // Its shortcut on the button, as Settings has it now.
   const keymap = useKeymap()
   const workspace = workspaces.find((w) => w.id === workspaceId)
-  const card =
-    workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))
+  const card = workspace && findTerminal(workspace, cardId)
   const title = workspace && card ? cardWindowTitle(workspace, card) : null
 
   useEffect(() => {

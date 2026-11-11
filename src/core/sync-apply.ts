@@ -74,7 +74,7 @@ export function applySyncBoard(
         cards.push(columnId === c.columnId ? c : { ...c, columnId })
       }
     }
-    return { ...w, cards, shells }
+    return { ...w, cards, shells, ...orchestratorFrom(w, mine) }
   })
   // A workspace the file deleted stays whole while a card of it runs here; a card the file has
   // elsewhere is left out, so ids stay unique (#8 D3).
@@ -82,4 +82,20 @@ export function applySyncBoard(
     .filter((w) => !incomingIds.has(w.id) && kept(w).length > 0)
     .map((w) => ({ ...w, cards: w.cards.filter((c) => !incomingCards.has(c.id)) }))
   return [...applied, ...stays]
+}
+
+/**
+ * The Orchestrator's conversation this machine takes (#81 D8): the file's session id, with this
+ * machine's `claudeStarted` and `startedAgents` while that session is the one it had (else none
+ * started); this machine's own while the file has none, so it is written back.
+ */
+function orchestratorFrom(
+  incoming: Workspace,
+  local: Workspace | undefined
+): Pick<Workspace, 'orchestrator'> {
+  const mine = local?.orchestrator
+  const theirs = incoming.orchestrator
+  if (!theirs) return mine ? { orchestrator: mine } : {}
+  if (mine && mine.agentSessionId === theirs.agentSessionId) return { orchestrator: mine }
+  return { orchestrator: { ...theirs, claudeStarted: false, startedAgents: [] } }
 }

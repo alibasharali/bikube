@@ -633,3 +633,33 @@ describe('paletteItems sidebar layout (#79 D1)', () => {
     expect(shown.slice(0, 2)).toEqual(['Sidebar: Nested', 'New workspace'])
   })
 })
+
+describe('paletteItems Orchestrator rows (#81 D5, D10, AC3, AC14)', () => {
+  const alpha = workspace('a', 'Alpha', [])
+  const state: WorkspaceState = { workspaces: [alpha], activeId: 'a' }
+  const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
+
+  it('lists Open orchestrator after New shell with its shortcut, and New conversation once it has one', () => {
+    const shown = labels(input(state, { orchestrator: { conversation: false } }))
+    expect(shown.slice(shown.indexOf('New shell'), shown.indexOf('View: Grid'))).toEqual([
+      'New shell',
+      'Open orchestrator'
+    ])
+    const rows = paletteItems(input(state, { orchestrator: { conversation: true } })).actions
+    expect(rows.find((r) => r.label === 'Open orchestrator')).toEqual({
+      kind: 'action',
+      action: { id: 'openOrchestrator' },
+      label: 'Open orchestrator',
+      shortcut: 'Ctrl+Alt+O'
+    })
+    expect(rows.find((r) => r.label === 'Orchestrator: New conversation')?.action).toEqual({
+      id: 'orchestratorNewConversation'
+    })
+  })
+
+  it('lists neither for a workspace without one (an SSH workspace)', () => {
+    const shown = labels(input(state))
+    expect(shown).not.toContain('Open orchestrator')
+    expect(shown).not.toContain('Orchestrator: New conversation')
+  })
+})

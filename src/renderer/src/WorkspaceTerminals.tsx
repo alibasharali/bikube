@@ -88,7 +88,7 @@ function AgentSetupRow({
  * A running card's or shell's row. In the Split sidebar's Agents section (#79 D5) it also names
  * its workspace (`workspaceName`), under its title and in its tooltip, and how long it has been
  * in its group (`since`, D6) before its status mark. A shell, which has no board card, shows its
- * `board status .` text under its title (#81 D3).
+ * `board status .` text under its title (#81 D3), as does the Orchestrator (D9).
  */
 export function TerminalRow({
   row,
@@ -107,7 +107,8 @@ export function TerminalRow({
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
   const { agentStatus } = useCardStatus(row.cardId)
-  const shellStatus = row.kind === 'shell' ? agentStatus : undefined
+  // A shell and the Orchestrator have no board card to show it on (#81 D3, D9).
+  const shellStatus = row.kind !== 'card' ? agentStatus : undefined
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
   const classes = ['workspace-terminal']
   if (current) classes.push('active')

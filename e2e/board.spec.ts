@@ -465,7 +465,15 @@ test("the workspace toolbar holds the active workspace's Agent setup, Edit and D
   const items = page.getByTestId('workspace-item')
   const toolbar = page.getByTestId('workspace-toolbar')
   await items.nth(0).click()
-  await expect(toolbar.getByRole('button')).toHaveText(['Agent setup', 'Edit', 'Delete', ''])
+  await expect(toolbar.getByRole('button')).toHaveText([
+    // The Orchestrator and its menu come first (#81 D5).
+    'Orchestrator',
+    '',
+    'Agent setup',
+    'Edit',
+    'Delete',
+    ''
+  ])
   await expect(toolbar.getByRole('button').last()).toHaveAccessibleName('New terminal')
   await expect(toolbar.getByTestId('workspace-edit')).toHaveAttribute('aria-label', 'Edit alpha')
   // The sidebar no longer shows them over the workspace's name.

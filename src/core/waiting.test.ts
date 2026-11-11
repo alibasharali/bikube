@@ -161,3 +161,16 @@ describe('a waiting shell (#41 AC7)', () => {
     })
   })
 })
+
+describe('the Orchestrator waits like a card (#81 D9, AC15)', () => {
+  it('counts in its workspace and opens there; none for an SSH workspace', () => {
+    const queue = ['orchestrator:beta']
+    expect(waitingCounts(queue, [alpha, beta])).toEqual(new Map([['beta', 1]]))
+    expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: 'orchestrator:beta'
+    })
+    const ssh = { ...beta, host: 'box' }
+    expect(withoutDeleted(queue, [alpha, ssh])).toEqual([])
+  })
+})

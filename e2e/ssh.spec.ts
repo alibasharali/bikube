@@ -1029,3 +1029,28 @@ test('#31 AC11: board activity works in an SSH card and its extra pane, cleared 
   await expect(tileStatus('api')).toHaveText('Running')
   await expect(card('api').getByTestId('card-activity')).toHaveCount(0)
 })
+
+test('#81 AC14: an SSH workspace has no Orchestrator: a disabled button, no palette rows, no shortcut', async () => {
+  await launch()
+  await createSsh('me@devbox', REMOTE_DIR, 'remote')
+  const button = page.getByTestId('toolbar-orchestrator')
+  await expect(button).toBeDisabled()
+  await expect(page.getByTestId('toolbar-orchestrator-menu')).toHaveCount(0)
+  await page.mouse.move(600, 500)
+  await button.hover()
+  const tooltip = page
+    .getByTestId('workspace-toolbar')
+    .getByRole('tooltip')
+    .filter({ hasText: 'Orchestrator' })
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('The orchestrator needs a local workspace')
+  // A click does nothing.
+  await button.click({ force: true })
+  await page.keyboard.press(process.platform === 'darwin' ? 'Alt+Meta+O' : 'Control+Alt+O')
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('card-view')).toHaveCount(0)
+  await expect(page.getByTestId('workspace-terminal')).toHaveCount(0)
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+Shift+P')
+  await page.getByTestId('palette-input').fill('orchestrator')
+  await expect(page.getByTestId('palette-row-title')).toHaveCount(0)
+})

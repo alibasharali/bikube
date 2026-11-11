@@ -36,6 +36,7 @@ describe('defaultKeymap (#31 D6)', () => {
       closeCard: 'Shift+Cmd+W',
       settings: 'Cmd+,',
       openShell: 'Cmd+T',
+      openOrchestrator: 'Alt+Cmd+O',
       togglePanel: 'Alt+Cmd+B',
       find: 'Cmd+F',
       palette: 'Cmd+K',
@@ -63,6 +64,7 @@ describe('defaultKeymap (#31 D6)', () => {
         closeCard: 'Ctrl+Shift+Q',
         settings: 'Ctrl+,',
         openShell: 'Ctrl+Shift+T',
+        openOrchestrator: 'Ctrl+Alt+O',
         togglePanel: 'Ctrl+Alt+B',
         find: 'Ctrl+Shift+F',
         palette: 'Ctrl+Shift+P',
@@ -263,10 +265,10 @@ describe('Copy command output (#60 D5, AC6)', () => {
       )
       expect(shortcutOverrides(defaultKeymap(platform), platform)).toEqual({})
     }
-    const changed = resolveKeymap({ copyCommandOutput: 'Ctrl+Alt+O' }, 'linux')
-    expect(shortcutOverrides(changed, 'linux')).toEqual({ copyCommandOutput: 'Ctrl+Alt+O' })
-    expect(validateShortcuts({ copyCommandOutput: 'Ctrl+Alt+O' }, 'linux')).toEqual({
-      copyCommandOutput: 'Ctrl+Alt+O'
+    const changed = resolveKeymap({ copyCommandOutput: 'Ctrl+Alt+Y' }, 'linux')
+    expect(shortcutOverrides(changed, 'linux')).toEqual({ copyCommandOutput: 'Ctrl+Alt+Y' })
+    expect(validateShortcuts({ copyCommandOutput: 'Ctrl+Alt+Y' }, 'linux')).toEqual({
+      copyCommandOutput: 'Ctrl+Alt+Y'
     })
     expect(resetRefusal('copyCommandOutput', changed, 'linux')).toBeNull()
   })
@@ -844,8 +846,8 @@ describe('Open in new window (#53 D6, AC13)', () => {
   })
 
   it('is read, refused when taken and reset like the others', () => {
-    expect(readShortcuts({ openInWindow: 'Ctrl+Alt+O' }, 'linux')).toEqual({
-      shortcuts: { openInWindow: 'Ctrl+Alt+O' },
+    expect(readShortcuts({ openInWindow: 'Ctrl+Alt+Y' }, 'linux')).toEqual({
+      shortcuts: { openInWindow: 'Ctrl+Alt+Y' },
       dropped: []
     })
     expect(resolveKeymap(readShortcuts({}, 'linux').shortcuts, 'linux').openInWindow).toBe(
@@ -855,7 +857,22 @@ describe('Open in new window (#53 D6, AC13)', () => {
     expect(
       recordPress(press('O', { ctrlKey: true, shiftKey: true }), 'find', keymap, 'linux')
     ).toEqual({ kind: 'refused', message: 'Already used by Open in new window' })
-    const taken = resolveKeymap({ find: 'Ctrl+Shift+O', openInWindow: 'Ctrl+Alt+O' }, 'linux')
+    const taken = resolveKeymap({ find: 'Ctrl+Shift+O', openInWindow: 'Ctrl+Alt+Y' }, 'linux')
     expect(resetRefusal('openInWindow', taken, 'linux')).toBe('Already used by Find')
+  })
+})
+
+describe('Open orchestrator (#81 D6, AC16)', () => {
+  it('is a configurable action: Alt+Cmd+O on macOS, Ctrl+Alt+O elsewhere, no default sharing it', () => {
+    expect(SHORTCUT_LABELS.openOrchestrator).toBe('Open orchestrator')
+    expect(defaultKeymap('darwin').openOrchestrator).toBe('Alt+Cmd+O')
+    expect(defaultKeymap('linux').openOrchestrator).toBe('Ctrl+Alt+O')
+    expect(keymapAction(press('o', { ctrlKey: true, altKey: true }), defaultKeymap('linux'))).toBe(
+      'openOrchestrator'
+    )
+    for (const platform of ['darwin', 'linux']) {
+      expect(readShortcuts({}, platform).dropped).toEqual([])
+      expect(resetRefusal('openOrchestrator', defaultKeymap(platform), platform)).toBeNull()
+    }
   })
 })

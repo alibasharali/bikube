@@ -714,3 +714,40 @@ describe('a pending worktree in the saved state (#69 D10)', () => {
     expect(read).toEqual({ ok: true, value: fullState() })
   })
 })
+
+describe("the Orchestrator's conversation in the saved state (#81 D8)", () => {
+  const session = {
+    agentSessionId: '11111111-2222-4333-8444-555555555555',
+    claudeStarted: true,
+    startedAgents: ['codex']
+  }
+
+  it('writes it on a workspace that has one and reads it back', () => {
+    const state = fullState()
+    state.workspaces[0] = {
+      ...state.workspaces[0]!,
+      orchestrator: { ...session, startedAgents: ['codex'] }
+    }
+    const text = serializeSavedState(state)
+    expect(JSON.parse(text).state.workspaces[0].orchestrator).toEqual(session)
+    expect('orchestrator' in JSON.parse(text).state.workspaces[1]).toBe(false)
+    expect(parseSavedState(text)).toEqual({ ok: true, value: state })
+  })
+
+  it('drops a bad value only, keeping the workspace and the rest of the file', () => {
+    for (const bad of [
+      42,
+      { ...session, agentSessionId: '' },
+      { ...session, claudeStarted: 'yes' },
+      { ...session, startedAgents: ['nope'] },
+      { ...session, startedAgents: ['codex', 'codex'] }
+    ]) {
+      const read = parseSavedState(
+        fileWith((f) => {
+          f.workspaces[0].orchestrator = bad
+        })
+      )
+      expect(read).toEqual({ ok: true, value: fullState() })
+    }
+  })
+})

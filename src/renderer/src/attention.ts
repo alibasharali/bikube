@@ -5,6 +5,8 @@ import { triggerFailureNotice, triggerStatus } from '../../core/trigger-status'
 import type { ShellCommand } from '../../core/shell-marks'
 import { isWaiting, withActivity, withoutDeleted } from '../../core/waiting'
 import { findShellCard } from '../../core/workspace-shells'
+import { orchestratorId } from '../../core/orchestrator'
+import { findTerminal, orchestratorOf } from './orchestrator'
 import { playTone } from './bell'
 import { startCard } from './card-actions'
 import { cardPanes, cardTerminals, onScreenCreated } from './card-terminals'
@@ -78,7 +80,10 @@ function updateBadge(): void {
 
 function cardOf(cardId: string): { workspaceId: string; workspace: string; title: string } | null {
   for (const workspace of workspaceStore.getState().workspaces) {
-    const card = workspace.cards.find((c) => c.id === cardId)
+    // The Orchestrator notifies as a card does (#81 D9).
+    const card =
+      workspace.cards.find((c) => c.id === cardId) ??
+      (cardId === orchestratorId(workspace.id) ? orchestratorOf(workspace) : undefined)
     if (card) return { workspaceId: workspace.id, workspace: workspace.name, title: card.title }
   }
   return null
@@ -133,7 +138,7 @@ function notify(cardId: string, activity: Activity): void {
 /** Card or shell `id`'s title and workspace. */
 function terminalOf(id: string): { workspaceId: string; workspace: string; title: string } | null {
   for (const workspace of workspaceStore.getState().workspaces) {
-    const card = workspace.cards.find((c) => c.id === id) ?? findShellCard(workspace, id)
+    const card = findTerminal(workspace, id)
     if (card) return { workspaceId: workspace.id, workspace: workspace.name, title: card.title }
   }
   return null

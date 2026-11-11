@@ -255,3 +255,33 @@ describe('card descriptions from the sync file (#69 D1)', () => {
     expect(applied!.cards[1]!).not.toHaveProperty('description')
   })
 })
+
+describe("the Orchestrator's conversation from the sync file (#81 D8, AC15)", () => {
+  const session = (
+    id: string,
+    claudeStarted: boolean,
+    startedAgents: Card['startedAgents']
+  ): NonNullable<Workspace['orchestrator']> => ({
+    agentSessionId: id,
+    claudeStarted,
+    startedAgents
+  })
+
+  it("takes the file's session id, keeping this machine's started flags for the same session", () => {
+    const local = workspace('api', { orchestrator: session('s1', true, ['codex']) })
+    const same = applySyncBoard(
+      [workspace('api', { orchestrator: session('s1', false, []) })],
+      [local],
+      none
+    )
+    expect(same[0].orchestrator).toEqual(session('s1', true, ['codex']))
+    const other = applySyncBoard(
+      [workspace('api', { orchestrator: session('s2', false, []) })],
+      [local],
+      none
+    )
+    expect(other[0].orchestrator).toEqual(session('s2', false, []))
+    const none_ = applySyncBoard([workspace('api')], [local], none)
+    expect(none_[0].orchestrator).toEqual(session('s1', true, ['codex']))
+  })
+})

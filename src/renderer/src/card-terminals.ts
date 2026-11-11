@@ -55,6 +55,8 @@ import {
   type ShellCommand
 } from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
+import { hasOrchestrator, isOrchestratorId, orchestratorId } from '../../core/orchestrator'
+import { CLAUDE_STARTUP } from '../../core/startup-command'
 import { ringBell } from './bell'
 import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
@@ -959,8 +961,17 @@ function sessionRouter(): SessionRouter {
   return router
 }
 
-/** Whether the card's startup command is Claude Code; shells and unknown cards are not. */
+/**
+ * Whether the card's startup command is Claude Code, or it is an Orchestrator running Claude Code
+ * (#81 D7); shells and unknown cards are not.
+ */
 function startsClaudeCode(cardId: string): boolean {
+  if (isOrchestratorId(cardId)) {
+    return (
+      isCard(cardId) &&
+      (settingsStore.get().orchestratorStartup ?? CLAUDE_STARTUP).kind === 'claude'
+    )
+  }
   return workspaceStore
     .getState()
     .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
@@ -989,15 +1000,27 @@ async function foregroundProgram(sessionId: string | undefined): Promise<string 
   return sessionId === undefined ? null : window.bikube.terminal.foreground(sessionId)
 }
 
-/** Whether `cardId` is a card (not a shell) on the board. */
+/**
+ * Whether `cardId` is a card (not a shell) on the board, or a local workspace's Orchestrator,
+ * whose main pane's output is kept as a card's (#81 D9).
+ */
 function isCard(cardId: string): boolean {
-  return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
+  return workspaceStore
+    .getState()
+    .workspaces.some(
+      (w) =>
+        w.cards.some((c) => c.id === cardId) ||
+        (hasOrchestrator(w) && cardId === orchestratorId(w.id))
+    )
 }
 
 /** Nothing is read or saved while Keep output after a card stops is off (#46 D8). */
 const keepingOutput = (): boolean => settingsStore.get().keepOutput
 
-/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
+/**
+ * Cards' (and Orchestrators') main pane output, kept by main across their starts (#46); never a
+ * shell's (D1).
+ */
 const outputKeeper: OutputKeeper = {
   keeps: (cardId) => keepingOutput() && isCard(cardId),
   scrollback: () => settingsStore.get().scrollback,

@@ -139,3 +139,24 @@ describe('openTerminals', () => {
     expect(openTerminals([workspace('a', [card('a1', 'One')])], running(), noActivity)).toEqual([])
   })
 })
+
+describe("the Orchestrator's row (#81 D5)", () => {
+  it('comes first in its workspace while it runs, with the Orchestrator agent as its tool', () => {
+    const a = workspace('a', [card('a1', 'First')])
+    const rows = openTerminals([a], running('a1', 'orchestrator:a'), noActivity, undefined, {
+      kind: 'codex'
+    })
+    expect(rows.map((r) => [r.kind, r.cardId, r.title, r.tool])).toEqual([
+      ['orchestrator', 'orchestrator:a', 'Orchestrator', 'codex'],
+      ['card', 'a1', 'First', 'shell']
+    ])
+    expect(openTerminals([a], running('a1'), noActivity).map((r) => r.cardId)).toEqual(['a1'])
+  })
+
+  it('is Claude Code by default and none for an SSH workspace', () => {
+    const a = workspace('a', [])
+    expect(openTerminals([a], running('orchestrator:a'), noActivity)[0]?.tool).toBe('claude')
+    const ssh = { ...workspace('s', []), host: 'box' }
+    expect(openTerminals([ssh], running('orchestrator:s'), noActivity)).toEqual([])
+  })
+})

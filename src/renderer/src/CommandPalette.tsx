@@ -21,6 +21,7 @@ import {
 } from '../../core/palette'
 import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import { shellCards } from '../../core/workspace-shells'
+import { hasOrchestrator } from '../../core/orchestrator'
 import type { WorkspaceState } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import {
@@ -145,6 +146,8 @@ function CommandPalette({
   const statusKey = useStatusKey(ids)
   // Next waiting card follows the queue live (#41 D7).
   const waiting = useWaitingQueue()
+  const active = state.workspaces.find((w) => w.id === state.activeId)
+  const activeOrchestrator = active && hasOrchestrator(active) ? active : undefined
 
   const items = useMemo(
     () =>
@@ -160,7 +163,11 @@ function CommandPalette({
           sidebarLayout,
           keymap: currentKeymap(),
           platform: window.bikube?.platform ?? '',
-          waiting
+          waiting,
+          // The active workspace's Orchestrator, none for an SSH one (#81 D5, D10).
+          ...(activeOrchestrator && {
+            orchestrator: { conversation: activeOrchestrator.orchestrator !== undefined }
+          })
         }),
         query
       ),

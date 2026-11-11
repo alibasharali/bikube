@@ -799,15 +799,15 @@ test('AC13: Settings lists Open in new window, recorded, refused, saved and rese
   await field.click()
   await page.keyboard.press(PALETTE)
   await expect(error).toHaveText('Already used by Command palette')
-  await page.keyboard.press('Control+Alt+O')
-  await expect(field).toHaveText('Ctrl+Alt+O')
-  await expect.poll(saved).toContain('"openInWindow":"Ctrl+Alt+O"')
+  await page.keyboard.press('Control+Alt+Y')
+  await expect(field).toHaveText('Ctrl+Alt+Y')
+  await expect.poll(saved).toContain('"openInWindow":"Ctrl+Alt+Y"')
   await page.keyboard.press('Escape')
   await expect(settings).toHaveCount(0)
 
   await newCard('Agent A')
   const opened = app.waitForEvent('window')
-  await page.keyboard.press('Control+Alt+O')
+  await page.keyboard.press('Control+Alt+Y')
   const window = await opened
   await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
 

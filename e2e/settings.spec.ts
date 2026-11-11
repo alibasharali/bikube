@@ -1178,13 +1178,13 @@ test('#60 AC6: Copy command output shows its default, can be recorded to a key t
   // Another action's shortcut is refused.
   await page.keyboard.press(darwin ? 'Meta+F' : 'Control+Shift+F')
   await expect(shortcutError(page, 'copyCommandOutput')).toHaveText('Already used by Find')
-  await page.keyboard.press('Control+Alt+O')
-  await expect(field).toHaveText('Ctrl+Alt+O')
-  await expect.poll(saved).toContain('"copyCommandOutput":"Ctrl+Alt+O"')
+  await page.keyboard.press('Control+Alt+Y')
+  await expect(field).toHaveText('Ctrl+Alt+Y')
+  await expect.poll(saved).toContain('"copyCommandOutput":"Ctrl+Alt+Y"')
   await page.keyboard.press('Escape')
   await expect(dialog(page)).toHaveCount(0)
 
-  await page.keyboard.press('Control+Alt+O')
+  await page.keyboard.press('Control+Alt+Y')
   await expect.poll(() => clipboardWrites(app!)).toEqual(['copied'])
 
   await page.keyboard.press(SHORTCUT)
@@ -1439,4 +1439,30 @@ test('#64 AC8b: in a 400 px window each Settings row stacks its label above a fu
   for (const { label, layout } of await rowLayouts(page)) expect(layout, label).toBe('beside')
   const wideLabel = await tabs.first().locator('.settings-tab-label').boundingBox()
   expect(wideLabel!.width).toBeGreaterThan(20)
+})
+
+test('#81 AC16: Open orchestrator shows its default, records a key saved in shortcuts, and resets', async () => {
+  const dataDir = newDataDir()
+  const file = join(dataDir, 'bikube-settings.json')
+  const launched = await launchApp({ dataDir })
+  app = launched.app
+  const { page } = launched
+  const saved = (): string => (existsSync(file) ? readFileSync(file, 'utf8') : '')
+  const darwin = process.platform === 'darwin'
+  const defaultText = darwin ? 'Alt+Cmd+O' : 'Ctrl+Alt+O'
+  await page.getByTestId('settings-open').click()
+  await dialog(page).getByTestId('settings-section-shortcuts').click()
+  await expect(dialog(page).getByRole('group', { name: 'Shortcuts' })).toContainText(
+    'Open orchestrator'
+  )
+  const field = shortcutField(page, 'openOrchestrator')
+  await expect(field).toHaveText(defaultText)
+  await expect(shortcutReset(page, 'openOrchestrator')).toBeDisabled()
+  await field.click()
+  await page.keyboard.press('Control+Alt+U')
+  await expect(field).toHaveText('Ctrl+Alt+U')
+  await expect.poll(saved).toContain('"openOrchestrator":"Ctrl+Alt+U"')
+  await shortcutReset(page, 'openOrchestrator').click()
+  await expect(field).toHaveText(defaultText)
+  await expect.poll(saved).not.toContain('openOrchestrator')
 })

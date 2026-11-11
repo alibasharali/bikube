@@ -103,6 +103,8 @@ export type PaletteAction =
   | { id: 'moveCard'; columnId: string }
   | { id: 'newCard' }
   | { id: 'openShell' }
+  | { id: 'openOrchestrator' }
+  | { id: 'orchestratorNewConversation' }
   | { id: 'nextWaiting' }
   | { id: 'zoomPane' }
   | { id: 'focusNextPane' }
@@ -173,6 +175,11 @@ export interface PaletteInput {
   platform: string
   /** The waiting cards' and shells' ids, oldest first (#41 D2). */
   waiting: readonly string[]
+  /**
+   * The active workspace's Orchestrator (#81 D5, D10): absent when it has none (an SSH workspace),
+   * `conversation` once it has one to start anew.
+   */
+  orchestrator?: { conversation: boolean }
 }
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
@@ -233,6 +240,7 @@ type KeymapAction = Exclude<
   | 'workspaceView'
   | 'agentSetup'
   | 'sidebarLayout'
+  | 'orchestratorNewConversation'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -299,6 +307,17 @@ function actionRows(input: PaletteInput): ActionRow[] {
   if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
+  }
+  // The active workspace's Orchestrator, while it has one (#81 D5, D10).
+  if (hasActive && input.orchestrator) {
+    rows.push(keymapRow('openOrchestrator', keymap))
+    if (input.orchestrator.conversation) {
+      rows.push({
+        kind: 'action',
+        action: { id: 'orchestratorNewConversation' },
+        label: 'Orchestrator: New conversation'
+      })
+    }
   }
   // Only when the Next waiting card shortcut would open something (#41 D7).
   if (nextWaitingCard(input.waiting, view?.cardId ?? null, state.workspaces)) {

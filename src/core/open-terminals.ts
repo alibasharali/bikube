@@ -3,12 +3,13 @@
  * no DOM imports: the renderer runs it.
  */
 import type { Activity } from './activity'
+import { orchestratorCard } from './orchestrator'
 import type { StartupCommand } from './startup-command'
 import { shellCards } from './workspace-shells'
 import { cardsInColumn, type Workspace } from './workspace-store'
 
 export interface OpenTerminal {
-  kind: 'card' | 'shell'
+  kind: 'card' | 'shell' | 'orchestrator'
   workspaceId: string
   cardId: string
   /** The card's title or shell's name. */
@@ -19,15 +20,17 @@ export interface OpenTerminal {
 }
 
 /**
- * The running cards and shells, by workspace in sidebar order, each workspace's cards in column
- * order, then its shells in strip order. A trigger is left out until it has
- * been opened (`opened`).
+ * The running cards and shells, by workspace in sidebar order: each workspace's Orchestrator first
+ * (#81 D5, its tool the Orchestrator agent setting `orchestratorStartup`), its cards in column
+ * order, then its shells in strip order. A trigger is left out until it has been opened
+ * (`opened`).
  */
 export function openTerminals(
   workspaces: readonly Workspace[],
   isRunning: (cardId: string) => boolean,
   activity: (cardId: string) => Activity | undefined,
-  opened: (shellId: string) => boolean = () => true
+  opened: (shellId: string) => boolean = () => true,
+  orchestratorStartup?: StartupCommand
 ): OpenTerminal[] {
   const row = (
     kind: OpenTerminal['kind'],
@@ -40,6 +43,9 @@ export function openTerminals(
     return { kind, workspaceId: workspace.id, cardId, title, tool, ...(set && { activity: set }) }
   }
   return workspaces.flatMap((w) => [
+    ...[orchestratorCard(w, orchestratorStartup)]
+      .filter((o) => o !== undefined && isRunning(o.id))
+      .map((o) => row('orchestrator', w, o!.id, o!.title, o!.startup.kind)),
     ...w.columns.flatMap((column) =>
       cardsInColumn(w, column.id)
         .filter((c) => isRunning(c.id))

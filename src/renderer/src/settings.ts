@@ -37,11 +37,15 @@ export function createSettingsStore(
     update(change) {
       const next = validateSettings({ ...current, ...change }, platform)
       if (next === null) return false
-      const keys = (Object.keys(next) as (keyof Settings)[]).filter((key) => key !== 'shortcuts')
+      const keys = (Object.keys(next) as (keyof Settings)[]).filter(
+        (key) => key !== 'shortcuts' && key !== 'orchestratorStartup'
+      )
       if (
         keys.every((key) => next[key] === current[key]) &&
         // Absent when cleared, so not among `next`'s keys (#51 D5).
         next.globalShortcut === current.globalShortcut &&
+        // An object, absent for Claude Code (#81 D7).
+        JSON.stringify(next.orchestratorStartup) === JSON.stringify(current.orchestratorStartup) &&
         sameShortcuts(next.shortcuts, current.shortcuts)
       ) {
         return true

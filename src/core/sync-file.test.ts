@@ -599,3 +599,38 @@ describe('a pending worktree in the sync file (#69 D10)', () => {
     expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('pendingWorktree')
   })
 })
+
+describe("the Orchestrator's conversation in the sync file (#81 D8, AC15)", () => {
+  it('writes its session id, with nothing started (as a local card), and reads it back', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          orchestrator: {
+            agentSessionId: 'session-o',
+            claudeStarted: true,
+            startedAgents: ['codex']
+          }
+        }),
+        workspace('v', 'beta')
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.orchestrator).toEqual({
+      agentSessionId: 'session-o',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(board.workspaces[1]!).not.toHaveProperty('orchestrator')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.orchestrator).toEqual({
+      agentSessionId: 'session-o',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    file.board.workspaces[0].orchestrator = { agentSessionId: 7 }
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!).not.toHaveProperty('orchestrator')
+  })
+})

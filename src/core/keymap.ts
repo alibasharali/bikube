@@ -13,6 +13,7 @@ export const SHORTCUT_ACTIONS = [
   'closeCard',
   'settings',
   'openShell',
+  'openOrchestrator',
   'togglePanel',
   'find',
   'palette',
@@ -50,6 +51,8 @@ const MAC_DEFAULTS: Readonly<Keymap> = Object.freeze({
   closeCard: 'Shift+Cmd+W',
   settings: 'Cmd+,',
   openShell: 'Cmd+T',
+  // Not Shift+Cmd+O: Open in new window's (#81 D6).
+  openOrchestrator: 'Alt+Cmd+O',
   togglePanel: 'Alt+Cmd+B',
   find: 'Cmd+F',
   palette: 'Cmd+K',
@@ -81,6 +84,8 @@ const OTHER_DEFAULTS: Readonly<Keymap> = Object.freeze({
   closeCard: 'Ctrl+Shift+Q',
   settings: 'Ctrl+,',
   openShell: 'Ctrl+Shift+T',
+  // Not Ctrl+Shift+O: Open in new window's (#81 D6).
+  openOrchestrator: 'Ctrl+Alt+O',
   togglePanel: 'Ctrl+Alt+B',
   // Not Ctrl+F: it stays the shell's (readline's forward-char) (#35 D2).
   find: 'Ctrl+Shift+F',
@@ -318,6 +323,7 @@ export const SHORTCUT_LABELS: Readonly<Record<ShortcutAction, string>> = Object.
   closeCard: 'Close card',
   settings: 'Open Settings',
   openShell: 'New shell',
+  openOrchestrator: 'Open orchestrator',
   togglePanel: 'Toggle panel',
   find: 'Find',
   palette: 'Command palette',

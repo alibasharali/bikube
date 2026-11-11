@@ -21,5 +21,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
-- UX review: todo
+- done: ALL PASS (AC1, AC3, AC8, AC11, AC12, AC14 observed directly; the rest via e2e)
+- UX review: running

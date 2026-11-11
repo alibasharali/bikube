@@ -11,7 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { backToBoard, boardCard, cardView, expectCardOpen } from './card-view'
+import { backToBoard, boardCard, cardView, expectCardOpen, openTerminal } from './card-view'
 import {
   installedOutsideHome,
   openedPaths as openedPathsIn,
@@ -20,7 +20,6 @@ import {
 import { fakeSshHome, removeRemoteForwards, type FakeSshHome } from './fake-ssh'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // The side panel beside an open card (#55 S1) and beside the board (#57): shown by default,
 // toggled by its title bar button and the Toggle panel shortcut (no hide button of its own),
@@ -608,7 +607,7 @@ test('#55 AC9: a new file shows under an expanded folder within 4 s, and at once
   await expect(row('src/z.ts')).toHaveAttribute('aria-selected', 'true')
 })
 
-test("#55 AC10: a worktree card shows its worktree, the workspace's Default shell the workspace folder", async () => {
+test('#55 AC10: a worktree card shows its worktree, a terminal the workspace folder', async () => {
   await openC1()
   await backToBoard(page)
   await page.getByTestId('column').first().getByTestId('new-card').click()
@@ -626,9 +625,7 @@ test("#55 AC10: a worktree card shows its worktree, the workspace's Default shel
     .toEqual(['own-tree', '  dist', '  src', '  .gitignore', '  README.md'])
 
   await backToBoard(page)
-  await showShells(page)
-  await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await page.getByTestId('side-panel-tab-files').click()
   await expect(row('')).toHaveText('repo')
   await expect(row('')).toHaveAttribute('title', repo)

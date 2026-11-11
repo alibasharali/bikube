@@ -10,7 +10,7 @@ import {
   type RowStatus
 } from './palette'
 import { defaultKeymap } from './keymap'
-import { defaultShellId, type Card, type Workspace, type WorkspaceState } from './workspace-store'
+import { type Card, type Workspace, type WorkspaceState } from './workspace-store'
 
 const COLUMNS = [
   { id: 'backlog', name: 'Backlog' },
@@ -143,13 +143,11 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
     })
   })
 
-  it("lists each workspace's Default shell first, then its named shells in strip order", () => {
+  it("lists each workspace's shells in strip order, with no Default shell (#81 D1)", () => {
     const items = paletteItems(input({ workspaces: [alpha, beta], activeId: 'b' }))
     expect(items.shells.map((r) => [r.workspaceName, r.title, r.cardId])).toEqual([
-      ['Beta', 'Default shell', defaultShellId('b')],
       ['Beta', 'Dev server', 's1'],
-      ['Beta', 'Tests', 's2'],
-      ['Alpha', 'Default shell', defaultShellId('a')]
+      ['Beta', 'Tests', 's2']
     ])
     expect(items.shells.every((r) => r.kind === 'shell')).toBe(true)
   })
@@ -307,13 +305,13 @@ describe('paletteItems actions (#40 D6)', () => {
       workspaces: [{ ...alpha, view: 'grid' }, beta]
     }
     expect(labels(input(grid, { view: cardView }))).toContain('Edit description…')
-    const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const shell: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view: shell }))).not.toContain('Edit description…')
     expect(labels(input(state))).not.toContain('Edit description…')
   })
 
   it('offers no moves for a shell', () => {
-    const view: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const view: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view })).slice(0, 9)).toEqual([
       'Back to board',
       'Split right',
@@ -360,7 +358,7 @@ describe('paletteItems actions (#40 D6)', () => {
     // After the view's own actions, before Rename card…, Edit description… (#69 D4) and the moves.
     expect(rows[at - 1].label).toBe('Copy command output')
     expect(rows[at + 1].label).toBe('Rename card…')
-    const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const shell: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view: shell }))).toContain('Open in new window')
     expect(labels(input(state, { view: { ...cardView, running: false } }))).toContain(
       'Open in new window'

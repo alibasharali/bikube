@@ -73,7 +73,7 @@ function WorkspaceToolbar({
       <span className="workspace-toolbar-gap" />
       <Tooltip
         label="New terminal"
-        description="Opens the workspace's Default shell, or a new shell while that one runs"
+        description="Opens a new terminal in the workspace"
         shortcut="openShell"
         align="end"
       >

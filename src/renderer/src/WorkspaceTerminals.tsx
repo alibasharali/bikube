@@ -4,6 +4,7 @@ import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
 import type { OpenTerminal } from '../../core/open-terminals'
 import { formatAge } from '../../core/status-time'
 import { ToolIcon } from './AgentLogo'
+import { useCardStatus } from './card-terminals'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 import StatusIcon from './StatusIcon'
@@ -86,7 +87,8 @@ function AgentSetupRow({
 /**
  * A running card's or shell's row. In the Split sidebar's Agents section (#79 D5) it also names
  * its workspace (`workspaceName`), under its title and in its tooltip, and how long it has been
- * in its group (`since`, D6) before its status mark.
+ * in its group (`since`, D6) before its status mark. A shell, which has no board card, shows its
+ * `board status .` text under its title (#81 D3).
  */
 export function TerminalRow({
   row,
@@ -104,6 +106,8 @@ export function TerminalRow({
   since?: number
 }): React.JSX.Element {
   const inWindow = useInWindow(row.cardId)
+  const { agentStatus } = useCardStatus(row.cardId)
+  const shellStatus = row.kind === 'shell' ? agentStatus : undefined
   const needsYou = row.activity === 'waiting' || row.activity === 'question'
   const classes = ['workspace-terminal']
   if (current) classes.push('active')
@@ -133,7 +137,7 @@ export function TerminalRow({
             <ToolIcon tool={row.tool} />
           </span>
         )}
-        {workspaceName === undefined ? (
+        {workspaceName === undefined && !shellStatus ? (
           <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
             {row.title}
           </span>
@@ -142,9 +146,20 @@ export function TerminalRow({
             <span className="workspace-terminal-title" data-testid="workspace-terminal-title">
               {row.title}
             </span>
-            <span className="workspace-terminal-workspace" data-testid="agent-row-workspace">
-              {workspaceName}
-            </span>
+            {workspaceName !== undefined && (
+              <span className="workspace-terminal-workspace" data-testid="agent-row-workspace">
+                {workspaceName}
+              </span>
+            )}
+            {shellStatus && (
+              <span
+                className="workspace-terminal-workspace"
+                data-testid="workspace-terminal-status"
+                title={shellStatus}
+              >
+                {shellStatus}
+              </span>
+            )}
           </span>
         )}
         {inWindow && (

@@ -9,10 +9,9 @@ import { SHORTCUT_LABELS, type Keymap } from './keymap'
 import type { SidebarLayout, Theme } from './settings'
 import { MAX_PANES } from './split-tree'
 import { nextWaitingCard } from './waiting'
-import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
+import { shellCards } from './workspace-shells'
 import {
   cardsInColumn,
-  defaultShellId,
   workspaceView,
   type Workspace,
   type WorkspaceState,
@@ -79,9 +78,9 @@ export interface RowStatus {
 export interface TerminalRow {
   kind: 'card' | 'shell'
   workspaceId: string
-  /** The card's id, or the shell's (the Default shell's is `defaultShellId`). */
+  /** The card's id, or the shell's. */
   cardId: string
-  /** The card's title or shell's name; `Default shell` for the Default shell. */
+  /** The card's title or shell's name. */
   title: string
   workspaceName: string
   /** The card's worktree branch, when it has one. */
@@ -218,10 +217,7 @@ function cardRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
 
 function shellRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
   return order.flatMap((w) =>
-    shellCards(w).map((s) => {
-      const title = s.id === defaultShellId(w.id) ? DEFAULT_SHELL_TITLE : s.title
-      return terminalRow('shell', w, s.id, title, undefined, input.status(s.id))
-    })
+    shellCards(w).map((s) => terminalRow('shell', w, s.id, s.title, undefined, input.status(s.id)))
   )
 }
 

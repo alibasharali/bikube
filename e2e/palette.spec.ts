@@ -8,6 +8,7 @@ import { backToBoard, expectCardOpen, expectStatusOnBoard } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
+import { showShells } from './shells-tab'
 
 // The command palette (#40): opening and closing it, card and shell rows, matching, keyboard
 // selection, jumping to a card in any workspace, and rebinding its shortcut.
@@ -82,6 +83,15 @@ async function stoppedCard(title: string): Promise<void> {
   await run('exit')
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(boardCard(title).getByTestId('card-status-label')).toHaveText('Stopped')
+}
+
+/** Adds a named plain shell to the active workspace through the Shells tab; it stays Stopped. */
+async function namedShell(name: string): Promise<void> {
+  await showShells(page)
+  await page.getByTestId('shell-add').click()
+  await page.getByTestId('shell-name').fill(name)
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
 }
 
 const palette = (): Locator => page.getByRole('dialog', { name: 'Command palette' })
@@ -281,8 +291,10 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
   await createWorkspace('Alpha')
   await stoppedCard('one')
   await stoppedCard('two')
+  await namedShell('Dev')
   await createWorkspace('Beta')
   await stoppedCard('three')
+  await namedShell('Logs')
   await selectWorkspace('Alpha')
 
   await openPalette()
@@ -301,7 +313,7 @@ test('AC4: with an empty query, cards then shells, the active workspace first, e
     'Alpha · Stopped',
     'Beta · Stopped'
   ])
-  expect(await titles(section('shells'))).toEqual(['Default shell', 'Default shell'])
+  expect(await titles(section('shells'))).toEqual(['Dev', 'Logs'])
   await expect(rows(section('shells')).getByTestId('palette-row-meta')).toHaveText([
     'Alpha · Stopped',
     'Beta · Stopped'
@@ -398,9 +410,10 @@ test('AC11: Up and Down wrap, the mouse selects on hover, Enter runs the selecte
   await createWorkspace('Alpha')
   await stoppedCard('one')
   await stoppedCard('two')
+  await namedShell('Dev')
 
   await openPalette()
-  // `one`, `two` and the Default shell: the workspace's name matches no action.
+  // `one`, `two` and the shell `Dev`: the workspace's name matches no action.
   await page.keyboard.type('alpha')
   await expect(rows()).toHaveCount(3)
   await expect(rows().nth(0)).toHaveAttribute('aria-selected', 'true')
@@ -430,10 +443,9 @@ test('AC11: Up and Down wrap, the mouse selects on hover, Enter runs the selecte
   await expect(palette()).toHaveCount(0)
   await expectCardOpen(page, 'one')
   await openPalette()
-  await row('Default shell').click()
+  await row('Dev').click()
   await expect(palette()).toHaveCount(0)
-  await expect(page.getByTestId('card-view')).toBeVisible()
-  await expect(page.getByTestId('card-view')).not.toHaveAttribute('aria-label', 'one')
+  await expectCardOpen(page, 'Dev')
 })
 
 test('AC12: a recorded shortcut opens the palette instead of the default, saved, and Reset brings it back', async () => {

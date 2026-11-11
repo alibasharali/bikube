@@ -19,7 +19,6 @@ import {
 } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 import { fakeAgentsHome } from './fake-agents'
 import {
   claudeLogLines,
@@ -490,7 +489,7 @@ test("#22 AC3: a startup line longer than 80 columns is typed at the open view's
   writeFileSync(shell, `#!/bin/sh\nstty size > '${sizeLog}'\nexec /bin/bash "$@"\n`)
   chmodSync(shell, 0o755)
   await createWorkspace(makeDir('alpha'), 'alpha')
-  // The side panel (#55) narrows the open view: hide it (from the Default shell, before the
+  // The side panel (#55) narrows the open view: hide it (from a terminal, before the
   // sized shell is set), so the view is as wide as this line needs.
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
   await expect(page.getByTestId('card-view')).toBeVisible()
@@ -749,21 +748,23 @@ test('D9: Enter in the select creates the card once the type is picked', async (
   await expect.poll(logLines).toHaveLength(1)
 })
 
-test("claude typed in the Default shell gets Bikube's settings, and its board status shows in the Shells tab", async () => {
+test("claude typed in a terminal gets Bikube's settings, and its board status shows on its sidebar row", async () => {
   const dir = makeDir('alpha')
   await createWorkspace(dir, 'alpha')
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
-  await expect(page.getByTestId('card-view')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
 
   // Typed by hand, as a card's start line does it: with --settings, not twice.
   await run('claude -c')
   await expect.poll(() => logLines().at(-1)).toBe(`${SETTINGS_ARGS} -c`)
   await page.keyboard.press('Enter')
 
-  // Its hooks' `board status .` shows for the shell, in the Shells tab.
+  // Its hooks' `board status .` shows for the shell, under its sidebar row (#81 D3).
   await run(`"$BIKUBE_BIN/board" status . 'Tests green'`)
-  await showShells(page)
   await expect(
-    page.getByTestId('shell').filter({ hasText: 'Default shell' }).getByTestId('shell-agent-status')
+    page
+      .getByTestId('workspace-terminal')
+      .filter({ hasText: 'Terminal 1' })
+      .getByTestId('workspace-terminal-status')
   ).toHaveText('Tests green')
 })

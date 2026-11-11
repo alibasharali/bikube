@@ -3,7 +3,6 @@ import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './bo
 import { NOT_IN_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
-  defaultShellId,
   InMemoryWorkspaceStore,
   type Card,
   type Workspace,
@@ -1061,7 +1060,8 @@ describe('answerBoardCommand from a workspace shell', () => {
                 autostart: false,
                 type: 'shell',
                 temporary: true
-              }
+              },
+              { id: 's-build', name: 'Build', command: '', autostart: false, type: 'shell' }
             ]
           },
           state.workspaces[1]
@@ -1078,7 +1078,7 @@ describe('answerBoardCommand from a workspace shell', () => {
 
   it("lists and creates in the shell's workspace, the new card with the workspace's agent", () => {
     const store = shellStore()
-    const listed = answer(store, defaultShellId('alpha'), { command: 'list', format: 'json' })
+    const listed = answer(store, 's-dev', { command: 'list', format: 'json' })
     if (!listed.ok || listed.output === undefined) throw new Error('no output')
     expect(JSON.parse(listed.output).workspace.id).toBe('alpha')
 
@@ -1091,7 +1091,7 @@ describe('answerBoardCommand from a workspace shell', () => {
 
   it('moves a named card; refuses moving or describing `.`, since a shell is no card', () => {
     const store = shellStore()
-    const from = defaultShellId('alpha')
+    const from = 's-build'
     expect(answer(store, from, { command: 'move', card: 'api', column: 'Done' })).toEqual({
       ok: true
     })
@@ -1162,7 +1162,7 @@ describe('answerBoardCommand from a workspace shell', () => {
         undefined,
         (id, session) => sessions.push([id, session])
       )
-    const from = defaultShellId('alpha')
+    const from = 's-build'
     const SESSION = '0B8C3A1E-1111-4222-8333-444455556666'
     expect(ask(from, { command: 'session', card: '.', session: SESSION })).toEqual({ ok: true })
     expect(ask(from, { command: 'usage', card: '.', usage })).toEqual({ ok: true })
@@ -1182,12 +1182,12 @@ describe('answerBoardCommand from a workspace shell', () => {
     expect(store.getState()).toBe(before)
   })
 
-  it('still refuses a terminal that is neither a card nor a shell', () => {
-    expect(
-      answer(setup(), 'default-shell:gone', { command: 'workspaces', format: 'text' })
-    ).toEqual({
-      ok: false,
-      error: NOT_IN_A_CARD
-    })
+  it('still refuses a terminal that is neither a card nor a shell, a Default shell id too (#81 D1)', () => {
+    for (const from of ['default-shell:gone', 'default-shell:alpha']) {
+      expect(answer(shellStore(), from, { command: 'workspaces', format: 'text' })).toEqual({
+        ok: false,
+        error: NOT_IN_A_CARD
+      })
+    }
   })
 })

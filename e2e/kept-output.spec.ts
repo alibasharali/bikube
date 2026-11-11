@@ -315,7 +315,7 @@ test('AC6: deleting a card removes its save', async () => {
   await expect.poll(keptFiles).toEqual([])
 })
 
-test("AC9: an extra pane and the Default shell keep nothing; only the card's main pane", async () => {
+test("AC9: an extra pane and a shell keep nothing; only the card's main pane", async () => {
   await newCard('api')
   await run('echo main-pane')
   await expect.poll(() => bufferLines(0)).toContain('main-pane')
@@ -334,19 +334,23 @@ test("AC9: an extra pane and the Default shell keep nothing; only the card's mai
   expect(lines).not.toContain('extra-pane')
   await backToBoard(page)
 
-  // The Default shell, restarted: no separator.
+  // A plain named shell, restarted: no separator.
   await showShells(page)
-  const defaultShell = page.locator('[data-testid="shell"][data-shell-name="Default"]')
-  await defaultShell.getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await page.getByTestId('shell-add').click()
+  await page.getByTestId('shell-name').fill('Plain')
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
+  const plainShell = page.locator('[data-testid="shell"][data-shell-name="Plain"]')
+  await plainShell.getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Plain')
   await run('echo default-shell')
   await expect.poll(() => bufferLines(0)).toContain('default-shell')
   await backToBoard(page)
-  await defaultShell.getByTestId('shell-menu').click()
+  await plainShell.getByTestId('shell-menu').click()
   await page.getByTestId('shell-menu-close').click()
-  await expect(defaultShell.getByTestId('shell-open')).toHaveAttribute('data-running', 'false')
-  await defaultShell.getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await expect(plainShell.getByTestId('shell-open')).toHaveAttribute('data-running', 'false')
+  await plainShell.getByTestId('shell-open').click()
+  await expectCardOpen(page, 'Plain')
   await run('echo default-again')
   await expect.poll(() => bufferLines(0)).toContain('default-again')
   lines = await bufferLines(0)

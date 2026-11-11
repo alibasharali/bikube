@@ -2,11 +2,10 @@ import { expect, test, type ElectronApplication, type Page } from '@playwright/t
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
+import { backToBoard, expectCardOpen, openTerminal, SHORTCUTS, splitRight } from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // Shell integration (#45): the marks a shell sends around its prompts and commands (OSC 133,
 // OSC 633, OSC 7), and what Bikube shows from them: a failed command's mark on its line (D6),
@@ -58,14 +57,9 @@ function readSettings(): unknown {
   }
 }
 
-/** Opens the workspace's Default shell and focuses its terminal. */
-async function openDefaultShell(): Promise<void> {
-  await showShells(page)
-  await page
-    .locator('[data-testid="shell"][data-shell-name="Default"]')
-    .getByTestId('shell-open')
-    .click()
-  await expectCardOpen(page, 'Default')
+/** Opens a new terminal with New shell (`Terminal 1` unless `title` says) and focuses it. */
+async function openShell(title = 'Terminal 1'): Promise<void> {
+  await openTerminal(page, title)
   await page.getByTestId('card-view').getByTestId('terminal').click()
 }
 
@@ -127,7 +121,7 @@ const marked = (end: string): string =>
 
 test('AC2: a failed command gets a mark on its line with its exit code; one that ended with 0 none', async () => {
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
   const failed = page.getByTestId('command-failed')
   const badge = page.getByTestId('command-failed-badge')
 
@@ -170,7 +164,7 @@ test('AC2: a failed command gets a mark on its line with its exit code; one that
 
 test('AC5: bash with Shell integration marks a failed command; with it off a new shell does not', async () => {
   await launchWithShell('/bin/bash')
-  await openDefaultShell()
+  await openShell()
   const badge = page.getByTestId('command-failed-badge')
 
   await run('false')
@@ -193,13 +187,8 @@ test('AC5: bash with Shell integration marks a failed command; with it off a new
   await toggle.uncheck()
   await page.getByTestId('settings-dialog').getByRole('button', { name: 'Done' }).click()
   await expect.poll(() => readSettings()).toMatchObject({ settings: { shellIntegration: false } })
-  await showShells(page)
-  await page
-    .locator('[data-testid="shell"][data-shell-name="Default"]')
-    .getByTestId('shell-menu')
-    .click()
-  await page.getByTestId('shell-menu-restart').click()
-  await openDefaultShell()
+  // A new terminal: started with it off.
+  await openShell('Terminal 2')
   await run('false; echo second-"done"')
   await expect.poll(async () => (await rows()).includes('second-done')).toBe(true)
   await run('echo "debug=[$(trap -p DEBUG)]"')
@@ -227,7 +216,7 @@ function viewport(): Promise<{ top: number; bottom: number; rows: number }> {
 test('AC6: Previous prompt and Next prompt scroll a prompt to the top, the shell getting none of the keys', async () => {
   test.skip(process.platform === 'darwin', 'the AC names the Linux defaults')
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
 
   // 3 commands, each a marked prompt followed by 100 lines of output.
   await run(
@@ -368,7 +357,7 @@ test('AC7: a long command ending out of sight sends a notification; in the focus
   // Commands of 0.5 s or more count (development build only), so the test needn't wait 10 s.
   await launchWithShell('/bin/sh', { BIKUBE_LONG_COMMAND_MS: '500' })
   await stubNotifications()
-  await openDefaultShell()
+  await openShell()
   await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.focus())
   await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true)
   const panes = page.getByTestId('card-view').getByTestId('pane')
@@ -382,14 +371,14 @@ test('AC7: a long command ending out of sight sends a notification; in the focus
   await expect.poll(async () => (await paneRows(1)).includes('extra-done')).toBe(true)
   await expect
     .poll(() => notifications())
-    .toEqual([{ title: 'Default', body: 'Command failed (exit 4) · alpha' }])
+    .toEqual([{ title: 'Terminal 1', body: 'Command failed (exit 4) · alpha' }])
 
   // Clicking it from the board opens the shell with that pane focused.
   await backToBoard(page)
   await page.evaluate(() =>
     (window as unknown as { __sent: { click: () => void }[] }).__sent[0]!.click()
   )
-  await expectCardOpen(page, 'Default')
+  await expectCardOpen(page, 'Terminal 1')
   await expect(panes.nth(1)).toHaveAttribute('data-focused', 'true')
 
   // In the focused pane of the open shell, in the focused window: none.
@@ -472,7 +461,7 @@ async function splitDirectory(): Promise<string> {
 
 test('AC8: a split starts in the directory the shell reported, unless it is gone or on another host', async () => {
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
   const own = [root, realpathSync(root)]
 
   // OSC 7 for /tmp, with this machine's host name.
@@ -499,7 +488,7 @@ test('AC8: a split starts in the directory the shell reported, unless it is gone
 
 test('AC8: with bash and Shell integration, a split after cd starts in that directory', async () => {
   await launchWithShell('/bin/bash')
-  await openDefaultShell()
+  await openShell()
   await run('cd /tmp')
   // Its prompt reports the directory (OSC 7), before the next command's output.
   await run('echo c"d-done"')
@@ -544,7 +533,7 @@ async function shellGotNoKeys(): Promise<void> {
 
 test("#60 AC2: Copy command output selects and copies the last command's output", async () => {
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
   await recordClipboardWrites(app!)
   await run(markedOutput(String.raw`one\ntwo\n`))
   await run(markedOutput(String.raw`three\n`))
@@ -565,7 +554,7 @@ test("#60 AC2: Copy command output selects and copies the last command's output"
 
 test("#60 AC3: after Previous prompt, the output of the command at the viewport's top", async () => {
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
   await run(markedOutput(String.raw`one\ntwo\n`))
   // The second command's output: 100 lines, so the first one's prompt scrolls out of view.
   await run(
@@ -588,7 +577,7 @@ test("#60 AC3: after Previous prompt, the output of the command at the viewport'
 
 test('#60 AC4: with nothing to copy the clipboard and selection stay as they were', async () => {
   await launchWithShell('/bin/sh')
-  await openDefaultShell()
+  await openShell()
   await run('echo no-"marks"')
   await expect.poll(async () => (await rows()).includes('no-marks')).toBe(true)
   await recordClipboardWrites(app!)
@@ -642,7 +631,7 @@ test("#60 AC7: with Find open, the selection is the command's output, not the ma
   await dialog.getByTestId('settings-copy-on-select').check()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
-  await openDefaultShell()
+  await openShell()
   await run(markedOutput(String.raw`\141lpha\nbeta\n`))
   await run(markedOutput(String.raw`\141lpha\ngamma\n`))
   await expect.poll(async () => (await rows()).includes('gamma')).toBe(true)

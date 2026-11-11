@@ -192,7 +192,7 @@ export interface Workspace {
   defaultStartup: StartupCommand
   /**
    * The workspace's shells: terminals that aren't tasks (a dev server, a test watcher), shown above
-   * the board, not on it. The Default shell isn't stored: every workspace has it.
+   * the board, not on it. There is no Default shell (#81 D1).
    */
   shells: WorkspaceShell[]
   /**
@@ -268,9 +268,6 @@ export function temporaryShellName(shells: readonly WorkspaceShell[]): string {
   while (taken.has(`Terminal ${n}`)) n++
   return `Terminal ${n}`
 }
-
-/** The id of a workspace's Default shell: a plain shell in its folder, never stored. */
-export const defaultShellId = (workspaceId: string): string => `default-shell:${workspaceId}`
 
 export interface WorkspaceState {
   workspaces: Workspace[]

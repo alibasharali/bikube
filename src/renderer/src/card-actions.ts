@@ -18,7 +18,7 @@ import { clearCardUsage } from './usage'
  */
 export function startCard(workspaceId: string, cardId: string): void {
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
-  // A shell (the Default one included) starts like a card: in the workspace's folder.
+  // A shell starts like a card: in the folder it runs in.
   const card =
     workspace?.cards.find((c) => c.id === cardId) ?? (workspace && findShellCard(workspace, cardId))
   if (!card) return

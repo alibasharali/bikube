@@ -4852,6 +4852,13 @@ button.dev-server-chip:focus-visible {
   padding: var(--space-2);
 }
 
+.shells-empty {
+  margin: 0;
+  padding: var(--space-1) 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 .shells-add {
   align-self: flex-start;
   display: inline-flex;

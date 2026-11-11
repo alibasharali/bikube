@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findShellCard, listedShellCards, shellCards } from './workspace-shells'
-import { defaultShellId, type Workspace } from './workspace-store'
+import { type Workspace } from './workspace-store'
 
 const workspace: Workspace = {
   id: 'w',
@@ -23,12 +23,17 @@ const workspace: Workspace = {
 }
 
 describe('workspace shells as cards', () => {
-  it('puts the Default shell first, plain, then each shell typing its command', () => {
+  it('lists only the named shells, each typing its command, with no Default shell (#81 D1)', () => {
     expect(shellCards(workspace).map((c) => [c.id, c.title, c.startup])).toEqual([
-      [defaultShellId('w'), 'Default', { kind: 'shell' }],
       ['s1', 'Dev server', { kind: 'custom', command: 'npm run dev' }]
     ])
     expect(shellCards(workspace)[0]).toMatchObject({ directory: '/tmp/alpha' })
+    expect(shellCards({ ...workspace, shells: [] })).toEqual([])
+  })
+
+  it('types nothing for a shell without a command', () => {
+    const plain = { ...workspace.shells[0]!, command: '' }
+    expect(shellCards({ ...workspace, shells: [plain] })[0]!.startup).toEqual({ kind: 'shell' })
   })
 
   it('marks a trigger with a command to exit after it, never a shell or one without', () => {
@@ -38,12 +43,10 @@ describe('workspace shells as cards', () => {
         shells: [
           { id: 's1', name: 'Dev', command, autostart: false, type: trigger ? 'trigger' : 'shell' }
         ]
-      })[1]!.exitAfterStartup
+      })[0]!.exitAfterStartup
     expect(closing('npm run dev', true)).toBe(true)
     expect(closing('npm run dev', false)).toBeUndefined()
     expect(closing('', true)).toBeUndefined()
-    // The Default shell never is.
-    expect(shellCards(workspace)[0]!.exitAfterStartup).toBeUndefined()
   })
 
   it('runs over SSH in an SSH workspace', () => {
@@ -53,9 +56,9 @@ describe('workspace shells as cards', () => {
     )
   })
 
-  it('finds a shell by id, the Default one included', () => {
+  it('finds a shell by id, never a Default shell (#81 D1)', () => {
     expect(findShellCard(workspace, 's1')?.title).toBe('Dev server')
-    expect(findShellCard(workspace, defaultShellId('w'))?.title).toBe('Default')
+    expect(findShellCard(workspace, 'default-shell:w')).toBeUndefined()
     expect(findShellCard(workspace, 'nope')).toBeUndefined()
   })
 })
@@ -95,7 +98,7 @@ describe('a shell running in a worktree card', () => {
 })
 
 describe('the shells the Shells tab lists (#67 D1)', () => {
-  it('leaves temporary shells out, keeping the Default shell and saved ones in order', () => {
+  it('leaves temporary shells out, keeping the saved ones in order', () => {
     const withTemporary: Workspace = {
       ...workspace,
       shells: [
@@ -110,8 +113,8 @@ describe('the shells the Shells tab lists (#67 D1)', () => {
         ...workspace.shells
       ]
     }
-    expect(listedShellCards(withTemporary).map((c) => c.id)).toEqual([defaultShellId('w'), 's1'])
+    expect(listedShellCards(withTemporary).map((c) => c.id)).toEqual(['s1'])
     // Every shell is still a terminal elsewhere (the sidebar tree, the palette).
-    expect(shellCards(withTemporary).map((c) => c.id)).toEqual([defaultShellId('w'), 't1', 's1'])
+    expect(shellCards(withTemporary).map((c) => c.id)).toEqual(['t1', 's1'])
   })
 })

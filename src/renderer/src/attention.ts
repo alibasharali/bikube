@@ -130,7 +130,7 @@ function notify(cardId: string, activity: Activity): void {
   window.bikube.app.requestAttention()
 }
 
-/** Card or shell `id`'s title and workspace, the Default shell (never stored) included. */
+/** Card or shell `id`'s title and workspace. */
 function terminalOf(id: string): { workspaceId: string; workspace: string; title: string } | null {
   for (const workspace of workspaceStore.getState().workspaces) {
     const card = workspace.cards.find((c) => c.id === id) ?? findShellCard(workspace, id)
@@ -238,7 +238,7 @@ export function startAttention(): void {
   onScreenCreated((screen, cardId, paneId) =>
     screen.marks.onCommandEnded((command) => notifyLongCommand(cardId, paneId, command))
   )
-  // A deleted card or shell no longer waits; a workspace's Default shell isn't stored, but stays.
+  // A deleted card or shell no longer waits.
   workspaceStore.subscribe(() => {
     setWaiting(withoutDeleted(waiting, workspaceStore.getState().workspaces))
   })

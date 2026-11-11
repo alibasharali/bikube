@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Activity } from './activity'
 import { openTerminals } from './open-terminals'
-import { defaultShellId, type Card, type Workspace } from './workspace-store'
+import { type Card, type Workspace } from './workspace-store'
 
 const COLUMNS = [
   { id: 'backlog', name: 'Backlog' },
@@ -64,13 +64,12 @@ describe('openTerminals', () => {
     const b = workspace('b', [card('b1', 'Other')])
     const rows = openTerminals(
       [a, b],
-      running('a1', 'a2', 'dev', defaultShellId('a'), 'b1'),
+      running('a1', 'a2', 'dev', 'default-shell:a', 'b1'),
       noActivity
     )
     expect(rows.map((r) => [r.kind, r.workspaceId, r.title])).toEqual([
       ['card', 'a', 'First'],
       ['card', 'a', 'Second'],
-      ['shell', 'a', 'Default shell'],
       ['shell', 'a', 'Dev server'],
       ['card', 'b', 'Other']
     ])

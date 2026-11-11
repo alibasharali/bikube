@@ -201,8 +201,7 @@ function App(): React.JSX.Element {
     [activeId, setViews]
   )
 
-  // New shell (#66 D1): the active workspace's Default shell, starting it when stopped; while it
-  // runs, a new temporary shell (D2), opened started.
+  // New shell (#81 D2): a new temporary `Terminal N` in the active workspace, opened started.
   const openNewShell = useRef(() => {})
   useEffect(() => {
     openNewShell.current = () => {

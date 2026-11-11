@@ -900,16 +900,16 @@ test("#69 AC6/AC8: a card created in another workspace gets the description, the
     ])
 })
 
-test("the Default shell runs board: it lists, creates and moves named cards, and `.` isn't a card to move", async () => {
+test("a terminal runs board: it lists, creates and moves named cards, and `.` isn't a card to move", async () => {
   await launch()
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('Backlog', 'api')
   await back()
 
-  // New shell opens the workspace's Default shell, in the workspace folder.
+  // New shell opens a temporary terminal, in the workspace folder (#81 D3).
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
-  await expect(page.getByTestId('card-view')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
   await expect.poll(terminalFocused).toBe(true)
 
   const listed = await board(alpha, 'board list --json')

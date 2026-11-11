@@ -4,14 +4,14 @@
  */
 import type { Activity } from './activity'
 import type { StartupCommand } from './startup-command'
-import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
-import { cardsInColumn, defaultShellId, type Workspace } from './workspace-store'
+import { shellCards } from './workspace-shells'
+import { cardsInColumn, type Workspace } from './workspace-store'
 
 export interface OpenTerminal {
   kind: 'card' | 'shell'
   workspaceId: string
   cardId: string
-  /** The card's title or shell's name; `Default shell` for the Default shell. */
+  /** The card's title or shell's name. */
   title: string
   /** What it runs, for its logo and colour: a card's startup command's kind, `shell` for shells. */
   tool: StartupCommand['kind']
@@ -20,7 +20,7 @@ export interface OpenTerminal {
 
 /**
  * The running cards and shells, by workspace in sidebar order, each workspace's cards in column
- * order, then its shells (the Default shell first). A trigger is left out until it has
+ * order, then its shells in strip order. A trigger is left out until it has
  * been opened (`opened`).
  */
 export function openTerminals(
@@ -50,14 +50,6 @@ export function openTerminals(
       .filter(
         (s) => w.shells.find((named) => named.id === s.id)?.type !== 'trigger' || opened(s.id)
       )
-      .map((s) =>
-        row(
-          'shell',
-          w,
-          s.id,
-          s.id === defaultShellId(w.id) ? DEFAULT_SHELL_TITLE : s.title,
-          'shell'
-        )
-      )
+      .map((s) => row('shell', w, s.id, s.title, 'shell'))
   ])
 }

@@ -29,8 +29,8 @@ export const MAX_AGENT_STATUS_LENGTH = 200
 export const CALLING_CARD = '.'
 
 /**
- * The workspace holding the calling card, or the shell (the Default shell, a named or temporary
- * one) the request came from, whichever workspace is active (#9 D2, D3): every Bikube terminal
+ * The workspace holding the calling card, or the shell (a named or temporary one, #81 D3)
+ * the request came from, whichever workspace is active (#9 D2, D3): every Bikube terminal
  * gets `board`.
  */
 export function findCallingWorkspace(

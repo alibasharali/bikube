@@ -2,8 +2,7 @@ import { PanelLeftOpen } from 'lucide-react'
 import { useEffect } from 'react'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { cardWindowTitle } from '../../core/window-title'
-import { DEFAULT_SHELL_TITLE, findShellCard } from '../../core/workspace-shells'
-import { defaultShellId } from '../../core/workspace-store'
+import { findShellCard } from '../../core/workspace-shells'
 import { isCardViewAction } from './card-view-actions'
 import CardView from './CardView'
 import { openCardWindow } from './card-windows'
@@ -24,7 +23,7 @@ function setTitle(view: Window, title: string): void {
  * card's shell stopping (D8). Open in new window's shortcut, or the bar's Move to main window
  * button, moves the card back to the main window, opened there. The card view's actions and
  * Toggle panel work there; the app's own
- * shortcuts (Settings, the palette, Next waiting card, the Default shell, Mod+1…9) do nothing and,
+ * shortcuts (Settings, the palette, Next waiting card, New shell, Mod+1…9) do nothing and,
  * as everywhere, never reach the shell (D5).
  */
 function CardWindow({
@@ -47,9 +46,7 @@ function CardWindow({
   const workspace = workspaces.find((w) => w.id === workspaceId)
   const card =
     workspace && (workspace.cards.find((c) => c.id === cardId) ?? findShellCard(workspace, cardId))
-  // The Default shell is named as the palette names it (#53 AC9).
-  const shown = cardId === defaultShellId(workspaceId) ? { title: DEFAULT_SHELL_TITLE } : card
-  const title = workspace && shown ? cardWindowTitle(workspace, shown) : null
+  const title = workspace && card ? cardWindowTitle(workspace, card) : null
 
   useEffect(() => {
     if (title !== null) setTitle(view, title)

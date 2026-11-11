@@ -504,8 +504,7 @@ function CardView({
     // Capture phase: works wherever focus is, including the terminal, which swallows the key.
     const onKeyDown = (event: KeyboardEvent): void => {
       const action = keymapAction(event, currentKeymap())
-      // Settings, the Default shell, the command palette and Toggle panel are the app's (#40 D1,
-      // #57 D4).
+      // Settings, New shell, the command palette and Toggle panel are the app's (#40 D1, #57 D4).
       if (!isCardViewAction(action)) return
       // A dialog over the view (e.g. deleting a workspace) owns the keyboard.
       if (dialogOpenIn(view)) return

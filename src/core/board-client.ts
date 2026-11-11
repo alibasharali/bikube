@@ -125,7 +125,9 @@ export async function runBoard(
       out.stderr(`${read.error}\n`)
       return 1
     }
-    command = { command: 'send', card: args.card, text: read.text }
+    // A pipe's or heredoc's last new line would type an Enter of its own inside the paste: stdin's
+    // trailing new lines are trimmed, as `board describe -` trims (#69 D5); an argument's never.
+    command = { command: 'send', card: args.card, text: read.text.replace(/[\r\n]+$/, '') }
   } else {
     command = args.command
   }

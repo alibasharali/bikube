@@ -372,7 +372,7 @@ describe('runBoard: send and per-command timeouts (#81 D19, D20)', () => {
   it("sends stdin's text for -, its control characters but newline and tab removed", async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler)
-    expect(await run(['send', 'Review', '-'], utf8('fix\tit\r\n\x1b[1mnow\n'))).toEqual({
+    expect(await run(['send', 'Review', '-'], utf8('fix\tit\r\n\x1b[1mnow'))).toEqual({
       code: 0,
       stdout: '',
       stderr: ''
@@ -382,8 +382,17 @@ describe('runBoard: send and per-command timeouts (#81 D19, D20)', () => {
       cardId: 'c1',
       command: 'send',
       card: 'Review',
-      text: 'fix\tit\n[1mnow\n'
+      text: 'fix\tit\n[1mnow'
     })
+  })
+
+  it("trims stdin's trailing new lines, never an argument's", async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    await run(['send', 'Review', '-'], utf8('go on\n\nnow \r\n\n'))
+    expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'go on\n\nnow ' }))
+    await run(['send', 'Review', 'go on\n'])
+    expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'go on\n' }))
   })
 
   it('sends 100,000 multi-byte characters whole, and refuses more, sending nothing', async () => {

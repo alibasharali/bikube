@@ -6859,3 +6859,41 @@ button.dev-server-chip:focus-visible {
   color: var(--text);
   font-family: inherit;
 }
+
+/* The notice over a local Claude Code card (#80 D5): a strip above its panes, never a dialog. */
+.retention-banner {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.retention-banner-text {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.retention-banner-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.retention-banner-error {
+  color: var(--danger);
+}
+
+.retention-banner-actions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

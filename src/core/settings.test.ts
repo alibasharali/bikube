@@ -892,3 +892,22 @@ describe('the sidebar layout preference (#79 D1)', () => {
     expect(parsed.replaced).toEqual(['sidebarLayout'])
   })
 })
+
+describe('the Offer to keep Claude Code conversations preference (#80 D6)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('defaults to on, writing no key for it', () => {
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.offerClaudeRetention).toBe(
+      true
+    )
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('offerClaudeRetention')
+  })
+
+  it('writes off and reads it back; drops a non-boolean', () => {
+    const text = serializeSettings({ ...base, offerClaudeRetention: false })
+    expect(JSON.parse(text).settings.offerClaudeRetention).toBe(false)
+    expect(parseSettingsFile(text, 'linux').settings.offerClaudeRetention).toBe(false)
+    expect(validateSettings({ ...base, offerClaudeRetention: 'no' }, 'linux')).toBeNull()
+  })
+})

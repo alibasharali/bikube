@@ -5,6 +5,7 @@ import type {
   SettingsWriteResult
 } from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
+import type { ClaudeRetention } from '../core/claude-retention-types'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AgentSummaryRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
@@ -101,6 +102,8 @@ export const IPC = {
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
   agentTabRevealOutput: 'agentTab:revealOutput',
+  claudeRetentionRead: 'claudeRetention:read',
+  claudeRetentionSet: 'claudeRetention:set',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -380,6 +383,17 @@ export interface AgentTabApi {
   revealOutput(sessionId: string, path: string): Promise<boolean>
 }
 
+/** Claude Code's conversation retention in the user's `~/.claude/settings.json` (#80 D2–D5). */
+export interface ClaudeRetentionApi {
+  /** How `cleanupPeriodDays` reads now (D3): low with the days in effect, ok or unknown. */
+  read(): Promise<ClaudeRetention>
+  /**
+   * Sets `cleanupPeriodDays` to 3650 (D4), main naming the file and the value; a failure's
+   * `message` is the error line (`Couldn't save: settings.json is not valid JSON`).
+   */
+  set(): Promise<SettingsWriteResult>
+}
+
 export interface AgentSetupApi {
   /**
    * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
@@ -572,5 +586,6 @@ export interface BikubeApi {
   editors: EditorsApi
   agentSetup: AgentSetupApi
   agentTab: AgentTabApi
+  claudeRetention: ClaudeRetentionApi
   update: UpdateApi
 }

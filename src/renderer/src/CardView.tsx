@@ -11,6 +11,7 @@ import CloseCardDialog from './CloseCardDialog'
 import DescriptionDialog from './DescriptionDialog'
 import RenameCardDialog from './RenameCardDialog'
 import RemoveWorktreeDialog from './RemoveWorktreeDialog'
+import RetentionBanner from './RetentionBanner'
 import FindBar from './FindBar'
 import { SMALL_ICON } from './icons'
 import { isCardViewAction, registerCardViewActions, type CardViewAction } from './card-view-actions'
@@ -469,6 +470,15 @@ function CardView({
   return (
     <div className="card-layout">
       <section className="card-view" data-testid="card-view" aria-label={card.title}>
+        {/* A local Claude Code card's one-time retention notice (#80 D5), above its panes. */}
+        {card.startup.kind === 'claude' && card.host === undefined && (
+          <RetentionBanner
+            cardId={card.id}
+            onDone={() =>
+              focusScreen(paneScreen(card.id, cardPanes().layout(card.id).focused), view)
+            }
+          />
+        )}
         <div
           className="card-view-terminal"
           data-testid="card-terminal"

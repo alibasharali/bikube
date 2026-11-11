@@ -5,6 +5,7 @@ import type {
   SettingsWriteResult
 } from '../core/agent-setup-snapshot'
 import type { ClaudeVersion } from '../core/claude-version'
+import type { ClaudeRetention, ConversationPrepare } from '../core/claude-retention-types'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
 import type { AgentSummaryRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
@@ -101,6 +102,11 @@ export const IPC = {
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
   agentTabRevealOutput: 'agentTab:revealOutput',
+  claudeRetentionRead: 'claudeRetention:read',
+  claudeRetentionSet: 'claudeRetention:set',
+  transcriptsBackup: 'transcripts:backup',
+  transcriptsDelete: 'transcripts:delete',
+  transcriptsPrepare: 'transcripts:prepare',
   updateState: 'update:state',
   updateStateChanged: 'update:stateChanged',
   updateShow: 'update:show',
@@ -219,6 +225,27 @@ export interface ScrollbackApi {
    * after a bound.
    */
   quitSaved(): void
+}
+
+/**
+ * Local Claude Code cards' transcript backups (#80 D8–D10), kept by main in
+ * `<userData>/transcripts`, one folder per card: the renderer names a card id, its folder and
+ * its session id, never a backup path.
+ */
+export interface TranscriptsApi {
+  /**
+   * Copies the session's transcript (and its folder) from Claude Code's projects for `folder`
+   * when it changed since the last copy, removing the card's other sessions' copies. Sent in
+   * order with `scrollback.quitSaved`, so a backup sent before it is made before the shells stop.
+   */
+  backup(cardId: string, folder: string, sessionId: string): void
+  /** Removes the card's backups, if any. */
+  delete(cardId: string): void
+  /**
+   * Before a resume (#80 D11): whether the session's transcript is in Claude Code's projects for
+   * `folder`, put back there from the card's backup when it isn't, or missing.
+   */
+  prepare(cardId: string, folder: string, sessionId: string): Promise<ConversationPrepare>
 }
 
 /** App-wide settings, stored by main in `userData/bikube-settings.json` (#10 D6). */
@@ -378,6 +405,17 @@ export interface AgentTabApi {
   openOutput(sessionId: string, path: string): Promise<OpenResult>
   /** Shows a file output in the OS file manager (#79 D2, D10), as `openOutput` checks it; false when refused. */
   revealOutput(sessionId: string, path: string): Promise<boolean>
+}
+
+/** Claude Code's conversation retention in the user's `~/.claude/settings.json` (#80 D2–D5). */
+export interface ClaudeRetentionApi {
+  /** How `cleanupPeriodDays` reads now (D3): low with the days in effect, ok or unknown. */
+  read(): Promise<ClaudeRetention>
+  /**
+   * Sets `cleanupPeriodDays` to 3650 (D4), main naming the file and the value; a failure's
+   * `message` is the error line (`Couldn't save: settings.json is not valid JSON`).
+   */
+  set(): Promise<SettingsWriteResult>
 }
 
 export interface AgentSetupApi {
@@ -559,6 +597,7 @@ export interface BikubeApi {
   dialog: DialogApi
   state: StateApi
   scrollback: ScrollbackApi
+  transcripts: TranscriptsApi
   settings: SettingsApi
   board: BoardApi
   sync: SyncApi
@@ -572,5 +611,6 @@ export interface BikubeApi {
   editors: EditorsApi
   agentSetup: AgentSetupApi
   agentTab: AgentTabApi
+  claudeRetention: ClaudeRetentionApi
   update: UpdateApi
 }

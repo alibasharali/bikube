@@ -128,6 +128,11 @@ export interface Preferences {
   notificationSound: boolean
   /** Claude Code cards keep their one-line status with `board status` (#31 D16). */
   claudeStatus: boolean
+  /**
+   * Opening a local Claude Code card offers to keep Claude Code's conversations for 10 years while
+   * `~/.claude/settings.json` keeps them less (#80 D5, D6); Don't ask again turns it off.
+   */
+  offerClaudeRetention: boolean
   /** Local zsh, bash and fish shells start with Bikube's integration scripts (#45 D3, D4). */
   shellIntegration: boolean
   /** Sixel and iTerm2 images show in terminals created while it is on (#52 D3). */
@@ -190,6 +195,7 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   notifications: true,
   notificationSound: true,
   claudeStatus: true,
+  offerClaudeRetention: true,
   shellIntegration: true,
   inlineImages: true,
   sidePanelOpen: true,
@@ -248,6 +254,7 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   notifications: isBoolean,
   notificationSound: isBoolean,
   claudeStatus: isBoolean,
+  offerClaudeRetention: isBoolean,
   shellIntegration: isBoolean,
   inlineImages: isBoolean,
   sidePanelOpen: isBoolean,

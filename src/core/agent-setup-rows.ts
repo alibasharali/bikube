@@ -22,6 +22,7 @@ import {
   type PluginEntry,
   type SettingsFile
 } from './agent-setup-snapshot'
+import { retentionWarning } from './claude-retention-types'
 
 /** The source chips other than All and Plugin, in the chip row's order (#71 D3). */
 export type SourceChipKind = 'project' | 'local' | 'user' | 'bikube'
@@ -570,11 +571,34 @@ export interface SetupWarning {
   entry: string
   file: string
   message: string
+  /** #80 D7's warning: shown with Keep for 10 years. */
+  keepConversations?: true
+}
+
+/** The user settings file Claude Code's retention is read from and written to (#80 D2). */
+const userSettingsFile = (snapshot: AgentSetupSnapshot): string =>
+  snapshot.settings.find((file) => file.scope === 'user')?.file ??
+  `${snapshot.home}/.claude/settings.json`
+
+/** The days in effect while `cleanupPeriodDays` reads low (#80 D3), else null. */
+function lowRetentionDays(snapshot: AgentSetupSnapshot): number | null {
+  const retention = snapshot.claudeRetention
+  return retention?.state === 'low' ? retention.days : null
 }
 
 /** Every warning on the page (D24), file warnings first, then by section in list order. */
 export function setupWarnings(snapshot: AgentSetupSnapshot): SetupWarning[] {
   const warnings: SetupWarning[] = snapshot.fileWarnings.map((w) => ({ ...w }))
+  const days = lowRetentionDays(snapshot)
+  if (days !== null) {
+    warnings.push({
+      section: 'config',
+      entry: 'cleanupPeriodDays',
+      file: userSettingsFile(snapshot),
+      message: retentionWarning(days),
+      keepConversations: true
+    })
+  }
   for (const plugin of snapshot.plugins) {
     for (const message of plugin.warnings) {
       warnings.push({ section: 'plugins', entry: plugin.key, file: plugin.installPath, message })
@@ -923,7 +947,11 @@ export interface ConfigRow extends ConfigSetter {
   control: ConfigControl
   /** The value comes from settings.local.json and has a control: Reset removes it there (D22). */
   resettable: boolean
+  /** #80 D7's warning on `cleanupPeriodDays` while it reads low, shown with Keep for 10 years. */
+  retentionWarning?: string
 }
+
+const RETENTION_KEY = 'cleanupPeriodDays'
 
 const byKey = (a: { key: string }, b: { key: string }): number =>
   a.key < b.key ? -1 : a.key > b.key ? 1 : 0
@@ -953,7 +981,29 @@ export function configRows(
       else setters.set(key, [setter])
     }
   }
+  const days = lowRetentionDays(snapshot)
+  const retention = days === null ? null : retentionWarning(days)
   const rows: ConfigRow[] = []
+  if (days !== null && retention !== null && !setters.has(RETENTION_KEY)) {
+    // #80 D7: a row of its own for the warning when no file sets it (Claude Code's default).
+    const row: ConfigRow = {
+      key: RETENTION_KEY,
+      source: { kind: 'user' },
+      file: userSettingsFile(snapshot),
+      value: days,
+      text: `${days} (Claude Code's default)`,
+      overridden: [],
+      control: null,
+      resettable: false,
+      retentionWarning: retention
+    }
+    if (
+      matchesSource(filter, row.source) &&
+      matchesQuery(query, [RETENTION_KEY, row.text, sourceLabel(row.source)])
+    ) {
+      rows.push(row)
+    }
+  }
   for (const [key, [winner, ...overridden]] of setters) {
     const control = key === 'env' ? null : configControl(winner.value)
     const row: ConfigRow = {
@@ -962,7 +1012,8 @@ export function configRows(
       overridden,
       control,
       // Only a value D22 lets the page change; the rest is read-only (D28).
-      resettable: winner.source.kind === 'local' && control !== null
+      resettable: winner.source.kind === 'local' && control !== null,
+      ...(key === RETENTION_KEY && retention !== null ? { retentionWarning: retention } : {})
     }
     if (
       matchesSource(filter, row.source) &&

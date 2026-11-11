@@ -19,6 +19,7 @@ import { registerAgents } from './agents'
 import { registerEditors } from './editors'
 import { registerAgentSetup } from './agent-setup'
 import { registerAgentTab } from './agent-tab'
+import { registerClaudeRetention } from './claude-retention'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
 import { registerGit } from './git'
 import { registerLinks } from './links'
@@ -26,6 +27,7 @@ import { registerPorts } from './ports'
 import { installAppMenu } from './menu'
 import { registerSettings, type MainSettings } from './settings'
 import { cardIds, registerScrollback } from './scrollback'
+import { registerTranscripts } from './transcripts'
 import { registerState } from './state'
 import { registerSync } from './sync'
 import { registerTerminals } from './terminals'
@@ -173,6 +175,9 @@ function startApp(): void {
       : scrollback.store.clear()
   )
   settings.onKeepOutputOff(() => scrollback.store.clear())
+  // Transcript backups of cards on neither board go too (#80 D10).
+  const transcripts = registerTranscripts()
+  void sync.launched.then(() => transcripts.prune(cardIds(localBoard, state.load())))
   registerClipboard()
   registerLinks()
   registerPorts()
@@ -186,6 +191,7 @@ function startApp(): void {
   registerEditors(() => settings.shell())
   registerAgentSetup(() => settings.editor())
   registerAgentTab()
+  registerClaudeRetention()
   const updates = registerUpdates(() => terminals.sessionCount)
 
   // The app is one local page: a dropped file or link must never replace it and inherit the bridge.
@@ -196,9 +202,10 @@ function startApp(): void {
   })
 
   // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives
-  // the app (#18 D2): the first quit with live shells or a busy sync folder is held until the
-  // shells have exited (SIGHUP, then SIGKILL, #18 D1) and the sync folder's flush is done, or
-  // `QUIT_WAIT_MS` passed (#26 D5). Any later quit flushes again (the window stays live during the
+  // the app (#18 D2): the first quit with live shells, a busy sync folder or queued transcript
+  // backups (#80 D9) is held until the shells have exited (SIGHUP, then SIGKILL, #18 D1), the
+  // transcript backups are copied (within `QUIT_SAVE_WAIT_MS`) and the sync folder's flush is
+  // done, or `QUIT_WAIT_MS` passed (#26 D5). Any later quit flushes again (the window stays live during the
   // hold, so changes can still come in) and SIGKILLs what is left; the second is held once more,
   // at most `QUIT_WAIT_MS`, while the sync folder is still busy, and a third goes through.
   let holds = 0
@@ -219,13 +226,26 @@ function startApp(): void {
     const syncBusy = sync.busy()
     const synced = sync.flush()
     if (holds > 0) terminals.forceKillAll()
-    const hold = quitHold({ holds, liveShells: terminals.sessionCount > 0, syncBusy })
+    const hold = quitHold({
+      holds,
+      liveShells: terminals.sessionCount > 0,
+      syncBusy,
+      transcriptsBusy: transcripts.busy()
+    })
     busyAtLastQuit = syncBusy
     if (!hold.hold) return
     holds++
     event.preventDefault()
-    const saved = told ? boundedWait(quitSaved, QUIT_SAVE_WAIT_MS) : Promise.resolve()
-    const done = hold.shells ? Promise.all([saved.then(() => terminals.killAll()), synced]) : synced
+    // The transcript backups the renderer sent before `quitSaved` (#80 D9) are copied with async
+    // fs: they finish before the shells stop, within the same wait, and a quit with no shell is
+    // held for them (and those sent earlier) as well.
+    const saved = boundedWait(
+      (told ? quitSaved : Promise.resolve()).then(() => transcripts.idle()),
+      QUIT_SAVE_WAIT_MS
+    )
+    const done = hold.shells
+      ? Promise.all([saved.then(() => terminals.killAll()), synced])
+      : Promise.all([saved, synced])
     void boundedWait(done, QUIT_WAIT_MS).then(() => app.quit())
   })
 

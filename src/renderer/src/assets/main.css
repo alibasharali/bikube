@@ -6135,6 +6135,12 @@ button.dev-server-chip:focus-visible {
   gap: var(--space-1);
 }
 
+/* #80 D7: the retention warning with its Keep for 10 years button. */
+.agent-setup-retention {
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* An amber warning (D24): amber text and outline on the row's surface, since the amber tint under
    amber text falls short of 4.5:1 in some light themes. */
 .agent-setup-warning {
@@ -6147,6 +6153,20 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-xs);
   line-height: 18px;
   overflow-wrap: anywhere;
+}
+
+/* A warning long enough to wrap (#80 D7's retention line): a box with a small radius and vertical
+   padding in place of the pill, the ⚠ on the first line beside the text. */
+.agent-setup-warning-block {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.agent-setup-warning-block > :last-child {
+  min-width: 0;
 }
 
 .agent-setup-row-more {
@@ -6858,4 +6878,52 @@ button.dev-server-chip:focus-visible {
 .shell-agent-status {
   color: var(--text);
   font-family: inherit;
+}
+
+/* The notice over a local Claude Code card (#80 D5): a strip above its panes, never a dialog. */
+.retention-banner {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.retention-banner-text {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.retention-banner-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.retention-banner-error {
+  color: var(--danger);
+}
+
+/* Shrinks to the card view's width and wraps its buttons onto more lines (no flex: none, which kept
+   them at their full width past a narrow card view). */
+.retention-banner-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.retention-banner-actions .btn {
+  max-width: 100%;
+  white-space: normal;
 }

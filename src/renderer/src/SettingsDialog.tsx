@@ -1221,6 +1221,13 @@ function AgentsSection(): React.JSX.Element {
         checked={settings.claudeStatus}
         onChange={(claudeStatus) => settingsStore.update({ claudeStatus })}
       />
+      <SwitchRow
+        label="Offer to keep Claude Code conversations"
+        hint="Opening a Claude Code card offers to keep its conversations for 10 years while Claude Code deletes them sooner. The offer's Don't ask again turns this off."
+        testId="settings-offer-claude-retention"
+        checked={settings.offerClaudeRetention}
+        onChange={(offerClaudeRetention) => settingsStore.update({ offerClaudeRetention })}
+      />
     </>
   )
 }

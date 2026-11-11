@@ -345,9 +345,10 @@ function ac4Fixtures(folder: string): void {
   write(join(installPath, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'kit' }))
   write(join(installPath, 'skills/lint/SKILL.md'), frontmatter('lint', 'Lints the code'))
   write(join(installPath, 'agents/fixer.md'), frontmatter('fixer', 'Fixes what lint finds'))
+  // Claude Code's retention high, so #80 D7's warning isn't listed.
   write(
     join(home, '.claude/settings.json'),
-    JSON.stringify({ enabledPlugins: { 'kit@market': true } })
+    JSON.stringify({ enabledPlugins: { 'kit@market': true }, cleanupPeriodDays: 3650 })
   )
 }
 
@@ -414,6 +415,8 @@ test('AC8: an agent without frontmatter is warned about on its row and in Overvi
   await openWith((folder) => {
     write(join(folder, '.claude/agents/bare.md'), 'You are a helper.\n')
     write(join(folder, '.claude/settings.json'), '{ "model": ')
+    // Claude Code's retention high, so #80 D7's warning isn't listed.
+    write(join(home, '.claude/settings.json'), JSON.stringify({ cleanupPeriodDays: 3650 }))
   })
   const warnings = page.getByTestId('agent-setup-warning-item')
   await expect(warnings).toHaveCount(2)
@@ -939,6 +942,77 @@ test('AC11: Config edits booleans and numbers in settings.local.json, and Reset 
   await expect(model.getByTestId('agent-setup-config-value')).toHaveText('sonnet')
   await expect(model.getByTestId('agent-setup-config-reset')).toHaveCount(0)
   await expect(days.getByTestId('agent-setup-config-reset')).toHaveCount(1)
+})
+
+// #80 S2: Claude Code's retention (`cleanupPeriodDays` in the fake home's settings) warned about.
+
+const RETENTION_WARNING =
+  "⚠ Claude Code deletes conversations older than 30 days; Bikube cards can't resume them after that."
+
+for (const offer of [true, false]) {
+  test(`#80 AC6: a low retention is warned about in Overview and on Config's row; Keep for 10 years raises it${offer ? '' : ', with the offer off'}`, async () => {
+    if (!offer) {
+      writeFileSync(
+        join(dataDir, 'bikube-settings.json'),
+        '{"version":1,"settings":{"theme":"dark","fontSize":13,"fontFamily":"Menlo, Consolas, monospace","shell":"","terminalThemeDark":"Bikube Dark","terminalThemeLight":"Bikube Light","useGhosttyConfig":false,"offerClaudeRetention":false}}'
+      )
+    }
+    const userSettings = join(home, '.claude/settings.json')
+    await openWith(() => {
+      write(userSettings, JSON.stringify({ model: 'opus', cleanupPeriodDays: 30 }))
+    })
+    const warning = page
+      .getByTestId('agent-setup-warning-item')
+      .filter({ hasText: 'cleanupPeriodDays' })
+    await expect(warning.getByTestId('agent-setup-row-warning')).toHaveText(RETENTION_WARNING)
+    await expect(warning).toContainText('~/.claude/settings.json')
+    await expect(warning.getByTestId('agent-setup-keep-conversations')).toHaveText(
+      'Keep for 10 years'
+    )
+    await expect(
+      page.getByTestId('agent-setup-section-config').getByTestId('agent-setup-section-warning')
+    ).toBeVisible()
+
+    await tab('Config').click()
+    const days = configRow('cleanupPeriodDays')
+    await expect(days.getByTestId('agent-setup-row-warning')).toHaveText(RETENTION_WARNING)
+    await expect(days.getByTestId('agent-setup-config-number')).toHaveValue('30')
+    await days.getByTestId('agent-setup-keep-conversations').click()
+
+    // Written to ~/.claude/settings.json, every other key kept; the row reads 3650 from User.
+    await expect
+      .poll(() => JSON.parse(readFileSync(userSettings, 'utf8')) as unknown)
+      .toEqual({ model: 'opus', cleanupPeriodDays: 3650 })
+    await expect(days.getByTestId('agent-setup-config-number')).toHaveValue('3650')
+    await expect(days.getByTestId('agent-setup-source')).toHaveText('User')
+    await expect(days.getByTestId('agent-setup-row-warning')).toHaveCount(0)
+    await expect(days.getByTestId('agent-setup-keep-conversations')).toHaveCount(0)
+    await expect(page.getByTestId('agent-setup-save-error')).toHaveCount(0)
+    await tab('Overview').click()
+    await expect(page.getByTestId('agent-setup-no-warnings')).toHaveText('No problems found')
+  })
+}
+
+test("#80 D7: with no cleanupPeriodDays set, Config shows a row for Claude Code's default with the warning", async () => {
+  await openWith(() => {})
+  await tab('Config').click()
+  const days = configRow('cleanupPeriodDays')
+  await expect(days.getByTestId('agent-setup-config-value')).toHaveText(
+    "30 (Claude Code's default)"
+  )
+  await expect(days.getByTestId('agent-setup-source')).toHaveText('User')
+  await expect(days.getByTestId('agent-setup-row-warning')).toHaveText(RETENTION_WARNING)
+  await days.getByTestId('agent-setup-keep-conversations').click()
+  // ~/.claude/ and the file made for it.
+  await expect
+    .poll(() =>
+      existsSync(join(home, '.claude/settings.json'))
+        ? readFileSync(join(home, '.claude/settings.json'), 'utf8')
+        : ''
+    )
+    .toBe('{\n  "cleanupPeriodDays": 3650\n}\n')
+  await expect(days.getByTestId('agent-setup-config-number')).toHaveValue('3650')
+  await expect(days.getByTestId('agent-setup-row-warning')).toHaveCount(0)
 })
 
 // Open file and Reveal (#68 S6).

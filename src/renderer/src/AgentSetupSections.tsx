@@ -43,6 +43,7 @@ import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
 import { isOpenNote, listedFileErrorLine } from '../../core/open-result'
 import type { Workspace } from '../../core/workspace-store'
 import {
+  keepConversations,
   saveConfig,
   saveSwitch,
   switchKey,
@@ -51,6 +52,7 @@ import {
   useClaudeVersion
 } from './agent-setup-data'
 import { SectionIcon } from './agent-setup-icons'
+import { useClaudeRetention } from './claude-retention'
 import { SMALL_ICON } from './icons'
 import { useSettings } from './settings'
 
@@ -271,6 +273,39 @@ function Warnings({ warnings }: { warnings: readonly string[] }): React.JSX.Elem
   )
 }
 
+/**
+ * #80 D7's warning while Claude Code's retention reads low, with Keep for 10 years: main sets
+ * `cleanupPeriodDays` to 3650 in `~/.claude/settings.json` and the page reads again.
+ */
+function RetentionWarning({
+  folder,
+  message
+}: {
+  folder: string
+  message: string
+}): React.JSX.Element {
+  const { saving } = useClaudeRetention()
+  return (
+    <span className="agent-setup-row-warnings agent-setup-retention">
+      <span
+        className="agent-setup-warning agent-setup-warning-block"
+        data-testid="agent-setup-row-warning"
+      >
+        <span aria-hidden="true">⚠</span> <span>{message}</span>
+      </span>
+      <button
+        type="button"
+        className="btn btn-small"
+        data-testid="agent-setup-keep-conversations"
+        disabled={saving}
+        onClick={() => void keepConversations(folder)}
+      >
+        Keep for 10 years
+      </button>
+    </span>
+  )
+}
+
 const label = (id: AgentSetupSectionId): string =>
   AGENT_SETUP_SECTIONS.find((s) => s.id === id)!.label
 
@@ -281,6 +316,7 @@ const label = (id: AgentSetupSectionId): string =>
  * split's buttons aren't nested in another.
  */
 export function OverviewSection({
+  workspace,
   snapshot,
   query,
   filter,
@@ -371,7 +407,11 @@ export function OverviewSection({
                 </span>
                 <FileActions file={warning.file} />
               </div>
-              <Warnings warnings={[warning.message]} />
+              {warning.keepConversations ? (
+                <RetentionWarning folder={workspace.directory} message={warning.message} />
+              ) : (
+                <Warnings warnings={[warning.message]} />
+              )}
             </li>
           ))}
         </ul>
@@ -1392,6 +1432,7 @@ function ConfigItem({
           )}
         </span>
       </div>
+      {row.retentionWarning && <RetentionWarning folder={folder} message={row.retentionWarning} />}
       {invalid && (
         <p className="field-error" id={errorId} role="alert" data-testid="agent-setup-config-error">
           {NUMBER_ERROR}

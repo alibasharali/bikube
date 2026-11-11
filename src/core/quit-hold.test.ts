@@ -28,6 +28,15 @@ describe('quitHold (#18 D2, #26 D5)', () => {
     })
   })
 
+  it('holds the first quit while transcript backups are being copied, and only the first (#80 D9)', () => {
+    expect(
+      quitHold({ holds: 0, liveShells: false, syncBusy: false, transcriptsBusy: true })
+    ).toEqual({ hold: true, shells: false })
+    expect(
+      quitHold({ holds: 1, liveShells: false, syncBusy: false, transcriptsBusy: true })
+    ).toEqual({ hold: false })
+  })
+
   it('lets a third quit through whatever is still busy', () => {
     expect(quitHold({ holds: 2, liveShells: true, syncBusy: true })).toEqual({ hold: false })
   })

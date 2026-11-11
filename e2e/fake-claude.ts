@@ -36,8 +36,10 @@ export const claudeResumeLine = (id: string): string =>
 
 // The fake `claude` of #5's smoke tests: it logs its arguments to $BIKUBE_CLAUDE_LOG, prints
 // them, and waits on stdin. With FAKE_CLAUDE_RESUME_FAILS=1 a `--resume` run fails at once.
-// A line on stdin is a message sent: like Bikube's real hook, it reports its session with
-// `board session`, so the card resumes it next time.
+// A line on stdin is a message sent: like Claude Code, it writes the conversation's transcript
+// (one line, at `$HOME/.claude/projects/<encoded cwd>/<id>.jsonl`, unless the test wrote one) and,
+// like Bikube's real hook, reports its session with `board session`, so the card resumes it next
+// time (#80 D13).
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$*" >> "$BIKUBE_CLAUDE_LOG"
 echo "fake-claude $*"
@@ -48,7 +50,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 read -r _
-[ -n "$id" ] && "$BIKUBE_BIN/board" session . "$id" >/dev/null 2>&1
+if [ -n "$id" ]; then
+  dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$dir"
+  [ -e "$dir/$id.jsonl" ] || printf '%s\\n' '{"type":"summary","summary":"fake claude"}' > "$dir/$id.jsonl"
+  "$BIKUBE_BIN/board" session . "$id" >/dev/null 2>&1
+fi
 exit 0
 `
 

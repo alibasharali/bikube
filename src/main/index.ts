@@ -9,7 +9,7 @@ import { NO_VIEW_PROMPT_ARG } from '../core/view-prompt'
 import { hostNameArg } from '../core/shell-marks'
 import { KILL_GRACE_MS } from '../core/session-manager'
 import { IPC } from '../shared/api'
-import { boardShellEnvFor, boardSocketPath, registerBoard, sshBoardSockets } from './board'
+import { boardShellEnvFor, boardSocketPath, registerBoard, sessionBoardSockets } from './board'
 import { registerAttention } from './attention'
 import { allowCardWindows, appWindow, registerCardWindows } from './card-windows'
 import { registerClipboard } from './clipboard'
@@ -156,14 +156,16 @@ function startApp(): void {
   // The window's first board waits for the launch read, bounded (#13 D11, #26 D4).
   state.holdLoad(sync.launched)
   const socketPath = boardSocketPath()
-  // Each SSH session's own `board` socket (#25 D2), relaying once `registerBoard` runs.
-  const sshBoard = sshBoardSockets(socketPath)
+  // Each SSH and Orchestrator session's own `board` socket (#25 D2, #81 D16), relaying once
+  // `registerBoard` runs.
+  const sessionBoard = sessionBoardSockets(socketPath)
   const terminals = registerTerminals(
     boardShellEnvFor(socketPath),
-    sshBoard.sockets,
+    sessionBoard.ssh,
     () => settings.shell(),
     () => settings.claudeStatus(),
-    () => settings.shellIntegration()
+    () => settings.shellIntegration(),
+    sessionBoard.orchestrator
   )
   const scrollback = registerScrollback(() => settings.keepOutput())
   // Saves of cards on neither the local board nor the one after the launch read go (#46 D7), and
@@ -279,7 +281,7 @@ function startApp(): void {
 
   app.whenReady().then(() => {
     // `board` requests from cards (#9 D5, #25 D2): the sockets are gone again once the app quits.
-    const closeBoard = registerBoard(socketPath, terminals, sshBoard)
+    const closeBoard = registerBoard(socketPath, terminals, sessionBoard)
     app.on('will-quit', closeBoard)
     settings.applyTheme()
     // The saved global shortcut, registered before the window opens (#51 D8).

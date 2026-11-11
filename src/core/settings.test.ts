@@ -959,3 +959,35 @@ describe('the Orchestrator agent in the settings file (#81 D7, AC5)', () => {
     }
   })
 })
+
+describe('Your orchestrator instructions in the settings file (#81 D14)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is empty by default and written only when not empty', () => {
+    expect(DEFAULT_SETTINGS.orchestratorInstructions).toBe('')
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty(
+      'orchestratorInstructions'
+    )
+    const orchestratorInstructions = 'Always use worktrees.\n\n- Ask before merging.'
+    const text = serializeSettings({ ...base, orchestratorInstructions })
+    expect(JSON.parse(text).settings.orchestratorInstructions).toBe(orchestratorInstructions)
+    expect(parseSettingsFile(text, 'linux').settings.orchestratorInstructions).toBe(
+      orchestratorInstructions
+    )
+  })
+
+  it('takes up to 20,000 characters with no trailing whitespace', () => {
+    const longest = 'x'.repeat(20_000)
+    expect(
+      validateSettings({ ...base, orchestratorInstructions: longest }, 'linux')
+        ?.orchestratorInstructions
+    ).toBe(longest)
+    for (const bad of ['x'.repeat(20_001), 'a\n', 'a ', 42]) {
+      expect(validateSettings({ ...base, orchestratorInstructions: bad }, 'linux')).toBeNull()
+      const parsed = parseSettingsFile(file({ ...base, orchestratorInstructions: bad }), 'linux')
+      expect(parsed.settings.orchestratorInstructions).toBe('')
+      expect(parsed.replaced).toEqual(['orchestratorInstructions'])
+    }
+  })
+})

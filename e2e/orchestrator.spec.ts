@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ORCHESTRATOR_FIRST_PROMPT } from '../src/core/orchestrator'
-import { backToBoard, cardView, expectCardOpen } from './card-view'
+import { orchestratorGuide } from '../src/core/orchestrator-guide'
+import { backToBoard, cardView, expectCardOpen, splitRight } from './card-view'
 import { agentLogLines, fakeAgentsHome, type FakeAgentsHome } from './fake-agents'
 import { claudeLogLines, SETTINGS_ARGS } from './fake-claude'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
@@ -41,8 +42,11 @@ test.afterEach(async () => {
   rmSync(root, { recursive: true, force: true })
 })
 
-async function launch(): Promise<void> {
-  ;({ app, page } = await launchApp({ dataDir, env: { ...fake.env, BIKUBE_HOME_DIR: fake.home } }))
+async function launch(extra: Record<string, string> = {}): Promise<void> {
+  ;({ app, page } = await launchApp({
+    dataDir,
+    env: { ...fake.env, BIKUBE_HOME_DIR: fake.home, ...extra }
+  }))
 }
 
 async function createWorkspace(directory: string, name: string): Promise<void> {
@@ -298,4 +302,69 @@ test('AC15: waiting in the sidebar, Split and Next waiting card; the Agent tab s
   await expect(needsYou.getByTestId('workspace-terminal-title')).toHaveText(['Orchestrator'])
   await page.keyboard.press(NEXT_WAITING)
   await expectCardOpen(page, 'Orchestrator')
+})
+
+/** A file's text, or '' while it doesn't exist. */
+function readText(path: string): string {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+test('AC6: board guide prints the guide and Your orchestrator instructions, as the SessionStart hook does', async () => {
+  const hookLog = join(root, 'hook.txt')
+  await launch({ FAKE_CLAUDE_HOOK_LOG: hookLog })
+  const settingsFile = (): string => readText(join(dataDir, 'bikube-settings.json'))
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-agents').click()
+  const field = page.getByTestId('settings-orchestrator-instructions')
+  await expect(field).toHaveValue('')
+  await field.fill('Always use worktrees.\n\n')
+  await field.blur()
+  await expect(field).toHaveValue('Always use worktrees.')
+  await expect.poll(settingsFile).toContain('"orchestratorInstructions":"Always use worktrees."')
+  await page.keyboard.press('Escape')
+
+  await createWorkspace(repo, 'Proj')
+  await openFromToolbar()
+  const expected = orchestratorGuide('Proj', repo, 'Always use worktrees.')
+  expect(expected).toContain('## Your instructions\n\nAlways use worktrees.\n')
+  // Claude Code's SessionStart hook, run by the fake claude with BIKUBE_ORCHESTRATOR=1.
+  await expect.poll(() => readText(hookLog)).toBe(expected)
+  await run('hello')
+  const guide = join(root, 'guide.txt')
+  await run(`board guide > ${guide}; echo "guide rc=$?"`)
+  await expect.poll(bufferLines).toContain('guide rc=0')
+  expect(readText(guide)).toBe(expected)
+
+  // Emptied, there is no `## Your instructions`, and none is saved.
+  await backToBoard(page)
+  await page.getByTestId('settings-open').click()
+  await page.getByTestId('settings-section-agents').click()
+  await page.getByTestId('settings-orchestrator-instructions').fill('')
+  await page.getByTestId('settings-orchestrator-instructions').blur()
+  await expect.poll(settingsFile).not.toContain('orchestratorInstructions')
+  await page.keyboard.press('Escape')
+  await page.getByTestId('workspace-terminal').first().click()
+  await expectCardOpen(page, 'Orchestrator')
+  await run(`board guide > ${guide}; echo "empty rc=$?"`)
+  await expect.poll(bufferLines).toContain('empty rc=0')
+  expect(readText(guide)).toBe(orchestratorGuide('Proj', repo, ''))
+
+  // D16: its own socket, and an extra pane's own too, each serving board guide.
+  await run('echo "sock=$BIKUBE_SOCKET"')
+  const socketLine = async (): Promise<string> =>
+    (await bufferLines()).find((l) => l.startsWith('sock=')) ?? ''
+  await expect.poll(socketLine).toMatch(/^sock=\/\S+\/board\/o-[0-9a-f]{16}\.sock$/)
+  const mainSocket = await socketLine()
+  await splitRight(page)
+  await expect.poll(terminalFocused).toBe(true)
+  const sockets = join(root, 'sockets.txt')
+  await page.keyboard.type(`echo "$BIKUBE_SOCKET" > ${sockets}; board guide > ${guide}.2`)
+  await page.keyboard.press('Enter')
+  await expect.poll(() => readText(`${guide}.2`)).toBe(orchestratorGuide('Proj', repo, ''))
+  expect(readText(sockets).trim()).toMatch(/\/board\/o-[0-9a-f]{16}\.sock$/)
+  expect(`sock=${readText(sockets).trim()}`).not.toBe(mainSocket)
 })

@@ -60,6 +60,28 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
   session      the Claude Code session the card resumes (Bikube's Claude hooks set it)
   description  prints the card's task description (markdown); nothing when it has none
   describe     replaces it with the file's text (- reads stdin); an empty file removes it
+
+Orchestrator only:
+       board guide
+       board start <card>
+       board open <card>
+       board send <card> <text>|-
+       board wait <card> [--timeout <s>]
+       board reply <card>
+       board terminal [--show] <command>
+       board palette list
+       board palette run <label>
+
+  guide        prints the orchestrator's instructions
+  start        starts a stopped card in the background
+  open         shows a card at full size, starting it if needed
+  send         types the text (- reads stdin) into a running card, then Enter
+  wait         waits until the card stops, waits for you or asks (default 600 s)
+  reply        prints a Claude Code card's last reply
+  terminal     opens a new terminal running <command> (--show also shows it)
+  palette      lists the command palette's rows, or runs one by its label
+  --workspace <w>
+               on start, open and terminal: the workspace, as above
 `
 
 /** What `board create --agent` takes (#69 D8): Claude Code or a preset, never a plain shell. */
@@ -106,6 +128,43 @@ export type BoardCommand =
   | { command: 'setup'; card: string; result: SetupResult }
   /** Sent by `board usage` after reading the transcript (#50 D5); not in the usage text. */
   | { command: 'usage'; card: string; usage: ClaudeUsage }
+  /** The orchestrator's instructions (#81 D13); the Orchestrator only, as are the rest. */
+  | { command: 'guide' }
+  /** Starts a stopped card in the background (#81 D17). */
+  | { command: 'start'; card: string; workspace?: string }
+  /** Starts it if needed and shows it (#81 D17). */
+  | { command: 'open'; card: string; workspace?: string }
+  /** Types `text` into a running card's main pane, then Enter (#81 D19). */
+  | { command: 'send'; card: string; text: string }
+  /** Waits for the card to stop, wait or ask, `timeout` seconds at most (#81 D20). */
+  | { command: 'wait'; card: string; timeout?: number }
+  /** Prints a Claude Code card's last reply (#81 D21). */
+  | { command: 'reply'; card: string }
+  /** A new temporary terminal typing `line` (#81 D22), shown with `show`. */
+  | { command: 'terminal'; line: string; workspace?: string; show?: true }
+  /** Lists the palette's rows, or runs the one labelled `label` (#81 D23). */
+  | { command: 'palette'; action: 'list' }
+  | { command: 'palette'; action: 'run'; label: string }
+
+/** The commands only the Orchestrator may run (#81 D16): `board.sock` refuses them. */
+export const ORCHESTRATOR_ONLY_COMMANDS: ReadonlySet<BoardCommand['command']> = new Set([
+  'guide',
+  'start',
+  'open',
+  'send',
+  'wait',
+  'reply',
+  'terminal',
+  'palette'
+])
+
+/** `board wait`'s timeout in seconds (#81 D20): the default, and the range it takes. */
+export const WAIT_DEFAULT_SECONDS = 600
+export const WAIT_MAX_SECONDS = 3600
+
+/** Whether `value` is a timeout `board wait` takes: whole seconds, 1 to 3600. */
+export const isWaitTimeout = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= WAIT_MAX_SECONDS
 
 /** How `board list` prints: lines for a person, or JSON for a program. */
 export type ListFormat = 'text' | 'json'
@@ -137,7 +196,7 @@ export type BoardArgs =
       command: Extract<BoardCommand, { command: 'create' }>
     }
 
-/** The commands `--workspace` selects a workspace for (#69 D6). */
+/** The commands `--workspace` selects a workspace for (#69 D6, #81 D17, D22). */
 const TAKES_WORKSPACE = new Set([
   'list',
   'create',
@@ -145,7 +204,10 @@ const TAKES_WORKSPACE = new Set([
   'move',
   'status',
   'description',
-  'describe'
+  'describe',
+  'start',
+  'open',
+  'terminal'
 ])
 
 interface Options {
@@ -153,8 +215,10 @@ interface Options {
   agent?: string
   descriptionFile?: string
   branch?: string
+  timeout?: string
   json?: true
   worktree?: true
+  show?: true
 }
 
 /**
@@ -173,6 +237,7 @@ function splitOptions(
     valued['--description-file'] = 'descriptionFile'
     valued['--branch'] = 'branch'
   }
+  if (name === 'wait') valued['--timeout'] = 'timeout'
   const takesJson = name === 'list' || name === 'workspaces'
   const options: Options = {}
   const operands: string[] = []
@@ -198,6 +263,11 @@ function splitOptions(
       options.worktree = true
       continue
     }
+    if (name === 'terminal' && arg === '--show') {
+      if (options.show) return null
+      options.show = true
+      continue
+    }
     // An option of another command, or one `board` doesn't know: a wrong shape.
     if (KNOWN_OPTIONS.has(arg)) return null
     operands.push(arg)
@@ -211,7 +281,9 @@ const KNOWN_OPTIONS = new Set([
   '--description-file',
   '--json',
   '--worktree',
-  '--branch'
+  '--branch',
+  '--timeout',
+  '--show'
 ])
 
 const USAGE: BoardArgs = { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
@@ -235,6 +307,10 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
   }
   if (name === 'description' && operands.length === 1) {
     return { kind: 'command', command: { command: 'description', card: operands[0], ...where } }
+  }
+  const orchestrator = parseOrchestratorCommand(name, operands, options)
+  if (orchestrator !== undefined) {
+    return orchestrator ? { kind: 'command', command: orchestrator } : USAGE
   }
   if (operands.length !== 2) return USAGE
   const [card, value] = operands
@@ -271,6 +347,52 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
   if (name === 'usage') return { kind: 'transcript', card, path: value }
   if (name === 'describe') return { kind: 'descriptionFile', card, path: value, ...where }
   return USAGE
+}
+
+/**
+ * The orchestrator-only command `name` with its operands (#81 D13, D17–D23): undefined when
+ * `name` is none of them, null for a wrong shape.
+ */
+function parseOrchestratorCommand(
+  name: string,
+  operands: readonly string[],
+  options: Options
+): BoardCommand | null | undefined {
+  const where = options.workspace !== undefined ? { workspace: options.workspace } : {}
+  const one = operands.length === 1 ? operands[0] : undefined
+  switch (name) {
+    case 'guide':
+      return operands.length === 0 ? { command: 'guide' } : null
+    case 'start':
+    case 'open':
+      return one === undefined ? null : { command: name, card: one, ...where }
+    case 'reply':
+      return one === undefined ? null : { command: 'reply', card: one }
+    case 'send':
+      return operands.length === 2
+        ? { command: 'send', card: operands[0], text: operands[1] }
+        : null
+    case 'wait': {
+      if (one === undefined) return null
+      if (options.timeout === undefined) return { command: 'wait', card: one }
+      const timeout = /^[0-9]+$/.test(options.timeout) ? Number(options.timeout) : NaN
+      return isWaitTimeout(timeout) ? { command: 'wait', card: one, timeout } : null
+    }
+    case 'terminal':
+      return one === undefined
+        ? null
+        : { command: 'terminal', line: one, ...where, ...(options.show && { show: true as const }) }
+    case 'palette':
+      if (operands[0] === 'list' && operands.length === 1) {
+        return { command: 'palette', action: 'list' }
+      }
+      if (operands[0] === 'run' && operands.length === 2) {
+        return { command: 'palette', action: 'run', label: operands[1] }
+      }
+      return null
+    default:
+      return undefined
+  }
 }
 
 /** A Claude Code session id: a UUID, any case. */

@@ -55,6 +55,7 @@ import {
   type SidebarLayout,
   type Theme
 } from '../../core/settings'
+import { MAX_ORCHESTRATOR_INSTRUCTIONS } from '../../core/orchestrator-guide'
 import { ANSI_COLOUR_NAMES, terminalPalette, withSymbols } from '../../core/terminal-appearance'
 import { terminalTheme } from '../../core/terminal-themes'
 import type { ShellChoices } from '../../shared/api'
@@ -1204,6 +1205,7 @@ function AgentsSection(): React.JSX.Element {
   return (
     <>
       <OrchestratorAgentField />
+      <OrchestratorInstructionsField />
       <SwitchRow
         label="Notifications"
         hint="When an agent is waiting for you or needs your answer, unless its card is in view, and when a command that ran 10 s or more ends out of sight. The Dock shows how many are waiting."
@@ -1304,6 +1306,48 @@ function OrchestratorAgentField(): React.JSX.Element {
           {invalid
             ? 'Enter a one-line command.'
             : "What each workspace's orchestrator runs. Applies at its next start."}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Your orchestrator instructions (#81 D14): the user's own text, which `board guide` prints after
+ * the shipped guide. Saved on blur, its trailing whitespace trimmed; an orchestrator reads it at
+ * its next start, resume or `/clear`.
+ */
+function OrchestratorInstructionsField(): React.JSX.Element {
+  const { orchestratorInstructions } = useSettings()
+  const [text, setText] = useState(orchestratorInstructions)
+  const id = useId()
+  const fieldId = `${id}-orchestrator-instructions`
+  const hintId = `${fieldId}-hint`
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={fieldId}>
+        Your orchestrator instructions
+      </label>
+      <div className="settings-control">
+        <textarea
+          id={fieldId}
+          className="settings-input settings-textarea"
+          data-testid="settings-orchestrator-instructions"
+          aria-describedby={hintId}
+          value={text}
+          maxLength={MAX_ORCHESTRATOR_INSTRUCTIONS}
+          rows={5}
+          placeholder="Always use worktrees."
+          spellCheck={false}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => {
+            const trimmed = text.trimEnd()
+            setText(trimmed)
+            settingsStore.update({ orchestratorInstructions: trimmed })
+          }}
+        />
+        <p className="field-hint" id={hintId}>
+          Added to every orchestrator&rsquo;s instructions. Applies at its next start or resume.
         </p>
       </div>
     </div>

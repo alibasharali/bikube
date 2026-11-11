@@ -26,6 +26,7 @@ import { WORKSPACE_VIEWS, type WorkspaceView } from './workspace-store'
 import { COLUMN_CARD_LIMIT, isColumnCardLimit } from './column-limit'
 import { isAgentKind } from './agent-presets'
 import { checkCardStartup, type StartupCommand } from './startup-command'
+import { MAX_ORCHESTRATOR_INSTRUCTIONS } from './orchestrator-guide'
 
 export const SETTINGS_FILE_NAME = 'bikube-settings.json'
 export const SETTINGS_VERSION = 1
@@ -192,6 +193,11 @@ export interface Preferences {
   columnCardLimit: number
   /** The sidebar as one tree, or its agents in their own section below the workspaces (#79 D1). */
   sidebarLayout: SidebarLayout
+  /**
+   * Your orchestrator instructions (#81 D14): the user's own text `board guide` prints after the
+   * shipped guide; '' for none. At most 20,000 characters, trailing whitespace trimmed.
+   */
+  orchestratorInstructions: string
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -231,7 +237,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   defaultView: 'kanban',
   viewChosen: false,
   columnCardLimit: COLUMN_CARD_LIMIT,
-  sidebarLayout: 'nested'
+  sidebarLayout: 'nested',
+  orchestratorInstructions: ''
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -299,7 +306,9 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   defaultView: oneOf(WORKSPACE_VIEWS),
   viewChosen: isBoolean,
   columnCardLimit: isColumnCardLimit,
-  sidebarLayout: oneOf(SIDEBAR_LAYOUTS)
+  sidebarLayout: oneOf(SIDEBAR_LAYOUTS),
+  orchestratorInstructions: (v): v is string =>
+    typeof v === 'string' && v.length <= MAX_ORCHESTRATOR_INSTRUCTIONS && v === v.trimEnd()
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { answerBoardCommand, checkCreateWorktree, type RepoBranches } from './board-answer'
-import { NOT_IN_A_CARD, ORCHESTRATOR_NOT_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
+import {
+  NOT_IN_A_CARD,
+  ONLY_ORCHESTRATOR,
+  ORCHESTRATOR_NOT_A_CARD,
+  SHELL_NOT_A_CARD
+} from './board-commands'
+import { orchestratorGuide } from './orchestrator-guide'
 import type { ClaudeUsage } from './claude-usage-types'
 import {
   InMemoryWorkspaceStore,
@@ -1289,6 +1295,61 @@ describe('answerBoardCommand from the Orchestrator (#81 D8, D9, D16)', () => {
           () => {}
         )
       ).toEqual({ ok: false, error: NOT_IN_A_CARD })
+    }
+  })
+})
+
+describe('board guide (#81 D13, D16)', () => {
+  const guide = { command: 'guide' } as const
+  const ask = (store: InMemoryWorkspaceStore, from: string, instructions?: () => string): unknown =>
+    answerBoardCommand(
+      store,
+      from,
+      guide,
+      running,
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      instructions ? { instructions } : undefined
+    )
+
+  it("prints the guide with the Orchestrator's workspace and folder, then the user's text, read at each run", () => {
+    const store = setup()
+    store.ensureOrchestrator('alpha')
+    let text = 'Always use worktrees.'
+    expect(ask(store, 'orchestrator:alpha', () => text)).toEqual({
+      ok: true,
+      output: orchestratorGuide('alpha', '/tmp/bikube-alpha', 'Always use worktrees.')
+    })
+    text = ''
+    expect(ask(store, 'orchestrator:alpha', () => text)).toEqual({
+      ok: true,
+      output: orchestratorGuide('alpha', '/tmp/bikube-alpha', '')
+    })
+    expect(ask(store, 'orchestrator:alpha')).toEqual({
+      ok: true,
+      output: orchestratorGuide('alpha', '/tmp/bikube-alpha', '')
+    })
+  })
+
+  it('refuses every orchestrator-only command from a card or a shell', () => {
+    const store = setup()
+    const shell = store.createTemporaryShell('alpha')
+    const shellId = shell.ok ? shell.value.id : ''
+    for (const from of ['c-api', shellId]) {
+      for (const command of [
+        guide,
+        { command: 'start', card: 'api' },
+        { command: 'palette', action: 'list' }
+      ] as const) {
+        expect(answerBoardCommand(store, from, command, running, () => {})).toEqual({
+          ok: false,
+          error: ONLY_ORCHESTRATOR
+        })
+      }
     }
   })
 })

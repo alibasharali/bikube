@@ -99,6 +99,32 @@ function commandOf(request: BoardRequest): BoardCommand {
         description: request.description,
         ...where
       }
+    case 'guide':
+      return { command: 'guide' }
+    case 'start':
+    case 'open':
+      return { command: request.command, card: request.card, ...where }
+    case 'send':
+      return { command: 'send', card: request.card, text: request.text }
+    case 'wait':
+      return {
+        command: 'wait',
+        card: request.card,
+        ...(request.timeout !== undefined && { timeout: request.timeout })
+      }
+    case 'reply':
+      return { command: 'reply', card: request.card }
+    case 'terminal':
+      return {
+        command: 'terminal',
+        line: request.line,
+        ...where,
+        ...(request.show && { show: true })
+      }
+    case 'palette':
+      return request.action === 'run'
+        ? { command: 'palette', action: 'run', label: request.label }
+        : { command: 'palette', action: 'list' }
   }
 }
 

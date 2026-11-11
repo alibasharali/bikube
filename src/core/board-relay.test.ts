@@ -200,3 +200,22 @@ describe('BoardRelay: create with a worktree (#69 D10)', () => {
     expect(sent.map((s) => s.command)).toEqual(commands)
   })
 })
+
+describe('BoardRelay: orchestrator-only commands (#81 D13, D17–D23)', () => {
+  it('forwards each with its fields', () => {
+    const commands: BoardCommand[] = [
+      { command: 'guide' },
+      { command: 'start', card: 'x', workspace: 'b' },
+      { command: 'open', card: 'x' },
+      { command: 'send', card: 'x', text: 'go on' },
+      { command: 'wait', card: 'x', timeout: 5 },
+      { command: 'wait', card: 'x' },
+      { command: 'reply', card: 'x' },
+      { command: 'terminal', line: 'printf ready', workspace: 'b', show: true },
+      { command: 'palette', action: 'list' },
+      { command: 'palette', action: 'run', label: 'Agent setup' }
+    ]
+    for (const command of commands) void relay.handle({ v: 1, cardId: 'c1', ...command })
+    expect(sent.map((s) => s.command)).toEqual(commands)
+  })
+})

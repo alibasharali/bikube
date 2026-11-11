@@ -27,6 +27,9 @@ export const SHELL_NOT_A_CARD = 'board: this is a shell, not a card; name a card
 export const ORCHESTRATOR_NOT_A_CARD =
   'board: this is the orchestrator, not a card; name a card by its id or title'
 
+/** An orchestrator-only command (#81 D16) from anything but the Orchestrator's own socket. */
+export const ONLY_ORCHESTRATOR = 'board: only the orchestrator can do that'
+
 /** Longest agent status, in characters (#9 D8). */
 export const MAX_AGENT_STATUS_LENGTH = 200
 

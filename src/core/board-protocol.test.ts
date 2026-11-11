@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { BoardCommand } from './board-args'
 import {
   BOARD_PROTOCOL_VERSION,
   INVALID_REQUEST,
@@ -414,6 +415,54 @@ describe('create with a worktree (#69 D10)', () => {
       { ...base, command: 'move', card: '.', column: 'x', branch: 'b' }
     ]) {
       expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+})
+
+describe('orchestrator-only requests (#81 D13, D17–D23)', () => {
+  const roundTrip = (command: BoardCommand): ReturnType<typeof parseRequestLine> =>
+    parseRequestLine(serializeRequest('orchestrator:w1', command))
+
+  it('round-trips each of them', () => {
+    const commands: BoardCommand[] = [
+      { command: 'guide' },
+      { command: 'start', card: 'X' },
+      { command: 'start', card: 'X', workspace: 'B' },
+      { command: 'open', card: 'X', workspace: 'B' },
+      { command: 'send', card: 'X', text: 'go on' },
+      { command: 'wait', card: 'X' },
+      { command: 'wait', card: 'X', timeout: 5 },
+      { command: 'reply', card: 'X' },
+      { command: 'terminal', line: 'printf ready' },
+      { command: 'terminal', line: 'exec sleep 60', workspace: 'B', show: true },
+      { command: 'palette', action: 'list' },
+      { command: 'palette', action: 'run', label: 'Agent setup' }
+    ]
+    for (const command of commands) {
+      expect(roundTrip(command)).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'orchestrator:w1', ...command }
+      })
+    }
+  })
+
+  it('rejects a wrong timeout, show, action or label, and fields another command takes', () => {
+    const raw = (value: object): string => JSON.stringify({ v: 1, cardId: 'c1', ...value })
+    for (const value of [
+      { command: 'guide', card: 'x' },
+      { command: 'wait', card: 'X', timeout: 0 },
+      { command: 'wait', card: 'X', timeout: 3601 },
+      { command: 'wait', card: 'X', timeout: '5' },
+      { command: 'terminal', line: 'x', show: false },
+      { command: 'terminal', line: 'x', show: 'yes' },
+      { command: 'palette', action: 'go' },
+      { command: 'palette', action: 'list', label: 'x' },
+      { command: 'palette', action: 'run' },
+      { command: 'reply', card: 'X', workspace: 'B' },
+      { command: 'send', card: 'X', text: 'x', workspace: 'B' },
+      { command: 'start', card: 'X', timeout: 5 }
+    ]) {
+      expect(parseRequestLine(raw(value))).toEqual({ ok: false, error: INVALID_REQUEST })
     }
   })
 })

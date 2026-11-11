@@ -930,3 +930,35 @@ test("a terminal runs board: it lists, creates and moves named cards, and `.` is
   await expect(titlesIn('Backlog')).toHaveText(['From the shell'])
   await expect(titlesIn('Done')).toHaveText(['api'])
 })
+
+test('#81 AC7: only the orchestrator runs guide, start and palette; board.sock refuses its id', async () => {
+  await launch()
+  const alpha = makeDir('alpha')
+  await createWorkspace(alpha, 'alpha')
+  const only = refused('board: only the orchestrator can do that')
+  const orchestratorOnly = ['board guide', 'board start X', 'board palette list']
+
+  await newCard('Backlog', 'Plain')
+  for (const command of orchestratorOnly) expect(await board(alpha, command)).toEqual(only)
+  // D24: help lists them in every terminal.
+  expect(await board(alpha, 'board help')).toEqual({ code: 0, stdout: BOARD_USAGE, stderr: '' })
+  expect(BOARD_USAGE).toContain('Orchestrator only:')
+  // A request on board.sock naming the Orchestrator's id can't act as it.
+  const listed = await board(alpha, 'board workspaces --json')
+  const id = (JSON.parse(listed.stdout) as { id: string }[])[0].id
+  for (const command of ['board status . x', 'board guide']) {
+    expect(await board(alpha, `BIKUBE_CARD_ID=orchestrator:${id} ${command}`)).toEqual(
+      refused('board: invalid request')
+    )
+  }
+  expect(await board(alpha, `board status orchestrator:${id} x`)).toEqual(
+    refused('board: invalid request')
+  )
+  await back()
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
+  await expect.poll(terminalFocused).toBe(true)
+  for (const command of orchestratorOnly) expect(await board(alpha, command)).toEqual(only)
+  expect(await board(alpha, 'board help')).toEqual({ code: 0, stdout: BOARD_USAGE, stderr: '' })
+})

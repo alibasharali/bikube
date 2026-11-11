@@ -3,6 +3,7 @@ import { findShellCard } from '../../core/workspace-shells'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
+import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 import { backupTranscript } from './transcript-backups'
 import { setCardUsage } from './usage'
@@ -20,7 +21,8 @@ const isWorkspaceShell = (id: string): boolean =>
  * up a local Claude Code card's transcript (#80 D9).
  * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
- * forgotten each time it stops (#75 D3a).
+ * forgotten each time it stops (#75 D3a). The Orchestrator's `board guide` prints the guide with
+ * Settings' Your orchestrator instructions (#81 D13).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
@@ -62,7 +64,9 @@ export function listenForBoardRequests(): () => void {
         const status = cardTerminals().status(id)
         return { running, activity: status?.activity, status: status?.agentStatus }
       },
-      setShellSession
+      setShellSession,
+      // Read at each `board guide`, so an edit reaches every orchestrator (#81 D14).
+      { instructions: () => settingsStore.get().orchestratorInstructions }
     )
   })
 }

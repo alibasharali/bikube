@@ -3930,6 +3930,16 @@ button.dev-server-chip:focus-visible {
   font-size: var(--text-sm);
 }
 
+/* Your orchestrator instructions (#81 D14): several lines, scrolling inside its own box. */
+.settings-input.settings-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  max-height: 40vh;
+  font-family: var(--font-mono);
+  resize: vertical;
+}
+
 .settings-control .field-row {
   display: flex;
   gap: var(--space-2);

@@ -249,6 +249,25 @@ describe('the hook commands, run by a shell (#31 D15, AC13)', () => {
       })
     })
 
+    it(`prints board guide's output in place of the instruction in the Orchestrator (${shell}, #81 D15)`, () => {
+      const input = { ...base, hook_event_name: 'SessionStart', source: 'startup' }
+      expect(run(shell, 'SessionStart', input, { BIKUBE_ORCHESTRATOR: '1' })).toEqual({
+        status: 0,
+        stdout: 'noise\n',
+        stderr: ''
+      })
+      expect(loggedLines(1)).toEqual(['guide'])
+      // Off: nothing printed, and no guide asked for.
+      expect(
+        run(shell, 'SessionStart', input, { BIKUBE_ORCHESTRATOR: '1', BIKUBE_CLAUDE_STATUS: '0' })
+      ).toEqual({ status: 0, stdout: '', stderr: '' })
+      expect(logged()).toEqual(['guide'])
+      // A failing board prints what it printed, still exit 0.
+      expect(
+        run(shell, 'SessionStart', input, { BIKUBE_ORCHESTRATOR: '1', FAKE_BOARD_EXIT: '1' })
+      ).toEqual({ status: 0, stdout: 'noise\n', stderr: '' })
+    })
+
     it(`prints nothing at session start with status updates off (${shell})`, () => {
       const input = { ...base, hook_event_name: 'SessionStart', source: 'startup' }
       expect(run(shell, 'SessionStart', input, { BIKUBE_CLAUDE_STATUS: '0' })).toEqual({

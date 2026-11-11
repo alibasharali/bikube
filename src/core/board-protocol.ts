@@ -4,7 +4,7 @@
  */
 
 import { isActivityValue } from './activity'
-import { isBoardAgent, isListFormat, isSessionId, isSetupResult } from './board-args'
+import { isBoardAgent, isListFormat, isSessionId, isSetupResult, isWaitTimeout } from './board-args'
 import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-usage-types'
 
@@ -72,7 +72,15 @@ const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   setup: ['card', 'result'],
   usage: ['card', 'usage'],
   description: ['card'],
-  describe: ['card', 'description']
+  describe: ['card', 'description'],
+  guide: [],
+  start: ['card'],
+  open: ['card'],
+  send: ['card', 'text'],
+  wait: ['card'],
+  reply: ['card'],
+  terminal: ['line'],
+  palette: ['action']
 }
 
 /** The commands that take a `workspace` (#69 D6). */
@@ -83,13 +91,25 @@ const TAKES_WORKSPACE = new Set([
   'move',
   'status',
   'description',
-  'describe'
+  'describe',
+  'start',
+  'open',
+  'terminal'
 ])
 
-/** Each command's optional string fields (#69 D6, D8). */
+/** Each command's optional string fields (#69 D6, D8; #81 D23). */
 function optionalFields(command: BoardCommand['command']): readonly string[] {
   if (command === 'create') return ['workspace', 'agent', 'description', 'branch']
+  if (command === 'palette') return ['label']
   return TAKES_WORKSPACE.has(command) ? ['workspace'] : []
+}
+
+/** Each command's optional fields that aren't strings: checked by `asRequest`. */
+function otherFields(command: BoardCommand['command']): readonly string[] {
+  if (command === 'create') return ['worktree']
+  if (command === 'wait') return ['timeout']
+  if (command === 'terminal') return ['show']
+  return []
 }
 
 const COMMANDS = new Set(Object.keys(FIELDS))
@@ -164,7 +184,7 @@ export function parseRequestLine(line: string): ParsedRequest {
     key === 'command' ||
     required.includes(key) ||
     optional.includes(key) ||
-    (name === 'create' && key === 'worktree')
+    otherFields(name).includes(key)
   const shaped =
     typeof value.cardId === 'string' &&
     keys.every(known) &&
@@ -242,6 +262,33 @@ function asRequest(
       return isActivityValue(value.activity)
         ? { v: 1, cardId, command, card, activity: value.activity }
         : null
+    case 'guide':
+      return { v: 1, cardId, command }
+    case 'start':
+    case 'open':
+      return { v: 1, cardId, command, card, ...where }
+    case 'reply':
+      return { v: 1, cardId, command, card }
+    case 'send':
+      return { v: 1, cardId, command, card, text: str('text') }
+    case 'wait': {
+      const { timeout } = value
+      if (timeout !== undefined && !isWaitTimeout(timeout)) return null
+      return { v: 1, cardId, command, card, ...(timeout !== undefined && { timeout }) }
+    }
+    case 'terminal': {
+      const { show } = value
+      if (show !== undefined && show !== true) return null
+      return { v: 1, cardId, command, line: str('line'), ...where, ...(show && { show }) }
+    }
+    case 'palette':
+      if (value.action === 'list' && value.label === undefined) {
+        return { v: 1, cardId, command, action: 'list' }
+      }
+      if (value.action === 'run' && value.label !== undefined) {
+        return { v: 1, cardId, command, action: 'run', label: str('label') }
+      }
+      return null
   }
 }
 

@@ -3,7 +3,7 @@
  * its store, applies the change, and answers with the reply the CLI prints. Plain TS.
  */
 import type { Activity } from './activity'
-import type { BoardCommand, SetupResult } from './board-args'
+import { ORCHESTRATOR_ONLY_COMMANDS, type BoardCommand, type SetupResult } from './board-args'
 import {
   boardListing,
   formatBoardListing,
@@ -28,6 +28,7 @@ import {
   CALLING_CARD,
   SHELL_NOT_A_CARD,
   ORCHESTRATOR_NOT_A_CARD,
+  ONLY_ORCHESTRATOR,
   noSetupError,
   notRunningError,
   resolveCard,
@@ -35,7 +36,8 @@ import {
 } from './board-commands'
 import { INVALID_REQUEST, type BoardReply } from './board-protocol'
 import type { ClaudeUsage } from './claude-usage-types'
-import type { Card, WorkspaceState, WorkspaceStore } from './workspace-store'
+import { orchestratorGuide } from './orchestrator-guide'
+import type { Card, Workspace, WorkspaceState, WorkspaceStore } from './workspace-store'
 import { branchProblem, suggestBranch } from './worktree-names'
 
 /** The local branches of the repository a folder is in, or null outside one (main's `worktree.info`). */
@@ -122,6 +124,45 @@ function answerShell(
 }
 
 /**
+ * What the orchestrator-only commands read and do in the renderer (#81 D13, D17–D23); later
+ * slices add theirs. Every field is optional so callers and tests pass only what they use.
+ */
+export interface OrchestratorAnswers {
+  /** Settings' Your orchestrator instructions (D14), read at each `board guide`. */
+  instructions?: () => string
+}
+
+/** The orchestrator-only `command` from the Orchestrator of `workspace` (#81 D16). */
+type OrchestratorOnly = Extract<
+  BoardCommand,
+  { command: 'guide' | 'start' | 'open' | 'send' | 'wait' | 'reply' | 'terminal' | 'palette' }
+>
+
+const isOrchestratorOnly = (command: BoardCommand): command is OrchestratorOnly =>
+  ORCHESTRATOR_ONLY_COMMANDS.has(command.command)
+
+/**
+ * An orchestrator-only command from the Orchestrator of `workspace`: `guide` prints the guide
+ * with the workspace's name and folder and the user's instructions (D13); the others come with
+ * later slices.
+ */
+function answerOrchestratorOnly(
+  workspace: Workspace,
+  command: OrchestratorOnly,
+  answers: OrchestratorAnswers
+): BoardReply {
+  if (command.command === 'guide') {
+    const output = orchestratorGuide(
+      workspace.name,
+      workspace.directory,
+      answers.instructions?.() ?? ''
+    )
+    return { ok: true, output }
+  }
+  return { ok: false, error: `board: ${command.command} is not available yet` }
+}
+
+/**
  * `command` naming `.` from the Orchestrator (#81 D9): its status, activity and usage are handed
  * on for it at runtime (it has no board card to keep them on), its session is saved as its
  * conversation (D8), `description` prints nothing, and anything else is refused.
@@ -193,7 +234,8 @@ export function answerBoardCommand(
   setupAnswered: (card: Card, result: SetupResult) => void = () => {},
   setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {},
   runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) }),
-  setShellSession: (shellId: string, sessionId: string) => void = () => {}
+  setShellSession: (shellId: string, sessionId: string) => void = () => {},
+  orchestrator: OrchestratorAnswers = {}
 ): BoardReply {
   const state = store.getState()
   const workspace = findCallingWorkspace(state, callingCardId)
@@ -205,6 +247,12 @@ export function answerBoardCommand(
   // An SSH card's session socket serves only its own card's workspace (#69 D9).
   const remote = callingCard.host !== undefined
   if (remote && !servesRemoteCard(command)) return { ok: false, error: INVALID_REQUEST }
+  // Main lets these through only from the Orchestrator's own socket (#81 D16); checked again here.
+  if (isOrchestratorOnly(command)) {
+    return kind === 'orchestrator'
+      ? answerOrchestratorOnly(calling, command, orchestrator)
+      : { ok: false, error: ONLY_ORCHESTRATOR }
+  }
   if (command.command === 'workspaces') {
     const listing = workspacesListing(state, calling.id)
     const output =

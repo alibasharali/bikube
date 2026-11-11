@@ -90,12 +90,14 @@ const reportUsage = (missing = ''): string =>
 /**
  * Reports the usage (every source: startup, resume, clear, compact; #50 D6) and prints the instruction,
  * which Claude adds to its context, unless the card was started with `BIKUBE_CLAUDE_STATUS=0` (the
- * Claude Code status updates setting off). A `/resume` reports the
+ * Claude Code status updates setting off). In the Orchestrator (`BIKUBE_ORCHESTRATOR` set, #81 D15)
+ * it prints `board guide`'s output instead. A `/resume` reports the
  * resumed session, so the card resumes it next time.
  */
 const SESSION_START =
   `s=$(cat); ${reportUsage('[ -e "$t" ] || t=/dev/null; ')}; case $s in *'"source":"resume"'*|*'"source": "resume"'*) ${REPORT_SESSION};; esac; ` +
-  `[ "$BIKUBE_CLAUDE_STATUS" = 0 ] || cat "$BIKUBE_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; ` +
+  `[ "$BIKUBE_CLAUDE_STATUS" = 0 ] || if [ -n "$BIKUBE_ORCHESTRATOR" ]; then "$BIKUBE_BIN/board" guide </dev/null 2>/dev/null; ` +
+  `else cat "$BIKUBE_BIN/${CLAUDE_INSTRUCTION_FILE}" 2>/dev/null; fi; ` +
   'exit 0'
 
 /** Claude's turn ended: the usage so far is reported, and the card waits for the user. */

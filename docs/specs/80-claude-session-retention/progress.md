@@ -7,8 +7,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | Slice | Status | Commits | Review | Interfaces for later slices |
 |---|---|---|---|---|
 | S1 | done | `0655b73..7d14a7a` | fixed r1 (comment) | IPC `claudeRetention:read` → `ClaudeRetention` ({state:'low',days}/ok/unknown), `claudeRetention:set` → `SettingsWriteResult` (main frame, queued); `window.bikube.claudeRetention.read()/.set()`; core `readClaudeRetention`, `setClaudeRetention`, `CLAUDE_RETENTION_DAYS` (src/core/claude-retention.ts), `retentionNotice` (claude-retention-types.ts); renderer store src/renderer/src/claude-retention.ts: `checkClaudeRetention`, `keepClaudeConversations()` (error line or null), `dismissClaudeRetention`, `useClaudeRetention`; `writeSettingsJson` in settings-local-writer.ts |
-| S2 | running | | | |
-| S3 | todo | | | |
+| S2 | done | `46fac67..94edb47` | CLEAN | `AgentSetupSnapshot.claudeRetention?` (attached by main's agentSetup:read), `SetupWarning.keepConversations?`, `ConfigRow.retentionWarning?`, `retentionWarning(days)` (claude-retention-types.ts), renderer `keepConversations(folder)` in agent-setup-data.ts |
+| S3 | running | | | |
 | S4 | todo | | | |
 
 ## Rulings

@@ -57,6 +57,7 @@ import {
 import { isSoftwareRenderer } from '../../core/webgl-support'
 import { hasOrchestrator, isOrchestratorId, orchestratorId } from '../../core/orchestrator'
 import { CLAUDE_STARTUP } from '../../core/startup-command'
+import { orchestratorStartedWith } from './orchestrator-starts'
 import { ringBell } from './bell'
 import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
@@ -967,10 +968,10 @@ function sessionRouter(): SessionRouter {
  */
 function startsClaudeCode(cardId: string): boolean {
   if (isOrchestratorId(cardId)) {
-    return (
-      isCard(cardId) &&
-      (settingsStore.get().orchestratorStartup ?? CLAUDE_STARTUP).kind === 'claude'
-    )
+    // The agent it starts (or started) with, set before its start (#81 D7).
+    const startup =
+      orchestratorStartedWith(cardId) ?? settingsStore.get().orchestratorStartup ?? CLAUDE_STARTUP
+    return isCard(cardId) && startup.kind === 'claude'
   }
   return workspaceStore
     .getState()

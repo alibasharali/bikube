@@ -1,8 +1,19 @@
 import { transcriptBackupTarget } from '../../core/transcript-backup-target'
 import { cardTerminals, onQuitSave } from './card-terminals'
-import { orchestratorId } from '../../core/orchestrator'
-import { orchestratorOf } from './orchestrator'
+import { orchestratorCard, orchestratorId } from '../../core/orchestrator'
+import type { Card, Workspace } from '../../core/workspace-store'
+import { orchestratorStartedWith } from './orchestrator-starts'
+import { orchestratorStartupOf } from './orchestrator'
 import { workspaceStore } from './store'
+
+/**
+ * The Orchestrator whose conversation is backed up: running the agent it started with, also as its
+ * stop is reported (before that is forgotten), whatever the setting says since (#81 D7).
+ */
+function orchestratorBackedUp(workspace: Workspace): Card | undefined {
+  const id = orchestratorId(workspace.id)
+  return orchestratorCard(workspace, orchestratorStartedWith(id) ?? orchestratorStartupOf(id))
+}
 
 /**
  * Asks main to back up the card's current Claude Code conversation (#80 D8, D9) when it is a
@@ -13,7 +24,7 @@ export function backupTranscript(cardId: string): void {
   for (const workspace of workspaceStore.getState().workspaces) {
     const card =
       workspace.cards.find((c) => c.id === cardId) ??
-      (cardId === orchestratorId(workspace.id) ? orchestratorOf(workspace) : undefined)
+      (cardId === orchestratorId(workspace.id) ? orchestratorBackedUp(workspace) : undefined)
     if (!card) continue
     const target = transcriptBackupTarget(card)
     if (target) window.bikube.transcripts.backup(card.id, target.folder, target.sessionId)

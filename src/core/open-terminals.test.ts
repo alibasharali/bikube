@@ -160,3 +160,13 @@ describe("the Orchestrator's row (#81 D5)", () => {
     expect(openTerminals([ssh], running('orchestrator:s'), noActivity)).toEqual([])
   })
 })
+
+describe("the Orchestrator's row with the agent each one runs (#81 D7)", () => {
+  it('reads its tool by its id', () => {
+    const a = workspace('a', [])
+    const rows = openTerminals([a], running('orchestrator:a'), noActivity, undefined, (id) =>
+      id === 'orchestrator:a' ? { kind: 'gemini' } : { kind: 'claude' }
+    )
+    expect(rows.map((r) => r.tool)).toEqual(['gemini'])
+  })
+})

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ORCHESTRATOR_FIRST_PROMPT,
+  currentOrchestratorStartup,
   findOrchestratorCard,
   findTerminalCard,
   isOrchestratorId,
@@ -147,5 +148,15 @@ describe("the Orchestrator's start line (#81 D8, D15, AC3, AC5)", () => {
       command: 'my-agent'
     })!
     expect(startLine(card)).toBe('my-agent')
+  })
+})
+
+describe("the Orchestrator's agent while it runs (#81 D7)", () => {
+  it('is the one it started with while running, else the setting', () => {
+    const claude = { kind: 'claude' } as const
+    const codex = { kind: 'codex' } as const
+    expect(currentOrchestratorStartup(true, claude, codex)).toEqual(claude)
+    expect(currentOrchestratorStartup(false, claude, codex)).toEqual(codex)
+    expect(currentOrchestratorStartup(true, undefined, codex)).toEqual(codex)
   })
 })

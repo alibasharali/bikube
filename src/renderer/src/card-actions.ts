@@ -5,7 +5,7 @@ import { isOrchestratorId, orchestratorId } from '../../core/orchestrator'
 import { shellCards } from '../../core/workspace-shells'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { forgetConversationCheck, startCheckingConversation } from './conversation-checks'
-import { findTerminal } from './orchestrator'
+import { findTerminal, rememberOrchestratorStart } from './orchestrator'
 import { forgetPendingWorktree, makePendingWorktree } from './pending-worktrees'
 import { settingsStore } from './settings'
 import { workspaceStore } from './store'
@@ -31,8 +31,16 @@ export function startCard(workspaceId: string, cardId: string): void {
   // A local Claude Code card resuming gets its conversation checked first (#80 D11); a running
   // card types no resume line, so it is never checked.
   const start = (starting: Card): void => {
-    const launch = (checked: Card): void =>
+    const launch = (checked: Card): void => {
+      // A running Orchestrator keeps the agent it starts with now (#81 D7).
+      if (
+        isOrchestratorId(checked.id) &&
+        cardTerminals().runState(checked.id)?.kind !== 'running'
+      ) {
+        rememberOrchestratorStart(checked.id, checked.startup)
+      }
       cardTerminals().start(checked, recordFirstStart(workspaceId, cardId))
+    }
     if (cardTerminals().runState(starting.id)?.kind === 'running') launch(starting)
     else startCheckingConversation(workspaceId, starting, launch)
   }

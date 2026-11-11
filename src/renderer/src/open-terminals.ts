@@ -6,7 +6,7 @@ import { shellCards } from '../../core/workspace-shells'
 import type { Workspace } from '../../core/workspace-store'
 import { useOpenedVersion, wasOpened } from './background-shells'
 import { cardTerminals } from './card-terminals'
-import { useOrchestratorStartup } from './orchestrator'
+import { orchestratorStartupOf, useOrchestratorStartup } from './orchestrator'
 
 /** Every card's, shell's and Orchestrator's (#81 D5) id in `workspaces`. */
 function terminalIds(workspaces: readonly Workspace[]): string[] {
@@ -47,6 +47,7 @@ export function useOpenTerminals(
       .join('\n')
   )
   const openedVersion = useOpenedVersion()
+  // Each Orchestrator's row shows the agent it runs (#81 D7); a setting change re-reads them.
   const orchestratorStartup = useOrchestratorStartup()
   return useMemo(() => {
     const byWorkspace = new Map<string, OpenTerminal[]>()
@@ -55,7 +56,7 @@ export function useOpenTerminals(
       isRunning,
       activityOf,
       wasOpened,
-      orchestratorStartup
+      orchestratorStartupOf
     )) {
       byWorkspace.set(row.workspaceId, [...(byWorkspace.get(row.workspaceId) ?? []), row])
     }

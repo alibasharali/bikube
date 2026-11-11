@@ -84,3 +84,15 @@ export function findTerminalCard(
     findOrchestratorCard(workspace, id, orchestratorStartup)
   )
 }
+
+/**
+ * The agent an Orchestrator runs now (D7): while it runs, the one it started with (`startedWith`,
+ * when known), since a changed setting applies only at its next start; else the setting.
+ */
+export function currentOrchestratorStartup(
+  running: boolean,
+  startedWith: StartupCommand | undefined,
+  setting: StartupCommand
+): StartupCommand {
+  return running && startedWith ? startedWith : setting
+}

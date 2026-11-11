@@ -202,9 +202,10 @@ function startApp(): void {
   })
 
   // Pending board, settings and sync folder changes reach the disk, then no PTY process outlives
-  // the app (#18 D2): the first quit with live shells or a busy sync folder is held until the
-  // shells have exited (SIGHUP, then SIGKILL, #18 D1) and the sync folder's flush is done, or
-  // `QUIT_WAIT_MS` passed (#26 D5). Any later quit flushes again (the window stays live during the
+  // the app (#18 D2): the first quit with live shells, a busy sync folder or queued transcript
+  // backups (#80 D9) is held until the shells have exited (SIGHUP, then SIGKILL, #18 D1), the
+  // transcript backups are copied (within `QUIT_SAVE_WAIT_MS`) and the sync folder's flush is
+  // done, or `QUIT_WAIT_MS` passed (#26 D5). Any later quit flushes again (the window stays live during the
   // hold, so changes can still come in) and SIGKILLs what is left; the second is held once more,
   // at most `QUIT_WAIT_MS`, while the sync folder is still busy, and a third goes through.
   let holds = 0

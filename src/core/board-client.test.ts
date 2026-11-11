@@ -3,7 +3,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BOARD_USAGE } from './board-args'
+import { BOARD_USAGE, type BoardCommand } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { NO_ANSWER, NOT_RUNNING, runBoard } from './board-client'
 import type { BoardReply, BoardRequest } from './board-protocol'
@@ -347,5 +347,84 @@ describe('runBoard: description and describe (#69 D5)', () => {
     await writeFile(file, text)
     expect(await boardIn(['describe', '.', file])).toEqual({ code: 0, stdout: '', stderr: '' })
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ description: text }))
+  })
+})
+
+describe('runBoard: send and per-command timeouts (#81 D19, D20)', () => {
+  async function run(
+    argv: string[],
+    stdin: Uint8Array = new Uint8Array(),
+    timeoutMs?: (command: BoardCommand) => number
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    let stdout = ''
+    let stderr = ''
+    const code = await runBoard(
+      argv,
+      { BIKUBE_CARD_ID: 'c1', BIKUBE_SOCKET: socketPath },
+      { stdout: (text) => (stdout += text), stderr: (text) => (stderr += text) },
+      timeoutMs,
+      async () => stdin
+    )
+    return { code, stdout, stderr }
+  }
+  const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text)
+
+  it("sends stdin's text for -, its control characters but newline and tab removed", async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    expect(await run(['send', 'Review', '-'], utf8('fix\tit\r\n\x1b[1mnow\n'))).toEqual({
+      code: 0,
+      stdout: '',
+      stderr: ''
+    })
+    expect(handler).toHaveBeenCalledWith({
+      v: 1,
+      cardId: 'c1',
+      command: 'send',
+      card: 'Review',
+      text: 'fix\tit\n[1mnow\n'
+    })
+  })
+
+  it('sends 100,000 multi-byte characters whole, and refuses more, sending nothing', async () => {
+    const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
+    await serve(handler)
+    const text = '🎉é'.repeat(50_000)
+    expect(await run(['send', 'Review', '-'], utf8(text))).toMatchObject({ code: 0 })
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ text }))
+    handler.mockClear()
+    expect(await run(['send', 'Review', '-'], utf8(`${text}x`))).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: 'board: the text is longer than 100,000 characters\n'
+    })
+    expect(await run(['send', 'Review', '-'], new Uint8Array([0xff]))).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: 'board: stdin is not UTF-8 text\n'
+    })
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it("waits for each command's reply as long as its timeout says", async () => {
+    await serve(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve({ ok: true, output: 'waiting\n' }), 200))
+    )
+    const seen: string[] = []
+    const timeouts = (command: BoardCommand): number => {
+      seen.push(command.command)
+      return command.command === 'wait' ? 2000 : 50
+    }
+    expect(await run(['wait', 'Review'], undefined, timeouts)).toEqual({
+      code: 0,
+      stdout: 'waiting\n',
+      stderr: ''
+    })
+    expect(await run(['move', '.', 'Done'], undefined, timeouts)).toMatchObject({
+      code: 1,
+      stderr: `${NO_ANSWER}\n`
+    })
+    expect(seen).toEqual(['wait', 'move'])
   })
 })

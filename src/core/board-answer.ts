@@ -3,7 +3,13 @@
  * its store, applies the change, and answers with the reply the CLI prints. Plain TS.
  */
 import type { Activity } from './activity'
-import { ORCHESTRATOR_ONLY_COMMANDS, type BoardCommand, type SetupResult } from './board-args'
+import type { ReplyRead } from './agent-tab'
+import {
+  ORCHESTRATOR_ONLY_COMMANDS,
+  WAIT_DEFAULT_SECONDS,
+  type BoardCommand,
+  type SetupResult
+} from './board-args'
 import {
   boardListing,
   formatBoardListing,
@@ -35,7 +41,10 @@ import {
   resolveColumn
 } from './board-commands'
 import { INVALID_REQUEST, type BoardReply } from './board-protocol'
+import { checkSendText } from './board-send'
 import type { StartOutcome } from './board-start'
+import { waitTimedOut, type WaitResult } from './board-wait'
+import { transcriptBackupTarget } from './transcript-backup-target'
 import type { ClaudeUsage } from './claude-usage-types'
 import { orchestratorGuide } from './orchestrator-guide'
 import type { Card, Workspace, WorkspaceState, WorkspaceStore } from './workspace-store'
@@ -141,6 +150,15 @@ export interface OrchestratorAnswers {
    * in its own window if it has one, as any open does (clearing `New`).
    */
   open?: (workspaceId: string, cardId: string) => void
+  /**
+   * Types the cleaned text into the running card's main pane as one paste, then Enter 50 ms later
+   * (D19); resolves once the Enter is typed.
+   */
+  send?: (cardId: string, text: string) => Promise<void>
+  /** Waits until the card stops, waits or asks, `seconds` at most (D20). */
+  wait?: (cardId: string, seconds: number) => Promise<WaitResult | 'timeout'>
+  /** Main's read of the last reply in the Claude Code session's transcript in `folder` (D21). */
+  reply?: (folder: string, sessionId: string) => Promise<ReplyRead>
 }
 
 /** The orchestrator-only `command` from the Orchestrator of `workspace` (#81 D16). */
@@ -160,8 +178,8 @@ const startFailed = (title: string, reason: string): BoardReply => ({
 
 /**
  * An orchestrator-only command from the Orchestrator of `workspace`: `guide` prints the guide
- * with the workspace's name and folder and the user's instructions (D13); `start`, `open` and
- * `terminal` are `answerBoardRequest`'s; the others come with later slices.
+ * with the workspace's name and folder and the user's instructions (D13); `start`, `open`,
+ * `terminal`, `send`, `wait` and `reply` are `answerBoardRequest`'s; `palette` comes with S6.
  */
 function answerOrchestratorOnly(
   workspace: Workspace,
@@ -179,17 +197,68 @@ function answerOrchestratorOnly(
   return { ok: false, error: `board: ${command.command} is not available yet` }
 }
 
-/** The commands answered once something has happened, not at once (#81 D17, D22). */
-type AwaitedCommand = Extract<BoardCommand, { command: 'start' | 'open' | 'terminal' }>
+/** The commands answered once something has happened, not at once (#81 D17, D19–D22). */
+type AwaitedCommand = Extract<
+  BoardCommand,
+  { command: 'start' | 'open' | 'terminal' | 'send' | 'wait' | 'reply' }
+>
 
-const isAwaited = (command: BoardCommand): command is AwaitedCommand =>
-  command.command === 'start' || command.command === 'open' || command.command === 'terminal'
+const AWAITED: ReadonlySet<BoardCommand['command']> = new Set([
+  'start',
+  'open',
+  'terminal',
+  'send',
+  'wait',
+  'reply'
+])
+
+const isAwaited = (command: BoardCommand): command is AwaitedCommand => AWAITED.has(command.command)
+
+/** A start's answer: nothing, or that it is still starting at the renderer's limit (D17). */
+const started = (title: string, outcome: StartOutcome): BoardReply =>
+  outcome.ok && outcome.pending
+    ? { ok: true, output: `${title} is still starting\n` }
+    : { ok: true }
+
+/** `send`, `wait` and `reply` on a card found for the Orchestrator (D19–D21). */
+async function answerCardCommand(
+  card: Card,
+  command: Extract<AwaitedCommand, { command: 'send' | 'wait' | 'reply' }>,
+  isRunning: (cardId: string) => boolean,
+  answers: OrchestratorAnswers
+): Promise<BoardReply> {
+  if (command.command === 'send') {
+    if (!isRunning(card.id)) return { ok: false, error: notRunningError(card) }
+    const checked = checkSendText(command.text)
+    if (!checked.ok) return checked
+    await answers.send?.(card.id, checked.text)
+    return { ok: true }
+  }
+  if (command.command === 'wait') {
+    const seconds = command.timeout ?? WAIT_DEFAULT_SECONDS
+    const result = answers.wait ? await answers.wait(card.id, seconds) : 'timeout'
+    return result === 'timeout'
+      ? { ok: false, error: waitTimedOut(seconds) }
+      : { ok: true, output: `${result}\n` }
+  }
+  // A local Claude Code card's transcript is on this machine (#75 D3); any other card has none.
+  const target = transcriptBackupTarget(card)
+  if (!target) return { ok: false, error: `board: "${card.title}" is not a Claude Code card` }
+  const read = answers.reply
+    ? await answers.reply(target.folder, target.sessionId)
+    : ({ state: 'none' } as const)
+  return read.state === 'reply'
+    ? { ok: true, output: `${read.text}\n` }
+    : { ok: false, error: `board: "${card.title}" has no reply yet` }
+}
 
 /**
  * `start` and `open` act on a card by id in any workspace, or by title in the active workspace or
  * `--workspace`'s (D17); `terminal` adds a temporary terminal typing its command to
  * `--workspace`'s workspace, else the active one, starts it and, with `--show`, opens it (D22).
- * Each answers once the start is over, refusing a failed one with its reason.
+ * Each answers once the start is over, refusing a failed one with its reason, and saying a start
+ * still undecided at the renderer's limit is still starting. `send`, `wait` and `reply` find their
+ * card as `start` does and answer as `answerCardCommand` does (D19–D21).
  */
 function answerAwaited(
   state: WorkspaceState,
@@ -202,7 +271,7 @@ function answerAwaited(
 ): BoardReply | Promise<BoardReply> {
   // The workspace `--workspace` names, else the active one (the user's, not the Orchestrator's).
   const named =
-    command.workspace !== undefined
+    'workspace' in command && command.workspace !== undefined
       ? resolveWorkspace(state, command.workspace)
       : {
           ok: true as const,
@@ -225,6 +294,9 @@ function answerAwaited(
   const placed = resolveAnyCard(state, named.value, callingCardId, command.card)
   if (!placed.ok) return placed
   const { workspace: ws, card } = placed.value
+  if (command.command === 'send' || command.command === 'wait' || command.command === 'reply') {
+    return answerCardCommand(card, command, isRunning, answers)
+  }
   if (isRunning(card.id)) {
     if (command.command === 'start') {
       return { ok: true, output: `${card.title} is already running\n` }
@@ -232,10 +304,10 @@ function answerAwaited(
     open(ws.id, card.id)
     return { ok: true }
   }
-  return start(ws.id, card.id).then((started) => {
-    if (!started.ok) return startFailed(card.title, started.reason)
+  return start(ws.id, card.id).then((outcome) => {
+    if (!outcome.ok) return startFailed(card.title, outcome.reason)
     if (command.command === 'open') open(ws.id, card.id)
-    return { ok: true }
+    return started(card.title, outcome)
   })
 }
 
@@ -316,7 +388,7 @@ type AnswerArgs = [
  * renames one. Both save through the store like any board change. `description` answers with
  * the card's description and one newline, or nothing; `describe` replaces it through the store,
  * which trims it, removes it when empty and refuses one over the cap (#69 D5).
- * `start`, `open` and `terminal` from the Orchestrator are answered by `answerBoardRequest`.
+ * `start`, `open`, `terminal`, `send`, `wait` and `reply` from the Orchestrator are answered by `answerBoardRequest`.
  */
 export function answerBoardCommand(
   store: AnswerArgs[0],
@@ -492,7 +564,8 @@ export function answerBoardCommand(
 
 /**
  * `answerBoardCommand` for every request, with the Orchestrator's `start`, `open` and `terminal`
- * (#81 D17, D22) answered once the start they make is over, as a promise.
+ * (#81 D17, D22) answered once the start they make is over, and its `send`, `wait` and `reply`
+ * (D19–D21) once typed, ended or read, as a promise.
  */
 export function answerBoardRequest(...args: AnswerArgs): BoardReply | Promise<BoardReply> {
   const [store, callingCardId, command, isRunning] = args

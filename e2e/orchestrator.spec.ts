@@ -1,5 +1,5 @@
 import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ORCHESTRATOR_FIRST_PROMPT } from '../src/core/orchestrator'
@@ -14,7 +14,8 @@ import { plainCards } from './plain-cards'
 // The workspace's Orchestrator (#81 S2): the toolbar button, its shortcut and palette rows, its
 // Claude Code start and resume with kept output, the Orchestrator agent setting, New
 // conversation, and its signals (waiting, Split's Agents, the Agent tab); `board guide` (S3);
-// `board start`, `open` and `terminal`, and an orchestrated card's first prompt (S4). The fake `claude` and
+// `board start`, `open` and `terminal`, and an orchestrated card's first prompt (S4); `board send`,
+// `wait` and `reply` (S5). The fake `claude` and
 // agents run on the login PATH of a fake home, which is also BIKUBE_HOME_DIR.
 
 const darwin = process.platform === 'darwin'
@@ -486,4 +487,71 @@ test('AC11: board terminal adds a running Terminal N in the background; --show o
   await rowsOf('Alpha').filter({ hasText: 'Terminal 1' }).click()
   await expectCardOpen(page, 'Terminal 1')
   await expect.poll(bufferLines).toContain('ready')
+})
+
+/** Writes a fixture transcript for the session in `folder` under the fake home (#75 D3). */
+function writeTranscript(folder: string, sessionId: string, entries: unknown[]): void {
+  const dir = join(fake.home, '.claude', 'projects', folder.replace(/[^A-Za-z0-9]/g, '-'))
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(
+    join(dir, `${sessionId}.jsonl`),
+    entries.map((e) => JSON.stringify(e)).join('\n') + '\n'
+  )
+}
+
+test('AC10: board send types into a card, board wait waits on its activity, board reply prints its last reply', async () => {
+  const input = join(root, 'input.log')
+  await launch({ FAKE_CLAUDE_INPUT_LOG: input })
+  await createWorkspace(repo, 'Alpha')
+  await orchestratorShell()
+  const ids = join(root, 'ids.txt')
+  await run(`board create --agent claude Backlog Review > ${ids}; echo "create rc=$?"`)
+  await expect.poll(bufferLines).toContain('create rc=0')
+  const id = readText(ids).split(' ')[0]!
+  await run('board create Backlog Plain; board start Review; echo "start rc=$?"')
+  await expect.poll(bufferLines).toContain('start rc=0')
+  await expect.poll(claudeLog).toHaveLength(2)
+  const session = /--session-id (\S+)/.exec(claudeLog()[1]!)?.[1] ?? ''
+  writeTranscript(repo, session, [
+    { type: 'user', message: { role: 'user', content: 'Review the branch' } },
+    {
+      type: 'assistant',
+      message: { id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'Found 2 issues.' }] }
+    }
+  ])
+
+  // The fake claude reads one line: `go on`, then Enter.
+  await run(`board send Review 'go on'; echo "send rc=$?"`)
+  await expect.poll(bufferLines).toContain('send rc=0')
+  // The Orchestrator's own fake claude read `hello` first.
+  await expect.poll(() => readText(input)).toBe('hello\ngo on\n')
+  await expectCardOpen(page, 'Orchestrator')
+
+  // Typed in the card (its shell now): working, then waiting a moment later.
+  await run(
+    `board send Review 'sleep 1; board activity ${id} working; sleep 1; board activity ${id} waiting'; ` +
+      'board wait Review --timeout 5; echo "wait rc=$?"'
+  )
+  await expect.poll(bufferLines).toContain('wait rc=0')
+  const lines = await bufferLines()
+  expect(lines[lines.indexOf('wait rc=0') - 1]).toBe('waiting')
+
+  // With no change it times out after about 5 s.
+  await run(
+    `board activity ${id} working; s=$(date +%s); board wait Review --timeout 5; ` +
+      'echo "timeout rc=$? after=$(( $(date +%s) - s ))"'
+  )
+  await expect
+    .poll(bufferLines, { timeout: 15_000 })
+    .toContainEqual(expect.stringMatching(/^timeout rc=1 after=[56]$/))
+  expect(await bufferLines()).toContain('board: timed out after 5 s')
+
+  await run('board reply Review; echo "reply rc=$?"')
+  await expect.poll(bufferLines).toContain('reply rc=0')
+  const after = await bufferLines()
+  expect(after[after.indexOf('reply rc=0') - 1]).toBe('Found 2 issues.')
+
+  await run('board reply Plain; echo "plain rc=$?"')
+  await expect.poll(bufferLines).toContain('plain rc=1')
+  expect(await bufferLines()).toContain('board: "Plain" is not a Claude Code card')
 })

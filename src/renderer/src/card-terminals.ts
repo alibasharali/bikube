@@ -13,6 +13,7 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { pasteData } from '../../core/board-send'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
@@ -464,6 +465,21 @@ export class XtermScreen implements CardScreen {
 
   onInput(listener: (data: string) => void): void {
     this.term.onData(listener)
+  }
+
+  /**
+   * Types `text` into the shell as xterm's paste would (`board send`, #81 D19): new lines as CR,
+   * bracketed when the program asked for bracketed paste. Through xterm's input, so it reaches the
+   * shell as keys typed here do, and never while the screen takes no input; xterm's own `paste`
+   * needs the screen opened in a page, which a card in the background may not be.
+   */
+  paste(text: string): void {
+    this.term.input(pasteData(text, this.term.modes.bracketedPasteMode))
+  }
+
+  /** Types `data` into the shell as keys typed here would be (`board send`'s Enter). */
+  type(data: string): void {
+    this.term.input(data)
   }
 
   onResize(listener: (size: { cols: number; rows: number }) => void): void {

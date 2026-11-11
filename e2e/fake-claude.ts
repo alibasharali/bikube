@@ -41,6 +41,7 @@ export const claudeResumeLine = (id: string): string =>
 // like Bikube's real hook, reports its session with `board session`, so the card resumes it next
 // time (#80 D13). With FAKE_CLAUDE_HOOK_LOG set it first runs its `--settings` file's SessionStart
 // hook, as Claude Code does at a fresh start, and writes what the hook printed there (#81 AC6).
+// With FAKE_CLAUDE_INPUT_LOG set it appends the line it read there (#81 AC10's `board send`).
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$*" >> "$BIKUBE_CLAUDE_LOG"
 echo "fake-claude $*"
@@ -57,7 +58,8 @@ while [ $# -gt 0 ]; do
   case "$1" in --session-id|--resume) id=$2 ;; esac
   shift
 done
-read -r _
+read -r line
+[ -n "$FAKE_CLAUDE_INPUT_LOG" ] && printf '%s\\n' "$line" >> "$FAKE_CLAUDE_INPUT_LOG"
 if [ -n "$id" ]; then
   dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
   mkdir -p "$dir"

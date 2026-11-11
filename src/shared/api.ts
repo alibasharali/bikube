@@ -7,7 +7,7 @@ import type {
 import type { ClaudeVersion } from '../core/claude-version'
 import type { ClaudeRetention, ConversationPrepare } from '../core/claude-retention-types'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
-import type { AgentSummaryRead } from '../core/agent-tab'
+import type { AgentSummaryRead, ReplyRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -102,6 +102,7 @@ export const IPC = {
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
   agentTabRevealOutput: 'agentTab:revealOutput',
+  agentTabReply: 'agentTab:reply',
   claudeRetentionRead: 'claudeRetention:read',
   claudeRetentionSet: 'claudeRetention:set',
   transcriptsBackup: 'transcripts:backup',
@@ -405,6 +406,11 @@ export interface AgentTabApi {
   openOutput(sessionId: string, path: string): Promise<OpenResult>
   /** Shows a file output in the OS file manager (#79 D2, D10), as `openOutput` checks it; false when refused. */
   revealOutput(sessionId: string, path: string): Promise<boolean>
+  /**
+   * `board reply`'s text (#81 D21): the main agent's last assistant message in the session's
+   * transcript for a card in `folder`, read by main as `summary` reads it, and checked the same way.
+   */
+  reply(folder: string, sessionId: string): Promise<ReplyRead>
 }
 
 /** Claude Code's conversation retention in the user's `~/.claude/settings.json` (#80 D2–D5). */

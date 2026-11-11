@@ -4,7 +4,15 @@
  */
 
 import { isActivityValue } from './activity'
-import { isBoardAgent, isListFormat, isSessionId, isSetupResult, isWaitTimeout } from './board-args'
+import {
+  isBoardAgent,
+  isListFormat,
+  isSessionId,
+  isSetupResult,
+  isWaitTimeout,
+  WAIT_DEFAULT_SECONDS,
+  WAIT_MAX_SECONDS
+} from './board-args'
 import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-usage-types'
 
@@ -26,6 +34,32 @@ export const REQUEST_TOO_LONG = 'board: request too long'
 export const NO_ANSWER = 'board: no answer from Bikube'
 /** How long `board` waits for main's reply (#9 D9), locally and in SSH cards (#25 D5). */
 export const ANSWER_TIMEOUT_MS = 5000
+
+/**
+ * The longest the renderer waits for `board start`, `open` or `terminal`'s start before
+ * answering that it is still starting (#81 D17).
+ */
+export const START_WAIT_MS = 60_000
+
+/**
+ * How long `board` waits for main's reply to `command`: #9's 5 s, a `wait`'s timeout plus 5 s
+ * (#81 D20, never over 3600 s however the value came), and 65 s for a start (D17).
+ */
+export function answerTimeoutMs(command: BoardCommand): number {
+  if (command.command === 'wait') {
+    const seconds = Number.isFinite(command.timeout)
+      ? Math.min(Math.max(command.timeout as number, 1), WAIT_MAX_SECONDS)
+      : WAIT_DEFAULT_SECONDS
+    return seconds * 1000 + ANSWER_TIMEOUT_MS
+  }
+  if (command.command === 'start' || command.command === 'open' || command.command === 'terminal') {
+    return START_WAIT_MS + ANSWER_TIMEOUT_MS
+  }
+  return ANSWER_TIMEOUT_MS
+}
+
+/** How long main waits for the window's answer: 1 s under the CLI, so the CLI hears why (#9 D9). */
+export const relayTimeoutMs = (command: BoardCommand): number => answerTimeoutMs(command) - 1000
 
 /** A request as sent: the calling card's id plus one command. */
 export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand
@@ -191,10 +225,13 @@ export function parseRequestLine(line: string): ParsedRequest {
     required.every((f) => f in value && (f === 'usage' || typeof value[f] === 'string')) &&
     optional.every((f) => value[f] === undefined || typeof value[f] === 'string')
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
-  // Only a description gets the 512 KiB line's room (#69 D5); every other string keeps 8 KiB.
+  // Only a description and a send's text get the 512 KiB line's room (#69 D5, #81 D19); every
+  // other string keeps 8 KiB.
+  const roomy = (key: string): boolean =>
+    key === 'description' || (name === 'send' && key === 'text')
   const overLong = keys.some((key) => {
     const field = (value as Record<string, unknown>)[key]
-    return key !== 'description' && typeof field === 'string' && isOverBytes(field, MAX_FIELD_BYTES)
+    return !roomy(key) && typeof field === 'string' && isOverBytes(field, MAX_FIELD_BYTES)
   })
   if (overLong) return { ok: false, error: REQUEST_TOO_LONG }
   const request = asRequest(name, value as Record<string, unknown>)

@@ -5,8 +5,11 @@
  */
 import type { CardRunState } from './card-status'
 
-/** How a start ended: its shell spawned, or the reason it couldn't. */
-export type StartOutcome = { ok: true } | { ok: false; reason: string }
+/**
+ * How a start ended: its shell spawned (`pending` when still undecided at the renderer's limit,
+ * #81 D17), or the reason it couldn't.
+ */
+export type StartOutcome = { ok: true; pending?: true } | { ok: false; reason: string }
 
 /** Where a start is: each part as the renderer reads it now, absent while it has none. */
 export interface StartProgress {

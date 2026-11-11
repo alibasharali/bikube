@@ -3,6 +3,7 @@ import {
   answerBoardCommand,
   answerBoardRequest,
   checkCreateWorktree,
+  type OrchestratorAnswers,
   type RepoBranches
 } from './board-answer'
 import type { BoardCommand } from './board-args'
@@ -1508,6 +1509,19 @@ describe('board start, open and terminal (#81 D17, D22)', () => {
     expect(starts).toEqual([])
   })
 
+  it('prints that a start undecided at its limit is still starting, opening it for open', async () => {
+    const { ask, opens } = asker(orchestratorStore(), { ok: true, pending: true })
+    expect(await ask({ command: 'start', card: 'c-other' })).toEqual({
+      ok: true,
+      output: 'other is still starting\n'
+    })
+    expect(await ask({ command: 'open', card: 'c-other' })).toEqual({
+      ok: true,
+      output: 'other is still starting\n'
+    })
+    expect(opens).toEqual(['beta/c-other'])
+  })
+
   it("marks the cards it creates orchestrated, and no other caller's (D18)", () => {
     const store = orchestratorStore()
     answerBoardCommand(
@@ -1527,5 +1541,128 @@ describe('board start, open and terminal (#81 D17, D22)', () => {
     const cards = store.getState().workspaces[0].cards
     expect(cards.find((c) => c.title === 'Review')?.orchestrated).toBe(true)
     expect(cards.find((c) => c.title === 'Mine')).not.toHaveProperty('orchestrated')
+  })
+})
+
+describe('board send, wait and reply (#81 D19–D21)', () => {
+  const FROM = 'orchestrator:alpha'
+  const SESSION = '11111111-2222-4333-8444-555555555555'
+  const orchestratorStore = (): InMemoryWorkspaceStore => {
+    const store = setup()
+    store.ensureOrchestrator('alpha')
+    return store
+  }
+  function asker(
+    store: InMemoryWorkspaceStore,
+    answers: OrchestratorAnswers,
+    isRunning: (id: string) => boolean = (id) => id !== 'c-old'
+  ): (command: BoardCommand, from?: string) => Promise<unknown> {
+    return async (command, from = FROM) =>
+      answerBoardRequest(
+        store,
+        from,
+        command,
+        isRunning,
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        answers
+      )
+  }
+
+  it("types a running card's cleaned text, by id or by title in the active workspace", async () => {
+    const sent: string[] = []
+    const ask = asker(orchestratorStore(), {
+      send: async (cardId, text) => {
+        sent.push(`${cardId}:${text}`)
+      }
+    })
+    expect(await ask({ command: 'send', card: 'c-api', text: 'go\x1b on\n' })).toEqual({ ok: true })
+    // beta is active.
+    expect(await ask({ command: 'send', card: 'other', text: 'hi' })).toEqual({ ok: true })
+    expect(sent).toEqual(['c-api:go on\n', 'c-other:hi'])
+  })
+
+  it("refuses a card that isn't running, and a text over 100,000 characters, typing nothing", async () => {
+    const sent: string[] = []
+    const ask = asker(orchestratorStore(), { send: async (id) => void sent.push(id) })
+    expect(await ask({ command: 'send', card: 'c-old', text: 'go on' })).toEqual({
+      ok: false,
+      error: 'board: "old" is not running'
+    })
+    expect(await ask({ command: 'send', card: 'c-api', text: 'a'.repeat(100_001) })).toEqual({
+      ok: false,
+      error: 'board: the text is longer than 100,000 characters'
+    })
+    expect(sent).toEqual([])
+  })
+
+  it('prints what the wait ended on, or refuses its timeout', async () => {
+    const waits: string[] = []
+    let result: 'waiting' | 'timeout' = 'waiting'
+    const ask = asker(orchestratorStore(), {
+      wait: async (cardId, seconds) => {
+        waits.push(`${cardId}:${seconds}`)
+        return result
+      }
+    })
+    expect(await ask({ command: 'wait', card: 'c-api', timeout: 5 })).toEqual({
+      ok: true,
+      output: 'waiting\n'
+    })
+    result = 'timeout'
+    expect(await ask({ command: 'wait', card: 'c-old' })).toEqual({
+      ok: false,
+      error: 'board: timed out after 600 s'
+    })
+    expect(waits).toEqual(['c-api:5', 'c-old:600'])
+  })
+
+  it("prints a local Claude Code card's last reply from its folder and session", async () => {
+    const store = orchestratorStore()
+    const reads: string[] = []
+    const ask = asker(store, {
+      reply: async (folder, sessionId) => {
+        reads.push(`${folder}:${sessionId}`)
+        return { state: 'reply', text: 'Found 2 issues.' }
+      }
+    })
+    const created = store.createCard('alpha', 'backlog', 'Review', { kind: 'claude' })
+    if (!created.ok) throw new Error('not created')
+    store.setAgentSession('alpha', created.value.id, SESSION)
+    expect(await ask({ command: 'reply', card: created.value.id })).toEqual({
+      ok: true,
+      output: 'Found 2 issues.\n'
+    })
+    expect(reads).toEqual([`${created.value.directory}:${SESSION}`])
+  })
+
+  it('refuses a card that is not Claude Code, and one with no reply yet', async () => {
+    const store = orchestratorStore()
+    const ask = asker(store, { reply: async () => ({ state: 'none' }) })
+    expect(await ask({ command: 'reply', card: 'c-api' })).toEqual({
+      ok: false,
+      error: 'board: "api" is not a Claude Code card'
+    })
+    const created = store.createCard('alpha', 'backlog', 'Review', { kind: 'claude' })
+    if (!created.ok) throw new Error('not created')
+    expect(await ask({ command: 'reply', card: created.value.id })).toEqual({
+      ok: false,
+      error: 'board: "Review" has no reply yet'
+    })
+  })
+
+  it('refuses all three from a card', async () => {
+    const ask = asker(orchestratorStore(), {})
+    for (const command of [
+      { command: 'send', card: 'c-web', text: 'x' },
+      { command: 'wait', card: 'c-web' },
+      { command: 'reply', card: 'c-web' }
+    ] as const) {
+      expect(await ask(command, 'c-api')).toEqual({ ok: false, error: ONLY_ORCHESTRATOR })
+    }
   })
 })

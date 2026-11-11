@@ -184,6 +184,8 @@ export type BoardArgs =
   | { kind: 'command'; command: BoardCommand }
   /** `board usage <card> <transcript>` (#50 D5): the client reads the transcript, then sends. */
   | { kind: 'transcript'; card: string; path: string }
+  /** `board send <card> -` (#81 D19): the client reads stdin, then sends its text. */
+  | { kind: 'sendStdin'; card: string }
   /** `board describe <card> <file>|-` (#69 D5): the client reads the file, then sends. */
   | { kind: 'descriptionFile'; card: string; path: string; workspace?: string }
   /**
@@ -307,6 +309,9 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
   }
   if (name === 'description' && operands.length === 1) {
     return { kind: 'command', command: { command: 'description', card: operands[0], ...where } }
+  }
+  if (name === 'send' && operands.length === 2 && operands[1] === '-') {
+    return { kind: 'sendStdin', card: operands[0] }
   }
   const orchestrator = parseOrchestratorCommand(name, operands, options)
   if (orchestrator !== undefined) {

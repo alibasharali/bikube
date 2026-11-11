@@ -9,14 +9,12 @@ import { NOT_IN_A_CARD } from './board-commands'
 import {
   MAX_REPLY_OUTPUT_LENGTH,
   MAX_REPLY_ERROR_LENGTH,
+  relayTimeoutMs,
   type BoardReply,
   type BoardRequest
 } from './board-protocol'
 
 export const NO_WINDOW = 'board: Bikube has no open window'
-/** How long main waits for the window, under the CLI's 5 s so the CLI hears why (#9 D9). */
-export const RELAY_TIMEOUT_MS = 4000
-
 /**
  * The window owning the card's live session; undefined when the card has no live session in
  * this run, null when it has one but its window is gone.
@@ -142,7 +140,8 @@ export class BoardRelay<Owner> {
   constructor(
     private readonly ownerOfCard: CardOwnerLookup<Owner>,
     private readonly send: SendToOwner<Owner>,
-    private readonly timeoutMs = RELAY_TIMEOUT_MS
+    /** One limit for every request, or each command's (`relayTimeoutMs` by default). */
+    private readonly timeoutMs: number | ((command: BoardCommand) => number) = relayTimeoutMs
   ) {}
 
   /** The reply for a parsed request; never rejects. */
@@ -153,10 +152,11 @@ export class BoardRelay<Owner> {
     const { cardId } = request
     const command = commandOf(request)
     const requestId = String(this.nextId++)
+    const timeoutMs = typeof this.timeoutMs === 'number' ? this.timeoutMs : this.timeoutMs(command)
     return new Promise((resolve) => {
       const timer = setTimeout(
         () => this.settle(requestId, { ok: false, error: NO_ANSWER }),
-        this.timeoutMs
+        timeoutMs
       )
       this.pending.set(requestId, { owner, resolve, timer })
       try {

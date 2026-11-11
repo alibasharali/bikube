@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardCommand } from './board-args'
 import {
+  ANSWER_TIMEOUT_MS,
+  answerTimeoutMs,
   BOARD_PROTOCOL_VERSION,
   INVALID_REQUEST,
   MAX_FIELD_BYTES,
   MAX_REQUEST_LINE_BYTES,
   parseReplyLine,
   parseRequestLine,
+  relayTimeoutMs,
   serializeReply,
-  serializeRequest
+  serializeRequest,
+  START_WAIT_MS
 } from './board-protocol'
 
 const move = { v: 1, cardId: 'c1', command: 'move', card: '.', column: 'Done' }
@@ -464,5 +468,59 @@ describe('orchestrator-only requests (#81 D13, D17–D23)', () => {
     ]) {
       expect(parseRequestLine(raw(value))).toEqual({ ok: false, error: INVALID_REQUEST })
     }
+  })
+})
+
+describe('per-command answer timeouts (#81 D17, D20)', () => {
+  it("gives most commands #9's 5 s, and the relay 1 s less", () => {
+    const move: BoardCommand = { command: 'move', card: '.', column: 'Done' }
+    expect(answerTimeoutMs(move)).toBe(ANSWER_TIMEOUT_MS)
+    expect(relayTimeoutMs(move)).toBe(ANSWER_TIMEOUT_MS - 1000)
+  })
+
+  it("waits for a wait's timeout plus 5 s, 600 s by default", () => {
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: 5 })).toBe(10_000)
+    expect(answerTimeoutMs({ command: 'wait', card: 'x' })).toBe(605_000)
+    expect(relayTimeoutMs({ command: 'wait', card: 'x', timeout: 3600 })).toBe(3_604_000)
+  })
+
+  it('never trusts an unbounded timeout: capped at 3600 s', () => {
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: 1e9 })).toBe(3_605_000)
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: NaN })).toBe(605_000)
+  })
+
+  it('gives start, open and terminal room for a 60 s start', () => {
+    for (const command of [
+      { command: 'start', card: 'x' },
+      { command: 'open', card: 'x' },
+      { command: 'terminal', line: 'ls' }
+    ] as const) {
+      expect(answerTimeoutMs(command)).toBe(65_000)
+      expect(relayTimeoutMs(command)).toBeGreaterThan(START_WAIT_MS)
+      expect(relayTimeoutMs(command)).toBeLessThan(answerTimeoutMs(command))
+    }
+  })
+})
+
+describe("send's text (#81 D19)", () => {
+  it('takes 100,000 multi-byte characters, past 8 KiB, but keeps 8 KiB for its card', () => {
+    const text = '🎉é'.repeat(50_000)
+    const sent = serializeRequest('o', { command: 'send', card: 'Review', text })
+    expect(parseRequestLine(sent)).toEqual({
+      ok: true,
+      request: { v: 1, cardId: 'o', command: 'send', card: 'Review', text }
+    })
+    const long = serializeRequest('o', {
+      command: 'send',
+      card: 'x'.repeat(MAX_FIELD_BYTES + 1),
+      text
+    })
+    expect(parseRequestLine(long)).toEqual({ ok: false, error: 'board: request too long' })
+    const status = serializeRequest('o', {
+      command: 'status',
+      card: 'x',
+      text: 'x'.repeat(MAX_FIELD_BYTES + 1)
+    })
+    expect(parseRequestLine(status)).toEqual({ ok: false, error: 'board: request too long' })
   })
 })

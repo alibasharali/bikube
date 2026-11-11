@@ -219,3 +219,25 @@ describe('BoardRelay: orchestrator-only commands (#81 D13, D17–D23)', () => {
     expect(sent.map((s) => s.command)).toEqual(commands)
   })
 })
+
+describe('BoardRelay: per-command timeouts (#81 D17, D20)', () => {
+  it('waits for each request as long as its command needs, by default', async () => {
+    const perCommand = new BoardRelay<Win>(
+      (cardId) => owners.get(cardId),
+      (owner, requestId, cardId, command) => sent.push({ owner, requestId, cardId, command })
+    )
+    const settled: string[] = []
+    const track = (name: string, reply: Promise<unknown>): void => {
+      void reply.then(() => settled.push(name))
+    }
+    track('move', perCommand.handle(request))
+    track('wait', perCommand.handle({ v: 1, cardId: 'c1', command: 'wait', card: 'x', timeout: 5 }))
+    track('start', perCommand.handle({ v: 1, cardId: 'c1', command: 'start', card: 'x' }))
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(settled).toEqual(['move'])
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(settled).toEqual(['move', 'wait'])
+    await vi.advanceTimersByTimeAsync(55_000)
+    expect(settled).toEqual(['move', 'wait', 'start'])
+  })
+})

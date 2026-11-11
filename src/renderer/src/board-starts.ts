@@ -1,3 +1,4 @@
+import { START_WAIT_MS } from '../../core/board-protocol'
 import { startOutcome, type StartOutcome } from '../../core/board-start'
 import { startCard } from './card-actions'
 import { cardTerminals } from './card-terminals'
@@ -12,16 +13,13 @@ import { pendingWorktreeRun } from './pending-worktrees'
 
 /** How often a start's progress is read, in ms. */
 const POLL_MS = 50
-/**
- * The longest a start is waited for before it is answered as started (a worktree still being
- * made): within main's relay timeout, so the answer reaches the CLI.
- */
-const START_WAIT_MS = 3000
 
 /**
  * Starts the card or shell exactly as opening it would (`startCard`: a pending worktree made
  * first, a resuming Claude Code card's conversation checked), changing no view, and resolves once
- * its shell has spawned or its start failed, with the reason.
+ * its shell has spawned or its start failed, with the reason; still undecided after
+ * `START_WAIT_MS` (a worktree still being made), as `pending`, within main's relay timeout for
+ * these commands so the answer reaches the CLI.
  */
 export function startForBoard(workspaceId: string, cardId: string): Promise<StartOutcome> {
   const terminals = cardTerminals()
@@ -39,7 +37,7 @@ export function startForBoard(workspaceId: string, cardId: string): Promise<Star
         spawned: terminals.sessionId(cardId) !== undefined
       })
       if (outcome) resolve(outcome)
-      else if (Date.now() >= deadline) resolve({ ok: true })
+      else if (Date.now() >= deadline) resolve({ ok: true, pending: true })
       else setTimeout(read, POLL_MS)
     }
     read()

@@ -1,5 +1,6 @@
 import { answerBoardRequest, checkCreateWorktree } from '../../core/board-answer'
 import { findShellCard } from '../../core/workspace-shells'
+import { sendToCard, waitOnCard } from './board-send-wait'
 import { openForBoard, startForBoard } from './board-starts'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
@@ -24,7 +25,9 @@ const isWorkspaceShell = (id: string): boolean =>
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
  * forgotten each time it stops (#75 D3a). The Orchestrator's `board guide` prints the guide with
  * Settings' Your orchestrator instructions (#81 D13); its `board start`, `open` and `terminal`
- * start in the background and answer once the start is over (#81 D17, D22).
+ * start in the background and answer once the start is over (#81 D17, D22); its `board send`
+ * types into a card, `wait` waits on its activity and `reply` asks main for its last reply
+ * (D19–D21).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
@@ -72,7 +75,11 @@ export function listenForBoardRequests(): () => void {
         instructions: () => settingsStore.get().orchestratorInstructions,
         // `board start`, `open` and `terminal` (#81 D17, D22).
         start: startForBoard,
-        open: openForBoard
+        open: openForBoard,
+        // `board send`, `wait` and `reply` (#81 D19–D21); main reads the transcript.
+        send: sendToCard,
+        wait: waitOnCard,
+        reply: (folder, sessionId) => window.bikube.agentTab.reply(folder, sessionId)
       }
     )
   })

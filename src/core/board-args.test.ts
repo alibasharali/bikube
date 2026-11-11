@@ -356,6 +356,10 @@ describe('orchestrator-only commands (#81 D13, D16–D24)', () => {
   const usage = { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
   const command = (argv: string[]): unknown => parseBoardArgs(argv)
 
+  it("reads send's text from stdin for - (D19)", () => {
+    expect(command(['send', 'Review', '-'])).toEqual({ kind: 'sendStdin', card: 'Review' })
+  })
+
   it('parses guide, start, open, reply, send, wait, terminal and palette as D13, D17–D23 write them', () => {
     expect(command(['guide'])).toEqual({ kind: 'command', command: { command: 'guide' } })
     expect(command(['start', 'X'])).toEqual({

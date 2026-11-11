@@ -6,9 +6,11 @@ import { createConnection } from 'node:net'
 import { parseBoardArgs, type BoardCommand } from './board-args'
 import { NOT_IN_A_CARD } from './board-commands'
 import { readClaudeUsage } from './claude-usage'
-import { readDescriptionFile, readProcessStdin } from './description-file'
+import { checkSendText } from './board-send'
+import { readDescriptionFile, readProcessStdin, readTextFile, STDIN_PATH } from './description-file'
 import {
   ANSWER_TIMEOUT_MS,
+  answerTimeoutMs,
   NO_ANSWER,
   parseReplyLine,
   serializeRequest,
@@ -65,13 +67,15 @@ export function sendBoardRequest(
  * Runs `board <argv>` with `env`'s `BIKUBE_CARD_ID` and `BIKUBE_SOCKET`; resolves with the exit code.
  * `board usage` reads its transcript first (#50 D5): one that can't be read sends nothing.
  * `board describe` and `board create --description-file` read their file, `readStdin` for `-`,
- * first (#69 D5, D8): one refused sends nothing.
+ * first (#69 D5, D8): one refused sends nothing. `board send` cleans its text (`-` read from
+ * stdin) and refuses one over 100,000 characters before sending (#81 D19). The reply is waited
+ * for as long as the command needs (`answerTimeoutMs`: a `wait`'s timeout plus 5 s, #81 D20).
  */
 export async function runBoard(
   argv: readonly string[],
   env: Record<string, string | undefined>,
   out: BoardOutput,
-  timeoutMs = ANSWER_TIMEOUT_MS,
+  timeoutMs: number | ((command: BoardCommand) => number) = answerTimeoutMs,
   readStdin: () => Promise<Uint8Array> = readProcessStdin
 ): Promise<number> {
   const args = parseBoardArgs(argv)
@@ -115,10 +119,26 @@ export async function runBoard(
         ...(args.workspace !== undefined && { workspace: args.workspace })
       }
     }
+  } else if (args.kind === 'sendStdin') {
+    const read = await readTextFile(STDIN_PATH, readStdin)
+    if (!read.ok) {
+      out.stderr(`${read.error}\n`)
+      return 1
+    }
+    command = { command: 'send', card: args.card, text: read.text }
   } else {
     command = args.command
   }
-  const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), timeoutMs)
+  if (command.command === 'send') {
+    const checked = checkSendText(command.text)
+    if (!checked.ok) {
+      out.stderr(`${checked.error}\n`)
+      return 1
+    }
+    command = { ...command, text: checked.text }
+  }
+  const limit = typeof timeoutMs === 'number' ? timeoutMs : timeoutMs(command)
+  const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), limit)
   if (reply.ok) {
     if (reply.output !== undefined) out.stdout(reply.output)
     return 0

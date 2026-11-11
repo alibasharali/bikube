@@ -2352,8 +2352,11 @@ button.dev-server-chip:focus-visible {
 }
 
 /* No room for the labels in a narrow toolbar (a narrow window, or the side panel beside it): the
-   icons alone, still named by their hidden labels and their tooltips. */
-@container workspace-toolbar (max-width: 599.98px) {
+   icons alone, still named by their hidden labels and their tooltips. The labelled buttons and
+   their gaps take about 494 px of the content box (which the query measures, inside the 16 px
+   padding), so the labels go only below 510 px: the default window (1100 px, sidebar and side
+   panel open) keeps them. */
+@container workspace-toolbar (max-width: 509.98px) {
   .workspace-toolbar-btn .workspace-toolbar-label {
     position: absolute;
     width: 1px;

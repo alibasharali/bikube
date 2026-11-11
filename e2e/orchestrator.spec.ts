@@ -304,6 +304,46 @@ test('UX: at 320 and 800 px every toolbar button and the Orchestrator menu stay 
   await page.getByTestId('titlebar-panel').first().click()
   await expect(page.getByTestId('titlebar-panel')).toHaveAttribute('aria-pressed', 'false')
   await expectToolbarFits(320)
+  // A menu that would cross the window's edge is moved back inside: the Orchestrator button moved
+  // (by its own offset, no layout change) so its start-aligned menu would end past the right edge.
+  await page.evaluate(() => {
+    const split = document.querySelector('.toolbar-split-btn') as HTMLElement
+    split.style.position = 'relative'
+    split.style.left = '240px'
+  })
+  await page.getByTestId('toolbar-orchestrator-menu').click()
+  await expect(page.getByTestId('orchestrator-new-conversation')).toBeVisible()
+  const moved = await page.getByRole('menu', { name: 'Orchestrator' }).boundingBox()
+  expect(moved!.x).toBeGreaterThanOrEqual(0)
+  expect(moved!.x + moved!.width).toBeLessThanOrEqual(320)
+  await page.keyboard.press('Escape')
+})
+
+test('UX: at the default 1100 px layout the toolbar shows every label on one row', async () => {
+  await launch()
+  await createWorkspace(repo, 'Proj')
+  await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 720))
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1100)
+  await expect(page.getByTestId('titlebar-panel').first()).toHaveAttribute('aria-pressed', 'true')
+  const toolbar = page.getByTestId('workspace-toolbar')
+  const labels = toolbar.locator('.workspace-toolbar-label')
+  await expect(labels).toHaveText(['Orchestrator', 'Agent setup', 'Edit', 'Delete'])
+  await expect
+    .poll(() =>
+      labels.evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect()
+          return r.width > 4 && el.scrollWidth <= Math.ceil(r.width)
+        })
+      )
+    )
+    .toEqual([true, true, true, true])
+  // One row: every button's box overlaps every other's vertically.
+  const rows = await toolbar.getByRole('button').evaluateAll((els) => {
+    const boxes = els.map((el) => el.getBoundingClientRect())
+    return Math.max(...boxes.map((b) => b.top)) < Math.min(...boxes.map((b) => b.bottom))
+  })
+  expect(rows).toBe(true)
 })
 
 test('AC13: New conversation… asks, Cancel changes nothing, confirming restarts with a new session', async () => {

@@ -2,7 +2,7 @@
 item: 81
 type: feature
 title: Project orchestrator
-status: draft
+status: approved
 branch: claude/81-project-orchestrator
 ---
 

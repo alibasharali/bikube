@@ -208,6 +208,45 @@ describe('setupWarnings', () => {
   })
 })
 
+describe('setupWarnings: Claude Code retention (#80 D7)', () => {
+  const message =
+    "Claude Code deletes conversations older than 30 days; Bikube cards can't resume them after that."
+
+  it('AC6: a low retention lists a Config warning on cleanupPeriodDays with Keep for 10 years', () => {
+    const warnings = setupWarnings(
+      snapshot({
+        settings: [settingsFile('user', { cleanupPeriodDays: 30 })],
+        claudeRetention: { state: 'low', days: 30 }
+      })
+    )
+    expect(warnings).toEqual([
+      {
+        section: 'config',
+        entry: 'cleanupPeriodDays',
+        file: '/user.json',
+        message,
+        keepConversations: true
+      }
+    ])
+  })
+
+  it('D7: names ~/.claude/settings.json when no user settings file was read', () => {
+    const warnings = setupWarnings(snapshot({ claudeRetention: { state: 'low', days: 7 } }))
+    expect(warnings.map((w) => [w.file, w.message])).toEqual([
+      [
+        '/h/.claude/settings.json',
+        "Claude Code deletes conversations older than 7 days; Bikube cards can't resume them after that."
+      ]
+    ])
+  })
+
+  it('D3: nothing when ok, unknown or not read', () => {
+    for (const claudeRetention of [{ state: 'ok' }, { state: 'unknown' }, undefined] as const) {
+      expect(setupWarnings(snapshot(claudeRetention ? { claudeRetention } : {}))).toEqual([])
+    }
+  })
+})
+
 describe('isPluginOff', () => {
   it('D18: a plugin entry is off while its plugin is', () => {
     const plugin = {
@@ -747,6 +786,49 @@ describe('configRows', () => {
     expect(configRows(s, 'MODEL').map((r) => r.key)).toEqual(['model'])
     expect(configRows(s, '30').map((r) => r.key)).toEqual(['cleanupPeriodDays'])
     expect(configRows(s, 'local').map((r) => r.key)).toEqual(['verbose'])
+  })
+
+  it("#80 D7: a low retention's warning is on the cleanupPeriodDays row", () => {
+    const rows = configRows(
+      snapshot({
+        settings: [settingsFile('user', { cleanupPeriodDays: 30, model: 'opus' })],
+        claudeRetention: { state: 'low', days: 30 }
+      }),
+      ''
+    )
+    expect(rows.map((r) => [r.key, r.retentionWarning])).toEqual([
+      [
+        'cleanupPeriodDays',
+        "Claude Code deletes conversations older than 30 days; Bikube cards can't resume them after that."
+      ],
+      ['model', undefined]
+    ])
+  })
+
+  it('#80 D7: a row is added for cleanupPeriodDays when no settings file sets it', () => {
+    const s = snapshot({
+      settings: [settingsFile('user', { model: 'opus' })],
+      claudeRetention: { state: 'low', days: 30 }
+    })
+    const [days] = configRows(s, '')
+    expect(days).toMatchObject({
+      key: 'cleanupPeriodDays',
+      source: { kind: 'user' },
+      file: '/user.json',
+      text: "30 (Claude Code's default)",
+      overridden: [],
+      control: null,
+      resettable: false
+    })
+    expect(days.retentionWarning).toContain('older than 30 days')
+    expect(configRows(s, 'cleanup').map((r) => r.key)).toEqual(['cleanupPeriodDays'])
+    expect(configRows(s, '', { kind: 'project' })).toEqual([])
+    // None while the setting isn't low.
+    for (const claudeRetention of [{ state: 'ok' }, { state: 'unknown' }] as const) {
+      expect(
+        configRows({ ...s, claudeRetention }, '').map((r) => [r.key, r.retentionWarning])
+      ).toEqual([['model', undefined]])
+    }
   })
 })
 

@@ -10,6 +10,8 @@
  * file and Reveal (S6) check a path against `paths`.
  */
 
+import type { ClaudeRetention } from './claude-retention-types'
+
 /** Where an entry comes from (D9): its source chip. */
 export type EntrySource =
   | { kind: 'project' }
@@ -203,6 +205,12 @@ export interface AgentSetupSnapshot {
   fileWarnings: FileWarning[]
   /** Every file the read found (absolute, sorted): what Open file and Reveal may name (D28). */
   paths: string[]
+  /**
+   * `~/.claude/settings.json`'s `cleanupPeriodDays` as #80 D3 reads it (main's
+   * `readClaudeRetention`, which tells a link from a file): low shows D7's warning. Absent when
+   * main didn't read it.
+   */
+  claudeRetention?: ClaudeRetention
 }
 
 /** Outcome of `agentSetup:read`. */

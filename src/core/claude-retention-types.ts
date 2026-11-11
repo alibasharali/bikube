@@ -13,3 +13,7 @@ export type ClaudeRetention =
 /** The notice's text (#80 D5) for the days in effect. */
 export const retentionNotice = (days: number): string =>
   `Claude Code deletes conversations after ${days} days, so this card can't resume after that.`
+
+/** Agent setup's warning (#80 D7) for the days in effect. */
+export const retentionWarning = (days: number): string =>
+  `Claude Code deletes conversations older than ${days} days; Bikube cards can't resume them after that.`

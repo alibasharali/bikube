@@ -6135,6 +6135,12 @@ button.dev-server-chip:focus-visible {
   gap: var(--space-1);
 }
 
+/* #80 D7: the retention warning with its Keep for 10 years button. */
+.agent-setup-retention {
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* An amber warning (D24): amber text and outline on the row's surface, since the amber tint under
    amber text falls short of 4.5:1 in some light themes. */
 .agent-setup-warning {

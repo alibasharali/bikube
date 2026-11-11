@@ -2,7 +2,7 @@
 item: 80
 type: feature
 title: Claude code session retention period
-status: draft
+status: approved
 branch: claude/80-claude-session-retention
 ---
 

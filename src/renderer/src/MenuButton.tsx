@@ -1,5 +1,5 @@
 import { Ellipsis } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ICON } from './icons'
 
 interface MenuButtonProps {
@@ -14,6 +14,12 @@ interface MenuButtonProps {
    * a column) does not clip it.
    */
   fixed?: boolean
+  /**
+   * With `fixed`, which edge of the button the menu lines up with: `end` (the default) grows it
+   * leftwards from the button's right edge, `start` rightwards from its left edge. Either way it
+   * is kept inside the window.
+   */
+  align?: 'start' | 'end'
   /** The menu items; `run(action)` closes the menu and then runs the action. */
   children: (run: (action: () => void) => () => void) => React.ReactNode
   /** The button's content and class: ⋯ in an icon button by default. */
@@ -30,6 +36,7 @@ function MenuButton({
   testId,
   className,
   fixed,
+  align = 'end',
   children,
   icon,
   buttonClassName = 'icon-btn',
@@ -39,6 +46,7 @@ function MenuButton({
   const [position, setPosition] = useState<React.CSSProperties | undefined>(undefined)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -52,6 +60,18 @@ function MenuButton({
     return () => doc.removeEventListener('mousedown', onDown)
   }, [open])
 
+  // A fixed menu wider than the room on its side moves back inside the window.
+  useLayoutEffect(() => {
+    if (!open || !fixed || !menu.current) return
+    const el = menu.current
+    const width = (el.ownerDocument.defaultView ?? window).innerWidth
+    const rect = el.getBoundingClientRect()
+    if (rect.left >= 0 && rect.right <= width) return
+    const left = Math.max(0, Math.min(rect.left, width - rect.width - 4))
+    if (Math.abs(left - rect.left) < 0.5) return
+    setPosition((p) => ({ position: 'fixed', top: p?.top, left, right: 'auto' }))
+  }, [open, fixed, position])
+
   const run = (action: () => void) => (): void => {
     setOpen(false)
     action()
@@ -60,14 +80,12 @@ function MenuButton({
   const toggle = (): void => {
     if (!open && fixed && button.current) {
       const rect = button.current.getBoundingClientRect()
-      setPosition({
-        position: 'fixed',
-        top: rect.bottom + 4,
-        right: Math.max(
-          0,
-          (button.current.ownerDocument.defaultView ?? window).innerWidth - rect.right
-        )
-      })
+      const width = (button.current.ownerDocument.defaultView ?? window).innerWidth
+      setPosition(
+        align === 'start'
+          ? { position: 'fixed', top: rect.bottom + 4, left: Math.max(0, rect.left), right: 'auto' }
+          : { position: 'fixed', top: rect.bottom + 4, right: Math.max(0, width - rect.right) }
+      )
     }
     setOpen((o) => !o)
   }
@@ -112,6 +130,7 @@ function MenuButton({
       </button>
       {open && (
         <div
+          ref={menu}
           className="menu"
           role="menu"
           aria-label={menuLabel}

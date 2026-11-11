@@ -2293,8 +2293,11 @@ button.dev-server-chip:focus-visible {
 
 /* The workspace's buttons above its board: Agent setup, Edit and Delete, then New terminal. */
 .workspace-toolbar {
+  /* Its labels follow its own width, which the sidebar and the side panel take from. */
+  container: workspace-toolbar / inline-size;
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -2325,11 +2328,16 @@ button.dev-server-chip:focus-visible {
   background: var(--surface-raised);
 }
 
-.toolbar-split-btn .split-btn-main {
+.toolbar-split-btn .split-btn-main.workspace-toolbar-btn {
+  gap: 6px;
   padding: var(--space-1) var(--space-3);
   color: var(--text);
   font-size: var(--text-sm);
   font-weight: 500;
+}
+
+.toolbar-split-btn .split-btn-toggle {
+  min-width: 24px;
 }
 
 /* An SSH workspace's: it has no Orchestrator (D10), its tooltip says why. */
@@ -2343,15 +2351,21 @@ button.dev-server-chip:focus-visible {
   background: transparent;
 }
 
-/* No room for the labels on a narrow window: the icons alone, named by their titles. */
-@media (max-width: 479.98px) {
-  .workspace-toolbar {
-    padding: var(--space-1) var(--space-3);
+/* No room for the labels in a narrow toolbar (a narrow window, or the side panel beside it): the
+   icons alone, still named by their hidden labels and their tooltips. */
+@container workspace-toolbar (max-width: 599.98px) {
+  .workspace-toolbar-btn .workspace-toolbar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
-  .workspace-toolbar-btn:not([data-testid='toolbar-agent-setup']) {
-    font-size: 0;
-    gap: 0;
+  .workspace-toolbar .workspace-toolbar-btn {
+    padding-inline: var(--space-2);
   }
 }
 

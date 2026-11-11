@@ -63,7 +63,7 @@ function WorkspaceToolbar({
           onClick={onAgentSetup}
         >
           <Blocks {...SMALL_ICON} />
-          Agent setup
+          <span className="workspace-toolbar-label">Agent setup</span>
         </button>
       </Tooltip>
       <Tooltip label="Edit workspace" description="Its name, folder, cards' agent and rules">
@@ -75,7 +75,7 @@ function WorkspaceToolbar({
           onClick={onEdit}
         >
           <Pencil {...SMALL_ICON} />
-          Edit
+          <span className="workspace-toolbar-label">Edit</span>
         </button>
       </Tooltip>
       <Tooltip
@@ -90,7 +90,7 @@ function WorkspaceToolbar({
           onClick={onDelete}
         >
           <Trash2 {...SMALL_ICON} />
-          Delete
+          <span className="workspace-toolbar-label">Delete</span>
         </button>
       </Tooltip>
       <span className="workspace-toolbar-gap" />
@@ -157,7 +157,7 @@ function OrchestratorButton({
           }}
         >
           <ToolIcon tool={startup.kind} />
-          Orchestrator
+          <span className="workspace-toolbar-label">Orchestrator</span>
         </button>
       </Tooltip>
       {local && (
@@ -169,6 +169,7 @@ function OrchestratorButton({
           menuLabel="Orchestrator"
           testId="toolbar-orchestrator-menu"
           fixed
+          align="start"
         >
           {(run) => (
             <button

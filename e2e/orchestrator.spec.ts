@@ -235,6 +235,77 @@ test('AC5: the Orchestrator agent setting starts Codex with the first prompt, th
   await expect.poll(settingsFile).not.toContain('orchestratorStartup')
 })
 
+/** Each of the toolbar's buttons' box, the toolbar's and the window's width. */
+function toolbarBoxes(): Promise<{
+  window: number
+  toolbar: { left: number; right: number; top: number; bottom: number }
+  buttons: { name: string; left: number; right: number; top: number; bottom: number }[]
+}> {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector('[data-testid=workspace-toolbar]') as HTMLElement
+    const box = (el: Element): { left: number; right: number; top: number; bottom: number } => {
+      const r = el.getBoundingClientRect()
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+    }
+    return {
+      window: window.innerWidth,
+      toolbar: box(toolbar),
+      buttons: Array.from(toolbar.querySelectorAll('button')).map((b) => ({
+        name: b.getAttribute('aria-label') ?? b.textContent ?? '',
+        ...box(b)
+      }))
+    }
+  })
+}
+
+async function expectToolbarFits(width: number): Promise<void> {
+  await app!.evaluate(
+    ({ BrowserWindow }, w) => BrowserWindow.getAllWindows()[0]?.setSize(w, 720),
+    width
+  )
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(width)
+  // After the sidebar's width transition.
+  await expect
+    .poll(async () => {
+      const { window: w, toolbar, buttons } = await toolbarBoxes()
+      return buttons
+        .filter(
+          (b) =>
+            b.left < Math.max(0, toolbar.left) - 0.5 ||
+            b.right > Math.min(w, toolbar.right) + 0.5 ||
+            b.top < toolbar.top - 0.5 ||
+            b.bottom > toolbar.bottom + 0.5 ||
+            b.right - b.left < 1
+        )
+        .map((b) => b.name)
+    })
+    .toEqual([])
+  expect((await toolbarBoxes()).buttons).toHaveLength(6)
+  await expect(page.getByTestId('toolbar-orchestrator')).toHaveAccessibleName('Orchestrator')
+  await expect(page.getByTestId('toolbar-agent-setup')).toHaveAccessibleName('Agent setup')
+  // The chevron's menu opens inside the window, its label whole.
+  await page.getByTestId('toolbar-orchestrator-menu').click()
+  const item = page.getByTestId('orchestrator-new-conversation')
+  await expect(item).toBeVisible()
+  const menu = await page.getByRole('menu', { name: 'Orchestrator' }).boundingBox()
+  expect(menu!.x).toBeGreaterThanOrEqual(0)
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(width)
+  const label = await item.evaluate((el) => el.scrollWidth <= el.clientWidth)
+  expect(label).toBe(true)
+  await page.keyboard.press('Escape')
+}
+
+test('UX: at 320 and 800 px every toolbar button and the Orchestrator menu stay inside the window', async () => {
+  await launch()
+  await createWorkspace(repo, 'Proj')
+  // The default layout: the side panel beside the board.
+  await expectToolbarFits(800)
+  // A phone-wide window, the panel hidden.
+  await page.getByTestId('titlebar-panel').first().click()
+  await expect(page.getByTestId('titlebar-panel')).toHaveAttribute('aria-pressed', 'false')
+  await expectToolbarFits(320)
+})
+
 test('AC13: New conversation… asks, Cancel changes nothing, confirming restarts with a new session', async () => {
   await launch()
   await createWorkspace(repo, 'Proj')

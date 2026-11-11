@@ -27,7 +27,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value)
 
-/** What a file's (or no file's) value reads as (D3); `undefined` when it is unset. */
+/** What a file's (or no file's) value reads as (D3); unset reads low at Claude Code's default 30 days. */
 function retentionOf(value: unknown): ClaudeRetention {
   if (value === undefined) return { state: 'low', days: CLAUDE_DEFAULT_CLEANUP_DAYS }
   if (!isNumber(value)) return { state: 'unknown' }

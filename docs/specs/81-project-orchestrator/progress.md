@@ -21,6 +21,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-11-11 ship review: fixed per-session orchestrator token (D16), `orchestrator:` ids dropped from state/sync, guide examples and title-resolution note, New conversation names the running agent, interrupted `board wait` cancelled. Open for the developer: (a) `board wait` right after `board send` returns the stale `waiting`; (b) the token is readable by same-user processes (/proc environ).
 
+- 2026-11-13 round 3 (developer): Q1 → `board wait` ignores a waiting/question set before the last `board send` (D20); Q2 → no special permissions: every local card and shell may run every command, the orchestrator socket and token removed (D16, D13, D24, AC7 rewritten).
+
 ## Verification
 
 - done: ALL PASS (AC1, AC3, AC8, AC11, AC12, AC14 observed directly; the rest via e2e)

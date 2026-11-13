@@ -28,8 +28,8 @@ export function waitResult(card: WaitedCard): WaitResult | null {
 /**
  * Each card's `board activity` sets and its last `board send` (#81 D19, D20): a send makes the
  * card's activity as it is then stale, until the next set (the same value again included), so a
- * wait right after a send never reads the last turn's `waiting`. Runtime only: two numbers per
- * card sent to, kept for the run.
+ * wait right after a send never reads the last turn's `waiting`. Runtime only: a count per card
+ * whose activity was set and one per card sent to, forgotten when the card is deleted.
  */
 export class SendMarks {
   /** How many times each card's activity was set. */
@@ -53,6 +53,12 @@ export class SendMarks {
   stale(cardId: string): boolean {
     const at = this.sentAt.get(cardId)
     return at !== undefined && at === (this.sets.get(cardId) ?? 0)
+  }
+
+  /** Forgets a deleted card's counts. */
+  forget(cardId: string): void {
+    this.sets.delete(cardId)
+    this.sentAt.delete(cardId)
   }
 
   /** Calls `listener` on each set of the card's activity; returns an unsubscribe function. */

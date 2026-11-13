@@ -77,6 +77,15 @@ describe('waiting after board send (#81 D19, D20)', () => {
     expect(review.fake.listeners.size).toBe(0)
   })
 
+  it("forgets a deleted card's marks", () => {
+    const marks = new SendMarks()
+    marks.activitySet('gone')
+    marks.sent('gone')
+    expect(marks.stale('gone')).toBe(true)
+    marks.forget('gone')
+    expect(marks.stale('gone')).toBe(false)
+  })
+
   it('answers the activity set after the send: working goes on, then question', async () => {
     const marks = new SendMarks()
     const review = card(marks, 'review', 'question')

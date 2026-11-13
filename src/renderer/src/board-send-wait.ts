@@ -15,6 +15,11 @@ export function boardActivitySet(cardId: string): void {
   sendMarks.activitySet(cardId)
 }
 
+/** Forgets a deleted card's send marks. */
+export function forgetSendMarks(cardId: string): void {
+  sendMarks.forget(cardId)
+}
+
 /**
  * Types `text` (already cleaned) into the running card's main pane as one paste, then Enter
  * 50 ms later; resolves once the Enter is typed. A start that ended meanwhile gets nothing more:

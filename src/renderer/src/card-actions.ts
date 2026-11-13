@@ -3,6 +3,7 @@ import type { Workspace, Card } from '../../core/workspace-store'
 import type { FirstStart } from '../../core/startup-command'
 import { isOrchestratorId, orchestratorId } from '../../core/orchestrator'
 import { shellCards } from '../../core/workspace-shells'
+import { forgetSendMarks } from './board-send-wait'
 import { cardPanes, cardTerminals } from './card-terminals'
 import { forgetConversationCheck, startCheckingConversation } from './conversation-checks'
 import { findTerminal, rememberOrchestratorStart } from './orchestrator'
@@ -142,7 +143,7 @@ export function requestCloseCard(cardId: string, ask: () => void): void {
 /**
  * Stops every pane's process of a card being deleted and frees its screens (#11 D6), and removes
  * its kept output (#46 D7; a shell has none, and removing none does nothing), its transcript
- * backup (#80 D10) and its usage (#50 D7), or a shell's Claude Code session and usage (#75 D3a).
+ * backup (#80 D10), its usage (#50 D7) and `board send` marks (#81 D20), or a shell's Claude Code session and usage (#75 D3a).
  */
 export function disposeCard(cardId: string): void {
   cardPanes().dispose(cardId)
@@ -151,6 +152,7 @@ export function disposeCard(cardId: string): void {
   window.bikube.transcripts.delete(cardId)
   clearCardUsage(cardId)
   clearShellAgent(cardId)
+  forgetSendMarks(cardId)
 }
 
 /** Deletes a card and stops its processes, freeing its terminals (#4 D13, #11 D6). */

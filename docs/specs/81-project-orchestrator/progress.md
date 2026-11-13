@@ -23,6 +23,8 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 - 2026-11-13 round 3 (developer): Q1 → `board wait` ignores a waiting/question set before the last `board send` (D20); Q2 → no special permissions: every local card and shell may run every command, the orchestrator socket and token removed (D16, D13, D24, AC7 rewritten).
 
+- 2026-11-13 round 3 slice `2012c06`: review FIX (doc comment) fixed, send marks forgotten on delete.
+
 ## Verification
 
 - done: ALL PASS (AC1, AC3, AC8, AC11, AC12, AC14 observed directly; the rest via e2e)

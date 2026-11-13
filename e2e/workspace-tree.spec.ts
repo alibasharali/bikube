@@ -2,11 +2,10 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, expectCardOpen } from './card-view'
+import { backToBoard, expectCardOpen, openTerminal } from './card-view'
 import { fakeAgentsHome } from './fake-agents'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // The sidebar as a tree: under each workspace its running cards and shells, each opening as a
 // palette pick does, with what waits for the user marked on the card; a workspace's click always
@@ -80,12 +79,10 @@ test('nests each workspace’s running cards and shells under it, and opens one 
   await newCard('Agent A')
   await createWorkspace('Beta')
   await newCard('Agent B')
-  await showShells(page)
-  await page.getByTestId('shell').first().getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await backToBoard(page)
 
-  await expect.poll(tree).toEqual(['Alpha: Agent A', 'Beta: Agent B, Default shell (shell)'])
+  await expect.poll(tree).toEqual(['Alpha: Agent A', 'Beta: Agent B, Terminal 1 (shell)'])
 
   // From Beta's board, Alpha's card switches workspace and opens it, marked current.
   await terminal('Agent A').click()
@@ -98,7 +95,7 @@ test('nests each workspace’s running cards and shells under it, and opens one 
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type('exit')
   await page.keyboard.press('Enter')
-  await expect.poll(tree).toEqual(['Alpha: ', 'Beta: Agent B, Default shell (shell)'])
+  await expect.poll(tree).toEqual(['Alpha: ', 'Beta: Agent B, Terminal 1 (shell)'])
 })
 
 test('a workspace’s click shows its board, even when a card was open there', async () => {
@@ -177,9 +174,7 @@ test('shows what each terminal runs: its agent’s logo and colour, a shell neut
     await expectCardOpen(page, title)
     await backToBoard(page)
   }
-  await showShells(page)
-  await page.getByTestId('shell').first().getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await backToBoard(page)
 
   for (const [title, label, kind] of agents) {
@@ -194,9 +189,9 @@ test('shows what each terminal runs: its agent’s logo and colour, a shell neut
       .evaluate((el) => getComputedStyle(el).color)
   const colours = await Promise.all(agents.map(([title]) => colour(title)))
   expect(new Set(colours).size).toBe(agents.length)
-  expect(colours).not.toContain(await colour('Default shell'))
-  await expect(terminal('Default shell').locator('..')).toHaveAttribute('data-kind', 'shell')
-  await expect(terminal('Default shell').locator('.agent-logo')).toHaveCount(0)
+  expect(colours).not.toContain(await colour('Terminal 1'))
+  await expect(terminal('Terminal 1').locator('..')).toHaveAttribute('data-kind', 'shell')
+  await expect(terminal('Terminal 1').locator('.agent-logo')).toHaveCount(0)
   if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT })
 })
 

@@ -9,10 +9,9 @@ import { SHORTCUT_LABELS, type Keymap } from './keymap'
 import type { SidebarLayout, Theme } from './settings'
 import { MAX_PANES } from './split-tree'
 import { nextWaitingCard } from './waiting'
-import { DEFAULT_SHELL_TITLE, shellCards } from './workspace-shells'
+import { shellCards } from './workspace-shells'
 import {
   cardsInColumn,
-  defaultShellId,
   workspaceView,
   type Workspace,
   type WorkspaceState,
@@ -79,9 +78,9 @@ export interface RowStatus {
 export interface TerminalRow {
   kind: 'card' | 'shell'
   workspaceId: string
-  /** The card's id, or the shell's (the Default shell's is `defaultShellId`). */
+  /** The card's id, or the shell's. */
   cardId: string
-  /** The card's title or shell's name; `Default shell` for the Default shell. */
+  /** The card's title or shell's name. */
   title: string
   workspaceName: string
   /** The card's worktree branch, when it has one. */
@@ -104,6 +103,8 @@ export type PaletteAction =
   | { id: 'moveCard'; columnId: string }
   | { id: 'newCard' }
   | { id: 'openShell' }
+  | { id: 'openOrchestrator' }
+  | { id: 'orchestratorNewConversation' }
   | { id: 'nextWaiting' }
   | { id: 'zoomPane' }
   | { id: 'focusNextPane' }
@@ -174,6 +175,11 @@ export interface PaletteInput {
   platform: string
   /** The waiting cards' and shells' ids, oldest first (#41 D2). */
   waiting: readonly string[]
+  /**
+   * The active workspace's Orchestrator (#81 D5, D10): absent when it has none (an SSH workspace),
+   * `conversation` once it has one to start anew.
+   */
+  orchestrator?: { conversation: boolean }
 }
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
@@ -218,10 +224,7 @@ function cardRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
 
 function shellRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
   return order.flatMap((w) =>
-    shellCards(w).map((s) => {
-      const title = s.id === defaultShellId(w.id) ? DEFAULT_SHELL_TITLE : s.title
-      return terminalRow('shell', w, s.id, title, undefined, input.status(s.id))
-    })
+    shellCards(w).map((s) => terminalRow('shell', w, s.id, s.title, undefined, input.status(s.id)))
   )
 }
 
@@ -237,6 +240,7 @@ type KeymapAction = Exclude<
   | 'workspaceView'
   | 'agentSetup'
   | 'sidebarLayout'
+  | 'orchestratorNewConversation'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -303,6 +307,17 @@ function actionRows(input: PaletteInput): ActionRow[] {
   if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
+  }
+  // The active workspace's Orchestrator, while it has one (#81 D5, D10).
+  if (hasActive && input.orchestrator) {
+    rows.push(keymapRow('openOrchestrator', keymap))
+    if (input.orchestrator.conversation) {
+      rows.push({
+        kind: 'action',
+        action: { id: 'orchestratorNewConversation' },
+        label: 'Orchestrator: New conversation'
+      })
+    }
   }
   // Only when the Next waiting card shortcut would open something (#41 D7).
   if (nextWaitingCard(input.waiting, view?.cardId ?? null, state.workspaces)) {
@@ -402,4 +417,38 @@ export function filterPalette(items: PaletteItems, query: string): PaletteItems 
     shells: filterRows(items.shells, query, terminal),
     actions: filterRows(items.actions, query, (row) => [row.label, row.label])
   }
+}
+
+/**
+ * What `board palette` leaves out (#81 D23): the rows acting on the open card or pane. Card and
+ * shell rows are left out too (`board open` covers those).
+ */
+const OPEN_VIEW_ACTIONS: ReadonlySet<PaletteAction['id']> = new Set<PaletteAction['id']>([
+  'back',
+  'splitRight',
+  'splitDown',
+  'closePane',
+  'closeCard',
+  'find',
+  'copyCommandOutput',
+  'moveCard',
+  'zoomPane',
+  'focusNextPane',
+  'focusPreviousPane',
+  'equalizePanes',
+  'renameCard',
+  'openInWindow',
+  'editDescription'
+])
+
+/** The Orchestrator's `board palette list` (#81 D23): `items`' action rows, in order, but D23's. */
+export function orchestratorPaletteRows(items: PaletteItems): ActionRow[] {
+  return items.actions.filter((row) => !OPEN_VIEW_ACTIONS.has(row.action.id))
+}
+
+/** The row `board palette run` runs (#81 D23): its label equal to `label`'s, trimmed, in any case. */
+export function findPaletteRow(rows: readonly ActionRow[], label: string): ActionRow | undefined {
+  const wanted = label.trim().toLowerCase()
+  if (!wanted) return undefined
+  return rows.find((row) => row.label.toLowerCase() === wanted)
 }

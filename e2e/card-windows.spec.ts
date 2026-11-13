@@ -741,16 +741,20 @@ test('AC4: a palette pick and Next waiting card focus its window, changing nothi
 
 test("AC9: a shell's menu opens it in its own window; its strip button and menu focus it", async () => {
   await showShells(page)
-  const shell = page.locator('[data-testid=shell][data-shell-name="Default"]')
+  await page.getByTestId('shell-add').click()
+  await page.getByTestId('shell-name').fill('Dev')
+  await page.getByTestId('shell-submit').click()
+  await expect(page.getByTestId('shell-dialog')).toHaveCount(0)
+  const shell = page.locator('[data-testid=shell][data-shell-name="Dev"]')
   const opened = app.waitForEvent('window')
   await shell.getByTestId('shell-menu').click()
   await page.getByTestId('shell-menu-open-window').click()
   const window = await opened
-  await expect.poll(() => window.title()).toBe(`Default shell · ${WORKSPACE}`)
+  await expect.poll(() => window.title()).toBe(`Dev · ${WORKSPACE}`)
   await expect(window.getByTestId('card-view')).toBeVisible()
   await expect(shell.getByTestId('shell-in-window')).toHaveText('In window')
   await expectCleanLine(window)
-  const focusCalls = await spyOnFocus(`Default shell · ${WORKSPACE}`)
+  const focusCalls = await spyOnFocus(`Dev · ${WORKSPACE}`)
 
   await shell.getByTestId('shell-open').click()
   await expect.poll(focusCalls).toBe(1)
@@ -761,8 +765,8 @@ test("AC9: a shell's menu opens it in its own window; its strip button and menu 
   expect(app.windows()).toHaveLength(2)
   await expect(page.getByTestId('board')).toBeVisible()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
-  // The New shell shortcut, the Default shell running in its window, opens a new shell here
-  // (#66 D1) and leaves that window alone.
+  // The New shell shortcut, with the shell running in its window, opens a new terminal here
+  // (#81 D2) and leaves that window alone.
   await page.keyboard.press(darwin ? 'Meta+T' : 'Control+Shift+T')
   await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
   await page.waitForTimeout(300)
@@ -795,15 +799,15 @@ test('AC13: Settings lists Open in new window, recorded, refused, saved and rese
   await field.click()
   await page.keyboard.press(PALETTE)
   await expect(error).toHaveText('Already used by Command palette')
-  await page.keyboard.press('Control+Alt+O')
-  await expect(field).toHaveText('Ctrl+Alt+O')
-  await expect.poll(saved).toContain('"openInWindow":"Ctrl+Alt+O"')
+  await page.keyboard.press('Control+Alt+Y')
+  await expect(field).toHaveText('Ctrl+Alt+Y')
+  await expect.poll(saved).toContain('"openInWindow":"Ctrl+Alt+Y"')
   await page.keyboard.press('Escape')
   await expect(settings).toHaveCount(0)
 
   await newCard('Agent A')
   const opened = app.waitForEvent('window')
-  await page.keyboard.press('Control+Alt+O')
+  await page.keyboard.press('Control+Alt+Y')
   const window = await opened
   await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'Agent A')
 

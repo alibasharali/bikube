@@ -18,7 +18,13 @@ import {
   type BoardReply,
   type BoardRequest
 } from './board-protocol'
-import { DRAIN_MS, MAX_CONNECTIONS, startBoardServer, type BoardServer } from './board-server'
+import {
+  DRAIN_MS,
+  MAX_CONNECTIONS,
+  requestSignal,
+  startBoardServer,
+  type BoardServer
+} from './board-server'
 
 let dir: string
 let boardDir: string
@@ -76,6 +82,29 @@ describe('startBoardServer', () => {
       card: '.',
       column: 'Done'
     })
+  })
+
+  it("aborts a request's signal when its client leaves before the reply, never after (#81 D20)", async () => {
+    let signal: AbortSignal | undefined
+    let answer: (reply: BoardReply) => void = () => {}
+    await serve((request) => {
+      signal = requestSignal(request)
+      return new Promise((resolve) => (answer = resolve))
+    })
+    const socket = createConnection(socketPath)
+    socket.write(serializeRequest('c1', { command: 'wait', card: 'x' }))
+    await vi.waitFor(() => expect(signal).toBeDefined())
+    expect(signal!.aborted).toBe(false)
+    socket.destroy()
+    await vi.waitFor(() => expect(signal!.aborted).toBe(true))
+    answer({ ok: true })
+
+    signal = undefined
+    const reply = exchange(serializeRequest('c1', { command: 'wait', card: 'x' }))
+    await vi.waitFor(() => expect(signal).toBeDefined())
+    answer({ ok: true, output: 'waiting\n' })
+    expect(await reply).toBe('{"ok":true,"output":"waiting\\n"}\n')
+    expect(signal!.aborted).toBe(false)
   })
 
   it('creates the socket as mode 0600 in a private 0700 directory (#9 D5, AC9)', async () => {

@@ -1,8 +1,12 @@
-import { answerBoardCommand, checkCreateWorktree } from '../../core/board-answer'
+import { answerBoardRequest, checkCreateWorktree } from '../../core/board-answer'
 import { findShellCard } from '../../core/workspace-shells'
+import { boardPaletteItems, runBoardPalette } from './board-palette'
+import { boardActivitySet, sendToCard, waitOnCard } from './board-send-wait'
+import { openForBoard, startForBoard } from './board-starts'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { clearShellAgent, setShellSession, setShellUsage } from './shell-agents'
+import { settingsStore } from './settings'
 import { workspaceStore } from './store'
 import { backupTranscript } from './transcript-backups'
 import { setCardUsage } from './usage'
@@ -20,11 +24,19 @@ const isWorkspaceShell = (id: string): boolean =>
  * up a local Claude Code card's transcript (#80 D9).
  * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
- * forgotten each time it stops (#75 D3a).
+ * forgotten each time it stops (#75 D3a). From any local card or shell, the Orchestrator's
+ * included (#81 D16): `board guide` prints the guide with Settings' Your orchestrator
+ * instructions (#81 D13); `board start`, `open` and `terminal` start in the background and answer
+ * once the start is over (#81 D17, D22); `board send` types into a card, `wait` waits on its
+ * activity (one set since the last send) and `reply` asks main for its last reply (D19–D21);
+ * `board palette` lists and runs the command palette's rows as the app shows them (D23).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
-  return window.bikube.board.onRequest(async (cardId, request) => {
+  return window.bikube.board.onRequest(async (cardId, request, onCancel) => {
+    // Main says when the asking client left (an interrupted `board wait`, #81 D20).
+    const gone = new AbortController()
+    onCancel(() => gone.abort())
     const checked = await checkCreateWorktree(
       workspaceStore.getState(),
       cardId,
@@ -33,13 +45,17 @@ export function listenForBoardRequests(): () => void {
     )
     if (!checked.ok) return checked
     const command = checked.command
-    return answerBoardCommand(
+    return answerBoardRequest(
       workspaceStore,
       cardId,
       command,
       (id) => cardTerminals().runState(id)?.kind === 'running',
       (id, text) => cardTerminals().setAgentStatus(id, text),
-      (id, activity) => cardTerminals().setActivity(id, activity),
+      (id, activity) => {
+        cardTerminals().setActivity(id, activity)
+        // Any set, the same value too, is newer than the card's last `board send` (#81 D20).
+        boardActivitySet(id)
+      },
       (card, result) => {
         if (result === 'failed') {
           cardTerminals().setupFailed(card.id)
@@ -62,7 +78,21 @@ export function listenForBoardRequests(): () => void {
         const status = cardTerminals().status(id)
         return { running, activity: status?.activity, status: status?.agentStatus }
       },
-      setShellSession
+      setShellSession,
+      {
+        // Read at each `board guide`, so an edit reaches every orchestrator (#81 D14).
+        instructions: () => settingsStore.get().orchestratorInstructions,
+        // `board start`, `open` and `terminal` (#81 D17, D22).
+        start: startForBoard,
+        open: openForBoard,
+        // `board send`, `wait` and `reply` (#81 D19–D21); main reads the transcript.
+        send: sendToCard,
+        wait: (id, seconds) => waitOnCard(id, seconds, gone.signal),
+        reply: (folder, sessionId) => window.bikube.agentTab.reply(folder, sessionId),
+        // `board palette` (#81 D23): the palette's rows for the view the app shows, run as picked.
+        palette: boardPaletteItems,
+        runPalette: runBoardPalette
+      }
     )
   })
 }

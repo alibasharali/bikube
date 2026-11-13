@@ -76,8 +76,9 @@ export function boardShellEnvFor(socketPath: string): (cardId: string) => Record
 /**
  * Serves `board` on the socket (#9 D5, D6, D10): each request goes to the window owning the
  * calling card's session, whose answer is relayed back. When listening fails the app runs on
- * without it. The SSH sessions' sockets relay the same way (#25 D2); a previous run's leftovers
- * are removed first. Returns the function that closes every socket on quit.
+ * without it. Every local card and shell, the Orchestrator included, speaks through it (#81
+ * D16). The SSH sessions' sockets relay the same way (#25 D2); a previous run's leftovers are
+ * removed first. Returns the function that closes every socket on quit.
  */
 export function registerBoard(
   socketPath: string,
@@ -88,6 +89,12 @@ export function registerBoard(
     (cardId) => terminals.ownerOfCard(cardId),
     (owner, requestId, cardId, command) => {
       owner.send(IPC.boardRequest, requestId, cardId, command)
+    },
+    undefined,
+    // A client that left before its answer (an interrupted `board wait`, #81 D20): the page drops
+    // what the request waits on.
+    (owner, requestId) => {
+      if (!owner.isDestroyed()) owner.send(IPC.boardCancel, requestId)
     }
   )
   terminals.onWindowGone((owner) => relay.release(owner))

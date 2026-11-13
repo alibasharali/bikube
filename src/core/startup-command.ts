@@ -38,6 +38,16 @@ export interface StartupState {
    * typed.
    */
   description?: string
+  /**
+   * Made by the Orchestrator (#81 D18): with a description, its fresh start passes
+   * `ORCHESTRATED_FIRST_PROMPT` instead of `FIRST_PROMPT`.
+   */
+  orchestrated?: true
+  /**
+   * The prompt a fresh agent start passes instead of `FIRST_PROMPT`, with or without a
+   * description: the Orchestrator's (#81 D15). Never stored on a card.
+   */
+  firstPrompt?: string
 }
 
 /**
@@ -48,7 +58,28 @@ export const FIRST_PROMPT =
   'This card has a task description. Read it with: board description .  Then summarise it in a ' +
   'few lines and ask me whether to start on it. Do not start working on it until I say so.'
 
-const QUOTED_PROMPT = `'${FIRST_PROMPT}'`
+/**
+ * `FIRST_PROMPT`'s place for a card the Orchestrator made (#81 D18): it starts working at once.
+ * Quoted the same way, so it holds no single quote, backslash or `$` either.
+ */
+export const ORCHESTRATED_FIRST_PROMPT =
+  'This card has a task description. Read it with: board description .  Then start working on it.'
+
+/**
+ * `text` single-quoted for sh, bash, zsh and fish: a `'` inside closes the quote, adds `\'` and
+ * opens it again, which every one of them reads as a quote.
+ */
+const quoted = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`
+
+/**
+ * The prompt a fresh agent start of `card` passes, quoted, or null for none (#69 D2, #81 D15,
+ * D18).
+ */
+function freshPrompt(card: StartupState): string | null {
+  if (card.firstPrompt !== undefined) return quoted(card.firstPrompt)
+  if (!card.description) return null
+  return quoted(card.orchestrated ? ORCHESTRATED_FIRST_PROMPT : FIRST_PROMPT)
+}
 
 /** An 8-4-4-4-12 hex UUID; anything else is never typed into a shell. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -99,7 +130,8 @@ export function startLine(card: StartupState): string | null {
       const id = card.agentSessionId
       if (!UUID.test(id)) return null
       const claude = `claude --settings "$BIKUBE_CLAUDE_SETTINGS"`
-      const prompt = card.description ? ` ${QUOTED_PROMPT}` : ''
+      const fresh = freshPrompt(card)
+      const prompt = fresh === null ? '' : ` ${fresh}`
       // Started once its hooks reported a conversation (`board session`): resume it, or start that
       // id fresh when it is gone. Before that, start the id fresh, or resume it when a conversation
       // exists that the hooks couldn't report (no Bikube to reach, an older card).
@@ -113,8 +145,9 @@ export function startLine(card: StartupState): string | null {
       const kind = card.startup.kind
       const { plain, resume, promptFlag } = AGENT_PRESETS[kind]
       if (card.startedAgents?.includes(kind)) return `${resume} || ${plain}`
-      if (!card.description) return plain
-      return [plain, promptFlag, QUOTED_PROMPT].filter(Boolean).join(' ')
+      const prompt = freshPrompt(card)
+      if (prompt === null) return plain
+      return [plain, promptFlag, prompt].filter(Boolean).join(' ')
     }
   }
 }

@@ -19,9 +19,20 @@ import { nextWaitingCard } from '../../core/waiting'
 import { showViewPrompt } from '../../core/view-prompt'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
 import { startInBackground } from './background-shells'
+import { onBoardPalette } from './board-palette'
+import { currentPaletteItems, type OpenTerminal } from './palette-input'
+import { onBoardOpen } from './board-starts'
 import { newShell } from './temporary-shells'
-import { markCardOpened, removeWorkspace, startCard } from './card-actions'
-import { findShellCard, shellCards } from '../../core/workspace-shells'
+import {
+  markCardOpened,
+  newOrchestratorConversation,
+  removeWorkspace,
+  startCard
+} from './card-actions'
+import { shellCards } from '../../core/workspace-shells'
+import { hasOrchestrator, isOrchestratorId, orchestratorId } from '../../core/orchestrator'
+import { AGENT_PRESETS, isAgentKind } from '../../core/agent-presets'
+import { findTerminal, orchestratorStartupOf } from './orchestrator'
 import { workspaceView, type Workspace } from '../../core/workspace-store'
 import { cardTerminals, useRunningCount } from './card-terminals'
 import {
@@ -85,7 +96,11 @@ function App(): React.JSX.Element {
     setEntered(activeId)
     if (activeId) {
       const cardIds = active
-        ? [...active.cards.map((c) => c.id), ...shellCards(active).map((s) => s.id)]
+        ? [
+            ...active.cards.map((c) => c.id),
+            ...shellCards(active).map((s) => s.id),
+            ...(hasOrchestrator(active) ? [orchestratorId(active.id)] : [])
+          ]
         : null
       setViews((v) =>
         enterWorkspace(
@@ -135,13 +150,13 @@ function App(): React.JSX.Element {
   useEffect(() => {
     agentSetupShown.current = agentSetup
   })
-  // The open terminal: one of the board's cards, or one of the workspace's shells.
-  const openCard = openedId
-    ? (active?.cards.find((c) => c.id === openedId) ??
-      (active && findShellCard(active, openedId)) ??
-      null)
-    : null
-  const openIsShell = openCard !== null && !active?.cards.some((c) => c.id === openCard.id)
+  // The open terminal: one of the board's cards, one of the workspace's shells, or its
+  // Orchestrator (#81 D4).
+  const openCard = openedId ? ((active && findTerminal(active, openedId)) ?? null) : null
+  const openOnBoard =
+    openCard !== null && (active?.cards.some((c) => c.id === openCard.id) ?? false)
+  // The Orchestrator runs an agent: its title bar shows its agent as a card's does.
+  const openIsShell = openCard !== null && !openOnBoard && !isOrchestratorId(openCard.id)
   // The open card or shell goes to its own window, by its shortcut or the palette (#53 D6).
   const openId = openCard?.id ?? null
   const onOpenInWindow = useCallback(() => {
@@ -201,8 +216,7 @@ function App(): React.JSX.Element {
     [activeId, setViews]
   )
 
-  // New shell (#66 D1): the active workspace's Default shell, starting it when stopped; while it
-  // runs, a new temporary shell (D2), opened started.
+  // New shell (#81 D2): a new temporary `Terminal N` in the active workspace, opened started.
   const openNewShell = useRef(() => {})
   useEffect(() => {
     openNewShell.current = () => {
@@ -227,6 +241,33 @@ function App(): React.JSX.Element {
     },
     [activeId, openedId, setViews]
   )
+
+  // `board open` and `board terminal --show` (#81 D17, D22): the card or shell, already started,
+  // opens as a palette pick does, its workspace made active; one in its own window has that window
+  // brought forward, its workspace made active here too, and its New mark cleared.
+  useEffect(
+    () =>
+      onBoardOpen((workspaceId, cardId) => {
+        if (focusCardWindow(cardId)) {
+          markCardOpened(workspaceId, cardId)
+          if (workspaceId !== activeId) onSelectWorkspace(workspaceId)
+          return
+        }
+        onPaletteOpen(workspaceId, cardId)
+      }),
+    [activeId, onPaletteOpen, onSelectWorkspace]
+  )
+
+  // Open orchestrator (#81 D6): the active workspace's Orchestrator, started when it isn't running,
+  // as a palette pick opens a terminal; nothing in an SSH workspace (D10).
+  const openOrchestrator = useRef(() => {})
+  useEffect(() => {
+    openOrchestrator.current = () => {
+      if (active && hasOrchestrator(active)) onPaletteOpen(active.id, orchestratorId(active.id))
+    }
+  })
+  // New conversation… (#81 D11): asks first; the workspace whose Orchestrator it is.
+  const [newConversation, setNewConversation] = useState<string | null>(null)
 
   // Next waiting card (#41 D4, D5): opens as a palette pick does; nothing when none would open.
   const openNextWaiting = useRef(() => {})
@@ -309,14 +350,16 @@ function App(): React.JSX.Element {
         if (!event.repeat) openNextWaiting.current()
         return
       }
-      if (action !== 'settings' && action !== 'openShell') return
+      if (action !== 'settings' && action !== 'openShell' && action !== 'openOrchestrator') return
       // Another dialog (or Settings itself) owns the keyboard: the shortcut does nothing.
       if (document.querySelector('[aria-modal="true"]')) return
       event.preventDefault()
       event.stopPropagation()
       if (action === 'settings') setSettingsOpen(true)
-      // A held shortcut's auto-repeat adds no more shells (#31 D7).
-      else if (!event.repeat) openNewShell.current()
+      // A held shortcut's auto-repeat opens nothing more (#31 D7).
+      else if (event.repeat) return
+      else if (action === 'openOrchestrator') openOrchestrator.current()
+      else openNewShell.current()
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
@@ -333,7 +376,7 @@ function App(): React.JSX.Element {
       else if (action.id === 'agentSetup') openAgentSetup()
       // To the column's bottom, as the card menu's move (#6 D8); the card stays open.
       else if (action.id === 'moveCard') {
-        if (activeId && openCard && !openIsShell) {
+        if (activeId && openCard && openOnBoard) {
           workspaceStore.moveCard(activeId, openCard.id, action.columnId, Number.POSITIVE_INFINITY)
         }
       }
@@ -343,7 +386,10 @@ function App(): React.JSX.Element {
         closeCard()
         requestNewCard(activeId)
       } else if (action.id === 'openShell') openNewShell.current()
-      else if (action.id === 'nextWaiting') openNextWaiting.current()
+      else if (action.id === 'openOrchestrator') openOrchestrator.current()
+      else if (action.id === 'orchestratorNewConversation') {
+        if (active && hasOrchestrator(active)) setNewConversation(active.id)
+      } else if (action.id === 'nextWaiting') openNextWaiting.current()
       else if (action.id === 'newWorkspace') setDialog({ kind: 'create' })
       else if (action.id === 'settings') setSettingsOpen(true)
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
@@ -369,6 +415,26 @@ function App(): React.JSX.Element {
     pendingAction.current = action
     setPaletteOpen(false)
   }, [])
+
+  // The view the palette's rows are built for: the card or shell open at full size, if any.
+  const paletteView: OpenTerminal | null =
+    active && openCard
+      ? { kind: openOnBoard ? 'card' : 'shell', workspaceId: active.id, cardId: openCard.id }
+      : null
+  const paletteFor = useRef({ view: paletteView, agentSetup })
+  useEffect(() => {
+    paletteFor.current = { view: paletteView, agentSetup }
+  })
+  // The Orchestrator's `board palette` (#81 D23): the rows the palette would show now, each run
+  // at once exactly as picking it would, whatever the user is looking at.
+  useEffect(
+    () =>
+      onBoardPalette({
+        items: () => currentPaletteItems(paletteFor.current.view, paletteFor.current.agentSetup),
+        run: (action) => runAction.current(action)
+      }),
+    []
+  )
 
   // Mod+1…9 select the 1st…9th workspace in sidebar order (#31 D18), anywhere no dialog owns the
   // keyboard, swallowed whole even with no workspace at that number; once per press (D7).
@@ -480,6 +546,8 @@ function App(): React.JSX.Element {
                   onEdit={() => setDialog({ kind: 'edit', id: active.id })}
                   onDelete={() => setDialog({ kind: 'delete', id: active.id })}
                   onNewShell={() => openNewShell.current()}
+                  onOrchestrator={() => openOrchestrator.current()}
+                  onNewConversation={() => setNewConversation(active.id)}
                 />
                 {workspaceView(active, defaultView) === 'grid' ? (
                   <GridView key={active.id} workspace={active} onOpenCard={onOpenCard} />
@@ -503,15 +571,7 @@ function App(): React.JSX.Element {
       </div>
       {paletteOpen && (
         <CommandPalette
-          open={
-            active && openCard
-              ? {
-                  kind: openIsShell ? 'shell' : 'card',
-                  workspaceId: active.id,
-                  cardId: openCard.id
-                }
-              : null
-          }
+          open={paletteView}
           agentSetup={agentSetup}
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}
@@ -530,6 +590,23 @@ function App(): React.JSX.Element {
           onClose={() => setDialog(null)}
         />
       )}
+      {newConversation !== null && (
+        <ConfirmDialog
+          title="New conversation"
+          message={`Start a new orchestrator conversation? The current one is kept by ${agentName(newConversation)} but the orchestrator won’t resume it.`}
+          confirmLabel="New conversation"
+          confirmTestId="confirm-new-conversation"
+          onCancel={() => setNewConversation(null)}
+          onConfirm={() => {
+            const workspaceId = newConversation
+            setNewConversation(null)
+            newOrchestratorConversation(workspaceId, (id) => {
+              if (workspaceStore.getState().activeId === workspaceId) onOpenCard(id)
+              else onPaletteOpen(workspaceId, id)
+            })
+          }}
+        />
+      )}
       {dialog?.kind === 'delete' && target && (
         <DeleteWorkspaceDialog
           workspace={target}
@@ -542,6 +619,16 @@ function App(): React.JSX.Element {
       )}
     </div>
   )
+}
+
+/**
+ * The name of the agent the workspace's Orchestrator runs (or ran) in New conversation's question
+ * (#81 D7, D11), which the setting may no longer name.
+ */
+function agentName(workspaceId: string): string {
+  const { kind } = orchestratorStartupOf(orchestratorId(workspaceId))
+  if (kind === 'claude') return 'Claude Code'
+  return isAgentKind(kind) ? AGENT_PRESETS[kind].label : 'its agent'
 }
 
 /** The workspace delete confirmation; its running count follows cards that exit meanwhile (D15). */

@@ -7,7 +7,7 @@ import type {
 import type { ClaudeVersion } from '../core/claude-version'
 import type { ClaudeRetention, ConversationPrepare } from '../core/claude-retention-types'
 import type { ClaudeStatsRead } from '../core/claude-stats-types'
-import type { AgentSummaryRead } from '../core/agent-tab'
+import type { AgentSummaryRead, ReplyRead } from '../core/agent-tab'
 import type { AppThemeId } from '../core/app-themes'
 import type { BoardCommand } from '../core/board-args'
 import type { BoardReply } from '../core/board-protocol'
@@ -56,6 +56,7 @@ export const IPC = {
   settingsGhosttyConfig: 'settings:ghosttyConfig',
   boardRequest: 'board:request',
   boardAnswer: 'board:answer',
+  boardCancel: 'board:cancel',
   syncStatus: 'sync:status',
   syncStatusChanged: 'sync:statusChanged',
   syncSetFolder: 'sync:setFolder',
@@ -102,6 +103,7 @@ export const IPC = {
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
   agentTabRevealOutput: 'agentTab:revealOutput',
+  agentTabReply: 'agentTab:reply',
   claudeRetentionRead: 'claudeRetention:read',
   claudeRetentionSet: 'claudeRetention:set',
   transcriptsBackup: 'transcripts:backup',
@@ -276,9 +278,17 @@ export interface ShellChoices {
  * each one against its store and returns the reply the CLI prints; preload sends it back.
  */
 export interface BoardApi {
-  /** `listener` answers one command run by the card `cardId`. Returns an unsubscribe function. */
+  /**
+   * `listener` answers one command run by the card `cardId`. `onCancel` registers what to run if
+   * the command's client leaves before the answer (an interrupted `board wait`, #81 D20), so what
+   * it waits on can be dropped. Returns an unsubscribe function.
+   */
   onRequest(
-    listener: (cardId: string, command: BoardCommand) => BoardReply | Promise<BoardReply>
+    listener: (
+      cardId: string,
+      command: BoardCommand,
+      onCancel: (cancel: () => void) => void
+    ) => BoardReply | Promise<BoardReply>
   ): () => void
 }
 
@@ -405,6 +415,11 @@ export interface AgentTabApi {
   openOutput(sessionId: string, path: string): Promise<OpenResult>
   /** Shows a file output in the OS file manager (#79 D2, D10), as `openOutput` checks it; false when refused. */
   revealOutput(sessionId: string, path: string): Promise<boolean>
+  /**
+   * `board reply`'s text (#81 D21): the main agent's last assistant message in the session's
+   * transcript for a card in `folder`, read by main as `summary` reads it, and checked the same way.
+   */
+  reply(folder: string, sessionId: string): Promise<ReplyRead>
 }
 
 /** Claude Code's conversation retention in the user's `~/.claude/settings.json` (#80 D2–D5). */

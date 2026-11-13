@@ -1,14 +1,30 @@
 import { transcriptBackupTarget } from '../../core/transcript-backup-target'
 import { cardTerminals, onQuitSave } from './card-terminals'
+import { orchestratorCard, orchestratorId } from '../../core/orchestrator'
+import type { Card, Workspace } from '../../core/workspace-store'
+import { orchestratorStartedWith } from './orchestrator-starts'
+import { orchestratorStartupOf } from './orchestrator'
 import { workspaceStore } from './store'
 
 /**
+ * The Orchestrator whose conversation is backed up: running the agent it started with, also as its
+ * stop is reported (before that is forgotten), whatever the setting says since (#81 D7).
+ */
+function orchestratorBackedUp(workspace: Workspace): Card | undefined {
+  const id = orchestratorId(workspace.id)
+  return orchestratorCard(workspace, orchestratorStartedWith(id) ?? orchestratorStartupOf(id))
+}
+
+/**
  * Asks main to back up the card's current Claude Code conversation (#80 D8, D9) when it is a
- * local Claude Code card on the board; main copies only what changed since the last copy.
+ * local Claude Code card on the board, or a workspace's Orchestrator running Claude Code (#81 D9);
+ * main copies only what changed since the last copy.
  */
 export function backupTranscript(cardId: string): void {
   for (const workspace of workspaceStore.getState().workspaces) {
-    const card = workspace.cards.find((c) => c.id === cardId)
+    const card =
+      workspace.cards.find((c) => c.id === cardId) ??
+      (cardId === orchestratorId(workspace.id) ? orchestratorBackedUp(workspace) : undefined)
     if (!card) continue
     const target = transcriptBackupTarget(card)
     if (target) window.bikube.transcripts.backup(card.id, target.folder, target.sessionId)
@@ -26,8 +42,8 @@ export function startTranscriptBackups(): void {
   terminals.onEnded(backupTranscript)
   onQuitSave(() => {
     for (const workspace of workspaceStore.getState().workspaces) {
-      for (const card of workspace.cards) {
-        if (terminals.runState(card.id)?.kind === 'running') backupTranscript(card.id)
+      for (const id of [...workspace.cards.map((c) => c.id), orchestratorId(workspace.id)]) {
+        if (terminals.runState(id)?.kind === 'running') backupTranscript(id)
       }
     }
   })

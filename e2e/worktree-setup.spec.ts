@@ -11,10 +11,16 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, belowSeparator, boardCard, closeCard, expectCardOpen } from './card-view'
+import {
+  backToBoard,
+  belowSeparator,
+  boardCard,
+  closeCard,
+  expectCardOpen,
+  openTerminal
+} from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // Worktree setup (#39): the workspace's command typed in each new worktree card before its
 // startup command. S1: the workspace field, its one-line check, restart and sync. S2: the
@@ -354,7 +360,7 @@ test('AC9: a setup that failed runs again after a restart, and the startup comma
   expect(await lines(page)).not.toContain(AGENT)
 })
 
-test('AC10: no setup line for a card without Own worktree or the Default shell; an empty setup types only the startup', async () => {
+test('AC10: no setup line for a card without Own worktree or a terminal; an empty setup types only the startup', async () => {
   const dataDir = newDataDir()
   const repo = makeRepo()
   const { page } = await launch(dataDir)
@@ -365,9 +371,7 @@ test('AC10: no setup line for a card without Own worktree or the Default shell; 
   expect(await screenText(page)).not.toContain('SETUP-RAN')
   await backToBoard(page)
 
-  await showShells(page)
-  await page.getByTestId('shell').filter({ hasText: 'Default' }).getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await page.keyboard.type('echo shell-$((30+3))')
   await page.keyboard.press('Enter')

@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { LOCAL_CLAUDE_INSTRUCTION, claudeSettings } from '../src/core/claude-hooks'
+import { ORCHESTRATOR_GUIDE } from '../src/core/orchestrator-guide'
 import { backToBoard, expectCardOpen } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
@@ -60,6 +61,12 @@ test('#31 AC12: the Claude settings file and its instruction ship beside board, 
   expect(settings).toBe(claudeSettings())
   expect(readFileSync(join(resources, 'bin', 'claude-instruction.txt'), 'utf8')).toBe(
     `${LOCAL_CLAUDE_INSTRUCTION}\n`
+  )
+})
+
+test("#81 D12: the orchestrator's guide ships beside board, outside the asar", () => {
+  expect(readFileSync(join(resources, 'bin', 'orchestrator-instruction.txt'), 'utf8')).toBe(
+    ORCHESTRATOR_GUIDE
   )
 })
 

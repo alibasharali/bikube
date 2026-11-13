@@ -15,7 +15,7 @@ import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 import { showShells } from './shells-tab'
 
-// A workspace's shells: the Default shell and named shells with a startup command, above the board.
+// A workspace's shells: named shells with a startup command, and New shell's temporary ones.
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -96,27 +96,8 @@ async function shellMenu(name: string, action: string): Promise<void> {
 const running = (name: string): Promise<string | null> =>
   shell(name).getByTestId('shell-open').getAttribute('data-running')
 
-test('the Default shell opens a plain shell in the workspace folder, also by its shortcut', async () => {
-  await expect(page.getByTestId('shell')).toHaveCount(1)
-  await shell('Default').getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
-  await expect(page.getByTestId('titlebar-shell-tag')).toHaveText('Shell')
-  await page.getByTestId('card-view').getByTestId('terminal').click()
-  await page.keyboard.type('echo "in=$PWD"')
-  await page.keyboard.press('Enter')
-  await expect.poll(lines).toContain(`in=${dir}`)
-  await backToBoard(page)
-  // Running: the board's own cards are untouched, and a click brings it back (the shortcut now
-  // opens a new shell, #66 D1).
-  await expect(page.getByTestId('card')).toHaveCount(0)
-  await expect.poll(() => running('Default')).toBe('true')
-  await shell('Default').getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
-  await expect.poll(lines).toContain(`in=${dir}`)
-})
-
-// New shell (#66): the Default shell first, then temporary `Terminal N` shells, listed in the
-// sidebar tree and never in the Shells tab (#67).
+// New shell (#66, #81 D2): always a temporary `Terminal N`, listed in the sidebar tree and never
+// in the Shells tab (#67). There is no Default shell (#81 D1).
 
 /** The sidebar tree's running terminals under the workspace, by title. */
 const treeTerminal = (title: string): Locator =>
@@ -130,68 +111,79 @@ async function typeInOpen(text: string): Promise<void> {
   await page.keyboard.press('Enter')
 }
 
-test('#66 AC1: New shell opens the Default shell while it is not running', async () => {
+test('#81 AC1: New shell opens Terminal 1, then Terminal 2; no Default shell anywhere', async () => {
+  // No named shells: the Shells tab says so above its add button.
+  await expect(page.getByTestId('shell')).toHaveCount(0)
+  await expect(page.getByTestId('shells-empty')).toHaveText('No shells yet.')
   await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Default')
-  await expect.poll(() => running('Default')).toBe('true')
-  await expect(shell('Terminal 1')).toHaveCount(0)
-  await expect(page.getByTestId('shell')).toHaveCount(1)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect(page.getByTestId('titlebar-shell-tag')).toHaveText('Shell')
+  await expect(treeTerminal('Terminal 1')).toBeVisible()
+  // In the workspace folder.
+  await typeInOpen('echo "t1=$PWD"')
+  await expect.poll(lines).toContain(`t1=${dir}`)
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 2')
+  await expect(treeTerminal('Terminal 2')).toBeVisible()
+  // #67 AC1: in the sidebar tree only; the Shells tab lists none of them.
+  await expect(page.getByTestId('shell')).toHaveCount(0)
+  await expect(page.getByTestId('shells-empty')).toBeVisible()
+  await expect(page.getByTestId('workspace-terminal-title')).toHaveText([
+    'Terminal 1',
+    'Terminal 2'
+  ])
+  // From the board, a new shell again.
+  await backToBoard(page)
+  await expect(page.getByTestId('card')).toHaveCount(0)
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 3')
+  await expect(treeTerminal('Terminal 3')).toBeVisible()
+  // A click on a running one's sidebar row brings it back.
+  await treeTerminal('Terminal 1').click()
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(lines).toContain(`t1=${dir}`)
+  // The palette's row reads New shell and does the same (#66 AC5); its Shells section has no
+  // Default shell.
+  await page.keyboard.press(darwin ? 'Meta+K' : 'Control+Shift+P')
+  const shellRows = page
+    .locator('[data-testid=palette-section][data-section=shells]')
+    .getByTestId('palette-row-title')
+  await expect(shellRows).toHaveText(['Terminal 1', 'Terminal 2', 'Terminal 3'])
+  await page.getByTestId('palette-input').fill('New shell')
+  await page.keyboard.press('Enter')
+  await expectCardOpen(page, 'Terminal 4')
+  await expect(page.getByText('Default shell')).toHaveCount(0)
+  // #67 D1: with the panel hidden, the title bar's chip counts no temporary shell.
+  await page.getByTestId('titlebar-panel').click()
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await expect(page.getByTestId('titlebar-shells')).toHaveCount(0)
+})
+
+test('#81 AC2: Terminal 1 runs board: it lists the board and its status shows on its sidebar row', async () => {
+  await page.keyboard.press(OPEN_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await typeInOpen('board list; board status . building')
+  await expect.poll(lines).toContain(`alpha (${dir})`)
+  await expect.poll(lines).toContain('Backlog (0)')
+  await expect(treeTerminal('Terminal 1').getByTestId('workspace-terminal-status')).toHaveText(
+    'building'
+  )
 })
 
 test('New terminal on the board toolbar and in the title bar runs New shell', async () => {
   await page.getByTestId('toolbar-new-shell').click()
-  await expectCardOpen(page, 'Default')
-  await expect.poll(() => running('Default')).toBe('true')
-  // With a terminal open, the title bar's button: a new temporary shell.
-  await page.getByTestId('titlebar-new-shell').click()
   await expectCardOpen(page, 'Terminal 1')
-  await expect(treeTerminal('Terminal 1')).toBeVisible()
+  // With a terminal open, the title bar's button: another temporary shell.
+  await page.getByTestId('titlebar-new-shell').click()
+  await expectCardOpen(page, 'Terminal 2')
+  await expect(treeTerminal('Terminal 2')).toBeVisible()
   // The board shows no split buttons: only New terminal.
   await backToBoard(page)
   await expect(page.getByTestId('titlebar-terminal-buttons')).toHaveCount(0)
   await expect(page.getByTestId('titlebar-split-right')).toHaveCount(0)
 })
 
-test('#66 AC2, AC3: with the Default shell running, New shell opens Terminal 1, then Terminal 2', async () => {
-  await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Default')
-  await expect.poll(() => running('Default')).toBe('true')
-  // AC2: the Default shell running and open.
-  await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Terminal 1')
-  await expect(treeTerminal('Terminal 1')).toBeVisible()
-  // #67 AC1: in the sidebar tree only; the Shells tab lists the Default shell alone.
-  await expect(shell('Terminal 1')).toHaveCount(0)
-  await expect(page.getByTestId('shell')).toHaveCount(1)
-  await expect(page.getByTestId('shells-running')).toHaveText('1')
-  await typeInOpen('echo "t1=$PWD"')
-  await expect.poll(lines).toContain(`t1=${dir}`)
-  await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Terminal 2')
-  await expect(treeTerminal('Terminal 2')).toBeVisible()
-  // AC3: from the board, a new shell again, not the Default shell.
-  await backToBoard(page)
-  await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Terminal 3')
-  await expect(treeTerminal('Terminal 3')).toBeVisible()
-  await expect(page.getByTestId('shell')).toHaveCount(1)
-  // The palette's row reads New shell and does the same (AC5).
-  await page.keyboard.press(darwin ? 'Meta+K' : 'Control+Shift+P')
-  await page.getByTestId('palette-input').fill('New shell')
-  await page.keyboard.press('Enter')
-  await expectCardOpen(page, 'Terminal 4')
-  // #67 D1: with the panel hidden, the title bar's chip counts the Default shell alone.
-  await page.getByTestId('titlebar-panel').click()
-  await expect(page.getByTestId('side-panel')).toHaveCount(0)
-  const chip = page.getByTestId('titlebar-shells')
-  await expect(chip).toHaveText('1 shell')
-  await expect(chip).toHaveAttribute('title', 'Running: Default shell. Show them in the panel')
-})
-
 test('#66 AC4: a new shell is removed when it stops, its name reused, and never saved', async () => {
-  await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Default')
-  await expect.poll(() => running('Default')).toBe('true')
   await page.keyboard.press(OPEN_SHELL)
   await expectCardOpen(page, 'Terminal 1')
   await page.keyboard.press(OPEN_SHELL)
@@ -218,7 +210,7 @@ test('#66 AC4: a new shell is removed when it stops, its name reused, and never 
   // A named shell added after them is saved; they never are.
   await newShell('Later', '')
   // #67 AC2: the Shells tab lists the saved shells, never the running Terminal 1.
-  await expect(page.getByTestId('shell')).toHaveCount(2)
+  await expect(page.getByTestId('shell')).toHaveCount(1)
   await expect(shell('Later')).toBeVisible()
   await expect(shell('Terminal 1')).toHaveCount(0)
   const statePath = join(dataDir, 'bikube-state.json')
@@ -228,13 +220,13 @@ test('#66 AC4: a new shell is removed when it stops, its name reused, and never 
   ;({ app, page } = await launchApp({ dataDir }))
   await showShells(page)
   await expect(shell('Later')).toBeVisible()
-  await expect(page.getByTestId('shell')).toHaveCount(2)
+  await expect(page.getByTestId('shell')).toHaveCount(1)
   // Not read back either: the palette, which lists stopped shells too, names none.
   await page.keyboard.press(darwin ? 'Meta+K' : 'Control+Shift+P')
   const shellRows = page
     .locator('[data-testid=palette-section][data-section=shells]')
     .getByTestId('palette-row-title')
-  await expect(shellRows).toHaveText(['Default shell', 'Later'])
+  await expect(shellRows).toHaveText(['Later'])
   await page.keyboard.press('Escape')
 })
 
@@ -249,8 +241,6 @@ test('#66 AC4: with a Sync folder on, the folder never names a new shell', async
   await settings.getByTestId('settings-done').click()
   await expect(settings).toHaveCount(0)
   await expect(page.getByTestId('sync-status')).toHaveText(/^Synced \d\d:\d\d$/)
-  await page.keyboard.press(OPEN_SHELL)
-  await expect.poll(() => running('Default')).toBe('true')
   await page.keyboard.press(OPEN_SHELL)
   await expectCardOpen(page, 'Terminal 1')
   await expect(treeTerminal('Terminal 1')).toBeVisible()
@@ -296,7 +286,7 @@ test('a named shell types its command each time it starts; restart, close, edit 
   await shellMenu('Web', 'delete')
   await page.getByTestId('confirm-delete').click()
   await expect(shell('Web')).toHaveCount(0)
-  await expect(page.getByTestId('shell')).toHaveCount(1)
+  await expect(page.getByTestId('shell')).toHaveCount(0)
 })
 
 test('a trigger runs its command in the background and shows done or failed; a click while it runs opens it', async () => {
@@ -472,14 +462,12 @@ test("a failed trigger's dialog shows all it printed, copies it and runs it agai
   await expect(output).toContainText('boom-42')
 })
 
-test('a shell must have a name and a one-line command; the Default one has no edit or delete', async () => {
+test('a shell must have a name and a one-line command', async () => {
   await page.getByTestId('shell-add').click()
   await page.getByTestId('shell-submit').click()
   await expect(page.getByTestId('shell-error-name')).toHaveText('Name is required')
   await page.getByTestId('shell-cancel').click()
-  await shell('Default').getByTestId('shell-menu').click()
-  await expect(page.getByTestId('shell-menu-edit')).toHaveCount(0)
-  await expect(page.getByTestId('shell-menu-delete')).toHaveCount(0)
+  await expect(page.getByTestId('shell')).toHaveCount(0)
 })
 
 test('a shell set to start with the workspace starts when the app opens it, and shells are kept', async () => {
@@ -489,7 +477,6 @@ test('a shell set to start with the workspace starts when the app opens it, and 
   ;({ app, page } = await launchApp({ dataDir }))
   await expect(shell('Watcher')).toBeVisible()
   await expect.poll(() => running('Watcher')).toBe('true')
-  await expect.poll(() => running('Default')).toBe('false')
 })
 
 test('the title bar shows the workspace folder, and the board has no header of its own', async () => {
@@ -510,9 +497,9 @@ test('the title bar shows the workspace folder, and the board has no header of i
   expect(options[0]).toBe('claude')
 })
 
-test('#48 AC7: the Default shell split into 2 panes zooms its focused pane and restores it', async () => {
+test('#48 AC7: a shell split into 2 panes zooms its focused pane and restores it', async () => {
   await page.keyboard.press(OPEN_SHELL)
-  await expectCardOpen(page, 'Default')
+  await expectCardOpen(page, 'Terminal 1')
   const panes = page.getByTestId('card-view').getByTestId('pane')
   const chip = page.getByTestId('card-view').getByTestId('pane-zoom')
   await expect(panes).toHaveCount(1)
@@ -539,8 +526,9 @@ test('a shell and a trigger show their type, and a trigger turned into a shell o
   await dialog.getByTestId('shell-command').fill('echo watching-$((40+2)); sleep 30')
   await dialog.getByTestId('shell-submit').click()
   await expect(dialog).toHaveCount(0)
-  await expect(shell('Default').getByTestId('shell-open')).toHaveAttribute('data-type', 'shell')
-  await expect(shell('Default').getByTestId('trigger-status')).toHaveCount(0)
+  await newShell('Plain', '')
+  await expect(shell('Plain').getByTestId('shell-open')).toHaveAttribute('data-type', 'shell')
+  await expect(shell('Plain').getByTestId('trigger-status')).toHaveCount(0)
   await expect(shell('Watcher').getByTestId('trigger-status')).toHaveCount(1)
 
   await shellMenu('Watcher', 'edit')
@@ -554,23 +542,24 @@ test('a shell and a trigger show their type, and a trigger turned into a shell o
 
 test('with the panel hidden, the title bar counts running shells and opens the Shells tab', async () => {
   const chip = page.getByTestId('titlebar-shells')
-  await shell('Default').getByTestId('shell-start').click()
-  await expect.poll(() => running('Default')).toBe('true')
+  await newShell('Plain', '')
+  await shell('Plain').getByTestId('shell-start').click()
+  await expect.poll(() => running('Plain')).toBe('true')
   // Shown only while the panel is hidden.
   await expect(chip).toHaveCount(0)
   await page.getByTestId('side-panel-tab-files').click()
   await page.getByTestId('titlebar-panel').click()
   await expect(page.getByTestId('side-panel')).toHaveCount(0)
   await expect(chip).toHaveText('1 shell')
-  await expect(chip).toHaveAttribute('title', 'Running: Default shell. Show them in the panel')
+  await expect(chip).toHaveAttribute('title', 'Running: Plain. Show them in the panel')
   await chip.click()
   await expect(page.getByTestId('side-panel')).toBeVisible()
   await expect(page.getByTestId('side-panel-tab-shells')).toHaveAttribute('aria-selected', 'true')
   await expect(chip).toHaveCount(0)
 
   // Nothing running, nothing shown.
-  await shell('Default').getByTestId('shell-stop').click()
-  await expect.poll(() => running('Default')).toBe('false')
+  await shell('Plain').getByTestId('shell-stop').click()
+  await expect.poll(() => running('Plain')).toBe('false')
   await page.getByTestId('titlebar-panel').click()
   await expect(chip).toHaveCount(0)
 })

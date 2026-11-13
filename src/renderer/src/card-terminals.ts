@@ -13,6 +13,7 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { pasteData } from '../../core/board-send'
 import { runningCount } from '../../core/card-deletes'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import { CardPanes } from '../../core/card-panes'
@@ -55,6 +56,9 @@ import {
   type ShellCommand
 } from '../../core/shell-marks'
 import { isSoftwareRenderer } from '../../core/webgl-support'
+import { hasOrchestrator, isOrchestratorId, orchestratorId } from '../../core/orchestrator'
+import { CLAUDE_STARTUP } from '../../core/startup-command'
+import { orchestratorStartedWith } from './orchestrator-starts'
 import { ringBell } from './bell'
 import { devServers } from './dev-servers'
 import { ghosttyStore } from './ghostty'
@@ -461,6 +465,21 @@ export class XtermScreen implements CardScreen {
 
   onInput(listener: (data: string) => void): void {
     this.term.onData(listener)
+  }
+
+  /**
+   * Types `text` into the shell as xterm's paste would (`board send`, #81 D19): new lines as CR,
+   * bracketed when the program asked for bracketed paste. Through xterm's input, so it reaches the
+   * shell as keys typed here do, and never while the screen takes no input; xterm's own `paste`
+   * needs the screen opened in a page, which a card in the background may not be.
+   */
+  paste(text: string): void {
+    this.term.input(pasteData(text, this.term.modes.bracketedPasteMode))
+  }
+
+  /** Types `data` into the shell as keys typed here would be (`board send`'s Enter). */
+  type(data: string): void {
+    this.term.input(data)
   }
 
   onResize(listener: (size: { cols: number; rows: number }) => void): void {
@@ -959,8 +978,17 @@ function sessionRouter(): SessionRouter {
   return router
 }
 
-/** Whether the card's startup command is Claude Code; shells and unknown cards are not. */
+/**
+ * Whether the card's startup command is Claude Code, or it is an Orchestrator running Claude Code
+ * (#81 D7); shells and unknown cards are not.
+ */
 function startsClaudeCode(cardId: string): boolean {
+  if (isOrchestratorId(cardId)) {
+    // The agent it starts (or started) with, set before its start (#81 D7).
+    const startup =
+      orchestratorStartedWith(cardId) ?? settingsStore.get().orchestratorStartup ?? CLAUDE_STARTUP
+    return isCard(cardId) && startup.kind === 'claude'
+  }
   return workspaceStore
     .getState()
     .workspaces.some((w) => w.cards.some((c) => c.id === cardId && c.startup.kind === 'claude'))
@@ -989,15 +1017,27 @@ async function foregroundProgram(sessionId: string | undefined): Promise<string 
   return sessionId === undefined ? null : window.bikube.terminal.foreground(sessionId)
 }
 
-/** Whether `cardId` is a card (not a shell) on the board. */
+/**
+ * Whether `cardId` is a card (not a shell) on the board, or a local workspace's Orchestrator,
+ * whose main pane's output is kept as a card's (#81 D9).
+ */
 function isCard(cardId: string): boolean {
-  return workspaceStore.getState().workspaces.some((w) => w.cards.some((c) => c.id === cardId))
+  return workspaceStore
+    .getState()
+    .workspaces.some(
+      (w) =>
+        w.cards.some((c) => c.id === cardId) ||
+        (hasOrchestrator(w) && cardId === orchestratorId(w.id))
+    )
 }
 
 /** Nothing is read or saved while Keep output after a card stops is off (#46 D8). */
 const keepingOutput = (): boolean => settingsStore.get().keepOutput
 
-/** Cards' main pane output, kept by main across their starts (#46); never a shell's (D1). */
+/**
+ * Cards' (and Orchestrators') main pane output, kept by main across their starts (#46); never a
+ * shell's (D1).
+ */
 const outputKeeper: OutputKeeper = {
   keeps: (cardId) => keepingOutput() && isCard(cardId),
   scrollback: () => settingsStore.get().scrollback,

@@ -11,3 +11,4 @@ out
 *.log*
 test-results
 playwright-report
+*.tsbuildinfo

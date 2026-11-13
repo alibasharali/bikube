@@ -10,13 +10,12 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, cardView, expectCardOpen } from './card-view'
+import { backToBoard, cardView, expectCardOpen, openTerminal } from './card-view'
 import { pickAppTheme } from './app-theme'
 import { agentLogLines, fakeAgentsHome } from './fake-agents'
 import { claudeLogLines } from './fake-claude'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // The Split sidebar (#79): Settings' Sidebar layout and the palette rows, the workspaces above an
 // Agents section that lists every workspace's agents by Needs you, Working and Idle, each naming
@@ -316,19 +315,17 @@ test('AC5: a shell running Claude Code moves to the Agents section and back; a p
   ;({ app, page } = await launchApp({ dataDir: dataDirWith(SPLIT_SETTINGS) }))
   await createWorkspace('A')
   await newCard('Logs')
-  await showShells(page)
-  await page.getByTestId('shell').first().getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
-  await expect.poll(nested).toEqual(['A: Logs, Default shell'])
+  await openTerminal(page)
+  await expect.poll(nested).toEqual(['A: Logs, Terminal 1'])
   await expect(agents().getByTestId('sidebar-agents-empty')).toBeVisible()
 
   await run(`'${claude}'`)
-  await expect.poll(groups).toEqual(['Idle 1: Default shell (A)'])
+  await expect.poll(groups).toEqual(['Idle 1: Terminal 1 (A)'])
   await expect.poll(nested).toEqual(['A: Logs'])
 
   await run('')
   await expect(agents().getByTestId('sidebar-agents-empty')).toBeVisible()
-  await expect.poll(nested).toEqual(['A: Logs, Default shell'])
+  await expect.poll(nested).toEqual(['A: Logs, Terminal 1'])
   await expect(agents().getByTestId('agent-group')).toHaveCount(0)
   await backToBoard(page)
 
@@ -337,7 +334,7 @@ test('AC5: a shell running Claude Code moves to the Agents section and back; a p
   await run('"$BIKUBE_BIN/board" activity . working')
   // The first `board` of a run starts Bikube's executable as Node from a cold disk cache.
   await expect.poll(groups, { timeout: 15_000 }).toEqual(['Working 1: Logs (A)'])
-  await expect.poll(nested).toEqual(['A: Default shell'])
+  await expect.poll(nested).toEqual(['A: Terminal 1'])
 })
 
 /** Agent row `title`'s time in its group, as shown. */

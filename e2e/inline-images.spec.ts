@@ -3,13 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deflateSync } from 'node:zlib'
-import { backToBoard, closeCard, expectCardOpen, splitRight } from './card-view'
+import { backToBoard, closeCard, expectCardOpen, openTerminal, splitRight } from './card-view'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // Inline images (#52): sixel and iTerm2 images printed in any terminal (a card's main pane, an
-// extra pane, the Default shell) are held at the cell where they were printed, also while the
+// extra pane, a terminal) are held at the cell where they were printed, also while the
 // card's view isn't open; kept output (#46) stays text only.
 
 let app: ElectronApplication
@@ -222,7 +221,7 @@ test('AC4: an image printed while the board shows is there when the card is open
   await expectImageBetween('away-before', 'away-after', { width: 20, height: 20 })
 })
 
-test('AC5: an extra pane and the Default shell hold the images they print', async () => {
+test('AC5: an extra pane and a terminal hold the images they print', async () => {
   await newCard('api')
   await splitRight(page)
   await expect(page.getByTestId('card-view').getByTestId('pane')).toHaveCount(2)
@@ -232,10 +231,7 @@ test('AC5: an extra pane and the Default shell hold the images they print', asyn
   expect(imageRows(await screen(0))).toEqual([])
   await backToBoard(page)
 
-  await showShells(page)
-  const defaultShell = page.locator('[data-testid="shell"][data-shell-name="Default"]')
-  await defaultShell.getByTestId('shell-open').click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await run(`printf 'shell-before\\n${SIXEL}\\nshell-after\\n'`)
   await expectImageBetween('shell-before', 'shell-after', { width: 20, height: 20 })
 })

@@ -72,3 +72,10 @@ export type AgentSummaryRead =
   | { state: 'conversation'; version: number; summary: AgentSummary }
   | { state: 'unchanged' }
   | { state: 'error'; reason: string }
+
+/**
+ * `board reply`'s read of a Claude Code session's transcript (#81 D21): its last reply's text,
+ * none (no transcript, or no assistant text in it yet), or a refused request (nothing read).
+ */
+export type ReplyRead =
+  { state: 'reply'; text: string } | { state: 'none' } | { state: 'error'; reason: string }

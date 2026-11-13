@@ -15,16 +15,19 @@ const request: BoardRequest = { v: 1, cardId: 'c1', command: 'move', card: '.', 
 
 let owners: Map<string, Win | null>
 let sent: { owner: Win; requestId: string; cardId: string; command: BoardCommand }[]
+let cancelled: { owner: Win; requestId: string }[]
 let relay: BoardRelay<Win>
 
 beforeEach(() => {
   vi.useFakeTimers()
   owners = new Map([['c1', win]])
   sent = []
+  cancelled = []
   relay = new BoardRelay<Win>(
     (cardId) => owners.get(cardId),
     (owner, requestId, cardId, command) => sent.push({ owner, requestId, cardId, command }),
-    1000
+    1000,
+    (owner, requestId) => cancelled.push({ owner, requestId })
   )
 })
 
@@ -166,6 +169,35 @@ describe('BoardRelay', () => {
   })
 })
 
+describe('BoardRelay: a client that leaves before its reply (#81 D20)', () => {
+  const wait: BoardRequest = { v: 1, cardId: 'c1', command: 'wait', card: 'x' }
+
+  it('drops the pending request and tells its window to cancel it', async () => {
+    const gone = new AbortController()
+    const reply = relay.handle(wait, gone.signal)
+    const { requestId } = sent[0]
+    gone.abort()
+    expect(cancelled).toEqual([{ owner: win, requestId }])
+    await expect(reply).resolves.toEqual({ ok: false, error: NO_ANSWER })
+    // Its answer arrives too late to be taken, and its timer is gone.
+    expect(relay.answer(win, requestId, { ok: true })).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('cancels nothing once answered, or for a client already gone', async () => {
+    const gone = new AbortController()
+    const reply = relay.handle(wait, gone.signal)
+    relay.answer(win, sent[0].requestId, { ok: true, output: 'waiting\n' })
+    gone.abort()
+    await expect(reply).resolves.toEqual({ ok: true, output: 'waiting\n' })
+    const left = new AbortController()
+    left.abort()
+    await expect(relay.handle(wait, left.signal)).resolves.toEqual({ ok: false, error: NO_ANSWER })
+    expect(sent).toHaveLength(1)
+    expect(cancelled).toEqual([])
+  })
+})
+
 describe('BoardRelay across workspaces (#69 D6–D8)', () => {
   it('forwards workspaces, a workspace, and create with its agent and description', () => {
     const commands: BoardCommand[] = [
@@ -198,5 +230,46 @@ describe('BoardRelay: create with a worktree (#69 D10)', () => {
     ]
     for (const command of commands) void relay.handle({ v: 1, cardId: 'c1', ...command })
     expect(sent.map((s) => s.command)).toEqual(commands)
+  })
+})
+
+describe('BoardRelay: the commands that drive the board and the app (#81 D13, D17–D23)', () => {
+  it('forwards each with its fields', () => {
+    const commands: BoardCommand[] = [
+      { command: 'guide' },
+      { command: 'start', card: 'x', workspace: 'b' },
+      { command: 'open', card: 'x' },
+      { command: 'send', card: 'x', text: 'go on' },
+      { command: 'wait', card: 'x', timeout: 5 },
+      { command: 'wait', card: 'x' },
+      { command: 'reply', card: 'x' },
+      { command: 'terminal', line: 'printf ready', workspace: 'b', show: true },
+      { command: 'palette', action: 'list' },
+      { command: 'palette', action: 'run', label: 'Agent setup' }
+    ]
+    for (const command of commands) void relay.handle({ v: 1, cardId: 'c1', ...command })
+    expect(sent.map((s) => s.command)).toEqual(commands)
+  })
+})
+
+describe('BoardRelay: per-command timeouts (#81 D17, D20)', () => {
+  it('waits for each request as long as its command needs, by default', async () => {
+    const perCommand = new BoardRelay<Win>(
+      (cardId) => owners.get(cardId),
+      (owner, requestId, cardId, command) => sent.push({ owner, requestId, cardId, command })
+    )
+    const settled: string[] = []
+    const track = (name: string, reply: Promise<unknown>): void => {
+      void reply.then(() => settled.push(name))
+    }
+    track('move', perCommand.handle(request))
+    track('wait', perCommand.handle({ v: 1, cardId: 'c1', command: 'wait', card: 'x', timeout: 5 }))
+    track('start', perCommand.handle({ v: 1, cardId: 'c1', command: 'start', card: 'x' }))
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(settled).toEqual(['move'])
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(settled).toEqual(['move', 'wait'])
+    await vi.advanceTimersByTimeAsync(55_000)
+    expect(settled).toEqual(['move', 'wait', 'start'])
   })
 })

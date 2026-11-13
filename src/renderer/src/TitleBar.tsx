@@ -12,8 +12,8 @@ import {
 import { useEffect } from 'react'
 import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
-import { DEFAULT_SHELL_TITLE, listedShellCards } from '../../core/workspace-shells'
-import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
+import { listedShellCards } from '../../core/workspace-shells'
+import type { Card, Workspace } from '../../core/workspace-store'
 import { BranchChip } from './BranchMenu'
 import { ToolIcon } from './AgentLogo'
 import { StartupTag } from './CardItem'
@@ -170,7 +170,7 @@ const TERMINAL_BUTTONS: readonly {
     action: 'openShell',
     testId: 'titlebar-new-shell',
     label: 'New terminal',
-    description: "Opens the workspace's Default shell, or a new shell while that one runs",
+    description: 'Opens a new terminal in the workspace',
     icon: SquareTerminal
   },
   {
@@ -234,7 +234,7 @@ function RunningShellsChip({ workspace }: { workspace: Workspace }): React.JSX.E
   if (running === 0) return null
   const names = shells
     .filter((s) => cardTerminals().runState(s.id)?.kind === 'running')
-    .map((s) => (s.id === defaultShellId(workspace.id) ? DEFAULT_SHELL_TITLE : s.title))
+    .map((s) => s.title)
   return (
     <button
       type="button"

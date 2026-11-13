@@ -88,7 +88,9 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
         // When it was opened is this machine's: every open would write the file.
         ...(c.createdAt !== undefined && { createdAt: c.createdAt }),
         // The New mark is cleared by the first open on any machine (#69 D11).
-        ...(c.unopened && { unopened: true as const })
+        ...(c.unopened && { unopened: true as const }),
+        // So it starts working on whichever machine starts it (#81 D18).
+        ...(c.orchestrated && { orchestrated: true as const })
       })),
       nextCardNumber: w.nextCardNumber,
       defaultStartup: startupCopy(w.defaultStartup),
@@ -111,7 +113,16 @@ export function toSyncBoard(state: WorkspaceState, home: string): SyncBoard {
       // The view is the workspace's setting, as its logo is.
       ...(w.view !== undefined && { view: w.view }),
       // So is its Kanban sort (#69 D12); `lastOpenedAt`, which it reads, stays on each machine.
-      ...(w.sort !== undefined && { sort: w.sort })
+      ...(w.sort !== undefined && { sort: w.sort }),
+      // The Orchestrator's conversation travels as a local card's does (#81 D8): its session id,
+      // with nothing started, which stays each machine's.
+      ...(w.orchestrator && {
+        orchestrator: {
+          agentSessionId: w.orchestrator.agentSessionId,
+          claudeStarted: false,
+          startedAgents: []
+        }
+      })
     }))
   }
 }
@@ -167,6 +178,10 @@ export function parseSyncFile(text: string, home: string): SyncFileResult {
     ok: true,
     workspaces: checked.value.workspaces.map((w) => ({
       ...w,
+      // Read as a local card's: nothing started on this machine yet (#81 D8).
+      ...(w.orchestrator && {
+        orchestrator: { ...w.orchestrator, claudeStarted: false, startedAgents: [] }
+      }),
       cards: w.cards.map((c) => {
         const read: Card = { ...c }
         delete read.setup

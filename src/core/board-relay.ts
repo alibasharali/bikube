@@ -6,17 +6,16 @@
 import type { BoardCommand } from './board-args'
 import { NO_ANSWER } from './board-client'
 import { NOT_IN_A_CARD } from './board-commands'
+import { requestSignal } from './board-server'
 import {
   MAX_REPLY_OUTPUT_LENGTH,
   MAX_REPLY_ERROR_LENGTH,
+  relayTimeoutMs,
   type BoardReply,
   type BoardRequest
 } from './board-protocol'
 
 export const NO_WINDOW = 'board: Bikube has no open window'
-/** How long main waits for the window, under the CLI's 5 s so the CLI hears why (#9 D9). */
-export const RELAY_TIMEOUT_MS = 4000
-
 /**
  * The window owning the card's live session; undefined when the card has no live session in
  * this run, null when it has one but its window is gone.
@@ -31,10 +30,15 @@ export type SendToOwner<Owner> = (
   command: BoardCommand
 ) => void
 
+/** Tells the window to drop a request its client no longer waits for (#81 D20). */
+export type CancelAtOwner<Owner> = (owner: Owner, requestId: string) => void
+
 interface Pending<Owner> {
   owner: Owner
   resolve: (reply: BoardReply) => void
   timer: ReturnType<typeof setTimeout>
+  /** Stops watching the client's signal. */
+  unwatch: () => void
 }
 
 /**
@@ -99,6 +103,32 @@ function commandOf(request: BoardRequest): BoardCommand {
         description: request.description,
         ...where
       }
+    case 'guide':
+      return { command: 'guide' }
+    case 'start':
+    case 'open':
+      return { command: request.command, card: request.card, ...where }
+    case 'send':
+      return { command: 'send', card: request.card, text: request.text }
+    case 'wait':
+      return {
+        command: 'wait',
+        card: request.card,
+        ...(request.timeout !== undefined && { timeout: request.timeout })
+      }
+    case 'reply':
+      return { command: 'reply', card: request.card }
+    case 'terminal':
+      return {
+        command: 'terminal',
+        line: request.line,
+        ...where,
+        ...(request.show && { show: true })
+      }
+    case 'palette':
+      return request.action === 'run'
+        ? { command: 'palette', action: 'run', label: request.label }
+        : { command: 'palette', action: 'list' }
   }
 }
 
@@ -116,23 +146,43 @@ export class BoardRelay<Owner> {
   constructor(
     private readonly ownerOfCard: CardOwnerLookup<Owner>,
     private readonly send: SendToOwner<Owner>,
-    private readonly timeoutMs = RELAY_TIMEOUT_MS
+    /** One limit for every request, or each command's (`relayTimeoutMs` by default). */
+    private readonly timeoutMs: number | ((command: BoardCommand) => number) = relayTimeoutMs,
+    /** Called for a request whose client left before its answer. */
+    private readonly cancel: CancelAtOwner<Owner> = () => {}
   ) {}
 
-  /** The reply for a parsed request; never rejects. */
-  handle(request: BoardRequest): Promise<BoardReply> {
+  /**
+   * The reply for a parsed request; never rejects. When `signal` aborts before the answer (its
+   * client left: an interrupted `board wait`, #81 D20), the request is dropped at once and its
+   * window told to cancel it.
+   */
+  handle(request: BoardRequest, signal = requestSignal(request)): Promise<BoardReply> {
+    if (signal?.aborted) return Promise.resolve({ ok: false, error: NO_ANSWER })
     const owner = this.ownerOfCard(request.cardId)
     if (owner === undefined) return Promise.resolve({ ok: false, error: NOT_IN_A_CARD })
     if (owner === null) return Promise.resolve({ ok: false, error: NO_WINDOW })
     const { cardId } = request
     const command = commandOf(request)
     const requestId = String(this.nextId++)
+    const timeoutMs = typeof this.timeoutMs === 'number' ? this.timeoutMs : this.timeoutMs(command)
     return new Promise((resolve) => {
       const timer = setTimeout(
         () => this.settle(requestId, { ok: false, error: NO_ANSWER }),
-        this.timeoutMs
+        timeoutMs
       )
-      this.pending.set(requestId, { owner, resolve, timer })
+      const left = (): void => {
+        if (!this.pending.has(requestId)) return
+        this.settle(requestId, { ok: false, error: NO_ANSWER })
+        try {
+          this.cancel(owner, requestId)
+        } catch {
+          // The window is gone: nothing there to cancel.
+        }
+      }
+      signal?.addEventListener('abort', left, { once: true })
+      const unwatch = (): void => signal?.removeEventListener('abort', left)
+      this.pending.set(requestId, { owner, resolve, timer, unwatch })
       try {
         this.send(owner, requestId, cardId, command)
       } catch {
@@ -179,6 +229,7 @@ export class BoardRelay<Owner> {
     if (!pending) return
     this.pending.delete(requestId)
     clearTimeout(pending.timer)
+    pending.unwatch()
     pending.resolve(reply)
   }
 }

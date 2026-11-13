@@ -12,6 +12,7 @@ import { checkDescription } from './card-description'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { branchProblem } from './worktree-names'
 import { isWorkspaceLogo, type WorkspaceLogoId } from './workspace-logos'
+import { orchestratorId } from './orchestrator'
 import {
   CLAUDE_STARTUP,
   checkCardStartup,
@@ -129,6 +130,11 @@ export interface Card {
    */
   unopened?: true
   /**
+   * Created by the Orchestrator's `board create` (#81 D18): its fresh agent start with a
+   * description is told to start working on it. Saved and synced; absent when false.
+   */
+  orchestrated?: true
+  /**
    * Its last `board status` text (cleaned), shown on it once Stopped, also after a restart: saved,
    * never synced, since every status would write the sync file. Absent when none or cleared.
    */
@@ -137,6 +143,8 @@ export interface Card {
   lastUsage?: ClaudeUsage
   /** Only a workspace shell's card-shaped record (never stored): see `StartupState`. */
   exitAfterStartup?: boolean
+  /** Only the Orchestrator's card-shaped record (never stored): see `StartupState` (#81 D15). */
+  firstPrompt?: string
 }
 
 /** Where a card's own git worktree is, and how to remove it. */
@@ -165,6 +173,8 @@ export interface NewCardOptions {
   unopened?: boolean
   /** Its own worktree at its first open (#69 D10): a local workspace's card only. */
   pendingWorktree?: PendingWorktree
+  /** Marks it `orchestrated`: made by the Orchestrator (#81 D18). */
+  orchestrated?: boolean
 }
 
 export interface Workspace {
@@ -192,7 +202,7 @@ export interface Workspace {
   defaultStartup: StartupCommand
   /**
    * The workspace's shells: terminals that aren't tasks (a dev server, a test watcher), shown above
-   * the board, not on it. The Default shell isn't stored: every workspace has it.
+   * the board, not on it. There is no Default shell (#81 D1).
    */
   shells: WorkspaceShell[]
   /**
@@ -212,6 +222,18 @@ export interface Workspace {
    * and synced like `view`; the stored order is never changed by it.
    */
   sort?: 'recent'
+  /**
+   * Its Orchestrator's conversation (#81 D8), absent until its first start: saved and synced like
+   * a card's session fields. Local workspaces only use it (D10).
+   */
+  orchestrator?: OrchestratorSession
+}
+
+/** The Orchestrator's conversation (#81 D8): what a card keeps to start or resume its agent. */
+export interface OrchestratorSession {
+  agentSessionId: string
+  claudeStarted: boolean
+  startedAgents: AgentKind[]
 }
 
 /** A named shell in the workspace's folder, which types `command` (when set) each time it starts. */
@@ -268,9 +290,6 @@ export function temporaryShellName(shells: readonly WorkspaceShell[]): string {
   while (taken.has(`Terminal ${n}`)) n++
   return `Terminal ${n}`
 }
-
-/** The id of a workspace's Default shell: a plain shell in its folder, never stored. */
-export const defaultShellId = (workspaceId: string): string => `default-shell:${workspaceId}`
 
 export interface WorkspaceState {
   workspaces: Workspace[]
@@ -400,7 +419,11 @@ export interface WorkspaceStore {
    * Adds a temporary plain shell (#66 D2) named by `temporaryShellName` at the end of the
    * workspace's shells.
    */
-  createTemporaryShell(workspaceId: string): Result<WorkspaceShell>
+  /**
+   * A temporary `Terminal N` (#66 D2), typing `command` (one line, checked like a named shell's)
+   * after its start when given (#81 D22).
+   */
+  createTemporaryShell(workspaceId: string, command?: string): Result<WorkspaceShell>
   updateShell(workspaceId: string, shellId: string, input: ShellInput): Result<WorkspaceShell>
   /**
    * Where the shell runs from its next start: a worktree card of the workspace, or null for the
@@ -408,7 +431,21 @@ export interface WorkspaceStore {
    */
   setShellRunIn(workspaceId: string, shellId: string, cardId: string | null): Result<WorkspaceShell>
   deleteShell(workspaceId: string, shellId: string): Result<void>
-  /** Records that `claude --session-id` was typed for this card (#5 D5). */
+  /**
+   * The workspace's Orchestrator conversation, given a new session id when it has none yet
+   * (#81 D8): called at its first start. A local workspace's only (D10).
+   */
+  ensureOrchestrator(workspaceId: string): Result<OrchestratorSession>
+  /**
+   * New conversation (#81 D11): the Orchestrator gets a new session id, with neither Claude Code
+   * nor any preset started.
+   */
+  newOrchestratorConversation(workspaceId: string): Result<OrchestratorSession>
+  /**
+   * Records that `claude --session-id` was typed for this card (#5 D5). This and the other session
+   * changes below (`clearClaudeStarted`, `setAgentSession`, `markAgentStarted`) also take the
+   * workspace's Orchestrator by its id (#81 D8), changing its stored conversation.
+   */
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card>
   /**
    * Start a new conversation (#80 D12): the card types its first-start line again, under the same
@@ -755,7 +792,8 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
       // Its worktree is new: the workspace's setup runs first, until it succeeds (#39 D2, D7).
       ...(worktree && ws.host === undefined && ws.worktreeSetup && { setup: ws.worktreeSetup }),
       ...(this.now && { createdAt: this.now() }),
-      ...(options.unopened && { unopened: true as const })
+      ...(options.unopened && { unopened: true as const }),
+      ...(options.orchestrated && { orchestrated: true as const })
     }
     this.replace({
       ...ws,
@@ -830,13 +868,16 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
     return { ok: true, value: shell }
   }
 
-  createTemporaryShell(workspaceId: string): Result<WorkspaceShell> {
+  createTemporaryShell(workspaceId: string, command = ''): Result<WorkspaceShell> {
     const ws = this.find(workspaceId)
     if (!ws) return unknownWorkspace()
+    const name = temporaryShellName(ws.shells)
+    const checked = checkShell({ name, command, autostart: false })
+    if (!checked.ok) return checked
     const shell: WorkspaceShell = {
       id: this.generateId(),
-      name: temporaryShellName(ws.shells),
-      command: '',
+      name,
+      command: checked.value.command,
       autostart: false,
       type: 'shell',
       temporary: true
@@ -937,33 +978,56 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
   }
 
   setAgentSession(workspaceId: string, cardId: string, sessionId: string): Result<Card> {
-    return this.updateCard(workspaceId, cardId, (card) => ({
-      ok: true,
-      value: { ...card, agentSessionId: sessionId, claudeStarted: true }
+    return this.updateSession(workspaceId, cardId, (session) => ({
+      ...session,
+      agentSessionId: sessionId,
+      claudeStarted: true
     }))
   }
 
   markClaudeStarted(workspaceId: string, cardId: string): Result<Card> {
-    return this.updateCard(workspaceId, cardId, (card) => ({
-      ok: true,
-      value: { ...card, claudeStarted: true }
+    return this.updateSession(workspaceId, cardId, (session) => ({
+      ...session,
+      claudeStarted: true
     }))
   }
 
   clearClaudeStarted(workspaceId: string, cardId: string): Result<Card> {
-    return this.updateCard(workspaceId, cardId, (card) => ({
-      ok: true,
-      value: { ...card, claudeStarted: false }
+    return this.updateSession(workspaceId, cardId, (session) => ({
+      ...session,
+      claudeStarted: false
     }))
   }
 
   markAgentStarted(workspaceId: string, cardId: string, kind: AgentKind): Result<Card> {
-    return this.updateCard(workspaceId, cardId, (card) => ({
-      ok: true,
-      value: card.startedAgents.includes(kind)
-        ? card
-        : { ...card, startedAgents: [...card.startedAgents, kind] }
-    }))
+    return this.updateSession(workspaceId, cardId, (session) =>
+      session.startedAgents.includes(kind)
+        ? session
+        : { ...session, startedAgents: [...session.startedAgents, kind] }
+    )
+  }
+
+  ensureOrchestrator(workspaceId: string): Result<OrchestratorSession> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    if (ws.host !== undefined) return fail('workspace', 'An SSH workspace has no orchestrator')
+    if (ws.orchestrator) return { ok: true, value: ws.orchestrator }
+    return this.setOrchestrator(ws, {
+      agentSessionId: this.generateSessionId(),
+      claudeStarted: false,
+      startedAgents: []
+    })
+  }
+
+  newOrchestratorConversation(workspaceId: string): Result<OrchestratorSession> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    if (ws.host !== undefined) return fail('workspace', 'An SSH workspace has no orchestrator')
+    return this.setOrchestrator(ws, {
+      agentSessionId: this.generateSessionId(),
+      claudeStarted: false,
+      startedAgents: []
+    })
   }
 
   clearCardSetup(workspaceId: string, cardId: string): Result<Card> {
@@ -1027,6 +1091,55 @@ export class InMemoryWorkspaceStore implements WorkspaceStore {
 
   replaceBoard(workspaces: Workspace[]): void {
     this.set(withBoard(this.state, workspaces))
+  }
+
+  private setOrchestrator(
+    ws: Workspace,
+    session: OrchestratorSession
+  ): Result<OrchestratorSession> {
+    this.replace({ ...ws, orchestrator: session })
+    return { ok: true, value: session }
+  }
+
+  /**
+   * Changes a card's session fields, or the Orchestrator's stored conversation when `cardId` is
+   * the workspace's Orchestrator (#81 D8), answering with the changed card (or, for the
+   * Orchestrator, a card holding only its id and session). The same session leaves the state as
+   * it is.
+   */
+  private updateSession(
+    workspaceId: string,
+    cardId: string,
+    change: (session: OrchestratorSession) => OrchestratorSession
+  ): Result<Card> {
+    const ws = this.find(workspaceId)
+    if (!ws) return unknownWorkspace()
+    if (cardId === orchestratorId(ws.id) && ws.host === undefined) {
+      const current = ws.orchestrator
+      if (!current) return unknownCard()
+      const next = change(current)
+      if (next !== current) this.setOrchestrator(ws, next)
+      return {
+        ok: true,
+        value: {
+          id: cardId,
+          columnId: '',
+          title: '',
+          directory: ws.directory,
+          startup: { kind: 'shell' },
+          ...next
+        }
+      }
+    }
+    return this.updateCard(workspaceId, cardId, (card) => {
+      const session = {
+        agentSessionId: card.agentSessionId,
+        claudeStarted: card.claudeStarted,
+        startedAgents: card.startedAgents
+      }
+      const next = change(session)
+      return { ok: true, value: next === session ? card : { ...card, ...next } }
+    })
   }
 
   private updateCard(

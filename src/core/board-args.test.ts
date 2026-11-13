@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOARD_USAGE, parseBoardArgs } from './board-args'
+import { BOARD_USAGE, SSH_BOARD_USAGE, parseBoardArgs } from './board-args'
 
 describe('parseBoardArgs', () => {
   it('prints usage to stdout with exit 0 for no arguments, help and --help', () => {
@@ -349,5 +349,106 @@ describe('parseBoardArgs: create --worktree (#69 D10)', () => {
 
   it('names --worktree [--branch <name>] in the usage text', () => {
     expect(BOARD_USAGE).toContain('[--worktree [--branch <name>]]')
+  })
+})
+
+describe('the commands that drive the board and the app (#81 D13, D16–D24)', () => {
+  const usage = { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
+  const command = (argv: string[]): unknown => parseBoardArgs(argv)
+
+  it("reads send's text from stdin for - (D19)", () => {
+    expect(command(['send', 'Review', '-'])).toEqual({ kind: 'sendStdin', card: 'Review' })
+  })
+
+  it('parses guide, start, open, reply, send, wait, terminal and palette as D13, D17–D23 write them', () => {
+    expect(command(['guide'])).toEqual({ kind: 'command', command: { command: 'guide' } })
+    expect(command(['start', 'X'])).toEqual({
+      kind: 'command',
+      command: { command: 'start', card: 'X' }
+    })
+    expect(command(['open', '--workspace', 'B', 'Review'])).toEqual({
+      kind: 'command',
+      command: { command: 'open', card: 'Review', workspace: 'B' }
+    })
+    expect(command(['reply', 'Review'])).toEqual({
+      kind: 'command',
+      command: { command: 'reply', card: 'Review' }
+    })
+    expect(command(['send', 'Review', 'go on'])).toEqual({
+      kind: 'command',
+      command: { command: 'send', card: 'Review', text: 'go on' }
+    })
+    expect(command(['wait', 'Review'])).toEqual({
+      kind: 'command',
+      command: { command: 'wait', card: 'Review' }
+    })
+    expect(command(['wait', 'Review', '--timeout', '5'])).toEqual({
+      kind: 'command',
+      command: { command: 'wait', card: 'Review', timeout: 5 }
+    })
+    expect(command(['terminal', '--show', '--workspace', 'B', 'exec sleep 60'])).toEqual({
+      kind: 'command',
+      command: { command: 'terminal', line: 'exec sleep 60', workspace: 'B', show: true }
+    })
+    expect(command(['terminal', 'printf ready'])).toEqual({
+      kind: 'command',
+      command: { command: 'terminal', line: 'printf ready' }
+    })
+    expect(command(['palette', 'list'])).toEqual({
+      kind: 'command',
+      command: { command: 'palette', action: 'list' }
+    })
+    expect(command(['palette', 'run', 'Agent setup'])).toEqual({
+      kind: 'command',
+      command: { command: 'palette', action: 'run', label: 'Agent setup' }
+    })
+  })
+
+  it('prints usage for any other shape', () => {
+    for (const argv of [
+      ['guide', 'x'],
+      ['start'],
+      ['start', 'a', 'b'],
+      ['reply', '--workspace', 'B', 'x'],
+      ['send', 'x'],
+      ['wait', 'x', '--timeout', '0'],
+      ['wait', 'x', '--timeout', '3601'],
+      ['wait', 'x', '--timeout', '1.5'],
+      ['wait', 'x', '--timeout', 'abc'],
+      ['terminal'],
+      ['terminal', 'a', 'b'],
+      ['terminal', '--show', '--show', 'a'],
+      ['palette'],
+      ['palette', 'list', 'x'],
+      ['palette', 'run'],
+      ['palette', 'go', 'x'],
+      ['move', '--show', '.', 'Done'],
+      ['status', '--timeout', '5', '.', 'x']
+    ]) {
+      expect(command(argv)).toEqual(usage)
+    }
+  })
+
+  it('lists them with the others in the usage text, under no heading of their own (D24)', () => {
+    expect(BOARD_USAGE).not.toContain('Orchestrator only')
+    const synopsis = BOARD_USAGE.split('\n\n')[0]!
+    for (const line of [
+      'board guide',
+      'board start <card>',
+      'board open <card>',
+      'board send <card> <text>|-',
+      'board wait <card> [--timeout <s>]',
+      'board reply <card>',
+      'board terminal [--show] <command>',
+      'board palette list',
+      'board palette run <label>'
+    ]) {
+      expect(synopsis).toContain(`       ${line}`)
+    }
+    expect(BOARD_USAGE).toMatch(/--workspace <w>\n.*start, open and terminal/s)
+  })
+
+  it("leaves SSH cards' usage as it was (D24)", () => {
+    expect(SSH_BOARD_USAGE).not.toContain('Orchestrator')
   })
 })

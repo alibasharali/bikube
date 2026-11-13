@@ -4,7 +4,15 @@
  */
 
 import { isActivityValue } from './activity'
-import { isBoardAgent, isListFormat, isSessionId, isSetupResult } from './board-args'
+import {
+  isBoardAgent,
+  isListFormat,
+  isSessionId,
+  isSetupResult,
+  isWaitTimeout,
+  WAIT_DEFAULT_SECONDS,
+  WAIT_MAX_SECONDS
+} from './board-args'
 import type { BoardCommand } from './board-args'
 import type { ClaudeUsage } from './claude-usage-types'
 
@@ -26,6 +34,32 @@ export const REQUEST_TOO_LONG = 'board: request too long'
 export const NO_ANSWER = 'board: no answer from Bikube'
 /** How long `board` waits for main's reply (#9 D9), locally and in SSH cards (#25 D5). */
 export const ANSWER_TIMEOUT_MS = 5000
+
+/**
+ * The longest the renderer waits for `board start`, `open` or `terminal`'s start before
+ * answering that it is still starting (#81 D17).
+ */
+export const START_WAIT_MS = 60_000
+
+/**
+ * How long `board` waits for main's reply to `command`: #9's 5 s, a `wait`'s timeout plus 5 s
+ * (#81 D20, never over 3600 s however the value came), and 65 s for a start (D17).
+ */
+export function answerTimeoutMs(command: BoardCommand): number {
+  if (command.command === 'wait') {
+    const seconds = Number.isFinite(command.timeout)
+      ? Math.min(Math.max(command.timeout as number, 1), WAIT_MAX_SECONDS)
+      : WAIT_DEFAULT_SECONDS
+    return seconds * 1000 + ANSWER_TIMEOUT_MS
+  }
+  if (command.command === 'start' || command.command === 'open' || command.command === 'terminal') {
+    return START_WAIT_MS + ANSWER_TIMEOUT_MS
+  }
+  return ANSWER_TIMEOUT_MS
+}
+
+/** How long main waits for the window's answer: 1 s under the CLI, so the CLI hears why (#9 D9). */
+export const relayTimeoutMs = (command: BoardCommand): number => answerTimeoutMs(command) - 1000
 
 /** A request as sent: the calling card's id plus one command. */
 export type BoardRequest = { v: typeof BOARD_PROTOCOL_VERSION; cardId: string } & BoardCommand
@@ -72,7 +106,15 @@ const FIELDS: Record<BoardCommand['command'], readonly string[]> = {
   setup: ['card', 'result'],
   usage: ['card', 'usage'],
   description: ['card'],
-  describe: ['card', 'description']
+  describe: ['card', 'description'],
+  guide: [],
+  start: ['card'],
+  open: ['card'],
+  send: ['card', 'text'],
+  wait: ['card'],
+  reply: ['card'],
+  terminal: ['line'],
+  palette: ['action']
 }
 
 /** The commands that take a `workspace` (#69 D6). */
@@ -83,13 +125,25 @@ const TAKES_WORKSPACE = new Set([
   'move',
   'status',
   'description',
-  'describe'
+  'describe',
+  'start',
+  'open',
+  'terminal'
 ])
 
-/** Each command's optional string fields (#69 D6, D8). */
+/** Each command's optional string fields (#69 D6, D8; #81 D23). */
 function optionalFields(command: BoardCommand['command']): readonly string[] {
   if (command === 'create') return ['workspace', 'agent', 'description', 'branch']
+  if (command === 'palette') return ['label']
   return TAKES_WORKSPACE.has(command) ? ['workspace'] : []
+}
+
+/** Each command's optional fields that aren't strings: checked by `asRequest`. */
+function otherFields(command: BoardCommand['command']): readonly string[] {
+  if (command === 'create') return ['worktree']
+  if (command === 'wait') return ['timeout']
+  if (command === 'terminal') return ['show']
+  return []
 }
 
 const COMMANDS = new Set(Object.keys(FIELDS))
@@ -164,21 +218,25 @@ export function parseRequestLine(line: string): ParsedRequest {
     key === 'command' ||
     required.includes(key) ||
     optional.includes(key) ||
-    (name === 'create' && key === 'worktree')
+    otherFields(name).includes(key)
   const shaped =
     typeof value.cardId === 'string' &&
     keys.every(known) &&
     required.every((f) => f in value && (f === 'usage' || typeof value[f] === 'string')) &&
     optional.every((f) => value[f] === undefined || typeof value[f] === 'string')
   if (!shaped) return { ok: false, error: INVALID_REQUEST }
-  // Only a description gets the 512 KiB line's room (#69 D5); every other string keeps 8 KiB.
+  // Only a description and a send's text get the 512 KiB line's room (#69 D5, #81 D19); every
+  // other string keeps 8 KiB.
+  const roomy = (key: string): boolean =>
+    key === 'description' || (name === 'send' && key === 'text')
   const overLong = keys.some((key) => {
     const field = (value as Record<string, unknown>)[key]
-    return key !== 'description' && typeof field === 'string' && isOverBytes(field, MAX_FIELD_BYTES)
+    return !roomy(key) && typeof field === 'string' && isOverBytes(field, MAX_FIELD_BYTES)
   })
   if (overLong) return { ok: false, error: REQUEST_TOO_LONG }
   const request = asRequest(name, value as Record<string, unknown>)
-  return request ? { ok: true, request } : { ok: false, error: INVALID_REQUEST }
+  if (!request) return { ok: false, error: INVALID_REQUEST }
+  return { ok: true, request }
 }
 
 /** The request in a shaped value, its fields checked per command; null when one is wrong. */
@@ -242,6 +300,33 @@ function asRequest(
       return isActivityValue(value.activity)
         ? { v: 1, cardId, command, card, activity: value.activity }
         : null
+    case 'guide':
+      return { v: 1, cardId, command }
+    case 'start':
+    case 'open':
+      return { v: 1, cardId, command, card, ...where }
+    case 'reply':
+      return { v: 1, cardId, command, card }
+    case 'send':
+      return { v: 1, cardId, command, card, text: str('text') }
+    case 'wait': {
+      const { timeout } = value
+      if (timeout !== undefined && !isWaitTimeout(timeout)) return null
+      return { v: 1, cardId, command, card, ...(timeout !== undefined && { timeout }) }
+    }
+    case 'terminal': {
+      const { show } = value
+      if (show !== undefined && show !== true) return null
+      return { v: 1, cardId, command, line: str('line'), ...where, ...(show && { show }) }
+    }
+    case 'palette':
+      if (value.action === 'list' && value.label === undefined) {
+        return { v: 1, cardId, command, action: 'list' }
+      }
+      if (value.action === 'run' && value.label !== undefined) {
+        return { v: 1, cardId, command, action: 'run', label: str('label') }
+      }
+      return null
   }
 }
 

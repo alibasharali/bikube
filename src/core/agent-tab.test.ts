@@ -74,9 +74,9 @@ describe('what the Agent tab shows (#75 D2, D3)', () => {
     })
   })
 
-  it('asks to run claude in the Default, a named and a temporary shell', () => {
+  it('asks to run claude in a named and a temporary shell', () => {
     const ws = workspace([card()])
-    for (const shell of [null, ws.shells[0], ws.shells[1]]) {
+    for (const shell of [ws.shells[0], ws.shells[1]]) {
       expect(agentTabSubject(ws, shellCard(ws, shell))).toEqual({
         kind: 'message',
         text: 'Run claude in this shell to see its agent here.'
@@ -94,7 +94,7 @@ describe('what the Agent tab shows (#75 D2, D3)', () => {
     const named = { ...ws.shells[0], runIn: 'c2' }
     const withRunIn = { ...ws, cards: [...ws.cards, worktree], shells: [named, ws.shells[1]] }
     for (const [w, shell, folder] of [
-      [ws, null, '/repo'],
+      [ws, ws.shells[0], '/repo'],
       [ws, ws.shells[1], '/repo'],
       [withRunIn, named, '/data/worktrees/repo-c2']
     ] as const) {
@@ -106,7 +106,7 @@ describe('what the Agent tab shows (#75 D2, D3)', () => {
 
   it('asks to run claude in a shell with no session kept, or not running', () => {
     const ws = workspace([card()])
-    const shell = shellCard(ws, null)
+    const shell = shellCard(ws, ws.shells[1])
     for (const kept of [
       { running: true, sessionId: undefined },
       { running: false, sessionId: SESSION },

@@ -109,3 +109,18 @@ describe('sidebarSections (#79 D3, D4, D9)', () => {
     expect(numbers.has('c9')).toBe(false)
   })
 })
+
+describe("the Orchestrator's row in Split (#81 D5, D9, AC15)", () => {
+  it('is an agent row when it runs an agent, and joins Needs you while it waits', () => {
+    const orchestrator = row('a', 'orchestrator:a', 'claude', { kind: 'orchestrator' })
+    expect(isAgentRow(orchestrator)).toBe(true)
+    expect(isAgentRow({ ...orchestrator, tool: 'codex' })).toBe(true)
+    expect(isAgentRow({ ...orchestrator, tool: 'custom' })).toBe(false)
+    const { agents } = sidebarSections(
+      [{ ...orchestrator, activity: 'waiting' }],
+      (r) => isAgentRow(r),
+      'a'
+    )
+    expect(agents.map((g) => [g.id, ids(g.rows)])).toEqual([['needsYou', ['orchestrator:a']]])
+  })
+})

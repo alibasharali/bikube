@@ -2,16 +2,22 @@ import { expect, test, type ElectronApplication, type Locator, type Page } from 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { backToBoard, boardCard, expectCardOpen, SHORTCUTS, splitRight } from './card-view'
+import {
+  backToBoard,
+  boardCard,
+  expectCardOpen,
+  openTerminal,
+  SHORTCUTS,
+  splitRight
+} from './card-view'
 import { clipboardWrites, recordClipboardWrites } from './clipboard-writes'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // Find in a card's terminal (#35): the find bar on the focused pane, its result text, stepping,
 // toggles, highlights, the clipboard, the remembered query, the live count, closing with the
 // view, where Find acts and rebinding it; then split panes, where the bar follows Find to the
-// focused pane and closes with its pane, and the Default shell. The words a test finds are
+// focused pane and closes with its pane, and a terminal (New shell). The words a test finds are
 // printed with octal escapes (`\141lpha`), so the typed command line never holds them.
 
 const darwin = process.platform === 'darwin'
@@ -622,14 +628,9 @@ test('#35 AC12: the bar closes with the extra pane it searches', async () => {
   await expect(input()).toHaveValue('gamma')
 })
 
-test('#35 AC13: Find works in the Default shell', async () => {
+test('#35 AC13: Find works in a terminal', async () => {
   await backToBoard(page)
-  await showShells(page)
-  await page
-    .locator('[data-testid="shell"][data-shell-name="Default"]')
-    .getByTestId('shell-open')
-    .click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await expect.poll(terminalFocused).toBe(true)
   await expect.poll(bufferLines, { timeout: 15_000 }).toContainEqual(expect.stringMatching(/\S/))
   await printAlphas()

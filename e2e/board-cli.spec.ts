@@ -12,6 +12,7 @@ import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { BOARD_USAGE } from '../src/core/board-args'
+import { orchestratorGuide } from '../src/core/orchestrator-guide'
 import { FIRST_PROMPT } from '../src/core/startup-command'
 import { MAX_REQUEST_LINE_BYTES } from '../src/core/board-protocol'
 import { backToBoard, checkOnBoard, expectCardOpen, splitRight } from './card-view'
@@ -900,16 +901,16 @@ test("#69 AC6/AC8: a card created in another workspace gets the description, the
     ])
 })
 
-test("the Default shell runs board: it lists, creates and moves named cards, and `.` isn't a card to move", async () => {
+test("a terminal runs board: it lists, creates and moves named cards, and `.` isn't a card to move", async () => {
   await launch()
   const alpha = makeDir('alpha')
   await createWorkspace(alpha, 'alpha')
   await newCard('Backlog', 'api')
   await back()
 
-  // New shell opens the workspace's Default shell, in the workspace folder.
+  // New shell opens a temporary terminal, in the workspace folder (#81 D3).
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
-  await expect(page.getByTestId('card-view')).toBeVisible()
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
   await expect.poll(terminalFocused).toBe(true)
 
   const listed = await board(alpha, 'board list --json')
@@ -929,4 +930,47 @@ test("the Default shell runs board: it lists, creates and moves named cards, and
   await back()
   await expect(titlesIn('Backlog')).toHaveText(['From the shell'])
   await expect(titlesIn('Done')).toHaveText(['api'])
+})
+
+test('#81 AC7: every terminal runs guide, palette and start; help lists them with the others', async () => {
+  await launch()
+  const proj = makeDir('proj')
+  await createWorkspace(proj, 'Proj')
+  /** Runs AC7's commands in the open terminal: `start` starts the stopped card `title`. */
+  async function drive(title: string): Promise<void> {
+    expect(await board(proj, 'board guide')).toEqual({
+      code: 0,
+      stdout: orchestratorGuide('Proj', proj, ''),
+      stderr: ''
+    })
+    const listed = await board(proj, 'board palette list')
+    expect(listed.code).toBe(0)
+    expect(listed.stdout.split('\n')).toEqual(
+      expect.arrayContaining(['Agent setup', 'Open Settings'])
+    )
+    const state = async (): Promise<string | undefined> => {
+      const cards = JSON.parse((await board(proj, 'board list --json')).stdout) as {
+        columns: { cards: { title: string; state: string }[] }[]
+      }
+      return cards.columns.flatMap((c) => c.cards).find((c) => c.title === title)?.state
+    }
+    expect(await state()).toBe('stopped')
+    expect(await board(proj, `board start ${title}`)).toEqual(ok)
+    expect(await state()).toBe('running')
+    // D24: help lists them with the others, under no heading of their own.
+    expect(await board(proj, 'board help')).toEqual({ code: 0, stdout: BOARD_USAGE, stderr: '' })
+  }
+  expect(BOARD_USAGE).not.toContain('Orchestrator only')
+  expect(BOARD_USAGE).toContain('       board palette list\n')
+
+  await newCard('Backlog', 'Plain')
+  expect((await board(proj, 'board create Backlog X')).code).toBe(0)
+  expect((await board(proj, 'board create Backlog Y')).code).toBe(0)
+  await drive('X')
+  await back()
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+Shift+T')
+  await expect(page.getByTestId('card-view')).toHaveAttribute('aria-label', 'Terminal 1')
+  await expect.poll(terminalFocused).toBe(true)
+  await drive('Y')
 })

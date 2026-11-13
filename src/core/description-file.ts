@@ -21,13 +21,12 @@ export async function readProcessStdin(): Promise<Uint8Array> {
 }
 
 /**
- * The description in `path` (`-` reads `readStdin`): UTF-8 text, trailing whitespace trimmed, ''
- * when empty. Unreadable, not UTF-8 or over `MAX_DESCRIPTION_LENGTH` is refused.
+ * The UTF-8 text in `path` (`-` reads `readStdin`), as it is; unreadable or not UTF-8 is refused.
  */
-export async function readDescriptionFile(
+export async function readTextFile(
   path: string,
   readStdin: () => Promise<Uint8Array> = readProcessStdin
-): Promise<DescriptionFile> {
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const name = path === STDIN_PATH ? 'stdin' : path
   let bytes: Uint8Array
   try {
@@ -35,13 +34,24 @@ export async function readDescriptionFile(
   } catch {
     return { ok: false, error: `board: can't read ${name}` }
   }
-  let text: string
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
   } catch {
     return { ok: false, error: `board: ${name} is not UTF-8 text` }
   }
-  const checked = checkDescription(text)
+}
+
+/**
+ * The description in `path` (`-` reads `readStdin`): UTF-8 text, trailing whitespace trimmed, ''
+ * when empty. Unreadable, not UTF-8 or over `MAX_DESCRIPTION_LENGTH` is refused.
+ */
+export async function readDescriptionFile(
+  path: string,
+  readStdin: () => Promise<Uint8Array> = readProcessStdin
+): Promise<DescriptionFile> {
+  const read = await readTextFile(path, readStdin)
+  if (!read.ok) return read
+  const checked = checkDescription(read.text)
   if (!checked.ok) return { ok: false, error: `board: ${checked.error.message}` }
   return { ok: true, description: checked.value ?? '' }
 }

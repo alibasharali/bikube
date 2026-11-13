@@ -5,7 +5,8 @@
  * only, never saved. Plain TS.
  */
 import type { Activity } from './activity'
-import { defaultShellId, type Workspace } from './workspace-store'
+import { hasOrchestrator, orchestratorId } from './orchestrator'
+import type { Workspace } from './workspace-store'
 
 /** The activities that mean the card waits for the user (D1). */
 export const isWaiting = (activity: Activity | null): boolean =>
@@ -38,11 +39,11 @@ export function nextWaiting(queue: readonly string[], openId: string | null): st
   return queue[(at + 1) % queue.length]
 }
 
-/** Each card's and shell's workspace id, the Default shell (never stored) included. */
+/** Each card's, shell's and Orchestrator's (#81 D9) workspace id. */
 function owners(workspaces: readonly Workspace[]): Map<string, string> {
   const owner = new Map<string, string>()
   for (const w of workspaces) {
-    owner.set(defaultShellId(w.id), w.id)
+    if (hasOrchestrator(w)) owner.set(orchestratorId(w.id), w.id)
     for (const s of w.shells) owner.set(s.id, w.id)
     for (const c of w.cards) owner.set(c.id, w.id)
   }

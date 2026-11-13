@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { lstatSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { servesRemoteCard } from './board-commands'
-import { INVALID_REQUEST, type BoardReply, type BoardRequest } from './board-protocol'
+import { INVALID_REQUEST, type BoardRequest } from './board-protocol'
 import { startBoardServer, type BoardHandler, type BoardServer } from './board-server'
 import type { BoardForward } from './ssh-command'
 
@@ -87,7 +87,7 @@ export class SessionSockets {
   async open(cardId: string): Promise<SessionSocket> {
     const localPath = join(this.dir, `s-${this.randomHex(8)}.sock`)
     const remoteSocket = `/tmp/bikube-${this.randomHex(16)}.sock`
-    const scoped = (request: BoardRequest): Promise<BoardReply> =>
+    const scoped: BoardHandler = (request) =>
       servesOwnCard(request, cardId)
         ? this.handler(request)
         : Promise.resolve({ ok: false, error: INVALID_REQUEST })

@@ -24,6 +24,9 @@ import { readShortcuts, resolveKeymap, validateShortcuts, type ShortcutOverrides
 import { BIKUBE_DARK, BIKUBE_LIGHT, isTerminalThemeName } from './terminal-themes'
 import { WORKSPACE_VIEWS, type WorkspaceView } from './workspace-store'
 import { COLUMN_CARD_LIMIT, isColumnCardLimit } from './column-limit'
+import { isAgentKind } from './agent-presets'
+import { checkCardStartup, type StartupCommand } from './startup-command'
+import { MAX_ORCHESTRATOR_INSTRUCTIONS } from './orchestrator-guide'
 
 export const SETTINGS_FILE_NAME = 'bikube-settings.json'
 export const SETTINGS_VERSION = 1
@@ -51,6 +54,24 @@ export interface Settings extends Preferences {
   shortcuts?: ShortcutOverrides
   /** The system-wide shortcut that shows or hides Bikube (#51 D9), as D7 text; absent when none. */
   globalShortcut?: string
+  /**
+   * What every workspace's Orchestrator starts (#81 D7): an agent preset or a Custom command;
+   * absent for Claude Code, the default.
+   */
+  orchestratorStartup?: StartupCommand
+}
+
+/**
+ * The Orchestrator agent setting `value` names (#81 D7): `null` for Claude Code (absent), the
+ * command for a preset or a Custom command (trimmed, one line), `undefined` when it is none.
+ */
+export function readOrchestratorStartup(value: unknown): StartupCommand | null | undefined {
+  if (!isObject(value)) return undefined
+  if (value.kind === 'claude') return null
+  if (isAgentKind(value.kind)) return { kind: value.kind }
+  if (value.kind !== 'custom' || typeof value.command !== 'string') return undefined
+  const checked = checkCardStartup({ kind: 'custom', command: value.command })
+  return checked.ok ? checked.value : undefined
 }
 
 export const CURSOR_STYLES = ['block', 'bar', 'underline'] as const
@@ -172,6 +193,11 @@ export interface Preferences {
   columnCardLimit: number
   /** The sidebar as one tree, or its agents in their own section below the workspaces (#79 D1). */
   sidebarLayout: SidebarLayout
+  /**
+   * Your orchestrator instructions (#81 D14): the user's own text `board guide` prints after the
+   * shipped guide; '' for none. At most 20,000 characters, trailing whitespace trimmed.
+   */
+  orchestratorInstructions: string
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -211,7 +237,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   defaultView: 'kanban',
   viewChosen: false,
   columnCardLimit: COLUMN_CARD_LIMIT,
-  sidebarLayout: 'nested'
+  sidebarLayout: 'nested',
+  orchestratorInstructions: ''
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -279,7 +306,9 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   defaultView: oneOf(WORKSPACE_VIEWS),
   viewChosen: isBoolean,
   columnCardLimit: isColumnCardLimit,
-  sidebarLayout: oneOf(SIDEBAR_LAYOUTS)
+  sidebarLayout: oneOf(SIDEBAR_LAYOUTS),
+  orchestratorInstructions: (v): v is string =>
+    typeof v === 'string' && v.length <= MAX_ORCHESTRATOR_INSTRUCTIONS && v === v.trimEnd()
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]
@@ -376,6 +405,11 @@ export function validateSettings(value: unknown, platform: string): Settings | n
     if (!PREFERENCE_CHECKS[key](value[key])) return null
     preferences[key] = value[key]
   }
+  const orchestrator =
+    value.orchestratorStartup === undefined
+      ? null
+      : readOrchestratorStartup(value.orchestratorStartup)
+  if (orchestrator === undefined) return null
   const settings = withShortcuts(
     {
       theme: value.theme,
@@ -385,7 +419,8 @@ export function validateSettings(value: unknown, platform: string): Settings | n
       terminalThemeDark: value.terminalThemeDark,
       terminalThemeLight: value.terminalThemeLight,
       useGhosttyConfig: value.useGhosttyConfig,
-      ...(preferences as Preferences)
+      ...(preferences as Preferences),
+      ...(orchestrator !== null && { orchestratorStartup: orchestrator })
     },
     shortcuts
   )
@@ -464,6 +499,11 @@ export function parseSettingsFile(text: string, platform: string): ParsedSetting
   if (isGlobalShortcut(raw.globalShortcut, resolveKeymap(shortcuts, platform), platform)) {
     settings.globalShortcut = raw.globalShortcut
   } else if ('globalShortcut' in raw) replaced.push('globalShortcut')
+  const orchestrator = readOrchestratorStartup(raw.orchestratorStartup)
+  if (orchestrator) settings.orchestratorStartup = orchestrator
+  else if (orchestrator === undefined && 'orchestratorStartup' in raw) {
+    replaced.push('orchestratorStartup')
+  }
   if (isSyncFolderPath(raw.syncFolder)) return { settings, replaced, syncFolder: raw.syncFolder }
   return { settings, replaced }
 }
@@ -494,6 +534,9 @@ export function serializeSettings(settings: Settings, syncFolder: string | null 
       ),
       ...(shortcuts !== undefined && Object.keys(shortcuts).length > 0 && { shortcuts }),
       ...(settings.globalShortcut !== undefined && { globalShortcut: settings.globalShortcut }),
+      ...(settings.orchestratorStartup !== undefined && {
+        orchestratorStartup: settings.orchestratorStartup
+      }),
       ...(syncFolder !== null && { syncFolder })
     }
   })

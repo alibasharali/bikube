@@ -1,6 +1,7 @@
 import { app, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { ListedOutputs, openListedOutput, revealListedOutput } from '../core/agent-output-open'
-import type { AgentSummaryRead } from '../core/agent-tab'
+import { readLastReply } from '../core/agent-reply'
+import type { AgentSummaryRead, ReplyRead } from '../core/agent-tab'
 import { TranscriptTailer, readAgentSummary, readSessionSummary } from '../core/agent-transcript'
 import type { OpenResult } from '../core/open-result'
 import { IPC } from '../shared/api'
@@ -51,6 +52,14 @@ export function registerAgentTab(): void {
       fromMainFrame(event, IPC.agentTabSessionSummary)
       count(sessionId)
       return readSessionSummary({ sessionId, since }, { home: userHome(), tailer, listed })
+    }
+  )
+  // `board reply` (#81 D21): the renderer names the card's folder and session, main only reads.
+  ipcMain.handle(
+    IPC.agentTabReply,
+    (event, folder: unknown, sessionId: unknown): Promise<ReplyRead> => {
+      fromMainFrame(event, IPC.agentTabReply)
+      return readLastReply({ folder, sessionId }, { home: userHome() })
     }
   )
   ipcMain.handle(

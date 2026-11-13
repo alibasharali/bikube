@@ -24,7 +24,7 @@ import {
   type TriggerStatus
 } from '../../core/trigger-status'
 import { listedShellCards, shellWorktreeCard } from '../../core/workspace-shells'
-import { defaultShellId, type Card, type Workspace } from '../../core/workspace-store'
+import type { Card, Workspace } from '../../core/workspace-store'
 import { startInBackground } from './background-shells'
 import { closeCard, removeShell, restartCard, startCard } from './card-actions'
 import { useCardRunState, useCardStatus } from './card-terminals'
@@ -43,7 +43,7 @@ import { workspaceStore } from './store'
 /**
  * The side panel's Shells tab: the workspace's shells, terminals that aren't tasks (a dev server,
  * a test watcher, a plain prompt), one row each with what it runs, where, and its dev servers.
- * The Default shell is always first; New shell adds a named one. A click on a row opens the shell,
+ * New shell adds a named one; with none, an empty line says so (#81 D1). A click on a row opens the shell,
  * starting it when stopped (a trigger's click runs it in the background unless it runs). Beside a worktree
  * card, each named shell's Start dropdown offers Run in this worktree: from then on it runs in
  * that card's worktree.
@@ -61,8 +61,14 @@ function ShellsTab({
   const [editing, setEditing] = useState<{ id: string | null } | null>(null)
   const editingShell =
     editing?.id != null ? (workspace.shells.find((s) => s.id === editing.id) ?? null) : null
+  const shells = listedShellCards(workspace)
   return (
     <div className="shells-tab" data-testid="shells">
+      {shells.length === 0 && (
+        <p className="shells-empty" data-testid="shells-empty">
+          No shells yet.
+        </p>
+      )}
       <div className="shells-tab-header">
         <button
           type="button"
@@ -75,7 +81,7 @@ function ShellsTab({
         </button>
       </div>
       <ul className="shell-rows" aria-label="Shells">
-        {listedShellCards(workspace).map((shell) => (
+        {shells.map((shell) => (
           <ShellRow
             key={shell.id}
             workspace={workspace}
@@ -114,8 +120,8 @@ function runShellIn(
   running: boolean,
   start: boolean
 ): void {
-  const named = workspace.shells.find((s) => s.id === shellId) ?? null
-  const moved = (shellWorktreeCard(workspace, named)?.id ?? null) !== cardId
+  const named = workspace.shells.find((s) => s.id === shellId)
+  const moved = ((named && shellWorktreeCard(workspace, named))?.id ?? null) !== cardId
   if (!workspaceStore.setShellRunIn(workspace.id, shellId, cardId).ok) return
   if (running) {
     if (moved) restartCard(workspace.id, shellId)
@@ -154,13 +160,12 @@ function ShellRow({
   const inWindow = useInWindow(shell.id)
   const [deleting, setDeleting] = useState(false)
   const row = useRef<HTMLLIElement>(null)
-  const isDefault = shell.id === defaultShellId(workspace.id)
   const named = workspace.shells.find((s) => s.id === shell.id) ?? null
   const trigger = named?.type === 'trigger'
   const startsHidden = trigger && !running
   const command = shell.startup.kind === 'custom' ? shell.startup.command : ''
   const status = trigger ? triggerStatus(runState, listening) : null
-  const where = shellWorktreeCard(workspace, named)
+  const where = named ? shellWorktreeCard(workspace, named) : undefined
   // Worktree cards a named shell can run in (local workspaces only).
   const worktreeCards =
     named && workspace.host === undefined ? workspace.cards.filter((c) => c.worktree) : []
@@ -203,7 +208,7 @@ function ShellRow({
           <span className="shell-type-icon" title={trigger ? 'Trigger' : 'Shell'}>
             {trigger ? <Zap {...SMALL_ICON} /> : <SquareTerminal {...SMALL_ICON} />}
           </span>
-          <span className="shell-name">{isDefault ? 'Default shell' : shell.title}</span>
+          <span className="shell-name">{shell.title}</span>
           {named?.autostart && (
             <span className="shell-marker" title="Starts when the workspace opens">
               <Power {...SMALL_ICON} aria-label="Starts when the workspace opens" />
@@ -404,32 +409,28 @@ function ShellRow({
                   })}
                 </div>
               )}
-              {!isDefault && (
-                <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="menu-item"
-                    data-testid="shell-menu-edit"
-                    onClick={run(onEdit)}
-                  >
-                    <Pencil {...MENU_ICON} />
-                    Edit…
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="menu-item menu-item-danger"
-                    data-testid="shell-menu-delete"
-                    onClick={run(() =>
-                      running ? setDeleting(true) : removeShell(workspace.id, shell.id)
-                    )}
-                  >
-                    <Trash2 {...MENU_ICON} />
-                    Delete
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                data-testid="shell-menu-edit"
+                onClick={run(onEdit)}
+              >
+                <Pencil {...MENU_ICON} />
+                Edit…
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item menu-item-danger"
+                data-testid="shell-menu-delete"
+                onClick={run(() =>
+                  running ? setDeleting(true) : removeShell(workspace.id, shell.id)
+                )}
+              >
+                <Trash2 {...MENU_ICON} />
+                Delete
+              </button>
             </>
           )}
         </MenuButton>

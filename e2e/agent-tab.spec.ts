@@ -141,7 +141,7 @@ test('#75 AC1: the Agent tab is the third, shows the board message and stays sel
   await expect(message()).toHaveText('Open a Claude Code card to see its agent.')
 })
 
-test('#75 AC2, AC3: a plain card, the Default shell and a Claude Code card with no transcript', async () => {
+test('#75 AC2, AC3: a plain card, a terminal and a Claude Code card with no transcript', async () => {
   await launch()
   await createWorkspace(repo, 'repo')
   await agentTab().click()
@@ -169,7 +169,7 @@ test('#75 AC2, AC3: a plain card, the Default shell and a Claude Code card with 
   const window = await opened
   await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'agent')
   const windowPanel = window.getByTestId('side-panel')
-  // The Default shell still runs: Shells shows its count.
+  // Files, Shells and Agent.
   await expect(windowPanel.getByRole('tab')).toHaveText(['Files', /^Shells/, 'Agent'])
   await expect(windowPanel.getByTestId('side-panel-tab-agent')).toHaveAttribute(
     'aria-selected',
@@ -508,7 +508,7 @@ function writeShellTranscript(id: string): string {
 const mainAgent = (): Locator =>
   group('Agents').getByTestId('agent-row').filter({ hasText: 'Main agent' })
 
-test('#75 AC15a: Claude Code in the Default and a temporary shell, runtime only', async () => {
+test('#75 AC15a: Claude Code in two temporary shells, runtime only', async () => {
   await launch()
   await createWorkspace(repo, 'repo')
   await agentTab().click()
@@ -516,7 +516,7 @@ test('#75 AC15a: Claude Code in the Default and a temporary shell, runtime only'
   const transcript = writeShellTranscript(session)
 
   await page.getByTestId('toolbar-new-shell').click()
-  await expectCardOpen(page, 'Default')
+  await expectCardOpen(page, 'Terminal 1')
   await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
   await typeInCard(`board session . ${session}`)
   await expect(commandTitles()).toHaveText(['Echo C'], { timeout: 3000 })
@@ -529,25 +529,25 @@ test('#75 AC15a: Claude Code in the Default and a temporary shell, runtime only'
     '42% context'
   )
 
-  // A temporary shell (New shell with the Default shell running) follows its own report.
+  // Another temporary shell follows its own report.
   await backToBoard(page)
   await page.getByTestId('toolbar-new-shell').click()
-  await expectCardOpen(page, 'Terminal 1')
+  await expectCardOpen(page, 'Terminal 2')
   await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
   await typeInCard(`board session . ${session}`)
   await expect(commandTitles()).toHaveText(['Echo C'], { timeout: 3000 })
   await typeInCard('board activity . working')
   await expect(mainAgent().getByTestId('agent-row-status')).toHaveText('Running')
 
-  // Closed and started again, the Default shell has no session.
-  await page.getByTestId('workspace-terminal').filter({ hasText: 'Default' }).click()
-  await expectCardOpen(page, 'Default')
+  // Closed, it is gone; the next Terminal 1 has no session.
+  await page.getByTestId('workspace-terminal').filter({ hasText: 'Terminal 1' }).click()
+  await expectCardOpen(page, 'Terminal 1')
   await expect(commandTitles()).toHaveText(['Echo C'])
   await closeCard(page)
   await page.getByTestId('confirm-close').click()
   await expect(cardView(page)).toHaveCount(0)
   await page.getByTestId('toolbar-new-shell').click()
-  await expectCardOpen(page, 'Default')
+  await expectCardOpen(page, 'Terminal 1')
   await expect(message()).toHaveText('Run claude in this shell to see its agent here.')
 
   // Never saved.

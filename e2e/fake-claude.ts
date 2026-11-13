@@ -39,17 +39,27 @@ export const claudeResumeLine = (id: string): string =>
 // A line on stdin is a message sent: like Claude Code, it writes the conversation's transcript
 // (one line, at `$HOME/.claude/projects/<encoded cwd>/<id>.jsonl`, unless the test wrote one) and,
 // like Bikube's real hook, reports its session with `board session`, so the card resumes it next
-// time (#80 D13).
+// time (#80 D13). With FAKE_CLAUDE_HOOK_LOG set it first runs its `--settings` file's SessionStart
+// hook, as Claude Code does at a fresh start, and writes what the hook printed there (#81 AC6).
+// With FAKE_CLAUDE_INPUT_LOG set it appends the line it read there (#81 AC10's `board send`).
 const FAKE_CLAUDE = `#!/bin/bash
 echo "$*" >> "$BIKUBE_CLAUDE_LOG"
 echo "fake-claude $*"
+if [ -n "$FAKE_CLAUDE_HOOK_LOG" ]; then
+  settings= prev=
+  for a in "$@"; do [ "$prev" = --settings ] && settings=$a; prev=$a; done
+  hook=$(ELECTRON_RUN_AS_NODE=1 "$BIKUBE_EXECUTABLE" -e 'process.stdout.write(require(process.argv[1]).hooks.SessionStart[0].hooks[0].command)' "$settings")
+  printf '%s' '{"session_id":"s","hook_event_name":"SessionStart","source":"startup"}' | sh -c "$hook" > "$FAKE_CLAUDE_HOOK_LOG.tmp"
+  mv "$FAKE_CLAUDE_HOOK_LOG.tmp" "$FAKE_CLAUDE_HOOK_LOG"
+fi
 case " $* " in *" --resume "*) [ "$FAKE_CLAUDE_RESUME_FAILS" = "1" ] && exit 1 ;; esac
 id=
 while [ $# -gt 0 ]; do
   case "$1" in --session-id|--resume) id=$2 ;; esac
   shift
 done
-read -r _
+read -r line
+[ -n "$FAKE_CLAUDE_INPUT_LOG" ] && printf '%s\\n' "$line" >> "$FAKE_CLAUDE_INPUT_LOG"
 if [ -n "$id" ]; then
   dir="$HOME/.claude/projects/$(printf '%s' "$PWD" | sed 's/[^A-Za-z0-9]/-/g')"
   mkdir -p "$dir"

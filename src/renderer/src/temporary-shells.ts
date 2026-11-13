@@ -1,23 +1,19 @@
-import { defaultShellId } from '../../core/workspace-store'
 import { removeShell } from './card-actions'
 import { cardTerminals } from './card-terminals'
 import { workspaceStore } from './store'
 
 /**
- * The New shell shortcut's shells (#66 D1, D2): the Default shell while it isn't running, else a
- * new temporary plain shell, removed from its workspace as soon as it stops.
+ * The New shell shortcut's shells (#66 D2, #81 D2): always a new temporary plain shell, removed from
+ * its workspace as soon as it stops.
  */
 
 const running = (id: string): boolean => cardTerminals().runState(id)?.kind === 'running'
 
 /**
- * The shell the New shell shortcut (and its palette row) opens in the workspace (D1): its Default
- * shell while that isn't running, else a temporary shell added now (D2, D3). Null for no
- * workspace.
+ * The shell the New shell shortcut (and its palette row) opens in the workspace: a temporary
+ * `Terminal N` added now (#81 D2). Null for no workspace.
  */
 export function newShell(workspaceId: string): string | null {
-  const defaultId = defaultShellId(workspaceId)
-  if (!running(defaultId)) return defaultId
   const added = workspaceStore.createTemporaryShell(workspaceId)
   return added.ok ? added.value.id : null
 }

@@ -31,6 +31,9 @@ import {
   type ShortcutAction
 } from '../../core/keymap'
 import { recordGlobalPress } from '../../core/global-hotkey'
+import { CLAUDE_STARTUP, type StartupCommand } from '../../core/startup-command'
+import { parseChoice } from '../../core/startup-form'
+import { StartupOptions } from './StartupField'
 import type { GlobalShortcutState } from '../../core/global-shortcut'
 import {
   DEFAULT_FONT_FAMILY,
@@ -52,6 +55,7 @@ import {
   type SidebarLayout,
   type Theme
 } from '../../core/settings'
+import { MAX_ORCHESTRATOR_INSTRUCTIONS } from '../../core/orchestrator-guide'
 import { ANSI_COLOUR_NAMES, terminalPalette, withSymbols } from '../../core/terminal-appearance'
 import { terminalTheme } from '../../core/terminal-themes'
 import type { ShellChoices } from '../../shared/api'
@@ -1195,11 +1199,13 @@ function TerminalBehaviourRows(): React.JSX.Element {
   )
 }
 
-/** Agents: being told when one needs you, and Claude Code's status line. */
+/** Agents: the Orchestrator's agent, being told when one needs you, and Claude Code's status line. */
 function AgentsSection(): React.JSX.Element {
   const settings = useSettings()
   return (
     <>
+      <OrchestratorAgentField />
+      <OrchestratorInstructionsField />
       <SwitchRow
         label="Notifications"
         hint="When an agent is waiting for you or needs your answer, unless its card is in view, and when a command that ran 10 s or more ends out of sight. The Dock shows how many are waiting."
@@ -1229,6 +1235,122 @@ function AgentsSection(): React.JSX.Element {
         onChange={(offerClaudeRetention) => settingsStore.update({ offerClaudeRetention })}
       />
     </>
+  )
+}
+
+/**
+ * Orchestrator agent (#81 D7): what every workspace's Orchestrator starts, Claude Code by default,
+ * an agent the login shell lacks disabled as in the New card dialog. A Custom command's text is
+ * applied on blur or Enter, once it is a valid one-line command. Its next start uses it.
+ */
+function OrchestratorAgentField(): React.JSX.Element {
+  const { orchestratorStartup } = useSettings()
+  const current = orchestratorStartup ?? CLAUDE_STARTUP
+  const id = useId()
+  const selectId = `${id}-orchestrator`
+  const [custom, setCustom] = useState(current.kind === 'custom')
+  const [command, setCommand] = useState(current.kind === 'custom' ? current.command : '')
+  const [invalid, setInvalid] = useState(false)
+  const choice = custom ? 'custom' : current.kind
+  const applyCommand = (): void => {
+    const ok = settingsStore.update({ orchestratorStartup: { kind: 'custom', command } })
+    setInvalid(!ok)
+  }
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={selectId}>
+        Orchestrator agent
+      </label>
+      <div className="settings-control">
+        <select
+          id={selectId}
+          className="settings-input"
+          data-testid="settings-orchestrator-agent"
+          value={choice}
+          onChange={(e) => {
+            const picked = parseChoice(e.target.value)
+            setInvalid(false)
+            if (picked === 'custom') {
+              setCustom(true)
+              if (command.trim())
+                settingsStore.update({ orchestratorStartup: { kind: 'custom', command } })
+              return
+            }
+            setCustom(false)
+            settingsStore.update({
+              orchestratorStartup:
+                picked === 'claude' ? undefined : ({ kind: picked } as StartupCommand)
+            })
+          }}
+        >
+          <StartupOptions />
+        </select>
+        {choice === 'custom' && (
+          <input
+            className="settings-input"
+            data-testid="settings-orchestrator-command"
+            aria-label="Orchestrator command"
+            aria-invalid={invalid ? true : undefined}
+            value={command}
+            placeholder="my-agent"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => setCommand(e.target.value)}
+            onBlur={applyCommand}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyCommand()
+            }}
+          />
+        )}
+        <p className="field-hint">
+          {invalid
+            ? 'Enter a one-line command.'
+            : "What each workspace's orchestrator runs. Applies at its next start."}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Your orchestrator instructions (#81 D14): the user's own text, which `board guide` prints after
+ * the shipped guide. Saved as typed, its trailing whitespace trimmed (shown trimmed on blur); an orchestrator reads it at
+ * its next start, resume or `/clear`.
+ */
+function OrchestratorInstructionsField(): React.JSX.Element {
+  const { orchestratorInstructions } = useSettings()
+  const [text, setText] = useState(orchestratorInstructions)
+  const id = useId()
+  const fieldId = `${id}-orchestrator-instructions`
+  const hintId = `${fieldId}-hint`
+  return (
+    <div className="settings-row">
+      <label className="settings-label" htmlFor={fieldId}>
+        Your orchestrator instructions
+      </label>
+      <div className="settings-control">
+        <textarea
+          id={fieldId}
+          className="settings-input settings-textarea"
+          data-testid="settings-orchestrator-instructions"
+          aria-describedby={hintId}
+          value={text}
+          maxLength={MAX_ORCHESTRATOR_INSTRUCTIONS}
+          rows={5}
+          placeholder="Always use worktrees."
+          spellCheck={false}
+          onChange={(e) => {
+            setText(e.target.value)
+            // Saved as typed, trimmed, so closing Settings with Esc loses nothing.
+            settingsStore.update({ orchestratorInstructions: e.target.value.trimEnd() })
+          }}
+          onBlur={() => setText(text.trimEnd())}
+        />
+        <p className="field-hint" id={hintId}>
+          Added to every orchestrator&rsquo;s instructions. Applies at its next start or resume.
+        </p>
+      </div>
+    </div>
   )
 }
 

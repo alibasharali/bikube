@@ -7,40 +7,24 @@ import {
   useState,
   useSyncExternalStore
 } from 'react'
-import { knownStatus, type CardRunState } from '../../core/card-status'
 import {
   filterPalette,
   paletteItems,
   type ActionRow,
-  type OpenView,
   type PaletteAction,
   type PaletteItems,
   type PaletteRow,
-  type RowStatus,
   type TerminalRow
 } from '../../core/palette'
-import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import { shellCards } from '../../core/workspace-shells'
 import type { WorkspaceState } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
-import {
-  cardPanes,
-  cardTerminals,
-  useCardRunState,
-  usePaneLayout,
-  type XtermScreen
-} from './card-terminals'
+import { cardTerminals, useCardRunState, usePaneLayout } from './card-terminals'
 import Modal from './Modal'
+import { paletteInput, rowStatus, type OpenTerminal } from './palette-input'
 import ShortcutKeys from './ShortcutKeys'
-import { currentKeymap, useSettings } from './settings'
+import { useSettings } from './settings'
 import { useWorkspaceState } from './store'
-
-/** The card or shell open at full size, as App knows it. */
-export interface OpenTerminal {
-  kind: OpenView['kind']
-  workspaceId: string
-  cardId: string
-}
 
 interface CommandPaletteProps {
   /** The card or shell open at full size, or null on the board. */
@@ -72,11 +56,6 @@ function terminalIds(state: WorkspaceState): string[] {
   ])
 }
 
-function rowStatus(cardId: string): RowStatus {
-  const { label, activity } = knownStatus(cardTerminals().status(cardId))
-  return activity ? { label, activity } : { label }
-}
-
 /**
  * Every listed card's and shell's status label and activity, as one string that changes only
  * when one of them does, so the rows follow live changes (D3) without re-rendering on output.
@@ -104,28 +83,6 @@ function useStatusKey(ids: string[]): string {
   )
 }
 
-/** A pane's screen, as CardView reads it: the card's own terminal for the main pane. */
-function paneScreen(cardId: string, paneId: string): XtermScreen | undefined {
-  return paneId === MAIN_PANE ? cardTerminals().screen(cardId) : cardPanes().screen(cardId, paneId)
-}
-
-/** The open view as the palette's rows read it, from its live run state and panes. */
-function openView(
-  open: OpenTerminal | null,
-  runState: CardRunState,
-  layout: PaneLayout
-): OpenView | null {
-  if (!open) return null
-  return {
-    ...open,
-    running: runState.kind === 'running',
-    paneCount: paneIds(layout.tree).length,
-    extraPaneFocused: layout.focused !== MAIN_PANE,
-    focusedPaneHasScreen: paneScreen(open.cardId, layout.focused) !== undefined,
-    zoomed: layout.zoomed === true
-  }
-}
-
 /** The command palette (#40 D2): a search field over the Cards, Shells and Actions sections. */
 function CommandPalette({
   open,
@@ -138,7 +95,7 @@ function CommandPalette({
   // The open view's actions follow its panes and whether it runs (D6).
   const runState = useCardRunState(open?.cardId ?? '')
   const layout = usePaneLayout(open?.cardId ?? '')
-  const { theme, appTheme, defaultView, sidebarLayout } = useSettings()
+  const settings = useSettings()
   const [query, setQuery] = useState('')
   const listId = useId()
   const ids = terminalIds(state)
@@ -149,37 +106,14 @@ function CommandPalette({
   const items = useMemo(
     () =>
       filterPalette(
-        paletteItems({
-          state,
-          status: rowStatus,
-          view: openView(open, runState, layout),
-          agentSetup,
-          theme,
-          appTheme,
-          defaultView,
-          sidebarLayout,
-          keymap: currentKeymap(),
-          platform: window.bikube?.platform ?? '',
-          waiting
-        }),
+        paletteItems(
+          paletteInput({ state, open, agentSetup, runState, layout, settings, waiting })
+        ),
         query
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      state,
-      open,
-      agentSetup,
-      runState,
-      layout,
-      theme,
-      appTheme,
-      defaultView,
-      sidebarLayout,
-      query,
-      statusKey,
-      waiting
-    ]
+    [state, open, agentSetup, runState, layout, settings, query, statusKey, waiting]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,

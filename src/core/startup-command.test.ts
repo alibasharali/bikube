@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { checkStartup, FIRST_PROMPT, startLine, typedStartLine } from './startup-command'
+import {
+  checkStartup,
+  FIRST_PROMPT,
+  ORCHESTRATED_FIRST_PROMPT,
+  startLine,
+  typedStartLine
+} from './startup-command'
 
 const U = '3f0e4c1a-8b2d-4c6e-9a7f-1b2c3d4e5f60'
 
@@ -226,5 +232,43 @@ describe('the first prompt for a card with a description (#69 D2, AC2)', () => {
         claudeStarted: false
       })
     ).not.toContain(prompt)
+  })
+})
+
+describe("an orchestrated card's first prompt (#81 D18, AC9)", () => {
+  const prompt =
+    'This card has a task description. Read it with: board description .  Then start working on it.'
+  const orchestrated = {
+    agentSessionId: U,
+    description: 'Review the branch',
+    orchestrated: true as const
+  }
+
+  it('is the fixed text, which holds no quote, backslash or $', () => {
+    expect(ORCHESTRATED_FIRST_PROMPT).toBe(prompt)
+    expect(ORCHESTRATED_FIRST_PROMPT).not.toMatch(/['"\\$`]/)
+  })
+
+  it("replaces #69's prompt on a fresh start with a description, never on a resume", () => {
+    expect(startLine({ ...orchestrated, startup: { kind: 'claude' }, claudeStarted: false })).toBe(
+      `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --session-id ${U} '${prompt}' || ` +
+        `claude --settings "$BIKUBE_CLAUDE_SETTINGS" --resume ${U}`
+    )
+    expect(
+      startLine({ ...orchestrated, startup: { kind: 'claude' }, claudeStarted: true })
+    ).not.toContain(prompt)
+    const codex = { ...orchestrated, startup: { kind: 'codex' }, claudeStarted: false } as const
+    expect(startLine({ ...codex, startedAgents: [] })).toBe(`codex '${prompt}'`)
+    expect(startLine({ ...codex, startedAgents: ['codex'] })).toBe('codex resume --last || codex')
+  })
+
+  it('passes none without a description', () => {
+    const line = startLine({
+      agentSessionId: U,
+      orchestrated: true as const,
+      startup: { kind: 'codex' },
+      claudeStarted: false
+    })
+    expect(line).toBe('codex')
   })
 })

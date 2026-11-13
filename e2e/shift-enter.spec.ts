@@ -3,11 +3,10 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expectCardOpen, splitRight } from './card-view'
+import { expectCardOpen, openTerminal, splitRight } from './card-view'
 import { fakeClaudeHome } from './fake-claude'
 import { launchApp, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
-import { showShells } from './shells-tab'
 
 // Shift+Enter (the terminal polish pass, #58). It sends ESC CR, which Claude Code takes as a new
 // line, while focus reporting is on in a Claude Code card's main pane or in any pane that saw
@@ -172,12 +171,7 @@ test('Shift+Enter is Enter in a card that does not start Claude Code', async () 
 
 test("Shift+Enter is ESC CR in a workspace's shell while Claude Code runs there, Enter once it exits", async () => {
   await addWorkspace(true)
-  await showShells(page)
-  await page
-    .locator('[data-testid="shell"][data-shell-name="Default"]')
-    .getByTestId('shell-open')
-    .click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await expect.poll(focusedText, { timeout: 15_000 }).toMatch(/\S/)
   await page.keyboard.type('sh probe.sh')
@@ -196,12 +190,7 @@ test("Shift+Enter is ESC CR in a workspace's shell while Claude Code runs there,
 
 test("Shift+Enter is ESC CR in a workspace's shell while a program named claude has focus reporting on, without the probe", async () => {
   await addWorkspace(true)
-  await showShells(page)
-  await page
-    .locator('[data-testid="shell"][data-shell-name="Default"]')
-    .getByTestId('shell-open')
-    .click()
-  await expectCardOpen(page, 'Default')
+  await openTerminal(page)
   await page.getByTestId('card-view').getByTestId('terminal').click()
   await expect.poll(focusedText, { timeout: 15_000 }).toMatch(/\S/)
   const claude = join(root, 'native', 'claude')

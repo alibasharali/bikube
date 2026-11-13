@@ -365,6 +365,24 @@ describe('shells in the sync file', () => {
   })
 })
 
+describe("cards and shells claiming an Orchestrator's id in the sync file (#81 D16)", () => {
+  it('drops them, reading the rest', () => {
+    const shell = { id: 's1', name: 'Dev', command: '', autostart: false, type: 'shell' as const }
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('k', 'w-backlog'), card('orchestrator:w', 'w-backlog')],
+          shells: [shell, { ...shell, id: 'orchestrator:s' }]
+        })
+      ]
+    }
+    const read = parseSyncFile(serializeSyncFile(toSyncBoard(state, HOME), new Date(0)), HOME)
+    expect(read.ok && read.workspaces[0]!.cards.map((c) => c.id)).toEqual(['k'])
+    expect(read.ok && read.workspaces[0]!.shells).toEqual([shell])
+  })
+})
+
 describe("a card's pending setup is not synced (#39 D8, AC12)", () => {
   it('writes no setup on any card, and reads a card the file gives one as having none', () => {
     const state: WorkspaceState = {
@@ -597,5 +615,64 @@ describe('a pending worktree in the sync file (#69 D10)', () => {
     const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
     expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
     expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('pendingWorktree')
+  })
+})
+
+describe("the Orchestrator's conversation in the sync file (#81 D8, AC15)", () => {
+  it('writes its session id, with nothing started (as a local card), and reads it back', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          orchestrator: {
+            agentSessionId: 'session-o',
+            claudeStarted: true,
+            startedAgents: ['codex']
+          }
+        }),
+        workspace('v', 'beta')
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.orchestrator).toEqual({
+      agentSessionId: 'session-o',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(board.workspaces[1]!).not.toHaveProperty('orchestrator')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.orchestrator).toEqual({
+      agentSessionId: 'session-o',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    file.board.workspaces[0].orchestrator = { agentSessionId: 7 }
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!).not.toHaveProperty('orchestrator')
+  })
+})
+
+describe('orchestrated cards in the sync file (#81 D18)', () => {
+  it('writes orchestrated only on a card marked, reads it back, and drops a bad value', () => {
+    const state: WorkspaceState = {
+      activeId: 'w',
+      workspaces: [
+        workspace('w', 'alpha', {
+          cards: [card('a', 'w-backlog', { orchestrated: true }), card('b', 'w-backlog')]
+        })
+      ]
+    }
+    const board = toSyncBoard(state, HOME)
+    expect(board.workspaces[0]!.cards[0]!.orchestrated).toBe(true)
+    expect(board.workspaces[0]!.cards[1]!).not.toHaveProperty('orchestrated')
+    const file = JSON.parse(serializeSyncFile(board, new Date(0)))
+    const read = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(read.ok && read.workspaces[0]!.cards[0]!.orchestrated).toBe(true)
+    expect(read.ok && read.workspaces[0]!.cards[1]!).not.toHaveProperty('orchestrated')
+    file.board.workspaces[0].cards[0].orchestrated = 1
+    const bad = parseSyncFile(JSON.stringify(file), '/tmp/hb')
+    expect(bad.ok && bad.workspaces[0]!.cards.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(bad.ok && bad.workspaces[0]!.cards[0]!).not.toHaveProperty('orchestrated')
   })
 })

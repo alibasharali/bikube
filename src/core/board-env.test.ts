@@ -40,3 +40,14 @@ describe('boardShellEnv', () => {
     )
   })
 })
+
+describe("the Orchestrator's shell (#81 D15)", () => {
+  it('gets BIKUBE_ORCHESTRATOR=1; a card or shell none', () => {
+    const env = boardShellEnv({ ...paths, cardId: 'orchestrator:w1', path: '/bin' })
+    expect(env.BIKUBE_ORCHESTRATOR).toBe('1')
+    expect(env.BIKUBE_CARD_ID).toBe('orchestrator:w1')
+    expect(boardShellEnv({ ...paths, cardId: 'c1', path: '/bin' })).not.toHaveProperty(
+      'BIKUBE_ORCHESTRATOR'
+    )
+  })
+})

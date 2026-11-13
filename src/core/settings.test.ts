@@ -911,3 +911,83 @@ describe('the Offer to keep Claude Code conversations preference (#80 D6)', () =
     expect(validateSettings({ ...base, offerClaudeRetention: 'no' }, 'linux')).toBeNull()
   })
 })
+
+describe('the Orchestrator agent in the settings file (#81 D7, AC5)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is Claude Code by default and written only when it is another agent', () => {
+    expect(DEFAULT_SETTINGS.orchestratorStartup).toBeUndefined()
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('orchestratorStartup')
+    for (const startup of [
+      { kind: 'codex' },
+      { kind: 'custom', command: 'my-agent --x' }
+    ] as const) {
+      const settings: Settings = { ...base, orchestratorStartup: startup }
+      const text = serializeSettings(settings)
+      expect(JSON.parse(text).settings.orchestratorStartup).toEqual(startup)
+      expect(parseSettingsFile(text, 'linux')).toEqual({ settings, replaced: [] })
+    }
+  })
+
+  it('saves Claude Code as none, a trimmed custom command, and refuses a bad one', () => {
+    expect(validateSettings({ ...base, orchestratorStartup: { kind: 'claude' } }, 'linux')).toEqual(
+      base
+    )
+    expect(
+      validateSettings(
+        { ...base, orchestratorStartup: { kind: 'custom', command: ' run ' } },
+        'linux'
+      )?.orchestratorStartup
+    ).toEqual({ kind: 'custom', command: 'run' })
+    for (const bad of [
+      { kind: 'shell' },
+      { kind: 'custom', command: '' },
+      { kind: 'custom', command: 'a\nb' },
+      { kind: 'nope' },
+      'codex'
+    ]) {
+      expect(validateSettings({ ...base, orchestratorStartup: bad }, 'linux')).toBeNull()
+    }
+  })
+
+  it('reads a bad one as Claude Code, reported', () => {
+    for (const bad of [{ kind: 'shell' }, { kind: 'custom', command: '' }, 42]) {
+      const parsed = parseSettingsFile(file({ ...base, orchestratorStartup: bad }), 'linux')
+      expect(parsed.settings).toEqual(base)
+      expect(parsed.replaced).toEqual(['orchestratorStartup'])
+    }
+  })
+})
+
+describe('Your orchestrator instructions in the settings file (#81 D14)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('is empty by default and written only when not empty', () => {
+    expect(DEFAULT_SETTINGS.orchestratorInstructions).toBe('')
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty(
+      'orchestratorInstructions'
+    )
+    const orchestratorInstructions = 'Always use worktrees.\n\n- Ask before merging.'
+    const text = serializeSettings({ ...base, orchestratorInstructions })
+    expect(JSON.parse(text).settings.orchestratorInstructions).toBe(orchestratorInstructions)
+    expect(parseSettingsFile(text, 'linux').settings.orchestratorInstructions).toBe(
+      orchestratorInstructions
+    )
+  })
+
+  it('takes up to 20,000 characters with no trailing whitespace', () => {
+    const longest = 'x'.repeat(20_000)
+    expect(
+      validateSettings({ ...base, orchestratorInstructions: longest }, 'linux')
+        ?.orchestratorInstructions
+    ).toBe(longest)
+    for (const bad of ['x'.repeat(20_001), 'a\n', 'a ', 42]) {
+      expect(validateSettings({ ...base, orchestratorInstructions: bad }, 'linux')).toBeNull()
+      const parsed = parseSettingsFile(file({ ...base, orchestratorInstructions: bad }), 'linux')
+      expect(parsed.settings.orchestratorInstructions).toBe('')
+      expect(parsed.replaced).toEqual(['orchestratorInstructions'])
+    }
+  })
+})

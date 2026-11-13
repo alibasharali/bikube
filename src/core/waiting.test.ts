@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultShellId, type Card, type Workspace } from './workspace-store'
+import { type Card, type Workspace } from './workspace-store'
 import {
   nextWaiting,
   nextWaitingCard,
@@ -100,42 +100,40 @@ describe('the waiting queue (#41 D1, D2)', () => {
 })
 
 describe('waiting per workspace (#41 D6)', () => {
-  it('counts the waiting cards and shells, the Default shell included', () => {
-    const queue = ['b1', defaultShellId('beta'), 'dev', 'a2']
+  it('counts the waiting cards and shells', () => {
+    const queue = ['b1', 'dev', 'a2']
     expect(waitingCounts(queue, [alpha, beta])).toEqual(
       new Map([
-        ['beta', 3],
+        ['beta', 2],
         ['alpha', 1]
       ])
     )
     expect(waitingCounts([], [alpha, beta])).toEqual(new Map())
   })
 
-  it('drops deleted cards and shells, and keeps the Default shell of a workspace that exists', () => {
-    const queue = ['b1', defaultShellId('beta'), 'dev', 'gone', defaultShellId('gone')]
-    expect(withoutDeleted(queue, [alpha, beta])).toEqual(['b1', defaultShellId('beta'), 'dev'])
-    expect(withoutDeleted(queue, [alpha, workspace('beta', ['b1'])])).toEqual([
-      'b1',
-      defaultShellId('beta')
-    ])
+  it('drops deleted cards and shells, and a Default shell id now that there is none (#81 D1)', () => {
+    const queue = ['b1', 'default-shell:beta', 'dev', 'gone']
+    expect(withoutDeleted(queue, [alpha, beta])).toEqual(['b1', 'dev'])
+    expect(withoutDeleted(queue, [alpha, workspace('beta', ['b1'])])).toEqual(['b1'])
+    expect(waitingCounts(['default-shell:beta'], [alpha, beta])).toEqual(new Map())
   })
 
   it('returns the same queue when nothing was deleted', () => {
-    const queue = ['b1', defaultShellId('beta')]
+    const queue = ['b1', 'dev']
     expect(withoutDeleted(queue, [alpha, beta])).toBe(queue)
   })
 })
 
 describe('the next waiting card and its workspace (#41 D4, D5)', () => {
-  it('names the workspace of the card or shell to open, the Default shell included', () => {
-    const queue = ['b1', defaultShellId('beta'), 'a2']
+  it('names the workspace of the card or shell to open', () => {
+    const queue = ['b1', 'dev', 'a2']
     expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
       workspaceId: 'beta',
       cardId: 'b1'
     })
     expect(nextWaitingCard(queue, 'b1', [alpha, beta])).toEqual({
       workspaceId: 'beta',
-      cardId: defaultShellId('beta')
+      cardId: 'dev'
     })
     expect(nextWaitingCard(queue, 'a2', [alpha, beta])).toEqual({
       workspaceId: 'beta',
@@ -153,13 +151,26 @@ describe('the next waiting card and its workspace (#41 D4, D5)', () => {
   })
 })
 
-describe('a waiting Default shell (#41 AC7)', () => {
+describe('a waiting shell (#41 AC7)', () => {
   it('counts 1 for its workspace and is the one the picker opens', () => {
-    const queue = [defaultShellId('beta')]
+    const queue = ['dev']
     expect(waitingCounts(queue, [alpha, beta])).toEqual(new Map([['beta', 1]]))
     expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
       workspaceId: 'beta',
-      cardId: defaultShellId('beta')
+      cardId: 'dev'
     })
+  })
+})
+
+describe('the Orchestrator waits like a card (#81 D9, AC15)', () => {
+  it('counts in its workspace and opens there; none for an SSH workspace', () => {
+    const queue = ['orchestrator:beta']
+    expect(waitingCounts(queue, [alpha, beta])).toEqual(new Map([['beta', 1]]))
+    expect(nextWaitingCard(queue, null, [alpha, beta])).toEqual({
+      workspaceId: 'beta',
+      cardId: 'orchestrator:beta'
+    })
+    const ssh = { ...beta, host: 'box' }
+    expect(withoutDeleted(queue, [alpha, ssh])).toEqual([])
   })
 })

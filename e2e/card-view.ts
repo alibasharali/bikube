@@ -29,6 +29,18 @@ export async function expectCardOpen(page: Page, title: string): Promise<void> {
   await expect(cardView(page)).toHaveAttribute('aria-label', title)
 }
 
+/** New shell's default shortcut (#66, #81 D2): a new temporary `Terminal N`, opened. */
+export const NEW_SHELL = darwin ? 'Meta+T' : 'Control+Shift+T'
+
+/**
+ * Opens a new temporary terminal with New shell and waits for it, `Terminal 1` unless `title`
+ * says otherwise: a plain shell in the workspace folder.
+ */
+export async function openTerminal(page: Page, title = 'Terminal 1'): Promise<void> {
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, title)
+}
+
 /** Goes back to the board (or a grid view workspace's grid) with the Back shortcut. */
 export async function backToBoard(page: Page): Promise<void> {
   await page.keyboard.press(SHORTCUTS.back)

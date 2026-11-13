@@ -1465,6 +1465,18 @@ describe('temporary shells (#66 D2, D3)', () => {
     expect(s.createTemporaryShell('nope')).toMatchObject({ ok: false })
   })
 
+  it("types a command given as its startup, checked like a named shell's (#81 D22)", () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const t = ok(s.createTemporaryShell(w.id, '  npm run dev  '))
+    expect(t).toMatchObject({ name: 'Terminal 1', command: 'npm run dev', type: 'shell' })
+    expect(s.createTemporaryShell(w.id, 'a\nb')).toMatchObject({
+      ok: false,
+      error: { field: 'command', message: 'Command must be one line' }
+    })
+    expect(s.getState().workspaces[0].shells).toHaveLength(1)
+  })
+
   it('stays temporary when edited', () => {
     const s = make()
     const w = create(s, 'alpha')
@@ -1561,6 +1573,19 @@ describe('workspace views and card open times', () => {
     const opened = ok(s.markCardOpened(w.id, created.id, 7))
     expect(opened.lastOpenedAt).toBe(7)
     expect('unopened' in opened).toBe(false)
+  })
+
+  it('creates a card marked orchestrated when asked, kept when opened (#81 D18)', () => {
+    const s = make()
+    const w = create(s, 'alpha')
+    const created = ok(
+      s.createCard(w.id, w.columns[0].id, 'Review', undefined, undefined, undefined, {
+        orchestrated: true
+      })
+    )
+    expect(created.orchestrated).toBe(true)
+    expect('orchestrated' in card(s, w, 'plain')).toBe(false)
+    expect(ok(s.markCardOpened(w.id, created.id, 7)).orchestrated).toBe(true)
   })
 
   it("keeps a card's last status and usage, '' and no tokens forgetting them, the same saving nothing", () => {
@@ -1696,5 +1721,70 @@ describe('pending worktree (#69 D10)', () => {
     const state = s.getState()
     ok(s.clearPendingWorktree(w.id, c.id))
     expect(s.getState()).toBe(state)
+  })
+})
+
+describe("the Orchestrator's conversation (#81 D8, D11)", () => {
+  const ids = (): InMemoryWorkspaceStore => {
+    let n = 0
+    return new InMemoryWorkspaceStore({ generateSessionId: () => `session-${++n}` })
+  }
+
+  it('is absent until ensured, then kept as it is', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    expect(w.orchestrator).toBeUndefined()
+    expect(ok(s.ensureOrchestrator(w.id))).toEqual({
+      agentSessionId: 'session-1',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    const state = s.getState()
+    ok(s.ensureOrchestrator(w.id))
+    expect(s.getState()).toBe(state)
+    expect(s.getState().workspaces[0].orchestrator?.agentSessionId).toBe('session-1')
+  })
+
+  it('takes the card session changes by its id', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    const id = `orchestrator:${w.id}`
+    ok(s.ensureOrchestrator(w.id))
+    ok(s.markAgentStarted(w.id, id, 'codex'))
+    ok(s.markClaudeStarted(w.id, id))
+    expect(s.getState().workspaces[0].orchestrator).toEqual({
+      agentSessionId: 'session-1',
+      claudeStarted: true,
+      startedAgents: ['codex']
+    })
+    ok(s.clearClaudeStarted(w.id, id))
+    expect(s.getState().workspaces[0].orchestrator?.claudeStarted).toBe(false)
+    ok(s.setAgentSession(w.id, id, 'session-x'))
+    expect(s.getState().workspaces[0].orchestrator).toMatchObject({
+      agentSessionId: 'session-x',
+      claudeStarted: true
+    })
+  })
+
+  it("is refused for an SSH workspace or another workspace's id", () => {
+    const s = ids()
+    const ssh = ok(s.createWorkspace({ name: 'r', directory: '~', host: 'box' }))
+    expect(s.ensureOrchestrator(ssh.id).ok).toBe(false)
+    const w = create(s, 'a')
+    expect(s.setAgentSession(w.id, `orchestrator:${ssh.id}`, 'x').ok).toBe(false)
+  })
+
+  it('a new conversation gets a new session id with nothing started (D11)', () => {
+    const s = ids()
+    const w = create(s, 'a')
+    ok(s.ensureOrchestrator(w.id))
+    ok(s.markAgentStarted(w.id, `orchestrator:${w.id}`, 'codex'))
+    ok(s.setAgentSession(w.id, `orchestrator:${w.id}`, 'session-x'))
+    expect(ok(s.newOrchestratorConversation(w.id))).toEqual({
+      agentSessionId: 'session-2',
+      claudeStarted: false,
+      startedAgents: []
+    })
+    expect(s.getState().workspaces[0].orchestrator?.agentSessionId).toBe('session-2')
   })
 })

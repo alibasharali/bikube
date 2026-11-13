@@ -3,7 +3,8 @@
  * its store, applies the change, and answers with the reply the CLI prints. Plain TS.
  */
 import type { Activity } from './activity'
-import type { BoardCommand, SetupResult } from './board-args'
+import type { ReplyRead } from './agent-tab'
+import { WAIT_DEFAULT_SECONDS, type BoardCommand, type SetupResult } from './board-args'
 import {
   boardListing,
   formatBoardListing,
@@ -27,14 +28,26 @@ import {
   callingTerminal,
   CALLING_CARD,
   SHELL_NOT_A_CARD,
+  ORCHESTRATOR_NOT_A_CARD,
   noSetupError,
   notRunningError,
   resolveCard,
   resolveColumn
 } from './board-commands'
 import { INVALID_REQUEST, type BoardReply } from './board-protocol'
+import { checkSendText } from './board-send'
+import type { StartOutcome } from './board-start'
+import { waitTimedOut, type WaitResult } from './board-wait'
+import { transcriptBackupTarget } from './transcript-backup-target'
 import type { ClaudeUsage } from './claude-usage-types'
-import type { Card, WorkspaceState, WorkspaceStore } from './workspace-store'
+import { orchestratorGuide } from './orchestrator-guide'
+import {
+  findPaletteRow,
+  orchestratorPaletteRows,
+  type PaletteAction,
+  type PaletteItems
+} from './palette'
+import type { Card, Workspace, WorkspaceState, WorkspaceStore } from './workspace-store'
 import { branchProblem, suggestBranch } from './worktree-names'
 
 /** The local branches of the repository a folder is in, or null outside one (main's `worktree.info`). */
@@ -121,6 +134,274 @@ function answerShell(
 }
 
 /**
+ * What the commands that drive the board and the app read and do in the renderer (#81 D13,
+ * D17–D23), for any local card or shell as for the Orchestrator (D16). Every field is optional so
+ * callers and tests pass only what they use.
+ */
+export interface OrchestratorAnswers {
+  /** Settings' Your orchestrator instructions (D14), read at each `board guide`. */
+  instructions?: () => string
+  /**
+   * Starts a stopped card or shell in the background exactly as opening it would (D17: a pending
+   * worktree first, a conversation check), changing no view; resolves with how its start ended.
+   */
+  start?: (workspaceId: string, cardId: string) => Promise<StartOutcome>
+  /**
+   * Shows a running card or shell (D17, D22): makes its workspace active and opens it at full size,
+   * in its own window if it has one, as any open does (clearing `New`).
+   */
+  open?: (workspaceId: string, cardId: string) => void
+  /**
+   * Types the cleaned text into the running card's main pane as one paste, then Enter 50 ms later
+   * (D19); resolves once the Enter is typed.
+   */
+  send?: (cardId: string, text: string) => Promise<void>
+  /** Waits until the card stops, waits or asks, `seconds` at most (D20). */
+  wait?: (cardId: string, seconds: number) => Promise<WaitResult | 'timeout'>
+  /** Main's read of the last reply in the Claude Code session's transcript in `folder` (D21). */
+  reply?: (folder: string, sessionId: string) => Promise<ReplyRead>
+  /** The palette's rows for the user's current view, as the palette would show them (D23). */
+  palette?: () => PaletteItems
+  /** Runs an action row exactly as picking it in the palette would (D23). */
+  runPalette?: (action: PaletteAction) => void
+}
+
+/** A command that drives the board and the app (#81 D13, D17–D23), from any local terminal (D16). */
+type DrivingCommand = Extract<
+  BoardCommand,
+  { command: 'guide' | 'start' | 'open' | 'send' | 'wait' | 'reply' | 'terminal' | 'palette' }
+>
+
+const DRIVING: ReadonlySet<BoardCommand['command']> = new Set([
+  'guide',
+  'start',
+  'open',
+  'send',
+  'wait',
+  'reply',
+  'terminal',
+  'palette'
+])
+
+const isDriving = (command: BoardCommand): command is DrivingCommand => DRIVING.has(command.command)
+
+/** The refusal for a card or terminal whose start failed (#81 D17). */
+const startFailed = (title: string, reason: string): BoardReply => ({
+  ok: false,
+  error: `board: "${title}" couldn't start: ${reason}`
+})
+
+/**
+ * A driving command from a local terminal in `workspace` (D16): `guide` prints the guide with the
+ * workspace's name and folder and the user's instructions (D13); `start`, `open`,
+ * `terminal`, `send`, `wait` and `reply` are `answerBoardRequest`'s. `palette list` prints the
+ * palette's action rows but those acting on the open card or pane, one label a line; `palette run`
+ * runs the one its label names, at once, and prints nothing (D23).
+ */
+function answerDriving(
+  workspace: Workspace,
+  command: DrivingCommand,
+  answers: OrchestratorAnswers
+): BoardReply {
+  if (command.command === 'guide') {
+    const output = orchestratorGuide(
+      workspace.name,
+      workspace.directory,
+      answers.instructions?.() ?? ''
+    )
+    return { ok: true, output }
+  }
+  if (command.command === 'palette') {
+    const rows = orchestratorPaletteRows(
+      answers.palette?.() ?? { cards: [], shells: [], actions: [] }
+    )
+    if (command.action === 'list') {
+      return { ok: true, output: rows.map((row) => `${row.label}\n`).join('') }
+    }
+    const row = findPaletteRow(rows, command.label)
+    if (!row) return { ok: false, error: `board: no palette row "${command.label}"` }
+    answers.runPalette?.(row.action)
+    return { ok: true }
+  }
+  return { ok: false, error: `board: ${command.command} is not available yet` }
+}
+
+/** The commands answered once something has happened, not at once (#81 D17, D19–D22). */
+type AwaitedCommand = Extract<
+  BoardCommand,
+  { command: 'start' | 'open' | 'terminal' | 'send' | 'wait' | 'reply' }
+>
+
+const AWAITED: ReadonlySet<BoardCommand['command']> = new Set([
+  'start',
+  'open',
+  'terminal',
+  'send',
+  'wait',
+  'reply'
+])
+
+const isAwaited = (command: BoardCommand): command is AwaitedCommand => AWAITED.has(command.command)
+
+/** A start's answer: nothing, or that it is still starting at the renderer's limit (D17). */
+const started = (title: string, outcome: StartOutcome): BoardReply =>
+  outcome.ok && outcome.pending
+    ? { ok: true, output: `${title} is still starting\n` }
+    : { ok: true }
+
+/** `send`, `wait` and `reply` on a card found as `start` finds it (D19–D21). */
+async function answerCardCommand(
+  card: Card,
+  command: Extract<AwaitedCommand, { command: 'send' | 'wait' | 'reply' }>,
+  isRunning: (cardId: string) => boolean,
+  answers: OrchestratorAnswers
+): Promise<BoardReply> {
+  if (command.command === 'send') {
+    if (!isRunning(card.id)) return { ok: false, error: notRunningError(card) }
+    const checked = checkSendText(command.text)
+    if (!checked.ok) return checked
+    await answers.send?.(card.id, checked.text)
+    return { ok: true }
+  }
+  if (command.command === 'wait') {
+    const seconds = command.timeout ?? WAIT_DEFAULT_SECONDS
+    const result = answers.wait ? await answers.wait(card.id, seconds) : 'timeout'
+    return result === 'timeout'
+      ? { ok: false, error: waitTimedOut(seconds) }
+      : { ok: true, output: `${result}\n` }
+  }
+  // A local Claude Code card's transcript is on this machine (#75 D3); any other card has none.
+  const target = transcriptBackupTarget(card)
+  if (!target) return { ok: false, error: `board: "${card.title}" is not a Claude Code card` }
+  const read = answers.reply
+    ? await answers.reply(target.folder, target.sessionId)
+    : ({ state: 'none' } as const)
+  return read.state === 'reply'
+    ? { ok: true, output: `${read.text}\n` }
+    : { ok: false, error: `board: "${card.title}" has no reply yet` }
+}
+
+/**
+ * `start` and `open` act on a card by id in any workspace, or by title in the active workspace or
+ * `--workspace`'s (D17); `terminal` adds a temporary terminal typing its command to
+ * `--workspace`'s workspace, else the active one, starts it and, with `--show`, opens it (D22).
+ * Each answers once the start is over, refusing a failed one with its reason, and saying a start
+ * still undecided at the renderer's limit is still starting. `send`, `wait` and `reply` find their
+ * card as `start` does and answer as `answerCardCommand` does (D19–D21).
+ */
+function answerAwaited(
+  state: WorkspaceState,
+  store: Pick<WorkspaceStore, 'createTemporaryShell'>,
+  workspace: Workspace,
+  callingCardId: string,
+  command: AwaitedCommand,
+  isRunning: (cardId: string) => boolean,
+  answers: OrchestratorAnswers
+): BoardReply | Promise<BoardReply> {
+  // The workspace `--workspace` names, else the active one (the user's, not the caller's).
+  const named =
+    'workspace' in command && command.workspace !== undefined
+      ? resolveWorkspace(state, command.workspace)
+      : {
+          ok: true as const,
+          value: state.workspaces.find((w) => w.id === state.activeId) ?? workspace
+        }
+  if (!named.ok) return named
+  const start =
+    answers.start ?? (async (): Promise<StartOutcome> => ({ ok: false, reason: 'not available' }))
+  const open = answers.open ?? (() => {})
+  if (command.command === 'terminal') {
+    const added = store.createTemporaryShell(named.value.id, command.line)
+    if (!added.ok) return { ok: false, error: `board: ${added.error.message}` }
+    const shell = added.value
+    return start(named.value.id, shell.id).then((started) => {
+      if (!started.ok) return startFailed(shell.name, started.reason)
+      if (command.show) open(named.value.id, shell.id)
+      return { ok: true, output: `${shell.name} ${shell.id}\n` }
+    })
+  }
+  const placed = resolveAnyCard(state, named.value, callingCardId, command.card)
+  if (!placed.ok) return placed
+  const { workspace: ws, card } = placed.value
+  if (command.command === 'send' || command.command === 'wait' || command.command === 'reply') {
+    return answerCardCommand(card, command, isRunning, answers)
+  }
+  if (isRunning(card.id)) {
+    if (command.command === 'start') {
+      return { ok: true, output: `${card.title} is already running\n` }
+    }
+    open(ws.id, card.id)
+    return { ok: true }
+  }
+  return start(ws.id, card.id).then((outcome) => {
+    if (!outcome.ok) return startFailed(card.title, outcome.reason)
+    if (command.command === 'open') open(ws.id, card.id)
+    return started(card.title, outcome)
+  })
+}
+
+/**
+ * `command` naming `.` from the Orchestrator (#81 D9): its status, activity and usage are handed
+ * on for it at runtime (it has no board card to keep them on), its session is saved as its
+ * conversation (D8), `description` prints nothing, and anything else is refused.
+ */
+function answerOrchestrator(
+  store: Pick<WorkspaceStore, 'setAgentSession'>,
+  workspaceId: string,
+  orchestrator: Card,
+  command: BoardCommand,
+  isRunning: (cardId: string) => boolean,
+  reports: Omit<ShellReports, 'setShellSession'>
+): BoardReply {
+  const id = orchestrator.id
+  if (command.command === 'description') return { ok: true }
+  if (command.command === 'session') {
+    const set = store.setAgentSession(workspaceId, id, command.session.toLowerCase())
+    return set.ok ? { ok: true } : { ok: false, error: `board: ${set.error.message}` }
+  }
+  if (
+    command.command !== 'status' &&
+    command.command !== 'activity' &&
+    command.command !== 'usage'
+  ) {
+    return { ok: false, error: ORCHESTRATOR_NOT_A_CARD }
+  }
+  if (!isRunning(id)) return { ok: false, error: notRunningError(orchestrator) }
+  if (command.command === 'status') reports.setAgentStatus(id, cleanAgentStatus(command.text))
+  else if (command.command === 'activity') {
+    reports.setActivity(id, command.activity === 'none' ? null : command.activity)
+  } else reports.setUsage(id, command.usage)
+  return { ok: true }
+}
+
+/** `answerBoardCommand`'s and `answerBoardRequest`'s arguments. */
+type AnswerArgs = [
+  store: Pick<
+    WorkspaceStore,
+    | 'getState'
+    | 'moveCard'
+    | 'setAgentSession'
+    | 'clearCardSetup'
+    | 'createCard'
+    | 'renameCard'
+    | 'setCardLastStatus'
+    | 'setCardLastUsage'
+    | 'setCardDescription'
+    | 'createTemporaryShell'
+  >,
+  callingCardId: string,
+  command: BoardCommand,
+  isRunning: (cardId: string) => boolean,
+  setAgentStatus: (cardId: string, text: string) => void,
+  setActivity?: (cardId: string, activity: Activity | null) => void,
+  setupAnswered?: (card: Card, result: SetupResult) => void,
+  setUsage?: (cardId: string, usage: ClaudeUsage) => void,
+  runtime?: (cardId: string) => CardRuntime,
+  setShellSession?: (shellId: string, sessionId: string) => void,
+  orchestrator?: OrchestratorAnswers
+]
+
+/**
  * Applies `command` for the calling card (#9 D2, D7, D8). A move goes to the bottom of the
  * column through the store, so it is saved like any board change (#8 D6). `status` needs a
  * running card and hands the cleaned text to `setAgentStatus` (#9 D8), which shows it, and keeps
@@ -136,20 +417,10 @@ function answerShell(
  * renames one. Both save through the store like any board change. `description` answers with
  * the card's description and one newline, or nothing; `describe` replaces it through the store,
  * which trims it, removes it when empty and refuses one over the cap (#69 D5).
+ * `start`, `open`, `terminal`, `send`, `wait` and `reply` are answered by `answerBoardRequest`.
  */
 export function answerBoardCommand(
-  store: Pick<
-    WorkspaceStore,
-    | 'getState'
-    | 'moveCard'
-    | 'setAgentSession'
-    | 'clearCardSetup'
-    | 'createCard'
-    | 'renameCard'
-    | 'setCardLastStatus'
-    | 'setCardLastUsage'
-    | 'setCardDescription'
-  >,
+  store: AnswerArgs[0],
   callingCardId: string,
   command: BoardCommand,
   isRunning: (cardId: string) => boolean,
@@ -158,17 +429,21 @@ export function answerBoardCommand(
   setupAnswered: (card: Card, result: SetupResult) => void = () => {},
   setUsage: (cardId: string, usage: ClaudeUsage) => void = () => {},
   runtime: (cardId: string) => CardRuntime = (id) => ({ running: isRunning(id) }),
-  setShellSession: (shellId: string, sessionId: string) => void = () => {}
+  setShellSession: (shellId: string, sessionId: string) => void = () => {},
+  orchestrator: OrchestratorAnswers = {}
 ): BoardReply {
   const state = store.getState()
   const workspace = findCallingWorkspace(state, callingCardId)
   if (!workspace.ok) return workspace
   const calling = workspace.value
   // A workspace shell may call too: it lists, creates and acts on named cards, never on `.`.
-  const { card: callingCard, shell } = callingTerminal(calling, callingCardId)
+  // So may the Orchestrator (#81 D16).
+  const { card: callingCard, shell, kind } = callingTerminal(calling, callingCardId)
   // An SSH card's session socket serves only its own card's workspace (#69 D9).
   const remote = callingCard.host !== undefined
   if (remote && !servesRemoteCard(command)) return { ok: false, error: INVALID_REQUEST }
+  // Every local card and shell may drive the board and the app, as the Orchestrator does (#81 D16).
+  if (isDriving(command)) return answerDriving(calling, command, orchestrator)
   if (command.command === 'workspaces') {
     const listing = workspacesListing(state, calling.id)
     const output =
@@ -201,8 +476,13 @@ export function answerBoardCommand(
     if (command.worktree && command.branch === undefined) {
       return { ok: false, error: INVALID_REQUEST }
     }
+    // The Orchestrator has no agent of its own to pass on: the target workspace's default (D16).
     const startup =
-      command.agent !== undefined ? agentStartup(command.agent) : inheritedStartup(callingCard)
+      command.agent !== undefined
+        ? agentStartup(command.agent)
+        : kind === 'orchestrator'
+          ? undefined
+          : inheritedStartup(callingCard)
     const created = store.createCard(
       titles.id,
       column.value.id,
@@ -212,6 +492,8 @@ export function answerBoardCommand(
       command.description,
       {
         unopened: titles.id !== calling.id,
+        // Its fresh start is told to start working (#81 D18).
+        orchestrated: kind === 'orchestrator',
         ...(command.worktree &&
           command.branch !== undefined && { pendingWorktree: { branch: command.branch } })
       }
@@ -227,6 +509,13 @@ export function answerBoardCommand(
       setAgentStatus,
       setActivity,
       setShellSession,
+      setUsage
+    })
+  }
+  if (kind === 'orchestrator' && command.card === CALLING_CARD) {
+    return answerOrchestrator(store, calling.id, callingCard, command, isRunning, {
+      setAgentStatus,
+      setActivity,
       setUsage
     })
   }
@@ -296,4 +585,30 @@ export function answerBoardCommand(
   if (!target) return { ok: true }
   const moved = store.moveCard(ws.id, card.value.id, target.columnId, target.index)
   return moved.ok ? { ok: true } : { ok: false, error: `board: ${moved.error.message}` }
+}
+
+/**
+ * `answerBoardCommand` for every request, with `start`, `open` and `terminal` (#81 D17, D22) from
+ * any local card or shell (D16) answered once the start they make is over, and `send`, `wait` and
+ * `reply` (D19–D21) once typed, ended or read, as a promise. An SSH card's are refused there.
+ */
+export function answerBoardRequest(...args: AnswerArgs): BoardReply | Promise<BoardReply> {
+  const [store, callingCardId, command, isRunning] = args
+  const calling = findCallingWorkspace(store.getState(), callingCardId)
+  if (
+    !isAwaited(command) ||
+    !calling.ok ||
+    callingTerminal(calling.value, callingCardId).card.host !== undefined
+  ) {
+    return answerBoardCommand(...args)
+  }
+  return answerAwaited(
+    store.getState(),
+    store,
+    calling.value,
+    callingCardId,
+    command,
+    isRunning,
+    args[10] ?? {}
+  )
 }

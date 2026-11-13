@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Activity } from './activity'
 import { openTerminals } from './open-terminals'
-import { defaultShellId, type Card, type Workspace } from './workspace-store'
+import { type Card, type Workspace } from './workspace-store'
 
 const COLUMNS = [
   { id: 'backlog', name: 'Backlog' },
@@ -64,13 +64,12 @@ describe('openTerminals', () => {
     const b = workspace('b', [card('b1', 'Other')])
     const rows = openTerminals(
       [a, b],
-      running('a1', 'a2', 'dev', defaultShellId('a'), 'b1'),
+      running('a1', 'a2', 'dev', 'default-shell:a', 'b1'),
       noActivity
     )
     expect(rows.map((r) => [r.kind, r.workspaceId, r.title])).toEqual([
       ['card', 'a', 'First'],
       ['card', 'a', 'Second'],
-      ['shell', 'a', 'Default shell'],
       ['shell', 'a', 'Dev server'],
       ['card', 'b', 'Other']
     ])
@@ -138,5 +137,36 @@ describe('openTerminals', () => {
 
   it('is empty when nothing runs', () => {
     expect(openTerminals([workspace('a', [card('a1', 'One')])], running(), noActivity)).toEqual([])
+  })
+})
+
+describe("the Orchestrator's row (#81 D5)", () => {
+  it('comes first in its workspace while it runs, with the Orchestrator agent as its tool', () => {
+    const a = workspace('a', [card('a1', 'First')])
+    const rows = openTerminals([a], running('a1', 'orchestrator:a'), noActivity, undefined, {
+      kind: 'codex'
+    })
+    expect(rows.map((r) => [r.kind, r.cardId, r.title, r.tool])).toEqual([
+      ['orchestrator', 'orchestrator:a', 'Orchestrator', 'codex'],
+      ['card', 'a1', 'First', 'shell']
+    ])
+    expect(openTerminals([a], running('a1'), noActivity).map((r) => r.cardId)).toEqual(['a1'])
+  })
+
+  it('is Claude Code by default and none for an SSH workspace', () => {
+    const a = workspace('a', [])
+    expect(openTerminals([a], running('orchestrator:a'), noActivity)[0]?.tool).toBe('claude')
+    const ssh = { ...workspace('s', []), host: 'box' }
+    expect(openTerminals([ssh], running('orchestrator:s'), noActivity)).toEqual([])
+  })
+})
+
+describe("the Orchestrator's row with the agent each one runs (#81 D7)", () => {
+  it('reads its tool by its id', () => {
+    const a = workspace('a', [])
+    const rows = openTerminals([a], running('orchestrator:a'), noActivity, undefined, (id) =>
+      id === 'orchestrator:a' ? { kind: 'gemini' } : { kind: 'claude' }
+    )
+    expect(rows.map((r) => r.tool)).toEqual(['gemini'])
   })
 })

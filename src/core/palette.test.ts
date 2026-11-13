@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   filterPalette,
+  findPaletteRow,
   matchScore,
+  orchestratorPaletteRows,
   paletteItems,
   type ActionRow,
   type OpenView,
@@ -10,7 +12,7 @@ import {
   type RowStatus
 } from './palette'
 import { defaultKeymap } from './keymap'
-import { defaultShellId, type Card, type Workspace, type WorkspaceState } from './workspace-store'
+import { type Card, type Workspace, type WorkspaceState } from './workspace-store'
 
 const COLUMNS = [
   { id: 'backlog', name: 'Backlog' },
@@ -143,13 +145,11 @@ describe('paletteItems card and shell rows (#40 D3, D5)', () => {
     })
   })
 
-  it("lists each workspace's Default shell first, then its named shells in strip order", () => {
+  it("lists each workspace's shells in strip order, with no Default shell (#81 D1)", () => {
     const items = paletteItems(input({ workspaces: [alpha, beta], activeId: 'b' }))
     expect(items.shells.map((r) => [r.workspaceName, r.title, r.cardId])).toEqual([
-      ['Beta', 'Default shell', defaultShellId('b')],
       ['Beta', 'Dev server', 's1'],
-      ['Beta', 'Tests', 's2'],
-      ['Alpha', 'Default shell', defaultShellId('a')]
+      ['Beta', 'Tests', 's2']
     ])
     expect(items.shells.every((r) => r.kind === 'shell')).toBe(true)
   })
@@ -307,13 +307,13 @@ describe('paletteItems actions (#40 D6)', () => {
       workspaces: [{ ...alpha, view: 'grid' }, beta]
     }
     expect(labels(input(grid, { view: cardView }))).toContain('Edit description…')
-    const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const shell: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view: shell }))).not.toContain('Edit description…')
     expect(labels(input(state))).not.toContain('Edit description…')
   })
 
   it('offers no moves for a shell', () => {
-    const view: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const view: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view })).slice(0, 9)).toEqual([
       'Back to board',
       'Split right',
@@ -360,7 +360,7 @@ describe('paletteItems actions (#40 D6)', () => {
     // After the view's own actions, before Rename card…, Edit description… (#69 D4) and the moves.
     expect(rows[at - 1].label).toBe('Copy command output')
     expect(rows[at + 1].label).toBe('Rename card…')
-    const shell: OpenView = { ...cardView, kind: 'shell', cardId: defaultShellId('a') }
+    const shell: OpenView = { ...cardView, kind: 'shell', cardId: 'shell-a' }
     expect(labels(input(state, { view: shell }))).toContain('Open in new window')
     expect(labels(input(state, { view: { ...cardView, running: false } }))).toContain(
       'Open in new window'
@@ -633,5 +633,119 @@ describe('paletteItems sidebar layout (#79 D1)', () => {
   it('offers it without workspaces too, before New workspace', () => {
     const shown = labels(input({ workspaces: [], activeId: null }, { sidebarLayout: 'split' }))
     expect(shown.slice(0, 2)).toEqual(['Sidebar: Nested', 'New workspace'])
+  })
+})
+
+describe('paletteItems Orchestrator rows (#81 D5, D10, AC3, AC14)', () => {
+  const alpha = workspace('a', 'Alpha', [])
+  const state: WorkspaceState = { workspaces: [alpha], activeId: 'a' }
+  const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
+
+  it('lists Open orchestrator after New shell with its shortcut, and New conversation once it has one', () => {
+    const shown = labels(input(state, { orchestrator: { conversation: false } }))
+    expect(shown.slice(shown.indexOf('New shell'), shown.indexOf('View: Grid'))).toEqual([
+      'New shell',
+      'Open orchestrator'
+    ])
+    const rows = paletteItems(input(state, { orchestrator: { conversation: true } })).actions
+    expect(rows.find((r) => r.label === 'Open orchestrator')).toEqual({
+      kind: 'action',
+      action: { id: 'openOrchestrator' },
+      label: 'Open orchestrator',
+      shortcut: 'Ctrl+Alt+O'
+    })
+    expect(rows.find((r) => r.label === 'Orchestrator: New conversation')?.action).toEqual({
+      id: 'orchestratorNewConversation'
+    })
+  })
+
+  it('lists neither for a workspace without one (an SSH workspace)', () => {
+    const shown = labels(input(state))
+    expect(shown).not.toContain('Open orchestrator')
+    expect(shown).not.toContain('Orchestrator: New conversation')
+  })
+})
+
+describe('orchestratorPaletteRows and findPaletteRow (#81 D23, AC12)', () => {
+  const alpha = workspace('a', 'A', [card('c1', 'build')])
+  const beta = workspace('b', 'B', [card('c2', 'test')], {
+    shells: [{ id: 's1', name: 'Dev', command: 'npm run dev', autostart: false, type: 'shell' }]
+  })
+  const state: WorkspaceState = { workspaces: [alpha, beta], activeId: 'a' }
+  const splitView: OpenView = {
+    kind: 'card',
+    workspaceId: 'a',
+    cardId: 'c1',
+    running: true,
+    paneCount: 2,
+    extraPaneFocused: true,
+    focusedPaneHasScreen: true,
+    zoomed: false
+  }
+  const labels = (i: PaletteInput): string[] =>
+    orchestratorPaletteRows(paletteItems(i)).map((r) => r.label)
+  const OPEN_VIEW_ROWS = [
+    'Back to board',
+    'Split right',
+    'Split down',
+    'Close pane',
+    'Close card',
+    'Find',
+    'Copy command output',
+    'Zoom pane',
+    'Next pane',
+    'Previous pane',
+    'Equalize panes',
+    'Rename card…',
+    'Open in new window',
+    'Edit description…',
+    'Move card to In Progress'
+  ]
+
+  it("lists the palette's action rows but those acting on the open card or pane, and no card or shell rows", () => {
+    const all = paletteItems(
+      input(state, { view: splitView, orchestrator: { conversation: true } })
+    )
+    for (const label of OPEN_VIEW_ROWS) {
+      expect(all.actions.map((r) => r.label)).toContain(label)
+    }
+    const shown = labels(input(state, { view: splitView, orchestrator: { conversation: true } }))
+    for (const label of OPEN_VIEW_ROWS) expect(shown).not.toContain(label)
+    expect(shown).toEqual(
+      all.actions
+        .map((r) => r.label)
+        .filter((label) => !OPEN_VIEW_ROWS.includes(label) && !label.startsWith('Move card to'))
+    )
+    expect(shown).toEqual(
+      expect.arrayContaining([
+        'Toggle panel',
+        'New card',
+        'Open orchestrator',
+        'Orchestrator: New conversation',
+        'Agent setup',
+        'Open Settings',
+        'Switch to workspace B'
+      ])
+    )
+    expect(shown.filter((label) => label.startsWith('Move card to'))).toEqual([])
+    for (const title of ['build', 'test', 'Dev']) expect(shown).not.toContain(title)
+  })
+
+  it('lists no Back while Agent setup shows, and the same rows as the palette on the board', () => {
+    expect(labels(input(state, { agentSetup: true }))).not.toContain('Back to board')
+    expect(labels(input(state))).toEqual(paletteItems(input(state)).actions.map((r) => r.label))
+  })
+
+  it('finds a listed row by its label, case-insensitively after trimming', () => {
+    const rows = orchestratorPaletteRows(paletteItems(input(state, { view: splitView })))
+    expect(findPaletteRow(rows, '  switch to workspace b ')?.action).toEqual({
+      id: 'switchWorkspace',
+      workspaceId: 'b'
+    })
+    expect(findPaletteRow(rows, 'AGENT SETUP')?.action).toEqual({ id: 'agentSetup' })
+    expect(findPaletteRow(rows, 'nope')).toBeUndefined()
+    expect(findPaletteRow(rows, 'Agent')).toBeUndefined()
+    expect(findPaletteRow(rows, 'Close card')).toBeUndefined()
+    expect(findPaletteRow(rows, '')).toBeUndefined()
   })
 })

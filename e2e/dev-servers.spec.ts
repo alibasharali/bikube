@@ -347,11 +347,9 @@ test("AC6: a named shell's printed, listening port shows under its row in the Sh
 
   const chip = shell.getByTestId('dev-server-chip')
   await expect(chip).toHaveText([`localhost:${port}`], { timeout: CHIP_MS })
-  // Under the shell's own row in the Shells tab (D7); the Default shell has none.
+  // Under the shell's own row in the Shells tab (D7), and only there.
   await expect(shell.locator(':scope > .dev-servers')).toHaveCount(1)
-  await expect(
-    page.locator('[data-testid="shell"][data-shell-name="Default"]').getByTestId('dev-servers')
-  ).toHaveCount(0)
+  await expect(page.getByTestId('dev-servers')).toHaveCount(1)
   await chip.click()
   await expect.poll(opened).toEqual([`http://localhost:${port}/`])
   await expect(page.getByTestId('card-view')).toHaveCount(0)

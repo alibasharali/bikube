@@ -6,6 +6,7 @@ import { isAgentKind, type AgentKind } from './agent-presets'
 import { readAutoMove } from './auto-move'
 import { cleanAgentStatus } from './board-commands'
 import { isDescription } from './card-description'
+import { isOrchestratorId } from './orchestrator'
 import { asUsage } from './board-protocol'
 import { checkHost, checkRemoteDirectory } from './ssh-location'
 import { checkStartup, type StartupCommand } from './startup-command'
@@ -121,6 +122,8 @@ function readWorkspace(raw: unknown): Workspace | string {
   if (!Array.isArray(raw.cards)) return 'bad cards'
   const cards: Card[] = []
   for (const c of raw.cards) {
+    // A card claiming an Orchestrator's id is dropped (#81 D16).
+    if (isObject(c) && claimsOrchestrator(c.id)) continue
     const card = readCard(c)
     if (typeof card === 'string') return card
     if (!columns.some((col) => col.id === card.columnId)) return 'card in unknown column'
@@ -141,9 +144,24 @@ function readWorkspace(raw: unknown): Workspace | string {
     ...(autoMove !== null && { autoMove }),
     ...(isWorkspaceView(raw.view) && { view: raw.view }),
     // Missing is the manual order; anything but `recent` is too, dropping only the key (#69 D12).
-    ...(raw.sort === 'recent' && { sort: 'recent' as const })
+    ...(raw.sort === 'recent' && { sort: 'recent' as const }),
+    // Missing until its first start; a bad one is dropped, as if it had none (#81 D8).
+    ...readOrchestrator(raw.orchestrator)
   }
 }
+
+/** `{ orchestrator }` for a valid Orchestrator conversation (#81 D8); else `{}`. */
+function readOrchestrator(raw: unknown): Pick<Workspace, 'orchestrator'> {
+  if (!isObject(raw)) return {}
+  const { agentSessionId, claudeStarted } = raw
+  if (!isId(agentSessionId) || typeof claudeStarted !== 'boolean') return {}
+  const startedAgents = readStartedAgents(raw.startedAgents)
+  if (!startedAgents) return {}
+  return { orchestrator: { agentSessionId, claudeStarted, startedAgents } }
+}
+
+/** Whether a saved card or shell's id is an Orchestrator's (#81 D16), which no saved one may be. */
+const claimsOrchestrator = (id: unknown): boolean => typeof id === 'string' && isOrchestratorId(id)
 
 /** The workspace's shells; missing, as in files from before shells, is none. */
 function readShells(raw: unknown): WorkspaceShell[] | string {
@@ -151,8 +169,9 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
   if (!Array.isArray(raw)) return 'bad shells'
   const shells: WorkspaceShell[] = []
   for (const s of raw) {
-    // A temporary shell (#66 D2) is runtime only: never saved, and never read back.
-    if (isObject(s) && s.temporary === true) continue
+    // A temporary shell (#66 D2) is runtime only: never saved, and never read back. Nor is one
+    // claiming an Orchestrator's id, which would be taken for the Orchestrator (#81 D4).
+    if (isObject(s) && (s.temporary === true || claimsOrchestrator(s.id))) continue
     if (!isObject(s) || !isId(s.id) || typeof s.name !== 'string') return 'bad shell'
     const command = typeof s.command === 'string' ? s.command : ''
     const checked = checkShell({
@@ -210,6 +229,8 @@ function readCard(raw: unknown): Card | string {
     ...(isTime(raw.lastOpenedAt) && { lastOpenedAt: raw.lastOpenedAt }),
     // Anything but true is dropped, as if the card had no New mark (#69 D11).
     ...(raw.unopened === true && { unopened: true as const }),
+    // Likewise anything but true reads as a card the Orchestrator didn't make (#81 D18).
+    ...(raw.orchestrated === true && { orchestrated: true as const }),
     ...readLastSeen(raw)
   }
 }

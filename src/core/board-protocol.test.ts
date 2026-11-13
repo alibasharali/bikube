@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import type { BoardCommand } from './board-args'
 import {
+  ANSWER_TIMEOUT_MS,
+  answerTimeoutMs,
   BOARD_PROTOCOL_VERSION,
   INVALID_REQUEST,
   MAX_FIELD_BYTES,
   MAX_REQUEST_LINE_BYTES,
   parseReplyLine,
   parseRequestLine,
+  relayTimeoutMs,
   serializeReply,
-  serializeRequest
+  serializeRequest,
+  START_WAIT_MS
 } from './board-protocol'
 
 const move = { v: 1, cardId: 'c1', command: 'move', card: '.', column: 'Done' }
@@ -415,5 +420,116 @@ describe('create with a worktree (#69 D10)', () => {
     ]) {
       expect(parseRequestLine(line(value))).toEqual({ ok: false, error: INVALID_REQUEST })
     }
+  })
+})
+
+describe('requests that drive the board and the app (#81 D13, D17–D23)', () => {
+  const roundTrip = (command: BoardCommand): ReturnType<typeof parseRequestLine> =>
+    parseRequestLine(serializeRequest('orchestrator:w1', command))
+
+  it('round-trips each of them', () => {
+    const commands: BoardCommand[] = [
+      { command: 'guide' },
+      { command: 'start', card: 'X' },
+      { command: 'start', card: 'X', workspace: 'B' },
+      { command: 'open', card: 'X', workspace: 'B' },
+      { command: 'send', card: 'X', text: 'go on' },
+      { command: 'wait', card: 'X' },
+      { command: 'wait', card: 'X', timeout: 5 },
+      { command: 'reply', card: 'X' },
+      { command: 'terminal', line: 'printf ready' },
+      { command: 'terminal', line: 'exec sleep 60', workspace: 'B', show: true },
+      { command: 'palette', action: 'list' },
+      { command: 'palette', action: 'run', label: 'Agent setup' }
+    ]
+    for (const command of commands) {
+      expect(roundTrip(command)).toEqual({
+        ok: true,
+        request: { v: 1, cardId: 'orchestrator:w1', ...command }
+      })
+    }
+  })
+
+  it('rejects a wrong timeout, show, action or label, and fields another command takes', () => {
+    const raw = (value: object): string => JSON.stringify({ v: 1, cardId: 'c1', ...value })
+    for (const value of [
+      { command: 'guide', card: 'x' },
+      { command: 'wait', card: 'X', timeout: 0 },
+      { command: 'wait', card: 'X', timeout: 3601 },
+      { command: 'wait', card: 'X', timeout: '5' },
+      { command: 'terminal', line: 'x', show: false },
+      { command: 'terminal', line: 'x', show: 'yes' },
+      { command: 'palette', action: 'go' },
+      { command: 'palette', action: 'list', label: 'x' },
+      { command: 'palette', action: 'run' },
+      { command: 'reply', card: 'X', workspace: 'B' },
+      { command: 'send', card: 'X', text: 'x', workspace: 'B' },
+      { command: 'start', card: 'X', timeout: 5 }
+    ]) {
+      expect(parseRequestLine(raw(value))).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+  })
+})
+
+describe('no token (#81 D16)', () => {
+  it('takes no token field: the Orchestrator speaks as any card does', () => {
+    expect(parseRequestLine(line({ ...move, token: 'ab'.repeat(32) }))).toEqual({
+      ok: false,
+      error: INVALID_REQUEST
+    })
+  })
+})
+
+describe('per-command answer timeouts (#81 D17, D20)', () => {
+  it("gives most commands #9's 5 s, and the relay 1 s less", () => {
+    const move: BoardCommand = { command: 'move', card: '.', column: 'Done' }
+    expect(answerTimeoutMs(move)).toBe(ANSWER_TIMEOUT_MS)
+    expect(relayTimeoutMs(move)).toBe(ANSWER_TIMEOUT_MS - 1000)
+  })
+
+  it("waits for a wait's timeout plus 5 s, 600 s by default", () => {
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: 5 })).toBe(10_000)
+    expect(answerTimeoutMs({ command: 'wait', card: 'x' })).toBe(605_000)
+    expect(relayTimeoutMs({ command: 'wait', card: 'x', timeout: 3600 })).toBe(3_604_000)
+  })
+
+  it('never trusts an unbounded timeout: capped at 3600 s', () => {
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: 1e9 })).toBe(3_605_000)
+    expect(answerTimeoutMs({ command: 'wait', card: 'x', timeout: NaN })).toBe(605_000)
+  })
+
+  it('gives start, open and terminal room for a 60 s start', () => {
+    for (const command of [
+      { command: 'start', card: 'x' },
+      { command: 'open', card: 'x' },
+      { command: 'terminal', line: 'ls' }
+    ] as const) {
+      expect(answerTimeoutMs(command)).toBe(65_000)
+      expect(relayTimeoutMs(command)).toBeGreaterThan(START_WAIT_MS)
+      expect(relayTimeoutMs(command)).toBeLessThan(answerTimeoutMs(command))
+    }
+  })
+})
+
+describe("send's text (#81 D19)", () => {
+  it('takes 100,000 multi-byte characters, past 8 KiB, but keeps 8 KiB for its card', () => {
+    const text = '🎉é'.repeat(50_000)
+    const sent = serializeRequest('o', { command: 'send', card: 'Review', text })
+    expect(parseRequestLine(sent)).toEqual({
+      ok: true,
+      request: { v: 1, cardId: 'o', command: 'send', card: 'Review', text }
+    })
+    const long = serializeRequest('o', {
+      command: 'send',
+      card: 'x'.repeat(MAX_FIELD_BYTES + 1),
+      text
+    })
+    expect(parseRequestLine(long)).toEqual({ ok: false, error: 'board: request too long' })
+    const status = serializeRequest('o', {
+      command: 'status',
+      card: 'x',
+      text: 'x'.repeat(MAX_FIELD_BYTES + 1)
+    })
+    expect(parseRequestLine(status)).toEqual({ ok: false, error: 'board: request too long' })
   })
 })

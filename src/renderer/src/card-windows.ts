@@ -2,7 +2,7 @@ import { createElement, StrictMode, useSyncExternalStore } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import { cardWindowName } from '../../core/card-window-name'
-import { findShellCard } from '../../core/workspace-shells'
+import { findTerminal } from './orchestrator'
 import { fontDocument } from './app-font'
 import { APP_THEME_ATTR, themeDocument } from './app-theme'
 import { markCardOpened, startCard } from './card-actions'
@@ -190,10 +190,7 @@ function copyStylesheets(view: Window): Promise<unknown> {
 /** Whether workspace `workspaceId` has card or shell `cardId`. */
 function cardExists(workspaceId: string, cardId: string): boolean {
   const workspace = workspaceStore.getState().workspaces.find((w) => w.id === workspaceId)
-  return (
-    workspace !== undefined &&
-    (workspace.cards.some((c) => c.id === cardId) || findShellCard(workspace, cardId) !== undefined)
-  )
+  return workspace !== undefined && findTerminal(workspace, cardId) !== undefined
 }
 
 /** A card window closes when its card, or its workspace, is deleted (D8). */

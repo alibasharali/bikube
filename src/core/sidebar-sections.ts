@@ -41,12 +41,13 @@ export function agentGroupOf(activity: Activity | undefined): AgentGroupId {
 }
 
 /**
- * Whether a running card or shell is an agent row (D2): a card started as Claude Code or an agent
+ * Whether a running card or shell is an agent row (D2): a card (or the Orchestrator) started as Claude Code or an agent
  * preset (rule 1), one running Claude Code in its main pane now (rule 2, `claudeRunning`), or one
  * with an activity set (rule 3).
  */
 export function isAgentRow(row: OpenTerminal, claudeRunning = false): boolean {
-  if (row.kind === 'card' && (row.tool === 'claude' || isAgentKind(row.tool))) return true
+  // The Orchestrator counts as a card does (#81 D5).
+  if (row.kind !== 'shell' && (row.tool === 'claude' || isAgentKind(row.tool))) return true
   return claudeRunning || row.activity !== undefined
 }
 

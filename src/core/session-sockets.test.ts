@@ -75,6 +75,26 @@ describe('SessionSockets (#25 D2, D3)', () => {
     expect(await sendBoardRequest(local, move)).toEqual({ ok: true })
   })
 
+  it('relays none of the commands only local terminals run (#81 D16, D24)', async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    sockets = new SessionSockets(boardDir, handler)
+    const local = (await sockets.open('card-1')).forward.localSocket!
+    for (const command of [
+      { command: 'guide' as const },
+      { command: 'start' as const, card: 'X' },
+      { command: 'open' as const, card: 'X' },
+      { command: 'send' as const, card: 'X', text: 'y' },
+      { command: 'wait' as const, card: 'X' },
+      { command: 'reply' as const, card: 'X' },
+      { command: 'terminal' as const, line: 'ls' },
+      { command: 'palette' as const, action: 'list' as const }
+    ]) {
+      const line = serializeRequest('card-1', command)
+      expect(await sendBoardRequest(local, line)).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+    expect(handler).not.toHaveBeenCalled()
+  })
+
   it("relays its own card's requests, on random paths in the board directory and /tmp", async () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: false, error: 'board: nope' }))
     sockets = new SessionSockets(boardDir, handler)

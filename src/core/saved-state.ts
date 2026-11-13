@@ -170,7 +170,7 @@ function readShells(raw: unknown): WorkspaceShell[] | string {
   const shells: WorkspaceShell[] = []
   for (const s of raw) {
     // A temporary shell (#66 D2) is runtime only: never saved, and never read back. Nor is one
-    // claiming an Orchestrator's id, which only the Orchestrator's own socket speaks for (#81 D16).
+    // claiming an Orchestrator's id, which would be taken for the Orchestrator (#81 D4).
     if (isObject(s) && (s.temporary === true || claimsOrchestrator(s.id))) continue
     if (!isObject(s) || !isId(s.id) || typeof s.name !== 'string') return 'bad shell'
     const command = typeof s.command === 'string' ? s.command : ''

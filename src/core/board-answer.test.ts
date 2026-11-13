@@ -7,13 +7,9 @@ import {
   type RepoBranches
 } from './board-answer'
 import type { BoardCommand } from './board-args'
+import { INVALID_REQUEST } from './board-protocol'
 import type { ActionRow, PaletteAction, PaletteItems } from './palette'
-import {
-  NOT_IN_A_CARD,
-  ONLY_ORCHESTRATOR,
-  ORCHESTRATOR_NOT_A_CARD,
-  SHELL_NOT_A_CARD
-} from './board-commands'
+import { NOT_IN_A_CARD, ORCHESTRATOR_NOT_A_CARD, SHELL_NOT_A_CARD } from './board-commands'
 import type { StartOutcome } from './board-start'
 import { orchestratorGuide } from './orchestrator-guide'
 import type { ClaudeUsage } from './claude-usage-types'
@@ -1344,22 +1340,36 @@ describe('board guide (#81 D13, D16)', () => {
     })
   })
 
-  it('refuses every orchestrator-only command from a card or a shell', () => {
+  it("prints the guide for a card's or a shell's own workspace, and refuses an SSH card's", () => {
     const store = setup()
-    const shell = store.createTemporaryShell('alpha')
+    const shell = store.createTemporaryShell('beta')
     const shellId = shell.ok ? shell.value.id : ''
-    for (const from of ['c-api', shellId]) {
-      for (const command of [
-        guide,
-        { command: 'start', card: 'api' },
-        { command: 'palette', action: 'list' }
-      ] as const) {
-        expect(answerBoardCommand(store, from, command, running, () => {})).toEqual({
-          ok: false,
-          error: ONLY_ORCHESTRATOR
-        })
+    expect(ask(store, 'c-api', () => 'Mine.')).toEqual({
+      ok: true,
+      output: orchestratorGuide('alpha', '/tmp/bikube-alpha', 'Mine.')
+    })
+    expect(ask(store, shellId)).toEqual({
+      ok: true,
+      output: orchestratorGuide('beta', '/tmp/bikube-beta', '')
+    })
+    const remote = new InMemoryWorkspaceStore({
+      initialState: {
+        workspaces: [
+          { ...workspace('ssh', [{ ...card('r-1', 'backlog'), host: 'box' }]), host: 'box' }
+        ],
+        activeId: 'ssh'
       }
-    }
+    })
+    expect(ask(remote, 'r-1')).toEqual({ ok: false, error: INVALID_REQUEST })
+    expect(
+      answerBoardRequest(
+        remote,
+        'r-1',
+        { command: 'start', card: 'r-1' },
+        () => false,
+        () => {}
+      )
+    ).toEqual({ ok: false, error: INVALID_REQUEST })
   })
 })
 
@@ -1406,6 +1416,16 @@ describe('board palette (#81 D23, AC12)', () => {
       reply: { ok: true, output: 'Agent setup\nOpen Settings\n' },
       ran: []
     })
+  })
+
+  it('lists and runs them from a card too (D16)', () => {
+    expect(ask({ command: 'palette', action: 'list' }, 'c-api').reply).toEqual({
+      ok: true,
+      output: 'Agent setup\nOpen Settings\n'
+    })
+    expect(ask({ command: 'palette', action: 'run', label: 'agent setup' }, 'c-api').ran).toEqual([
+      { id: 'agentSetup' }
+    ])
   })
 
   it('runs the row its label names, in any case after trimming, printing nothing', () => {
@@ -1547,29 +1567,34 @@ describe('board start, open and terminal (#81 D17, D22)', () => {
     expect(failing.opens).toEqual([])
   })
 
-  it('refuses them from a card, starting nothing', async () => {
+  it('starts and opens from a card and a shell as from the Orchestrator (D16)', async () => {
     const store = orchestratorStore()
+    const shell = store.createTemporaryShell('alpha')
+    const shellId = shell.ok ? shell.value.id : ''
     const starts: string[] = []
-    const reply = await answerBoardRequest(
-      store,
-      'c-api',
-      { command: 'start', card: 'c-other' },
-      running,
-      () => {},
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        start: async (_, id) => {
-          starts.push(id)
-          return { ok: true }
+    for (const from of ['c-api', shellId]) {
+      const reply = await answerBoardRequest(
+        store,
+        from,
+        { command: 'start', card: 'other' },
+        (id) => id !== 'c-other',
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          start: async (ws, id) => {
+            starts.push(`${ws}/${id}`)
+            return { ok: true }
+          }
         }
-      }
-    )
-    expect(reply).toEqual({ ok: false, error: ONLY_ORCHESTRATOR })
-    expect(starts).toEqual([])
+      )
+      expect(reply).toEqual({ ok: true })
+    }
+    // A title resolves in the active workspace (beta), whoever asks.
+    expect(starts).toEqual(['beta/c-other', 'beta/c-other'])
   })
 
   it('prints that a start undecided at its limit is still starting, opening it for open', async () => {
@@ -1718,14 +1743,22 @@ describe('board send, wait and reply (#81 D19–D21)', () => {
     })
   })
 
-  it('refuses all three from a card', async () => {
-    const ask = asker(orchestratorStore(), {})
-    for (const command of [
-      { command: 'send', card: 'c-web', text: 'x' },
-      { command: 'wait', card: 'c-web' },
-      { command: 'reply', card: 'c-web' }
-    ] as const) {
-      expect(await ask(command, 'c-api')).toEqual({ ok: false, error: ONLY_ORCHESTRATOR })
-    }
+  it('answers all three from a card as from the Orchestrator (D16)', async () => {
+    const sent: string[] = []
+    const ask = asker(orchestratorStore(), {
+      send: async (id) => void sent.push(id),
+      wait: async () => 'waiting',
+      reply: async () => ({ state: 'none' })
+    })
+    expect(await ask({ command: 'send', card: 'c-web', text: 'x' }, 'c-api')).toEqual({ ok: true })
+    expect(await ask({ command: 'wait', card: 'c-web' }, 'c-api')).toEqual({
+      ok: true,
+      output: 'waiting\n'
+    })
+    expect(await ask({ command: 'reply', card: 'c-web' }, 'c-api')).toEqual({
+      ok: false,
+      error: 'board: "web" is not a Claude Code card'
+    })
+    expect(sent).toEqual(['c-web'])
   })
 })

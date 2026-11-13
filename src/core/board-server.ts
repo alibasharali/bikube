@@ -37,13 +37,6 @@ const signals = new WeakMap<BoardRequest, AbortSignal>()
 export const requestSignal = (request: BoardRequest): AbortSignal | undefined =>
   signals.get(request)
 
-/** Gives `to`, a copy of `from` a handler passes on, `from`'s signal. */
-export function keepSignal(from: BoardRequest, to: BoardRequest): BoardRequest {
-  const signal = signals.get(from)
-  if (signal && to !== from) signals.set(to, signal)
-  return to
-}
-
 export interface BoardServerOptions {
   lineTimeoutMs?: number
   drainMs?: number

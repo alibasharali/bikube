@@ -4,19 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sendBoardRequest } from './board-client'
-import {
-  INVALID_REQUEST,
-  serializeRequest,
-  type BoardReply,
-  type BoardRequest
-} from './board-protocol'
-import { ONLY_ORCHESTRATOR } from './board-commands'
-import {
-  orchestratorSockets,
-  removeLeftoverSessionSockets,
-  SessionSockets,
-  sharedSocketHandler
-} from './session-sockets'
+import { INVALID_REQUEST, serializeRequest, type BoardReply } from './board-protocol'
+import { removeLeftoverSessionSockets, SessionSockets } from './session-sockets'
 
 let dir: string
 let boardDir: string
@@ -86,6 +75,26 @@ describe('SessionSockets (#25 D2, D3)', () => {
     expect(await sendBoardRequest(local, move)).toEqual({ ok: true })
   })
 
+  it('relays none of the commands only local terminals run (#81 D16, D24)', async () => {
+    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
+    sockets = new SessionSockets(boardDir, handler)
+    const local = (await sockets.open('card-1')).forward.localSocket!
+    for (const command of [
+      { command: 'guide' as const },
+      { command: 'start' as const, card: 'X' },
+      { command: 'open' as const, card: 'X' },
+      { command: 'send' as const, card: 'X', text: 'y' },
+      { command: 'wait' as const, card: 'X' },
+      { command: 'reply' as const, card: 'X' },
+      { command: 'terminal' as const, line: 'ls' },
+      { command: 'palette' as const, action: 'list' as const }
+    ]) {
+      const line = serializeRequest('card-1', command)
+      expect(await sendBoardRequest(local, line)).toEqual({ ok: false, error: INVALID_REQUEST })
+    }
+    expect(handler).not.toHaveBeenCalled()
+  })
+
   it("relays its own card's requests, on random paths in the board directory and /tmp", async () => {
     const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: false, error: 'board: nope' }))
     sockets = new SessionSockets(boardDir, handler)
@@ -151,13 +160,12 @@ describe('SessionSockets (#25 D2, D3)', () => {
   })
 })
 
-describe('removeLeftoverSessionSockets (#25 D2, #81 D16)', () => {
-  it('removes every s-*.sock and o-*.sock in the board directory and nothing else', () => {
+describe('removeLeftoverSessionSockets (#25 D2)', () => {
+  it('removes every s-*.sock in the board directory and nothing else', () => {
     mkdirSync(boardDir)
     for (const name of [
       's-old.sock',
       's-0123456789abcdef.sock',
-      'o-0123456789abcdef.sock',
       'board.sock',
       'other',
       's-x.txt'
@@ -170,151 +178,5 @@ describe('removeLeftoverSessionSockets (#25 D2, #81 D16)', () => {
 
   it('does nothing without a board directory', () => {
     expect(() => removeLeftoverSessionSockets(boardDir)).not.toThrow()
-  })
-})
-
-describe("the Orchestrator's sockets (#81 D16)", () => {
-  const orchestrator = 'orchestrator:w1'
-
-  it('listens on o-<16 hex>.sock and serves only requests naming its Orchestrator, every command', async () => {
-    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
-    sockets = orchestratorSockets(boardDir, handler)
-    const session = await sockets.open(orchestrator)
-    const path = session.forward.localSocket!
-    const token = session.token!
-    expect(path).toMatch(new RegExp(`^${boardDir}/o-[0-9a-f]{16}\\.sock$`))
-    for (const command of [
-      { command: 'guide' as const },
-      { command: 'create' as const, column: 'Todo', title: 'x', workspace: 'B' },
-      { command: 'workspaces' as const, format: 'text' as const },
-      { command: 'status' as const, card: '.', text: 'x' }
-    ]) {
-      expect(await sendBoardRequest(path, serializeRequest(orchestrator, command, token))).toEqual({
-        ok: true
-      })
-    }
-    expect(handler).toHaveBeenCalledTimes(4)
-    for (const cardId of ['card-1', 'orchestrator:w2']) {
-      const line = serializeRequest(cardId, { command: 'guide' }, token)
-      expect(await sendBoardRequest(path, line)).toEqual({
-        ok: false,
-        error: INVALID_REQUEST
-      })
-    }
-    expect(handler).toHaveBeenCalledTimes(4)
-  })
-
-  it("refuses its own Orchestrator's id without its session's token (D16)", async () => {
-    const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
-    sockets = orchestratorSockets(boardDir, handler)
-    const session = await sockets.open(orchestrator)
-    const other = await sockets.open(orchestrator)
-    const path = session.forward.localSocket!
-    expect(session.token).toMatch(/^[0-9a-f]{64}$/)
-    expect(other.token).not.toBe(session.token)
-    for (const token of [
-      undefined,
-      '',
-      other.token!,
-      session.token!.slice(0, 63),
-      'x'.repeat(64)
-    ]) {
-      const line = serializeRequest(orchestrator, { command: 'guide' }, token)
-      expect(await sendBoardRequest(path, line)).toEqual({ ok: false, error: INVALID_REQUEST })
-    }
-    expect(handler).not.toHaveBeenCalled()
-  })
-
-  it('never hands the token on to the window', async () => {
-    const received: BoardRequest[] = []
-    sockets = orchestratorSockets(boardDir, async (request) => {
-      received.push(request)
-      return { ok: true }
-    })
-    const session = await sockets.open(orchestrator)
-    const line = serializeRequest(orchestrator, { command: 'guide' }, session.token)
-    expect(await sendBoardRequest(session.forward.localSocket!, line)).toEqual({ ok: true })
-    expect(received).toEqual([{ v: 1, cardId: orchestrator, command: 'guide' }])
-  })
-
-  it('is closed when its session exits, like an SSH session socket', async () => {
-    sockets = orchestratorSockets(boardDir, async () => ({ ok: true }))
-    const session = await sockets.open(orchestrator)
-    session.attach('9')
-    sockets.sessionExited('9')
-    expect(existsSync(session.forward.localSocket!)).toBe(false)
-  })
-})
-
-describe("board.sock's refusals (#81 D16)", () => {
-  const handler = vi.fn(async (): Promise<BoardReply> => ({ ok: true }))
-  const shared = sharedSocketHandler(handler)
-
-  it('refuses the orchestrator-only commands from any card', async () => {
-    handler.mockClear()
-    for (const command of [
-      { command: 'guide' as const },
-      { command: 'start' as const, card: 'X' },
-      { command: 'open' as const, card: 'X' },
-      { command: 'send' as const, card: 'X', text: 'y' },
-      { command: 'wait' as const, card: 'X' },
-      { command: 'reply' as const, card: 'X' },
-      { command: 'terminal' as const, line: 'ls' },
-      { command: 'palette' as const, action: 'list' as const }
-    ]) {
-      expect(await shared({ v: 1, cardId: 'card-1', ...command })).toEqual({
-        ok: false,
-        error: ONLY_ORCHESTRATOR
-      })
-    }
-    expect(handler).not.toHaveBeenCalled()
-  })
-
-  it('refuses any request carrying a token as invalid', async () => {
-    handler.mockClear()
-    expect(
-      await shared({
-        v: 1,
-        cardId: 'card-1',
-        token: 'a'.repeat(64),
-        command: 'list',
-        format: 'text'
-      })
-    ).toEqual({ ok: false, error: INVALID_REQUEST })
-    expect(handler).not.toHaveBeenCalled()
-  })
-
-  it("refuses any request naming an Orchestrator's id as invalid", async () => {
-    handler.mockClear()
-    expect(
-      await shared({ v: 1, cardId: 'orchestrator:w1', command: 'status', card: '.', text: 'x' })
-    ).toEqual({ ok: false, error: INVALID_REQUEST })
-    expect(await shared({ v: 1, cardId: 'orchestrator:w1', command: 'guide' })).toEqual({
-      ok: false,
-      error: INVALID_REQUEST
-    })
-    expect(
-      await shared({
-        v: 1,
-        cardId: 'card-1',
-        command: 'status',
-        card: 'orchestrator:w1',
-        text: 'x'
-      })
-    ).toEqual({ ok: false, error: INVALID_REQUEST })
-    expect(handler).not.toHaveBeenCalled()
-  })
-
-  it("relays every other card's request", async () => {
-    handler.mockClear()
-    const request = {
-      v: 1 as const,
-      cardId: 'card-1',
-      command: 'move' as const,
-      card: '.',
-      column: 'Done'
-    }
-    expect(await shared(request)).toEqual({ ok: true })
-    expect(handler).toHaveBeenCalledWith(request)
   })
 })

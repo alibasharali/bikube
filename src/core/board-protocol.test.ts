@@ -423,7 +423,7 @@ describe('create with a worktree (#69 D10)', () => {
   })
 })
 
-describe('orchestrator-only requests (#81 D13, D17–D23)', () => {
+describe('requests that drive the board and the app (#81 D13, D17–D23)', () => {
   const roundTrip = (command: BoardCommand): ReturnType<typeof parseRequestLine> =>
     parseRequestLine(serializeRequest('orchestrator:w1', command))
 
@@ -471,26 +471,11 @@ describe('orchestrator-only requests (#81 D13, D17–D23)', () => {
   })
 })
 
-describe("an Orchestrator session's token (#81 D16)", () => {
-  const token = 'ab'.repeat(32)
-
-  it('round-trips a token on any command, and leaves it out when none is given', () => {
-    const sent = serializeRequest('orchestrator:w1', { command: 'guide' }, token)
-    expect(parseRequestLine(sent)).toEqual({
-      ok: true,
-      request: { v: 1, cardId: 'orchestrator:w1', token, command: 'guide' }
-    })
-    expect(serializeRequest('c1', { command: 'guide' })).not.toContain('token')
-  })
-
-  it('rejects a token that is not a string or is over 8 KiB', () => {
-    expect(parseRequestLine(line({ ...move, token: 1 }))).toEqual({
+describe('no token (#81 D16)', () => {
+  it('takes no token field: the Orchestrator speaks as any card does', () => {
+    expect(parseRequestLine(line({ ...move, token: 'ab'.repeat(32) }))).toEqual({
       ok: false,
       error: INVALID_REQUEST
-    })
-    expect(parseRequestLine(line({ ...move, token: 'a'.repeat(MAX_FIELD_BYTES + 1) }))).toEqual({
-      ok: false,
-      error: 'board: request too long'
     })
   })
 })

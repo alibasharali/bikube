@@ -1,7 +1,7 @@
 import { answerBoardRequest, checkCreateWorktree } from '../../core/board-answer'
 import { findShellCard } from '../../core/workspace-shells'
 import { boardPaletteItems, runBoardPalette } from './board-palette'
-import { sendToCard, waitOnCard } from './board-send-wait'
+import { boardActivitySet, sendToCard, waitOnCard } from './board-send-wait'
 import { openForBoard, startForBoard } from './board-starts'
 import { continueAfterSetup } from './card-actions'
 import { cardTerminals } from './card-terminals'
@@ -24,12 +24,12 @@ const isWorkspaceShell = (id: string): boolean =>
  * up a local Claude Code card's transcript (#80 D9).
  * A create with `--worktree` asks main for the repository's branches first (#69 D10).
  * A workspace shell's own session and usage are kept for the Agent tab, runtime only, and
- * forgotten each time it stops (#75 D3a). The Orchestrator's `board guide` prints the guide with
- * Settings' Your orchestrator instructions (#81 D13); its `board start`, `open` and `terminal`
- * start in the background and answer once the start is over (#81 D17, D22); its `board send`
- * types into a card, `wait` waits on its activity and `reply` asks main for its last reply
- * (D19–D21); its `board palette` lists and runs the command palette's rows as the app shows them
- * (D23).
+ * forgotten each time it stops (#75 D3a). From any local card or shell, the Orchestrator's
+ * included (#81 D16): `board guide` prints the guide with Settings' Your orchestrator
+ * instructions (#81 D13); `board start`, `open` and `terminal` start in the background and answer
+ * once the start is over (#81 D17, D22); `board send` types into a card, `wait` waits on its
+ * activity (one set since the last send) and `reply` asks main for its last reply (D19–D21);
+ * `board palette` lists and runs the command palette's rows as the app shows them (D23).
  */
 export function listenForBoardRequests(): () => void {
   cardTerminals().onEnded(clearShellAgent)
@@ -51,7 +51,11 @@ export function listenForBoardRequests(): () => void {
       command,
       (id) => cardTerminals().runState(id)?.kind === 'running',
       (id, text) => cardTerminals().setAgentStatus(id, text),
-      (id, activity) => cardTerminals().setActivity(id, activity),
+      (id, activity) => {
+        cardTerminals().setActivity(id, activity)
+        // Any set, the same value too, is newer than the card's last `board send` (#81 D20).
+        boardActivitySet(id)
+      },
       (card, result) => {
         if (result === 'failed') {
           cardTerminals().setupFailed(card.id)

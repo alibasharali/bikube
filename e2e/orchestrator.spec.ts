@@ -477,20 +477,17 @@ test('AC6: board guide prints the guide and Your orchestrator instructions, as t
   await expect.poll(bufferLines).toContain('empty rc=0')
   expect(readText(guide)).toBe(orchestratorGuide('Proj', repo, ''))
 
-  // D16: its own socket, and an extra pane's own too, each serving board guide.
-  await run('echo "sock=$BIKUBE_SOCKET"')
-  const socketLine = async (): Promise<string> =>
-    (await bufferLines()).find((l) => l.startsWith('sock=')) ?? ''
-  await expect.poll(socketLine).toMatch(/^sock=\/\S+\/board\/o-[0-9a-f]{16}\.sock$/)
-  const mainSocket = await socketLine()
+  // D16: no socket or token of its own, board.sock as any card's, in an extra pane too.
+  await run('echo "sock=$BIKUBE_SOCKET token=${BIKUBE_ORCHESTRATOR_TOKEN-none}"')
+  const boardSocket = join(dataDir, 'board', 'board.sock')
+  await expect.poll(bufferLines).toContain(`sock=${boardSocket} token=none`)
   await splitRight(page)
   await expect.poll(terminalFocused).toBe(true)
   const sockets = join(root, 'sockets.txt')
   await page.keyboard.type(`echo "$BIKUBE_SOCKET" > ${sockets}; board guide > ${guide}.2`)
   await page.keyboard.press('Enter')
   await expect.poll(() => readText(`${guide}.2`)).toBe(orchestratorGuide('Proj', repo, ''))
-  expect(readText(sockets).trim()).toMatch(/\/board\/o-[0-9a-f]{16}\.sock$/)
-  expect(`sock=${readText(sockets).trim()}`).not.toBe(mainSocket)
+  expect(readText(sockets).trim()).toBe(boardSocket)
 })
 
 /** The running terminals the sidebar lists under the workspace named `name`. */
@@ -656,6 +653,21 @@ test('AC10: board send types into a card, board wait waits on its activity, boar
     .poll(bufferLines, { timeout: 15_000 })
     .toContainEqual(expect.stringMatching(/^timeout rc=1 after=[56]$/))
   expect(await bufferLines()).toContain('board: timed out after 5 s')
+
+  // Still waiting from before a send, it doesn't count: the wait goes on until the card sets
+  // waiting again (typed in it 2 s after the send), then prints it (D20).
+  await run(`board activity ${id} waiting; board wait Review --timeout 5; echo "before rc=$?"`)
+  await expect.poll(bufferLines).toContain('before rc=0')
+  await run(
+    `board send Review 'echo again; sleep 2; board activity ${id} waiting'; s=$(date +%s); ` +
+      'board wait Review --timeout 5; echo "again rc=$? after=$(( $(date +%s) - s ))"'
+  )
+  await expect
+    .poll(bufferLines, { timeout: 15_000 })
+    .toContainEqual(expect.stringMatching(/^again rc=0 after=[234]$/))
+  const again = await bufferLines()
+  const ended = again.findIndex((l) => l.startsWith('again rc=0'))
+  expect(again[ended - 1]).toBe('waiting')
 
   await run('board reply Review; echo "reply rc=$?"')
   await expect.poll(bufferLines).toContain('reply rc=0')

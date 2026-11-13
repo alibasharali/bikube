@@ -64,8 +64,7 @@ export function sendBoardRequest(
 }
 
 /**
- * Runs `board <argv>` with `env`'s `BIKUBE_CARD_ID` and `BIKUBE_SOCKET` (and an Orchestrator's
- * `BIKUBE_ORCHESTRATOR_TOKEN`, #81 D16); resolves with the exit code.
+ * Runs `board <argv>` with `env`'s `BIKUBE_CARD_ID` and `BIKUBE_SOCKET`; resolves with the exit code.
  * `board usage` reads its transcript first (#50 D5): one that can't be read sends nothing.
  * `board describe` and `board create --description-file` read their file, `readStdin` for `-`,
  * first (#69 D5, D8): one refused sends nothing. `board send` cleans its text (`-` read from
@@ -141,10 +140,7 @@ export async function runBoard(
     command = { ...command, text: checked.text }
   }
   const limit = typeof timeoutMs === 'number' ? timeoutMs : timeoutMs(command)
-  // An Orchestrator session's secret, which its own socket requires (#81 D16).
-  const token = env.BIKUBE_ORCHESTRATOR_TOKEN || undefined
-  const line = serializeRequest(cardId, command, token)
-  const reply = await sendBoardRequest(socketPath, line, limit)
+  const reply = await sendBoardRequest(socketPath, serializeRequest(cardId, command), limit)
   if (reply.ok) {
     if (reply.output !== undefined) out.stdout(reply.output)
     return 0

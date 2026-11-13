@@ -4,12 +4,7 @@
  */
 import type { Activity } from './activity'
 import type { ReplyRead } from './agent-tab'
-import {
-  ORCHESTRATOR_ONLY_COMMANDS,
-  WAIT_DEFAULT_SECONDS,
-  type BoardCommand,
-  type SetupResult
-} from './board-args'
+import { WAIT_DEFAULT_SECONDS, type BoardCommand, type SetupResult } from './board-args'
 import {
   boardListing,
   formatBoardListing,
@@ -34,7 +29,6 @@ import {
   CALLING_CARD,
   SHELL_NOT_A_CARD,
   ORCHESTRATOR_NOT_A_CARD,
-  ONLY_ORCHESTRATOR,
   noSetupError,
   notRunningError,
   resolveCard,
@@ -140,8 +134,9 @@ function answerShell(
 }
 
 /**
- * What the orchestrator-only commands read and do in the renderer (#81 D13, D17–D23); later
- * slices add theirs. Every field is optional so callers and tests pass only what they use.
+ * What the commands that drive the board and the app read and do in the renderer (#81 D13,
+ * D17–D23), for any local card or shell as for the Orchestrator (D16). Every field is optional so
+ * callers and tests pass only what they use.
  */
 export interface OrchestratorAnswers {
   /** Settings' Your orchestrator instructions (D14), read at each `board guide`. */
@@ -171,14 +166,24 @@ export interface OrchestratorAnswers {
   runPalette?: (action: PaletteAction) => void
 }
 
-/** The orchestrator-only `command` from the Orchestrator of `workspace` (#81 D16). */
-type OrchestratorOnly = Extract<
+/** A command that drives the board and the app (#81 D13, D17–D23), from any local terminal (D16). */
+type DrivingCommand = Extract<
   BoardCommand,
   { command: 'guide' | 'start' | 'open' | 'send' | 'wait' | 'reply' | 'terminal' | 'palette' }
 >
 
-const isOrchestratorOnly = (command: BoardCommand): command is OrchestratorOnly =>
-  ORCHESTRATOR_ONLY_COMMANDS.has(command.command)
+const DRIVING: ReadonlySet<BoardCommand['command']> = new Set([
+  'guide',
+  'start',
+  'open',
+  'send',
+  'wait',
+  'reply',
+  'terminal',
+  'palette'
+])
+
+const isDriving = (command: BoardCommand): command is DrivingCommand => DRIVING.has(command.command)
 
 /** The refusal for a card or terminal whose start failed (#81 D17). */
 const startFailed = (title: string, reason: string): BoardReply => ({
@@ -187,15 +192,15 @@ const startFailed = (title: string, reason: string): BoardReply => ({
 })
 
 /**
- * An orchestrator-only command from the Orchestrator of `workspace`: `guide` prints the guide
- * with the workspace's name and folder and the user's instructions (D13); `start`, `open`,
+ * A driving command from a local terminal in `workspace` (D16): `guide` prints the guide with the
+ * workspace's name and folder and the user's instructions (D13); `start`, `open`,
  * `terminal`, `send`, `wait` and `reply` are `answerBoardRequest`'s. `palette list` prints the
  * palette's action rows but those acting on the open card or pane, one label a line; `palette run`
  * runs the one its label names, at once, and prints nothing (D23).
  */
-function answerOrchestratorOnly(
+function answerDriving(
   workspace: Workspace,
-  command: OrchestratorOnly,
+  command: DrivingCommand,
   answers: OrchestratorAnswers
 ): BoardReply {
   if (command.command === 'guide') {
@@ -244,7 +249,7 @@ const started = (title: string, outcome: StartOutcome): BoardReply =>
     ? { ok: true, output: `${title} is still starting\n` }
     : { ok: true }
 
-/** `send`, `wait` and `reply` on a card found for the Orchestrator (D19–D21). */
+/** `send`, `wait` and `reply` on a card found as `start` finds it (D19–D21). */
 async function answerCardCommand(
   card: Card,
   command: Extract<AwaitedCommand, { command: 'send' | 'wait' | 'reply' }>,
@@ -293,7 +298,7 @@ function answerAwaited(
   isRunning: (cardId: string) => boolean,
   answers: OrchestratorAnswers
 ): BoardReply | Promise<BoardReply> {
-  // The workspace `--workspace` names, else the active one (the user's, not the Orchestrator's).
+  // The workspace `--workspace` names, else the active one (the user's, not the caller's).
   const named =
     'workspace' in command && command.workspace !== undefined
       ? resolveWorkspace(state, command.workspace)
@@ -412,7 +417,7 @@ type AnswerArgs = [
  * renames one. Both save through the store like any board change. `description` answers with
  * the card's description and one newline, or nothing; `describe` replaces it through the store,
  * which trims it, removes it when empty and refuses one over the cap (#69 D5).
- * `start`, `open`, `terminal`, `send`, `wait` and `reply` from the Orchestrator are answered by `answerBoardRequest`.
+ * `start`, `open`, `terminal`, `send`, `wait` and `reply` are answered by `answerBoardRequest`.
  */
 export function answerBoardCommand(
   store: AnswerArgs[0],
@@ -437,12 +442,8 @@ export function answerBoardCommand(
   // An SSH card's session socket serves only its own card's workspace (#69 D9).
   const remote = callingCard.host !== undefined
   if (remote && !servesRemoteCard(command)) return { ok: false, error: INVALID_REQUEST }
-  // Main lets these through only from the Orchestrator's own socket (#81 D16); checked again here.
-  if (isOrchestratorOnly(command)) {
-    return kind === 'orchestrator'
-      ? answerOrchestratorOnly(calling, command, orchestrator)
-      : { ok: false, error: ONLY_ORCHESTRATOR }
-  }
+  // Every local card and shell may drive the board and the app, as the Orchestrator does (#81 D16).
+  if (isDriving(command)) return answerDriving(calling, command, orchestrator)
   if (command.command === 'workspaces') {
     const listing = workspacesListing(state, calling.id)
     const output =
@@ -587,9 +588,9 @@ export function answerBoardCommand(
 }
 
 /**
- * `answerBoardCommand` for every request, with the Orchestrator's `start`, `open` and `terminal`
- * (#81 D17, D22) answered once the start they make is over, and its `send`, `wait` and `reply`
- * (D19–D21) once typed, ended or read, as a promise.
+ * `answerBoardCommand` for every request, with `start`, `open` and `terminal` (#81 D17, D22) from
+ * any local card or shell (D16) answered once the start they make is over, and `send`, `wait` and
+ * `reply` (D19–D21) once typed, ended or read, as a promise. An SSH card's are refused there.
  */
 export function answerBoardRequest(...args: AnswerArgs): BoardReply | Promise<BoardReply> {
   const [store, callingCardId, command, isRunning] = args
@@ -597,7 +598,7 @@ export function answerBoardRequest(...args: AnswerArgs): BoardReply | Promise<Bo
   if (
     !isAwaited(command) ||
     !calling.ok ||
-    callingTerminal(calling.value, callingCardId).kind !== 'orchestrator'
+    callingTerminal(calling.value, callingCardId).card.host !== undefined
   ) {
     return answerBoardCommand(...args)
   }

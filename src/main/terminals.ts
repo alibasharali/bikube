@@ -25,7 +25,6 @@ import type { SessionSockets } from '../core/session-sockets'
 import { shellIntegrationStart } from '../core/shell-integration'
 import { shellToStart } from '../core/shells'
 import { spawnInDirectory } from '../core/terminal-spawn'
-import { isOrchestratorId } from '../core/orchestrator'
 import { IPC, type TerminalExit } from '../shared/api'
 
 export interface Terminals {
@@ -53,17 +52,14 @@ export interface Terminals {
  * `ssh -R` (#25 D1, D2), closed when the session exits. A local shell is the Shell setting's
  * (`shellSetting`, '' for the login shell); the local shell running `ssh` is always the login shell.
  * A local zsh, bash or fish starts with Bikube's integration script while `shellIntegration` is on
- * (#45 D3, D4), read at each spawn so a change applies to new terminals only. Each Orchestrator
- * session (its main pane and every extra pane) gets its own socket from `orchestratorSockets` as
- * `BIKUBE_SOCKET` (#81 D16), closed when the session exits.
+ * (#45 D3, D4), read at each spawn so a change applies to new terminals only.
  */
 export function registerTerminals(
   shellEnv: (cardId: string) => Record<string, string>,
   sessionSockets?: SessionSockets,
   shellSetting: () => string = () => '',
   claudeStatus: () => boolean = () => true,
-  shellIntegration: () => boolean = () => false,
-  orchestratorSockets?: SessionSockets
+  shellIntegration: () => boolean = () => false
 ): Terminals {
   const scriptsDir = shellIntegrationDir()
   const manager = new SessionManager()
@@ -95,7 +91,6 @@ export function registerTerminals(
     cards.remove(id)
     flow.forget(id)
     sessionSockets?.sessionExited(id)
-    orchestratorSockets?.sessionExited(id)
     const exit: TerminalExit = { id, exitCode, signal }
     if (owner && !owner.isDestroyed()) owner.send(IPC.exit, exit)
   })
@@ -137,12 +132,6 @@ export function registerTerminals(
       // An SSH session's socket listens before `ssh` starts; with none, `ssh` gets no `-R` (#25 D7).
       const remote = host !== null && host !== undefined
       const board = remote && sessionSockets ? await sessionSockets.open(cardId) : null
-      // The Orchestrator speaks only through its own socket; with none, board.sock refuses it (D16).
-      const orchestrator =
-        !remote && isOrchestratorId(cardId) && orchestratorSockets
-          ? await orchestratorSockets.open(cardId)
-          : null
-      const ownSocket = orchestrator?.forward.localSocket
       // Re-checked after the directory check: no spawn for a page that reloaded or closed meanwhile.
       // The frame check catches an old page's request that main only handled after the reload.
       const result = await spawnInDirectory(
@@ -179,10 +168,6 @@ export function registerTerminals(
             env: local
               ? {
                   ...shellEnv(cardId),
-                  ...(ownSocket && { BIKUBE_SOCKET: ownSocket }),
-                  // The secret only its own socket takes (D16).
-                  ...(ownSocket &&
-                    orchestrator?.token && { BIKUBE_ORCHESTRATOR_TOKEN: orchestrator.token }),
                   ...(shell && { SHELL: shell }),
                   // Read by the Claude Code session start hook (claude-hooks.ts).
                   BIKUBE_CLAUDE_STATUS: claudeStatus() ? '1' : '0',
@@ -191,7 +176,6 @@ export function registerTerminals(
               : undefined
           })
           board?.attach(info.id)
-          orchestrator?.attach(info.id)
           return info
         },
         {
@@ -206,7 +190,6 @@ export function registerTerminals(
         cards.add(result.id, cardId)
       } else {
         board?.discard()
-        orchestrator?.discard()
       }
       return result
     }

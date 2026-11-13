@@ -73,7 +73,7 @@ describe('runBoard', () => {
     })
   })
 
-  it("sends the Orchestrator session's BIKUBE_ORCHESTRATOR_TOKEN with the request (#81 D16)", async () => {
+  it("sends the Orchestrator's requests as any card's, with no secret of its own (#81 D16)", async () => {
     const handler = vi.fn(async () => ({ ok: true }) as BoardReply)
     await serve(handler)
     const env = {
@@ -82,12 +82,7 @@ describe('runBoard', () => {
       BIKUBE_ORCHESTRATOR_TOKEN: 'ab'.repeat(32)
     }
     expect(await board(['guide'], env)).toEqual({ code: 0, stdout: '', stderr: '' })
-    expect(handler).toHaveBeenCalledWith({
-      v: 1,
-      cardId: 'orchestrator:w1',
-      token: 'ab'.repeat(32),
-      command: 'guide'
-    })
+    expect(handler).toHaveBeenCalledWith({ v: 1, cardId: 'orchestrator:w1', command: 'guide' })
   })
 
   it("prints a reply's output to stdout (list, create)", async () => {

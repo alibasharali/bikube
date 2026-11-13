@@ -352,7 +352,7 @@ describe('parseBoardArgs: create --worktree (#69 D10)', () => {
   })
 })
 
-describe('orchestrator-only commands (#81 D13, D16–D24)', () => {
+describe('the commands that drive the board and the app (#81 D13, D16–D24)', () => {
   const usage = { kind: 'usage', stderr: BOARD_USAGE, exitCode: 2 }
   const command = (argv: string[]): unknown => parseBoardArgs(argv)
 
@@ -429,10 +429,9 @@ describe('orchestrator-only commands (#81 D13, D16–D24)', () => {
     }
   })
 
-  it('lists them under Orchestrator only in the usage text (D24)', () => {
-    const [before, after] = BOARD_USAGE.split('Orchestrator only:\n')
-    expect(after).toBeDefined()
-    expect(before).not.toMatch(/board (guide|start|open|send|wait|reply|terminal|palette)\b/)
+  it('lists them with the others in the usage text, under no heading of their own (D24)', () => {
+    expect(BOARD_USAGE).not.toContain('Orchestrator only')
+    const synopsis = BOARD_USAGE.split('\n\n')[0]!
     for (const line of [
       'board guide',
       'board start <card>',
@@ -444,8 +443,9 @@ describe('orchestrator-only commands (#81 D13, D16–D24)', () => {
       'board palette list',
       'board palette run <label>'
     ]) {
-      expect(after).toContain(line)
+      expect(synopsis).toContain(`       ${line}`)
     }
+    expect(BOARD_USAGE).toMatch(/--workspace <w>\n.*start, open and terminal/s)
   })
 
   it("leaves SSH cards' usage as it was (D24)", () => {

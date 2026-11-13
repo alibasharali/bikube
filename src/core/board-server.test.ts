@@ -20,7 +20,6 @@ import {
 } from './board-protocol'
 import {
   DRAIN_MS,
-  keepSignal,
   MAX_CONNECTIONS,
   requestSignal,
   startBoardServer,
@@ -106,16 +105,6 @@ describe('startBoardServer', () => {
     answer({ ok: true, output: 'waiting\n' })
     expect(await reply).toBe('{"ok":true,"output":"waiting\\n"}\n')
     expect(signal!.aborted).toBe(false)
-  })
-
-  it('hands a request copy its signal (keepSignal)', async () => {
-    let copied: AbortSignal | undefined
-    await serve(async (request) => {
-      copied = requestSignal(keepSignal(request, { ...request }))
-      return { ok: true }
-    })
-    await exchange(serializeRequest('c1', { command: 'guide' }))
-    expect(copied).toBeInstanceOf(AbortSignal)
   })
 
   it('creates the socket as mode 0600 in a private 0700 directory (#9 D5, AC9)', async () => {

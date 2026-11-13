@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Activity } from './activity'
-import { waitForCard, waitResult, waitTimedOut, type WaitedCard } from './board-wait'
+import { SendMarks, waitForCard, waitResult, waitTimedOut, type WaitedCard } from './board-wait'
 
 describe('waitResult (#81 D20)', () => {
   it('is stopped, waiting or question, and nothing while working or with no activity', () => {
@@ -9,6 +9,115 @@ describe('waitResult (#81 D20)', () => {
     expect(waitResult({ running: true, activity: 'question' })).toBe('question')
     expect(waitResult({ running: true, activity: 'working' })).toBeNull()
     expect(waitResult({ running: true, activity: null })).toBeNull()
+  })
+
+  it('reads a waiting or question set before the last send as nothing, a stopped card still stopped', () => {
+    expect(waitResult({ running: true, activity: 'waiting', stale: true })).toBeNull()
+    expect(waitResult({ running: true, activity: 'question', stale: true })).toBeNull()
+    expect(waitResult({ running: false, activity: 'waiting', stale: true })).toBe('stopped')
+  })
+})
+
+describe('waiting after board send (#81 D19, D20)', () => {
+  /** Card `id` running with `activity`, read through `marks` as the renderer does. */
+  function card(
+    marks: SendMarks,
+    id: string,
+    activity: Activity | null
+  ): {
+    deps: Parameters<typeof waitForCard>[0]
+    fake: ReturnType<typeof fakeCard>
+    setActivity(next: Activity | null): void
+    stop(): void
+  } {
+    let state: { running: boolean; activity: Activity | null } = { running: true, activity }
+    const fake = fakeCard({ ...state, stale: marks.stale(id) })
+    const deps = {
+      ...fake.deps,
+      read: (): WaitedCard => ({ ...state, stale: marks.stale(id) }),
+      subscribe: (listener: () => void): (() => void) => {
+        const off = fake.deps.subscribe(listener)
+        const offMarks = marks.subscribe(id, listener)
+        return () => {
+          off()
+          offMarks()
+        }
+      }
+    }
+    return {
+      deps,
+      fake,
+      /** `board activity <id> <activity>`: the card's activity set, the same value too. */
+      setActivity(next: Activity | null) {
+        marks.activitySet(id)
+        if (next !== state.activity) {
+          state = { ...state, activity: next }
+          fake.set(state.running, next)
+        }
+      },
+      stop() {
+        state = { running: false, activity: null }
+        fake.set(false, null)
+      }
+    }
+  }
+
+  it("makes the card's current waiting stale, until its activity is set again, waiting too", async () => {
+    const marks = new SendMarks()
+    const review = card(marks, 'review', 'waiting')
+    expect(await waitForCard(review.deps, 5)).toBe('waiting')
+    marks.sent('review')
+    let result: string | undefined
+    void waitForCard(review.deps, 5).then((r) => (result = r))
+    await Promise.resolve()
+    expect(result).toBeUndefined()
+    review.setActivity('waiting')
+    await Promise.resolve()
+    expect(result).toBe('waiting')
+    expect(review.fake.listeners.size).toBe(0)
+  })
+
+  it('answers the activity set after the send: working goes on, then question', async () => {
+    const marks = new SendMarks()
+    const review = card(marks, 'review', 'question')
+    marks.sent('review')
+    const done = waitForCard(review.deps, 5)
+    review.setActivity('working')
+    review.setActivity('question')
+    expect(await done).toBe('question')
+  })
+
+  it('still answers stopped at once after a send', async () => {
+    const marks = new SendMarks()
+    const review = card(marks, 'review', 'waiting')
+    marks.sent('review')
+    review.stop()
+    expect(await waitForCard(review.deps, 5)).toBe('stopped')
+  })
+
+  it('answers stopped when the card stops while its waiting is stale', async () => {
+    const marks = new SendMarks()
+    const review = card(marks, 'review', 'waiting')
+    marks.sent('review')
+    const done = waitForCard(review.deps, 5)
+    review.stop()
+    expect(await done).toBe('stopped')
+  })
+
+  it("leaves another card's waiting as it is", async () => {
+    const marks = new SendMarks()
+    const other = card(marks, 'other', 'waiting')
+    card(marks, 'review', 'waiting')
+    marks.sent('review')
+    expect(marks.stale('other')).toBe(false)
+    expect(await waitForCard(other.deps, 5)).toBe('waiting')
+  })
+
+  it('reads nothing as stale before any send', () => {
+    const marks = new SendMarks()
+    expect(marks.stale('review')).toBe(false)
+    marks.sent('review')
+    expect(marks.stale('review')).toBe(true)
   })
 })
 

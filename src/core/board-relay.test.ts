@@ -233,7 +233,7 @@ describe('BoardRelay: create with a worktree (#69 D10)', () => {
   })
 })
 
-describe('BoardRelay: orchestrator-only commands (#81 D13, D17–D23)', () => {
+describe('BoardRelay: the commands that drive the board and the app (#81 D13, D17–D23)', () => {
   it('forwards each with its fields', () => {
     const commands: BoardCommand[] = [
       { command: 'guide' },

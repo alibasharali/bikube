@@ -35,6 +35,15 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
        board session <card> <session-id>
        board description <card>
        board describe <card> <file>|-
+       board guide
+       board start <card>
+       board open <card>
+       board send <card> <text>|-
+       board wait <card> [--timeout <s>]
+       board reply <card>
+       board terminal [--show] <command>
+       board palette list
+       board palette run <label>
 
   workspaces   every workspace in sidebar order: id, name, local or ssh <host>, directory;
                * marks this card's
@@ -43,7 +52,8 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
   --workspace <w>
                on list, create, rename, move, status, description and describe: the workspace
                (its id, or its name in any case) whose card and column titles to use; this
-               card's workspace when left out
+               card's workspace when left out; on start, open and terminal: the workspace,
+               the one shown when left out
   --agent <agent>
                claude, codex, gemini, opencode or pi; this card's agent when left out
                (the workspace's default when this card runs a custom command or a shell)
@@ -60,19 +70,7 @@ export const BOARD_USAGE = `usage: board workspaces [--json]
   session      the Claude Code session the card resumes (Bikube's Claude hooks set it)
   description  prints the card's task description (markdown); nothing when it has none
   describe     replaces it with the file's text (- reads stdin); an empty file removes it
-
-Orchestrator only:
-       board guide
-       board start <card>
-       board open <card>
-       board send <card> <text>|-
-       board wait <card> [--timeout <s>]
-       board reply <card>
-       board terminal [--show] <command>
-       board palette list
-       board palette run <label>
-
-  guide        prints the orchestrator's instructions
+  guide        prints the orchestrator's guide for this workspace
   start        starts a stopped card in the background
   open         shows a card at full size, starting it if needed
   send         types the text (- reads stdin) into a running card, then Enter
@@ -80,8 +78,6 @@ Orchestrator only:
   reply        prints a Claude Code card's last reply
   terminal     opens a new terminal running <command> (--show also shows it)
   palette      lists the command palette's rows, or runs one by its label
-  --workspace <w>
-               on start, open and terminal: the workspace, as above
 `
 
 /** What `board create --agent` takes (#69 D8): Claude Code or a preset, never a plain shell. */
@@ -128,7 +124,7 @@ export type BoardCommand =
   | { command: 'setup'; card: string; result: SetupResult }
   /** Sent by `board usage` after reading the transcript (#50 D5); not in the usage text. */
   | { command: 'usage'; card: string; usage: ClaudeUsage }
-  /** The orchestrator's instructions (#81 D13); the Orchestrator only, as are the rest. */
+  /** The orchestrator's instructions for the calling terminal's workspace (#81 D13). */
   | { command: 'guide' }
   /** Starts a stopped card in the background (#81 D17). */
   | { command: 'start'; card: string; workspace?: string }
@@ -145,18 +141,6 @@ export type BoardCommand =
   /** Lists the palette's rows, or runs the one labelled `label` (#81 D23). */
   | { command: 'palette'; action: 'list' }
   | { command: 'palette'; action: 'run'; label: string }
-
-/** The commands only the Orchestrator may run (#81 D16): `board.sock` refuses them. */
-export const ORCHESTRATOR_ONLY_COMMANDS: ReadonlySet<BoardCommand['command']> = new Set([
-  'guide',
-  'start',
-  'open',
-  'send',
-  'wait',
-  'reply',
-  'terminal',
-  'palette'
-])
 
 /** `board wait`'s timeout in seconds (#81 D20): the default, and the range it takes. */
 export const WAIT_DEFAULT_SECONDS = 600
@@ -355,7 +339,7 @@ export function parseBoardArgs(argv: readonly string[]): BoardArgs {
 }
 
 /**
- * The orchestrator-only command `name` with its operands (#81 D13, D17–D23): undefined when
+ * The command `name` that drives the board and the app, with its operands (#81 D13, D17–D23): undefined when
  * `name` is none of them, null for a wrong shape.
  */
 function parseOrchestratorCommand(

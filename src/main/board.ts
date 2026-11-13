@@ -5,12 +5,7 @@ import { CLAUDE_SETTINGS_FILE } from '../core/claude-hooks'
 import { BoardRelay } from '../core/board-relay'
 import { NO_ANSWER } from '../core/board-protocol'
 import { startBoardServer, type BoardHandler, type BoardServer } from '../core/board-server'
-import {
-  orchestratorSockets,
-  removeLeftoverSessionSockets,
-  SessionSockets,
-  sharedSocketHandler
-} from '../core/session-sockets'
+import { removeLeftoverSessionSockets, SessionSockets } from '../core/session-sockets'
 import { IPC } from '../shared/api'
 import type { Terminals } from './terminals'
 
@@ -47,20 +42,17 @@ export function claudeSettingsPath(): string {
 }
 
 /**
- * The SSH sessions' sockets (#25 D2) and the Orchestrator sessions' (#81 D16), next to
- * `board.sock` in its private directory. They serve once `registerBoard` hands them its relay;
- * none exists before then.
+ * The SSH sessions' sockets (#25 D2), next to `board.sock` in its private directory. They serve
+ * once `registerBoard` hands them its relay; none exists before then.
  */
-export function sessionBoardSockets(socketPath: string): {
-  ssh: SessionSockets
-  orchestrator: SessionSockets
+export function sshBoardSockets(socketPath: string): {
+  sockets: SessionSockets
   relayTo(handler: BoardHandler): void
 } {
   let relay: BoardHandler = async () => ({ ok: false, error: NO_ANSWER })
-  const relayed: BoardHandler = (request) => relay(request)
+  const sockets = new SessionSockets(dirname(socketPath), (request) => relay(request))
   return {
-    ssh: new SessionSockets(dirname(socketPath), relayed),
-    orchestrator: orchestratorSockets(dirname(socketPath), relayed),
+    sockets,
     relayTo: (handler) => {
       relay = handler
     }
@@ -84,15 +76,14 @@ export function boardShellEnvFor(socketPath: string): (cardId: string) => Record
 /**
  * Serves `board` on the socket (#9 D5, D6, D10): each request goes to the window owning the
  * calling card's session, whose answer is relayed back. When listening fails the app runs on
- * without it. `board.sock` refuses the orchestrator-only commands and any request naming an
- * Orchestrator (#81 D16). The SSH and Orchestrator sessions' sockets relay the same way (#25 D2,
- * #81 D16); a previous run's leftovers are removed first. Returns the function that closes every
- * socket on quit.
+ * without it. Every local card and shell, the Orchestrator included, speaks through it (#81
+ * D16). The SSH sessions' sockets relay the same way (#25 D2); a previous run's leftovers are
+ * removed first. Returns the function that closes every socket on quit.
  */
 export function registerBoard(
   socketPath: string,
   terminals: Terminals,
-  sessions: ReturnType<typeof sessionBoardSockets>
+  ssh: ReturnType<typeof sshBoardSockets>
 ): () => void {
   const relay = new BoardRelay<WebContents>(
     (cardId) => terminals.ownerOfCard(cardId),
@@ -117,14 +108,11 @@ export function registerBoard(
   })
 
   removeLeftoverSessionSockets(dirname(socketPath))
-  sessions.relayTo((request) => relay.handle(request))
+  ssh.relayTo((request) => relay.handle(request))
 
   let server: BoardServer | null = null
   let closed = false
-  startBoardServer(
-    socketPath,
-    sharedSocketHandler((request) => relay.handle(request))
-  ).then(
+  startBoardServer(socketPath, (request) => relay.handle(request)).then(
     (started) => {
       if (closed) void started.close()
       else server = started
@@ -136,8 +124,7 @@ export function registerBoard(
   )
   return () => {
     closed = true
-    sessions.ssh.closeAll()
-    sessions.orchestrator.closeAll()
+    ssh.sockets.closeAll()
     void server?.close()
     server = null
   }

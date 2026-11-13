@@ -28,4 +28,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 ## Verification
 
 - done: ALL PASS (AC1, AC3, AC8, AC11, AC12, AC14 observed directly; the rest via e2e)
+- round 3 change: AC7 and AC10 re-verified by e2e (`orchestrator.spec.ts` 13/13, `board-cli.spec.ts` 18/18, `--workers=1`); no UI change
 - UX review: done (2 must-fix fixed: toolbar clipping, chevron menu off-window; labels kept at default size)

@@ -1,5 +1,6 @@
 import { Ellipsis } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { menuPlacement } from '../../core/menu-placement'
 import { ICON } from './icons'
 
 interface MenuButtonProps {
@@ -10,8 +11,8 @@ interface MenuButtonProps {
   testId: string
   className?: string
   /**
-   * Places the menu with fixed positioning under the button, so a scrolling list (the cards in
-   * a column) does not clip it.
+   * Places the menu with fixed positioning under the button (above it when there's no room
+   * below, #82), so a scrolling list (the cards in a column) does not clip it.
    */
   fixed?: boolean
   /**
@@ -60,17 +61,32 @@ function MenuButton({
     return () => doc.removeEventListener('mousedown', onDown)
   }, [open])
 
-  // A fixed menu wider than the room on its side moves back inside the window.
+  // A fixed menu goes under its button, or above it when it doesn't fit there, capped and
+  // scrolling when it fits on neither side, and inside the window sideways (#82). Placed once
+  // per opening, before the paint.
   useLayoutEffect(() => {
-    if (!open || !fixed || !menu.current) return
+    if (!open || !fixed || !menu.current || !button.current) return
     const el = menu.current
-    const width = (el.ownerDocument.defaultView ?? window).innerWidth
+    const view = el.ownerDocument.defaultView ?? window
     const rect = el.getBoundingClientRect()
-    if (rect.left >= 0 && rect.right <= width) return
-    const left = Math.max(0, Math.min(rect.left, width - rect.width - 4))
-    if (Math.abs(left - rect.left) < 0.5) return
-    setPosition((p) => ({ position: 'fixed', top: p?.top, left, right: 'auto' }))
-  }, [open, fixed, position])
+    const place = menuPlacement(
+      button.current.getBoundingClientRect(),
+      { width: rect.width, height: el.scrollHeight + (rect.height - el.clientHeight) },
+      { width: view.innerWidth, height: view.innerHeight },
+      align
+    )
+    setPosition({
+      position: 'fixed',
+      top: place.top,
+      left: place.left,
+      right: 'auto',
+      ...(place.maxHeight !== undefined && {
+        maxHeight: place.maxHeight,
+        overflowY: 'auto',
+        boxSizing: 'border-box'
+      })
+    })
+  }, [open, fixed, align])
 
   const run = (action: () => void) => (): void => {
     setOpen(false)

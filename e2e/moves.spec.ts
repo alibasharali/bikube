@@ -265,6 +265,10 @@ test('#82: a card menu near the bottom of the window opens above its card, whole
   const capped = await openMenu('a')
   expect(capped.menu.y).toBeGreaterThanOrEqual(0)
   expect(capped.menu.y + capped.menu.height).toBeLessThanOrEqual(capped.height)
+  const scrolls = await page
+    .getByRole('menu', { name: 'a actions' })
+    .evaluate((el) => el.scrollHeight > el.clientHeight)
+  expect(scrolls).toBe(true)
   await page.getByTestId('card-menu-delete').scrollIntoViewIfNeeded()
   await expect(page.getByTestId('card-menu-delete')).toBeInViewport({ ratio: 1 })
   await page.getByTestId('card-menu-delete').click()

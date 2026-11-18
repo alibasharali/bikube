@@ -67,25 +67,40 @@ function MenuButton({
   useLayoutEffect(() => {
     if (!open || !fixed || !menu.current || !button.current) return
     const el = menu.current
+    const at = button.current
     const view = el.ownerDocument.defaultView ?? window
-    const rect = el.getBoundingClientRect()
-    const place = menuPlacement(
-      button.current.getBoundingClientRect(),
-      { width: rect.width, height: el.scrollHeight + (rect.height - el.clientHeight) },
-      { width: view.innerWidth, height: view.innerHeight },
-      align
-    )
-    setPosition({
-      position: 'fixed',
-      top: place.top,
-      left: place.left,
-      right: 'auto',
-      ...(place.maxHeight !== undefined && {
-        maxHeight: place.maxHeight,
-        overflowY: 'auto',
-        boxSizing: 'border-box'
+    const place = (): void => {
+      const rect = el.getBoundingClientRect()
+      const spot = menuPlacement(
+        at.getBoundingClientRect(),
+        // The natural height, whatever cap an earlier placement set.
+        { width: rect.width, height: el.scrollHeight + (rect.height - el.clientHeight) },
+        { width: view.innerWidth, height: view.innerHeight },
+        align
+      )
+      setPosition({
+        position: 'fixed',
+        top: spot.top,
+        left: spot.left,
+        right: 'auto',
+        ...(spot.maxHeight !== undefined && {
+          maxHeight: spot.maxHeight,
+          overflowY: 'auto',
+          boxSizing: 'border-box'
+        })
       })
-    })
+    }
+    place()
+    // Placed again when its items change while it is open (a branch read adding one).
+    const resized = new view.ResizeObserver(() => place())
+    resized.observe(el)
+    // A capped menu keeps its size as items come and go: watch its items too.
+    const changed = new view.MutationObserver(() => place())
+    changed.observe(el, { childList: true, subtree: true })
+    return () => {
+      resized.disconnect()
+      changed.disconnect()
+    }
   }, [open, fixed, align])
 
   const run = (action: () => void) => (): void => {

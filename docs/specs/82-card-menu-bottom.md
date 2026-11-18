@@ -14,7 +14,7 @@ A board card's ⋯ menu near the bottom of the window opens below its button and
 
 ## Fix
 
-- **F1:** A fixed menu (`MenuButton`'s `fixed`) is placed once it is drawn, before the paint, by `menuPlacement` (`src/core/menu-placement.ts`, Node-free, Vitest): under the button when it fits there, else above it when it fits there, else on the side with more room with its height capped to that room and its items scrolling (`overflow-y: auto`). Sideways it keeps today's rule (its `align` edge, kept inside the window), with a 4 px margin from the window's edges.
+- **F1:** A fixed menu (`MenuButton`'s `fixed`) is placed once it is drawn, before the paint, by `menuPlacement` (`src/core/menu-placement.ts`, Node-free, Vitest): under the button when it fits there, else above it when it fits there, else on the side with more room with its height capped to that room and its items scrolling (`overflow-y: auto`). It keeps 4 px from the window's top and bottom. Sideways it keeps today's rule: its `align` edge, moved back inside the window (4 px from the right edge, 0 from the left). It is placed again when its size changes while open (an item added by a later read).
 
 ## Acceptance criteria
 

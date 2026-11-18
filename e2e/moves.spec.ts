@@ -217,6 +217,64 @@ test('AC8: the card menu moves a card to the bottom of another column', async ()
   await expect(page.getByTestId('card-view')).toHaveCount(0)
 })
 
+test('#82: a card menu near the bottom of the window opens above its card, whole', async () => {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1100, 800))
+  await createWorkspace(makeDir('alpha'), 'alpha')
+  const cards = ['a', 'b', 'c', 'd', 'e']
+  for (const title of cards) {
+    await newCard('Backlog', title)
+    await back()
+  }
+
+  /** Opens a card's menu; returns its box, its button's and the window's height. */
+  async function openMenu(title: string): Promise<{
+    menu: { y: number; height: number }
+    button: { y: number; height: number }
+    height: number
+  }> {
+    const button = card(title).getByTestId('card-menu')
+    await button.click()
+    const menu = page.getByRole('menu', { name: `${title} actions` })
+    await expect(menu).toBeVisible()
+    return {
+      menu: (await menu.boundingBox())!,
+      button: (await button.boundingBox())!,
+      height: await page.evaluate(() => window.innerHeight)
+    }
+  }
+
+  // AC2: room below the first card: under its button, as before.
+  const top = await openMenu('a')
+  expect(top.menu.y).toBeGreaterThanOrEqual(top.button.y + top.button.height)
+  expect(top.menu.y + top.menu.height).toBeLessThanOrEqual(top.height)
+  await page.keyboard.press('Escape')
+
+  // AC1: the last card's menu goes above its button, whole, and its last item is clickable.
+  const bottom = await openMenu('e')
+  expect(bottom.button.y + bottom.button.height + bottom.menu.height).toBeGreaterThan(bottom.height)
+  expect(bottom.menu.y + bottom.menu.height).toBeLessThanOrEqual(bottom.button.y)
+  expect(bottom.menu.y).toBeGreaterThanOrEqual(0)
+  await expect(page.getByTestId('card-menu-delete')).toBeInViewport({ ratio: 1 })
+  await page.getByTestId('card-menu-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText('Delete "e"?')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
+
+  // AC3: too short for the whole menu on either side: inside the window, scrolling to the end.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1100, 420))
+  const capped = await openMenu('a')
+  expect(capped.menu.y).toBeGreaterThanOrEqual(0)
+  expect(capped.menu.y + capped.menu.height).toBeLessThanOrEqual(capped.height)
+  const scrolls = await page
+    .getByRole('menu', { name: 'a actions' })
+    .evaluate((el) => el.scrollHeight > el.clientHeight)
+  expect(scrolls).toBe(true)
+  await page.getByTestId('card-menu-delete').scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('card-menu-delete')).toBeInViewport({ ratio: 1 })
+  await page.getByTestId('card-menu-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toContainText('Delete "a"?')
+})
+
 test('D8: with one column the card menu has no Move to group', async () => {
   await createWorkspace(makeDir('alpha'), 'alpha')
   for (const name of ['In Progress', 'Review', 'Done']) {

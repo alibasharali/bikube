@@ -1242,6 +1242,11 @@ button {
   box-shadow: var(--shadow-menu);
 }
 
+/* A menu capped to the window's height scrolls its items instead of squeezing them (#82). */
+.menu > * {
+  flex-shrink: 0;
+}
+
 .menu-item {
   display: flex;
   align-items: center;

@@ -2,7 +2,7 @@
 item: 83
 type: feature
 title: File editor
-status: draft
+status: approved
 branch: claude/83-file-editor
 ---
 

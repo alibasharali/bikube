@@ -222,3 +222,151 @@ test('AC8: a picture, a binary and a too-large file, each with Open in VS Code',
     .poll(() => editorRuns().slice(6))
     .toEqual(['run code', folder, join(folder, 'big.log')])
 })
+
+test('AC2: a file row ⋯ menu, by hover or right-click, opens it in VS Code with no tab', async () => {
+  await launch()
+  await row('src').dblclick()
+  const a = row('src/a.ts')
+  await expect(a).toBeVisible()
+  const menuButton = a.getByTestId('files-row-menu')
+  // Folders have none; the menu is there for files only.
+  await expect(row('src').getByTestId('files-row-menu')).toHaveCount(0)
+
+  // Hover shows the ⋯; its item reads Settings > Editor's choice.
+  const opacity = (button: Locator): Promise<string> =>
+    button.evaluate((e) => getComputedStyle(e).opacity)
+  await page.mouse.move(0, 0)
+  await expect.poll(() => opacity(menuButton)).toBe('0')
+  await a.hover()
+  await expect.poll(() => opacity(menuButton)).toBe('1')
+  await menuButton.click()
+  const item = page.getByTestId('files-row-open-external')
+  await expect(item).toHaveText('Open in VS Code')
+  await item.click()
+  await expect.poll(editorRuns).toEqual(['run code', folder, join(folder, 'src', 'a.ts')])
+  await expect(editor()).toHaveCount(0)
+  await expect(fileRows()).toHaveCount(0)
+
+  // A right-click opens the same menu.
+  await row('b.md').click({ button: 'right' })
+  await expect(row('b.md').getByTestId('files-row-menu')).toHaveAttribute('aria-expanded', 'true')
+  await page.getByTestId('files-row-open-external').click()
+  await expect.poll(() => editorRuns().slice(3)).toEqual(['run code', folder, join(folder, 'b.md')])
+  await expect(editor()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+
+  // From the keyboard: Tab from the focused row reaches its ⋯; Enter opens the menu, not the file.
+  await row('b.md').click()
+  await page.keyboard.press('Tab')
+  await expect(row('b.md').getByTestId('files-row-menu')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('files-row-open-external')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(row('b.md').getByTestId('files-row-menu')).toBeFocused()
+  await expect(page.getByTestId('files-row-open-external')).toHaveCount(0)
+  await page.waitForTimeout(300)
+  await expect(editor()).toHaveCount(0)
+})
+
+test('AC2, AC13: a card window keeps the external editor; editor IPC from it or a subframe is refused', async () => {
+  await launch()
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  const opened = app!.waitForEvent('window')
+  await page.getByTestId('titlebar-open-in-window').click()
+  const cardPage = await opened
+  const cardRow = (path: string): Locator =>
+    cardPage.getByTestId('side-panel').locator(`[data-testid=files-row][data-path="${path}"]`)
+  await expect(cardRow('b.md')).toBeVisible()
+
+  // A double-click runs VS Code there: the card window has no editor view (D2, D5).
+  await cardRow('b.md').dblclick()
+  await expect.poll(editorRuns).toEqual(['run code', folder, join(folder, 'b.md')])
+  // Its ⋯ menu is the same.
+  await cardRow('pic.png').click({ button: 'right' })
+  await cardPage.getByTestId('files-row-open-external').click()
+  await expect
+    .poll(() => editorRuns().slice(3))
+    .toEqual(['run code', folder, join(folder, 'pic.png')])
+  await expect(page.getByTestId('file-editor')).toHaveCount(0)
+  await expect(fileRows()).toHaveCount(0)
+
+  // Main's own editor handlers, asked from the card window's frame and from a subframe of the
+  // main window: each refused before anything is read or written (D6, AC13). A card window has
+  // no preload, so the request is handed to the registered handler with that frame as sender.
+  await page.evaluate(() => {
+    const frame = document.createElement('iframe')
+    frame.setAttribute('data-testid', 'e2e-subframe')
+    frame.srcdoc = '<p>sub</p>'
+    document.body.append(frame)
+  })
+  await expect
+    .poll(() =>
+      app!.evaluate(({ BrowserWindow }) => {
+        const main = BrowserWindow.getAllWindows().find(
+          (w) => !w.webContents.getURL().startsWith('about:')
+        )
+        return main?.webContents.mainFrame.frames.length ?? 0
+      })
+    )
+    .toBeGreaterThan(0)
+  const target = join(folder, 'b.md')
+  const answers = await app!.evaluate(
+    async ({ BrowserWindow, ipcMain }, { folder, target }) => {
+      const handlers = (
+        ipcMain as unknown as {
+          _invokeHandlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
+        }
+      )._invokeHandlers
+      const windows = BrowserWindow.getAllWindows()
+      const card = windows.find((w) => w.webContents.getURL().startsWith('about:'))!
+      const main = windows.find((w) => w !== card)!
+      const senders = [
+        { sender: card.webContents, senderFrame: card.webContents.mainFrame },
+        { sender: main.webContents, senderFrame: main.webContents.mainFrame.frames[0] }
+      ]
+      const ref = { kind: 'folder', folder, path: 'b.md' }
+      const write = {
+        text: 'gone',
+        eol: 'lf',
+        bom: false,
+        base: { size: 0, mtimeMs: 0, sha256: '' }
+      }
+      const calls: [string, unknown[]][] = [
+        ['editor:read', [ref]],
+        ['editor:stat', [ref]],
+        ['editor:write', [ref, write]],
+        ['editor:read', [{ kind: 'listed', folder, path: target }]]
+      ]
+      const out: string[] = []
+      for (const event of senders) {
+        for (const [channel, args] of calls) {
+          try {
+            await handlers.get(channel)!(event, ...args)
+            out.push(`${channel} answered`)
+          } catch (error) {
+            out.push(String((error as Error).message))
+          }
+        }
+      }
+      // The main window's own frame is answered, so the refusals above are the sender check's.
+      const own = (await handlers.get('editor:read')!(
+        { sender: main.webContents, senderFrame: main.webContents.mainFrame },
+        ref
+      )) as { kind: string }
+      out.push(`own ${own.kind}`)
+      return out
+    },
+    { folder, target }
+  )
+  expect(answers).toEqual([
+    ...['editor:read', 'editor:stat', 'editor:write', 'editor:read'].map(
+      (channel) => `${channel} rejected: untrusted sender`
+    ),
+    ...['editor:read', 'editor:stat', 'editor:write', 'editor:read'].map(
+      (channel) => `${channel} rejected: untrusted sender`
+    ),
+    'own text'
+  ])
+  expect(readFileSync(target, 'utf8')).toBe('# Notes\n')
+})

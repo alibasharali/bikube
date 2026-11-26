@@ -2609,6 +2609,30 @@ button.dev-server-chip:focus-visible {
   background: var(--pill-question-text);
 }
 
+/* A file row's ⋯ menu (#83 D5): at the row's right, shown on hover, focus and while open */
+.files-row-menu-wrap {
+  flex: none;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.files-change + .files-row-menu-wrap,
+.files-dot + .files-row-menu-wrap {
+  margin-left: 0;
+}
+
+.files-row-menu-btn {
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+}
+
+.files-row:hover .files-row-menu-btn,
+.files-row:focus-within .files-row-menu-btn,
+.files-row-menu-btn[aria-expanded='true'] {
+  opacity: 1;
+}
+
 .files-changed-only:disabled {
   opacity: 0.4;
   background: transparent;

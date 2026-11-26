@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from 'react'
-import type { EditorState } from '@codemirror/state'
-import type {
-  EditorDraft,
-  EditorFileRef,
-  EditorReadResult,
-  EditorStatResult,
-  EditorWrite,
-  EditorWriteResult
+import { EditorState, type Extension } from '@codemirror/state'
+import {
+  EDITOR_TEXT_LIMIT,
+  formatSize,
+  type EditorDraft,
+  type EditorFileRef,
+  type EditorReadResult,
+  type EditorStatResult,
+  type EditorWrite,
+  type EditorWriteResult
 } from '../../core/editor-files-types'
 import {
   activeTab,
@@ -58,6 +60,24 @@ export interface EditorDraftsIo {
   save(draft: EditorDraft): void
   delete(workspaceId: string, realPath: string): void
   dirty(count: number): void
+}
+
+/**
+ * A tab's editor state (D7): lines split at `\n` only, so a lone `\r` main left in the text stays
+ * a character, the tab stays clean and a save writes it back as it was (CodeMirror's default split
+ * would turn it into a line break).
+ */
+export function editorTextState(doc: string, extensions: Extension[] = []): EditorState {
+  return EditorState.create({
+    doc,
+    extensions: [EditorState.lineSeparator.of('\n'), ...extensions]
+  })
+}
+
+/** Text main refuses to save (D12, `parseEditorWrite`'s cap by characters); null when it fits. */
+function tooLargeToSave(text: string): string | null {
+  if (text.length <= EDITOR_TEXT_LIMIT) return null
+  return `too large to save (${formatSize(new TextEncoder().encode(text).length)})`
 }
 
 /** A dirty tab's draft is saved this long after its last edit (D11). */
@@ -225,6 +245,8 @@ export function createEditorFiles(
         baseUnknown.delete(k)
       }
     }
+    // A question about a tab gone meanwhile (its workspace deleted) would block every later close.
+    if (question && !docs.has(key(question.workspaceId, question.id))) question = null
     notify()
   }
   const statusOf = (k: string): EditorDocStatus => statuses.get(k) ?? CLEAN
@@ -266,7 +288,8 @@ export function createEditorFiles(
     const ref = refOf(k)
     const text = doc ? textOf(k, doc) : null
     if (!drafts || !doc || !ref || doc.read.kind !== 'text' || text === null) return
-    if (!statusOf(k).dirty) return
+    // Main refuses it (D12): the save says so, and no draft is sent.
+    if (!statusOf(k).dirty || tooLargeToSave(text) !== null) return
     const [workspaceId, id] = split(k)
     const { eol, bom, base } = doc.read
     drafts.save({ workspaceId, ref, realPath: id, text, eol, bom, base })
@@ -467,6 +490,11 @@ export function createEditorFiles(
         if (status.notice === 'changed') return false
         if (!status.dirty) return status.notice !== 'deleted'
         const text = textOf(k, doc) ?? ''
+        const tooLarge = tooLargeToSave(text)
+        if (tooLarge !== null) {
+          setStatus(k, { saveError: tooLarge })
+          return false
+        }
         const before = doc.read
         // D11's `Deleted on disk` bar: Save writes the file again where its folder still exists.
         const recreate = status.notice === 'deleted'

@@ -12,11 +12,12 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
-import { DraftsStore } from '../core/drafts-store'
+import { DraftsStore, parseEditorDraft } from '../core/drafts-store'
 import type { EditorDraft } from '../core/editor-files-types'
 import type { WorkspaceState } from '../core/workspace-store'
 import { IPC } from '../shared/api'
 import { appWindow } from './card-windows'
+import { served } from './editor-files'
 
 export interface MainDrafts {
   store: DraftsStore
@@ -60,9 +61,21 @@ export function registerDrafts(): MainDrafts {
     )
   }
 
+  // A draft naming a listed file was saved while the editor served it: after a restart that file
+  // stays the editor's though no listing names it yet or any more (D11). Read from main's own
+  // folder before the window loads, so the window can't add a path this way.
+  for (const draft of store.list()) {
+    if (draft.ref.kind === 'listed') served.add(draft.ref.folder, draft.ref.path)
+  }
+
   let dirty = 0
-  ipcMain.on(IPC.draftsSave, (event, draft: unknown) => {
-    if (fromMainWindow(event)) store.save(draft)
+  ipcMain.on(IPC.draftsSave, (event, value: unknown) => {
+    if (!fromMainWindow(event)) return
+    const draft = parseEditorDraft(value)
+    // Only a listed file the editor served is drafted, so the next launch accepts no other.
+    if (!draft || (draft.ref.kind === 'listed' && !served.has(draft.ref.folder, draft.ref.path)))
+      return
+    store.save(draft)
   })
   ipcMain.on(IPC.draftsDelete, (event, workspaceId: unknown, realPath: unknown) => {
     if (fromMainWindow(event)) store.delete(workspaceId, realPath)
@@ -77,6 +90,8 @@ export function registerDrafts(): MainDrafts {
       dirty = count as number
     }
   })
+  // The development build's dirty count for the e2e sender check (#83 AC13).
+  if (!app.isPackaged) Object.assign(globalThis, { __bikubeDraftsDirty: () => dirty })
   ipcMain.handle(IPC.draftsList, (event): EditorDraft[] => {
     if (!fromMainWindow(event)) throw new Error(`${IPC.draftsList} rejected: untrusted sender`)
     return store.list()

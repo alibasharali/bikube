@@ -15,7 +15,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ListedPaths } from './agent-setup-open'
-import { readEditorFile, statEditorFile, writeEditorFile, type EditorFs } from './editor-files'
+import {
+  readEditorFile,
+  ServedListedPaths,
+  statEditorFile,
+  writeEditorFile,
+  type EditorFs
+} from './editor-files'
 import { formatSize, type EditorFileRef, type EditorReadResult } from './editor-files-types'
 
 // The file editor's reads, stats and writes (#83 D6, D7, D12, D13) on real temporary folders.
@@ -208,6 +214,52 @@ describe('readEditorFile', () => {
     expect(loads).toEqual([root])
   })
 
+  it('keeps a listed file it served for the run once the listing drops it, so its deletion shows (D11)', async () => {
+    const home = join(dir, 'home')
+    mkdirSync(join(home, '.claude'), { recursive: true })
+    const settings = join(home, '.claude', 'settings.json')
+    writeFileSync(settings, '{}\n')
+    const served = new ServedListedPaths()
+    const listedRef: EditorFileRef = { kind: 'listed', folder: root, path: settings }
+    // Never listed: refused, and not remembered.
+    expect(await readEditorFile(listedRef, { listed, served })).toEqual({ kind: 'refused' })
+    expect(served.has(root, settings)).toBe(false)
+    listed.set(root, [settings])
+    const read = await readEditorFile(listedRef, { listed, served })
+    if (read.kind !== 'text') throw new Error(read.kind)
+    // Gone from disk and from Agent setup's next read: still the editor's file, now missing.
+    rmSync(settings)
+    listed.set(root, [])
+    expect(await statEditorFile(listedRef, { listed, served })).toEqual({ kind: 'missing' })
+    expect(await readEditorFile(listedRef, { listed, served })).toEqual({ kind: 'missing' })
+    const write = { text: '{ "a": 1 }\n', eol: 'lf' as const, bom: false, base: read.base }
+    expect(await writeEditorFile(listedRef, write, { listed, served })).toEqual({
+      ok: false,
+      reason: 'missing'
+    })
+    expect(
+      await writeEditorFile(listedRef, { ...write, recreate: true }, { listed, served })
+    ).toMatchObject({ ok: true })
+    expect(readFileSync(settings, 'utf8')).toBe('{ "a": 1 }\n')
+    // Only for the folder it was served under, and a recreate still needs its parent folder.
+    expect(
+      await readEditorFile({ ...listedRef, folder: join(dir, 'other') }, { listed, served })
+    ).toEqual({ kind: 'refused' })
+    rmSync(join(home, '.claude'), { recursive: true })
+    expect(
+      await writeEditorFile(listedRef, { ...write, recreate: true }, { listed, served })
+    ).toEqual({ ok: false, reason: 'failed', message: 'folder not found' })
+    // Seeded from a draft after a restart (main's own drafts folder), with no listing at all.
+    const seeded = new ServedListedPaths()
+    seeded.add(`${root}/`, settings)
+    const loadListing = async (): Promise<void> => {
+      throw new Error('never read')
+    }
+    expect(
+      await statEditorFile(listedRef, { listed: new ListedPaths(), served: seeded, loadListing })
+    ).toEqual({ kind: 'missing' })
+  })
+
   it('refuses a listed file whose first read failed, and loads nothing for a malformed one', async () => {
     const settings = join(dir, 'settings.json')
     writeFileSync(settings, '{}\n')
@@ -251,6 +303,27 @@ describe('writeEditorFile', () => {
     if (read.kind !== 'text') throw new Error(`not text: ${read.kind}`)
     return read
   }
+
+  it('keeps lone CRs: read as characters and written back unchanged around the edit', async () => {
+    const lf = put('lf.txt', 'a\rb\nc\r')
+    const lfRead = await readText('lf.txt')
+    expect(lfRead).toMatchObject({ text: 'a\rb\nc\r', eol: 'lf' })
+    await writeEditorFile(
+      ref('lf.txt'),
+      { text: 'a\rb\nc\r\nX', eol: 'lf', bom: false, base: lfRead.base },
+      { listed }
+    )
+    expect(readFileSync(lf, 'latin1')).toBe('a\rb\nc\r\nX')
+    const crlf = put('crlf.txt', 'a\r\r\nb\r\n')
+    const crlfRead = await readText('crlf.txt')
+    expect(crlfRead).toMatchObject({ text: 'a\r\nb\n', eol: 'crlf' })
+    await writeEditorFile(
+      ref('crlf.txt'),
+      { text: 'a\r\nbX\n', eol: 'crlf', bom: false, base: crlfRead.base },
+      { listed }
+    )
+    expect(readFileSync(crlf, 'latin1')).toBe('a\r\r\nbX\r\n')
+  })
 
   it('writes the text back with its CRLF line endings and BOM, and gives the new base', async () => {
     const file = put(

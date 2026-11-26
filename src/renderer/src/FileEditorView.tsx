@@ -30,6 +30,7 @@ import { editorLook, useEditorLookStyle } from './editor-look'
 import {
   closeActiveTab,
   editorFiles,
+  editorTextState,
   saveActiveTab,
   useCloseQuestion,
   useEditorStatus,
@@ -529,21 +530,19 @@ function CodeEditor({
     if (doc.read.kind !== 'text' || !host.current) return
     const state =
       doc.state ??
-      EditorState.create({
-        doc: doc.text ?? doc.read.text,
-        extensions: [
-          lineNumbers(),
-          highlightActiveLineGutter(),
-          history(),
-          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
-          // Find's panel at the editor's top, themed with the app's tokens (D14).
-          search({ top: true }),
-          language.of([]),
-          wrapping.of(wrapExtension(wrapNow.current)),
-          readOnly.of(readOnlyExtension(lockedNow.current)),
-          editorLook
-        ]
-      })
+      // Lines split at `\n` only: a lone `\r` stays a character (D7).
+      editorTextState(doc.text ?? doc.read.text, [
+        lineNumbers(),
+        highlightActiveLineGutter(),
+        history(),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        // Find's panel at the editor's top, themed with the app's tokens (D14).
+        search({ top: true }),
+        language.of([]),
+        wrapping.of(wrapExtension(wrapNow.current)),
+        readOnly.of(readOnlyExtension(lockedNow.current)),
+        editorLook
+      ])
     // Every edit reaches the store: the tab's dirty dot, and its text for a save (D12).
     const editor = new EditorView({
       state,

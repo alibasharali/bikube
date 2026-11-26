@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -372,6 +373,83 @@ test('AC2, AC13: a card window keeps the external editor; editor IPC from it or 
     'own text'
   ])
   expect(readFileSync(target, 'utf8')).toBe('# Notes\n')
+
+  // The drafts channels (D11) the same way: from the card window's frame or the subframe a save,
+  // a delete or a dirty count does nothing, and a list is refused.
+  type Who = 'card' | 'subframe' | 'main'
+  const draft = {
+    workspaceId: 'w-e2e',
+    ref: { kind: 'folder', folder, path: 'b.md' },
+    realPath: target,
+    text: 'draft',
+    eol: 'lf',
+    bom: false,
+    base: { size: 8, mtimeMs: 0, sha256: '0'.repeat(64) }
+  }
+  const drafts = (
+    who: Who,
+    channel: string,
+    args: unknown[]
+  ): Promise<{ answer: string; dirty: number; userData: string }> =>
+    app!.evaluate(
+      async ({ app: electronApp, BrowserWindow, ipcMain }, { who, channel, args }) => {
+        const windows = BrowserWindow.getAllWindows()
+        const card = windows.find((w) => w.webContents.getURL().startsWith('about:'))!
+        const main = windows.find((w) => w !== card)!
+        const event =
+          who === 'card'
+            ? { sender: card.webContents, senderFrame: card.webContents.mainFrame }
+            : who === 'subframe'
+              ? { sender: main.webContents, senderFrame: main.webContents.mainFrame.frames[0] }
+              : { sender: main.webContents, senderFrame: main.webContents.mainFrame }
+        let answer = 'sent'
+        if (channel === 'drafts:list') {
+          const handlers = (
+            ipcMain as unknown as {
+              _invokeHandlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
+            }
+          )._invokeHandlers
+          try {
+            const list = (await handlers.get(channel)!(event, ...args)) as unknown[]
+            answer = `listed ${list.length}`
+          } catch (error) {
+            answer = String((error as Error).message)
+          }
+        } else {
+          for (const listener of ipcMain.listeners(channel)) {
+            ;(listener as (event: unknown, ...args: unknown[]) => void)(event, ...args)
+          }
+        }
+        const dirty = (globalThis as unknown as { __bikubeDraftsDirty: () => number })
+          .__bikubeDraftsDirty
+        return { answer, dirty: dirty(), userData: electronApp.getPath('userData') }
+      },
+      { who, channel, args }
+    )
+  const untrusted: Who[] = ['card', 'subframe']
+  const { userData } = await drafts('main', 'drafts:dirty', [0])
+  const draftFiles = (): string[] =>
+    existsSync(join(userData, 'drafts')) ? readdirSync(join(userData, 'drafts')) : []
+  for (const who of untrusted) {
+    expect((await drafts(who, 'drafts:save', [draft])).answer).toBe('sent')
+    expect(await drafts(who, 'drafts:dirty', [3])).toMatchObject({ dirty: 0 })
+    expect((await drafts(who, 'drafts:list', [])).answer).toBe(
+      'drafts:list rejected: untrusted sender'
+    )
+  }
+  expect(draftFiles()).toEqual([])
+  // The main window's own frame is answered.
+  await drafts('main', 'drafts:save', [draft])
+  expect(draftFiles()).toHaveLength(1)
+  expect((await drafts('main', 'drafts:list', [])).answer).toBe('listed 1')
+  for (const who of untrusted) {
+    await drafts(who, 'drafts:delete', ['w-e2e', target])
+  }
+  expect(draftFiles()).toHaveLength(1)
+  await drafts('main', 'drafts:delete', ['w-e2e', target])
+  expect(draftFiles()).toEqual([])
+  expect(await drafts('main', 'drafts:dirty', [2])).toMatchObject({ dirty: 2 })
+  expect(await drafts('main', 'drafts:dirty', [0])).toMatchObject({ dirty: 0 })
 })
 
 const darwin = process.platform === 'darwin'

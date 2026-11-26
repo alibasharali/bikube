@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EditorState } from '@codemirror/state'
-import type {
-  EditorDraft,
-  EditorFileBase,
-  EditorFileRef,
-  EditorReadResult,
-  EditorWrite,
-  EditorWriteResult
+import { EditorState, type Transaction } from '@codemirror/state'
+import { history, undo } from '@codemirror/commands'
+import {
+  EDITOR_TEXT_LIMIT,
+  formatSize,
+  type EditorDraft,
+  type EditorFileBase,
+  type EditorFileRef,
+  type EditorReadResult,
+  type EditorWrite,
+  type EditorWriteResult
 } from '../../core/editor-files-types'
 import { activeTab, workspaceTabs } from '../../core/editor-tabs'
-import { createEditorFiles } from './editor-files'
+import { createEditorFiles, DRAFT_DELAY_MS, editorTextState } from './editor-files'
 
 const base = { size: 2, mtimeMs: 1, sha256: 'x' }
 const ref = (path: string): EditorFileRef => ({ kind: 'folder', folder: '/repo', path })
@@ -530,5 +533,117 @@ describe('checks (#83 D13)', () => {
     await files.open('w', ref('a'))
     await files.check()
     expect(stats).toBe(1)
+  })
+})
+
+describe('lone CRs, a stuck question and text too large to save (#83 D7, D11, D12)', () => {
+  /** A store over `/real/a.txt` holding `body`; writes and drafts recorded. */
+  const setup = (
+    body: string
+  ): {
+    files: ReturnType<typeof createEditorFiles>
+    writes: EditorWrite[]
+    drafts: EditorDraft[]
+  } => {
+    const read: EditorReadResult = {
+      kind: 'text',
+      text: body,
+      eol: 'lf',
+      bom: false,
+      base: { size: body.length, mtimeMs: 1, sha256: 'a'.repeat(64) },
+      realPath: '/real/a.txt'
+    }
+    const writes: EditorWrite[] = []
+    const drafts: EditorDraft[] = []
+    const files = createEditorFiles(
+      async () => read,
+      {
+        stat: async () => ({ kind: 'file', size: body.length, mtimeMs: 1 }),
+        write: async (_ref, write) => {
+          writes.push(write)
+          return { ok: true, base: { size: 1, mtimeMs: 2, sha256: 'b'.repeat(64) } }
+        }
+      },
+      { save: (draft) => drafts.push(draft), delete: () => {}, dirty: () => {} }
+    )
+    return { files, writes, drafts }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps a lone CR a character: clean when opened and after type and undo, saved as it was', async () => {
+    const { files, writes } = setup('a\rb\nc\n')
+    await files.open('w', ref('a.txt'))
+    let state = editorTextState(files.text('w', '/real/a.txt')!, [history()])
+    const view = {
+      get state() {
+        return state
+      },
+      dispatch: (tr: Transaction): void => {
+        state = tr.state
+        files.edited('w', '/real/a.txt', state)
+      }
+    }
+    files.keepState('w', '/real/a.txt', state)
+    expect(state.doc.lines).toBe(3)
+    expect(files.text('w', '/real/a.txt')).toBe('a\rb\nc\n')
+    expect(files.status('w', '/real/a.txt').dirty).toBe(false)
+    view.dispatch(state.update({ changes: { from: state.doc.length, insert: 'X' } }))
+    expect(files.status('w', '/real/a.txt').dirty).toBe(true)
+    undo(view)
+    expect(files.text('w', '/real/a.txt')).toBe('a\rb\nc\n')
+    expect(files.status('w', '/real/a.txt').dirty).toBe(false)
+    view.dispatch(state.update({ changes: { from: state.doc.length, insert: 'X' } }))
+    expect(await files.save('w', '/real/a.txt')).toBe(true)
+    expect(writes.map((w) => w.text)).toEqual(['a\rb\nc\nX'])
+  })
+
+  it('forgets a close question whose tab is gone, so later closes still ask', async () => {
+    const { files } = setup('a\n')
+    await files.open('w', ref('a.txt'))
+    await files.open('v', ref('a.txt'))
+    const dirty = (workspaceId: string): void => {
+      const state = editorTextState('a\n')
+      files.edited(
+        workspaceId,
+        '/real/a.txt',
+        state.update({ changes: { from: 0, insert: 'x' } }).state
+      )
+    }
+    dirty('w')
+    dirty('v')
+    files.askClose('w', ['/real/a.txt'])
+    expect(files.closeQuestion()).toMatchObject({ workspaceId: 'w' })
+    // Its workspace deleted (a Sync change) while the question is up.
+    files.keep(['v'])
+    expect(files.closeQuestion()).toBeNull()
+    files.askClose('v', ['/real/a.txt'])
+    expect(files.closeQuestion()).toMatchObject({ workspaceId: 'v', id: '/real/a.txt' })
+  })
+
+  it('refuses text over 5 MB before main: the size under the header, dirty, no draft', async () => {
+    vi.useFakeTimers()
+    const { files, writes, drafts } = setup('a\n')
+    await files.open('w', ref('a.txt'))
+    // One character over main's cap, two bytes over in UTF-8.
+    const big = 'x'.repeat(EDITOR_TEXT_LIMIT) + 'é'
+    const state = editorTextState('a\n')
+    files.edited(
+      'w',
+      '/real/a.txt',
+      state.update({ changes: { from: 0, to: state.doc.length, insert: big } }).state
+    )
+    await vi.advanceTimersByTimeAsync(DRAFT_DELAY_MS * 2)
+    files.flushDrafts()
+    expect(drafts).toEqual([])
+    expect(await files.save('w', '/real/a.txt')).toBe(false)
+    expect(writes).toEqual([])
+    expect(files.status('w', '/real/a.txt')).toEqual({
+      dirty: true,
+      notice: null,
+      saveError: `too large to save (${formatSize(EDITOR_TEXT_LIMIT + 2)})`
+    })
   })
 })

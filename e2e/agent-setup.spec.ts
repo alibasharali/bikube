@@ -1280,6 +1280,67 @@ test('#83 AC10: Open file opens ~/.claude/settings.json in the editor; Mod+S sav
   await expect.poll(() => readFileSync(settings, 'utf8')).toBe('x {}\n')
 })
 
+test('#83 AC10, D11: a deleted listed file under a dirty tab shows Deleted on disk, in the run and after a restart; Save writes it again', async () => {
+  const settings = join(home, '.claude', 'settings.json')
+  await openWith(() => write(settings, '{}\n'))
+  const save = darwin ? 'Meta+s' : 'Control+s'
+  const code = (): Locator => fileEditor().locator('.cm-content')
+  const bar = (): Locator => fileEditor().getByTestId('file-editor-bar')
+  const dirty = (): Locator => fileEditor().getByTestId('file-editor-tab-dirty')
+  const typeAtStart = async (text: string): Promise<void> => {
+    await code().locator('.cm-line').first().click()
+    await page.keyboard.press(darwin ? 'Meta+ArrowUp' : 'Control+Home')
+    await page.keyboard.type(text)
+  }
+  const openSettings = async (): Promise<void> => {
+    await setupRow('Proj').click()
+    await tab('Status').click()
+    const file = statusFile('~/.claude/settings.json')
+    await file.hover()
+    await file.getByRole('button', { name: 'Open file' }).click()
+    await expect(fileEditor()).toBeVisible()
+  }
+  await tab('Status').click()
+  const file = statusFile('~/.claude/settings.json')
+  await file.hover()
+  await file.getByRole('button', { name: 'Open file' }).click()
+  await expect(code()).toHaveText('{}')
+
+  // In the run: deleted while dirty, after Agent setup read the folder again without it.
+  await typeAtStart('a')
+  await expect(dirty()).toBeVisible()
+  rmSync(settings)
+  await setupRow('Proj').click()
+  await tab('Status').click()
+  await expect(
+    statusFile('~/.claude/settings.json').getByTestId('agent-setup-file-actions')
+  ).toHaveCount(0)
+  await page.getByTestId('sidebar').getByTestId('workspace-file').click()
+  await expect(bar()).toContainText('Deleted on disk', { timeout: 4000 })
+  await bar().getByTestId('file-editor-bar-save').click()
+  await expect(bar()).toHaveCount(0)
+  await expect(dirty()).toHaveCount(0)
+  expect(readFileSync(settings, 'utf8')).toBe('a{}\n')
+
+  // After a restart: the draft's file deleted while the app was closed; Mod+S writes it again.
+  await openSettings()
+  await typeAtStart('b')
+  await expect(dirty()).toBeVisible()
+  await app!.close()
+  app = undefined
+  rmSync(settings)
+  await launch()
+  await expect(board()).toBeVisible()
+  await page.getByTestId('sidebar').getByTestId('workspace-file').click()
+  await expect(code()).toHaveText('ba{}')
+  await expect(bar()).toContainText('Deleted on disk', { timeout: 4000 })
+  await page.keyboard.press(save)
+  await expect(bar()).toHaveCount(0)
+  await expect(dirty()).toHaveCount(0)
+  await expect(fileEditor().getByTestId('file-editor-save-error')).toHaveCount(0)
+  expect(readFileSync(settings, 'utf8')).toBe('ba{}\n')
+})
+
 // #72: the Sandbox section, from the three settings files.
 
 /** #72 AC2's and AC3's settings files: the fake home's, the workspace's and its local one. */

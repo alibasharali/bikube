@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import {
   parseEditorFileRef,
   readEditorFile,
+  ServedListedPaths,
   statEditorFile,
   writeEditorFile
 } from '../core/editor-files'
@@ -31,6 +32,12 @@ const fromMainWindow = (event: IpcMainInvokeEvent, channel: string): void => {
   }
 }
 
+/**
+ * The listed files the editor served this run, and those main's own drafts name at launch (#83
+ * D11): still the editor's once Agent setup's next read drops them, so a deleted one shows.
+ */
+export const served = new ServedListedPaths()
+
 /** Each file's running save, the next one queued behind it, so two never check one base at once. */
 const writing = new Map<string, Promise<unknown>>()
 
@@ -43,12 +50,12 @@ const writing = new Map<string, Promise<unknown>>()
 export function registerEditorFiles(): void {
   ipcMain.handle(IPC.editorRead, (event, ref: unknown): Promise<EditorReadResult> => {
     fromMainWindow(event, IPC.editorRead)
-    return readEditorFile(ref, { listed, loadListing })
+    return readEditorFile(ref, { listed, loadListing, served })
   })
 
   ipcMain.handle(IPC.editorStat, (event, ref: unknown): Promise<EditorStatResult> => {
     fromMainWindow(event, IPC.editorStat)
-    return statEditorFile(ref, { listed, loadListing })
+    return statEditorFile(ref, { listed, loadListing, served })
   })
 
   ipcMain.handle(
@@ -62,7 +69,7 @@ export function registerEditorFiles(): void {
       const before = writing.get(key) ?? Promise.resolve()
       const next = before
         .catch(() => undefined)
-        .then(() => writeEditorFile(ref, write, { listed, loadListing }))
+        .then(() => writeEditorFile(ref, write, { listed, loadListing, served }))
       writing.set(key, next)
       next
         .finally(() => {

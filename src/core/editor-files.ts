@@ -79,7 +79,35 @@ export interface EditorFileDeps {
    * rather than refused (D11). Called once per folder until it has a listing; a failure refuses.
    */
   loadListing?: (folder: string) => Promise<void>
+  /**
+   * The listed files the editor has served this run, and those its drafts name (D11): accepted
+   * though a later listing dropped them, so a deleted one reads `missing` and can be saved again.
+   */
+  served?: ServedListedPaths
   fs?: EditorFs
+}
+
+/**
+ * Every listed file (D6's `listed` reference) the editor served for the run, by folder (#83 D11):
+ * Agent setup's next read replaces its listing, and a file deleted meanwhile is in none, yet its
+ * tab must still show `Deleted on disk` and its Save write it again. Main adds a path only once a
+ * listing allowed it, or from a draft in its own drafts folder at launch.
+ */
+export class ServedListedPaths {
+  private readonly byFolder = new Map<string, Set<string>>()
+
+  add(folder: string, path: string): void {
+    if (!isAbsolute(folder) || !isAbsolute(path) || resolve(path) !== path) return
+    const key = resolve(folder)
+    const paths = this.byFolder.get(key) ?? new Set<string>()
+    paths.add(path)
+    this.byFolder.set(key, paths)
+  }
+
+  has(folder: string, path: string): boolean {
+    if (!isAbsolute(folder)) return false
+    return this.byFolder.get(resolve(folder))?.has(path) === true
+  }
 }
 
 const BOM = [0xef, 0xbb, 0xbf]
@@ -124,12 +152,14 @@ export function parseEditorWrite(value: unknown): EditorWrite | null {
 
 /**
  * Whether Agent setup's last read of the listed reference's folder listed its path (D6), reading
- * the folder first when it has no listing yet (`loadListing`); a failed read refuses.
+ * the folder first when it has no listing yet (`loadListing`); a failed read refuses. A path the
+ * editor served before (`served`) stays allowed for the run though the listing dropped it (D11).
  */
 async function isListed(
   ref: Extract<EditorFileRef, { kind: 'listed' }>,
   deps: EditorFileDeps
 ): Promise<boolean> {
+  if (deps.served?.has(ref.folder, ref.path)) return true
   const folder = resolve(ref.folder)
   if (!deps.listed.knows(folder) && deps.loadListing) {
     try {
@@ -138,7 +168,9 @@ async function isListed(
       return false
     }
   }
-  return deps.listed.has(ref.folder, ref.path)
+  if (!deps.listed.has(ref.folder, ref.path)) return false
+  deps.served?.add(ref.folder, ref.path)
+  return true
 }
 
 /**
@@ -300,10 +332,13 @@ export async function statEditorFile(
 const sameBase = (a: EditorFileBase, b: EditorFileBase): boolean =>
   a.size === b.size && a.mtimeMs === b.mtimeMs && a.sha256 === b.sha256
 
-/** The bytes a save writes: the text with its line endings and BOM back. */
+/**
+ * The bytes a save writes: the text with its line endings and BOM back. Its line breaks are `\n`
+ * (a read took CRLF's `\r` off); a `\r` left in it is a lone CR of the file's, written as it is.
+ */
 function fileBytes(write: EditorWrite): Buffer {
-  const lf = write.text.replace(/\r\n/g, '\n')
-  const body = Buffer.from(write.eol === 'crlf' ? lf.replace(/\n/g, '\r\n') : lf, 'utf8')
+  const { text } = write
+  const body = Buffer.from(write.eol === 'crlf' ? text.replace(/\n/g, '\r\n') : text, 'utf8')
   return write.bom ? Buffer.concat([Buffer.from(BOM), body]) : body
 }
 

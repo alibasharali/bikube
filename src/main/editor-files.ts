@@ -1,5 +1,11 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { readEditorFile, statEditorFile, writeEditorFile } from '../core/editor-files'
+import { resolve } from 'node:path'
+import {
+  parseEditorFileRef,
+  readEditorFile,
+  statEditorFile,
+  writeEditorFile
+} from '../core/editor-files'
 import type {
   EditorReadResult,
   EditorStatResult,
@@ -32,7 +38,7 @@ const writing = new Map<string, Promise<unknown>>()
  * The file editor's reads, stats and saves (#83 D6, D7, D12, D13): `editor:read`, `editor:stat`
  * and `editor:write`, each naming its file by a reference `src/core/editor-files.ts` checks before
  * anything is read: a path inside a shown folder by real path, or a file Agent setup's last read
- * of a folder listed (`listed`). One save at a time per reference.
+ * of a folder listed (`listed`). One save at a time per named file.
  */
 export function registerEditorFiles(): void {
   ipcMain.handle(IPC.editorRead, (event, ref: unknown): Promise<EditorReadResult> => {
@@ -49,12 +55,10 @@ export function registerEditorFiles(): void {
     IPC.editorWrite,
     (event, ref: unknown, write: unknown): Promise<EditorWriteResult> => {
       fromMainWindow(event, IPC.editorWrite)
-      let key: string
-      try {
-        key = JSON.stringify(ref) ?? ''
-      } catch {
-        return Promise.resolve({ ok: false, reason: 'refused' })
-      }
+      const parsed = parseEditorFileRef(ref)
+      if (!parsed) return Promise.resolve({ ok: false, reason: 'refused' })
+      // One queue per named file however it is spelled (`a/../b.txt` and `b.txt`).
+      const key = parsed.kind === 'folder' ? resolve(parsed.folder, parsed.path) : parsed.path
       const before = writing.get(key) ?? Promise.resolve()
       const next = before.catch(() => undefined).then(() => writeEditorFile(ref, write, { listed }))
       writing.set(key, next)

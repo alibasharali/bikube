@@ -8,7 +8,17 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { chmod, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import {
+  access,
+  chmod,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile
+} from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { ListedPaths } from './agent-setup-open'
 import { isPathArg } from './directories'
@@ -34,6 +44,7 @@ interface FileStats {
 
 /** The file system calls the editor makes. */
 export interface EditorFs {
+  access(path: string, mode: number): Promise<void>
   realpath(path: string): Promise<string>
   stat(path: string): Promise<FileStats>
   readFile(path: string): Promise<Uint8Array>
@@ -43,7 +54,7 @@ export interface EditorFs {
   unlink(path: string): Promise<void>
 }
 
-const nodeFs: EditorFs = { realpath, stat, readFile, writeFile, chmod, rename, unlink }
+const nodeFs: EditorFs = { access, realpath, stat, readFile, writeFile, chmod, rename, unlink }
 
 export interface EditorFileDeps {
   /** The files Agent setup's last read of each folder listed (D6's `listed` references). */
@@ -229,8 +240,9 @@ export function writeFailureReason(error: unknown): string {
 
 /**
  * Saves `write` to the file `ref` names (D12) only while the file still matches `write.base`
- * (size, mtime and hash), else `conflict` and nothing is written. The text gets its line endings
- * and BOM back and goes to a `.tmp` beside the real file, with the file's mode, renamed over it.
+ * (size, mtime and hash), else `conflict` and nothing is written; a file the user can't write is
+ * `failed` with `permission denied`. The text gets its line endings and BOM back and goes to a
+ * `.tmp` beside the real file, with the file's mode, renamed over it.
  */
 export async function writeEditorFile(
   value: unknown,
@@ -244,6 +256,13 @@ export async function writeEditorFile(
   if (found === 'missing') return { ok: false, reason: 'missing' }
   if (found === 'refused') return { ok: false, reason: 'refused' }
   const { real, stats } = found
+  // A rename needs only the folder's write access: a file the user can't write stays as it is.
+  try {
+    await fs.access(real, constants.W_OK)
+  } catch (error) {
+    if (isMissing(error)) return { ok: false, reason: 'missing' }
+    return { ok: false, reason: 'failed', message: writeFailureReason(error) }
+  }
   if (stats.size !== write.base.size || stats.mtimeMs !== write.base.mtimeMs) {
     return { ok: false, reason: 'conflict' }
   }

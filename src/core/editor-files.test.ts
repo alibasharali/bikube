@@ -252,6 +252,46 @@ describe('writeEditorFile', () => {
     expect(readdirSync(root)).toEqual(['run.sh'])
   })
 
+  it.skipIf(process.getuid?.() === 0)(
+    "writes nothing to a file the user can't write, and says why",
+    async () => {
+      const file = put('locked.txt', 'a\n')
+      chmodSync(file, 0o444)
+      const read = await readText('locked.txt')
+      const result = await writeEditorFile(
+        ref('locked.txt'),
+        { text: 'b\n', eol: 'lf', bom: false, base: read.base },
+        { listed }
+      )
+      expect(result).toEqual({ ok: false, reason: 'failed', message: 'permission denied' })
+      expect(readFileSync(file, 'utf8')).toBe('a\n')
+      expect(statSync(file).mode & 0o777).toBe(0o444)
+      expect(readdirSync(root)).toEqual(['locked.txt'])
+    }
+  )
+
+  it('checks write access on the real file before anything else', async () => {
+    const file = put('locked.txt', 'a\n')
+    const read = await readText('locked.txt')
+    const real = await import('node:fs/promises')
+    const asked: string[] = []
+    const fs: EditorFs = {
+      ...real,
+      access: async (path) => {
+        asked.push(path)
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
+      }
+    }
+    const result = await writeEditorFile(
+      ref('locked.txt'),
+      { text: 'b\n', eol: 'lf', bom: false, base: read.base },
+      { listed, fs }
+    )
+    expect(result).toEqual({ ok: false, reason: 'failed', message: 'permission denied' })
+    expect(asked).toEqual([file])
+    expect(readFileSync(file, 'utf8')).toBe('a\n')
+  })
+
   it('writes nothing when the file no longer matches the base', async () => {
     const file = put('a.txt', 'one\n')
     const read = await readText('a.txt')
@@ -333,8 +373,10 @@ describe('writeEditorFile', () => {
   it('gives a failed write its reason and removes its .tmp', async () => {
     const file = put('a.txt', 'a')
     const read = await readText('a.txt')
-    const { realpath, stat, readFile, writeFile, chmod, unlink } = await import('node:fs/promises')
+    const { realpath, stat, readFile, writeFile, chmod, unlink, access } =
+      await import('node:fs/promises')
     const fs: EditorFs = {
+      access,
       realpath,
       stat,
       readFile,

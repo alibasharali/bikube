@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditorState, type Transaction } from '@codemirror/state'
 import { history, undo } from '@codemirror/commands'
+import { EditorView } from '@codemirror/view'
 import {
   EDITOR_TEXT_LIMIT,
   formatSize,
@@ -598,6 +599,46 @@ describe('lone CRs, a stuck question and text too large to save (#83 D7, D11, D1
     view.dispatch(state.update({ changes: { from: state.doc.length, insert: 'X' } }))
     expect(await files.save('w', '/real/a.txt')).toBe(true)
     expect(writes.map((w) => w.text)).toEqual(['a\rb\nc\nX'])
+  })
+
+  it('takes pasted or dropped CRLF and CR line breaks as the tab\u2019s own, in a CRLF and an LF tab', async () => {
+    for (const eol of ['crlf', 'lf'] as const) {
+      const writes: EditorWrite[] = []
+      const files = createEditorFiles(
+        async () => ({
+          kind: 'text',
+          text: 'a\rb\n',
+          eol,
+          bom: false,
+          base: { size: 4, mtimeMs: 1, sha256: 'a'.repeat(64) },
+          realPath: '/real/a.txt'
+        }),
+        {
+          stat: async () => ({ kind: 'file', size: 4, mtimeMs: 1 }),
+          write: async (_ref, write) => {
+            writes.push(write)
+            return { ok: true, base: { size: 1, mtimeMs: 2, sha256: 'b'.repeat(64) } }
+          }
+        }
+      )
+      await files.open('w', ref('a.txt'))
+      const state = editorTextState(files.text('w', '/real/a.txt')!)
+      // As CodeMirror's paste and drop do: the clipboard input filters, then the state's split.
+      const pasted = state
+        .facet(EditorView.clipboardInputFilter)
+        .reduce((text, filter) => filter(text, state), 'x\r\ny\rz')
+      files.edited(
+        'w',
+        '/real/a.txt',
+        state.update({
+          changes: { from: state.doc.length, insert: state.toText(pasted) },
+          userEvent: 'input.paste'
+        }).state
+      )
+      expect(await files.save('w', '/real/a.txt')).toBe(true)
+      // The file's own lone CR stays; the pasted breaks are the tab's, written with its ending.
+      expect(writes.map((w) => [w.text, w.eol])).toEqual([['a\rb\nx\ny\nz', eol]])
+    }
   })
 
   it('forgets a close question whose tab is gone, so later closes still ask', async () => {

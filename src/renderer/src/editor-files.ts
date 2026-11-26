@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { EditorState, type Extension } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import {
   EDITOR_TEXT_LIMIT,
   formatSize,
@@ -63,14 +64,24 @@ export interface EditorDraftsIo {
 }
 
 /**
+ * Pasted or dropped text's line breaks as the tab's (D7): `\r\n` and a lone `\r` become `\n`,
+ * which a save writes with the file's line ending, so no invisible `\r` comes in with them.
+ */
+export const pastedLineBreaks = (text: string): string => text.replace(/\r\n?/g, '\n')
+
+/**
  * A tab's editor state (D7): lines split at `\n` only, so a lone `\r` main left in the text stays
  * a character, the tab stays clean and a save writes it back as it was (CodeMirror's default split
- * would turn it into a line break).
+ * would turn it into a line break); pasted and dropped text's line breaks are taken as `\n`.
  */
 export function editorTextState(doc: string, extensions: Extension[] = []): EditorState {
   return EditorState.create({
     doc,
-    extensions: [EditorState.lineSeparator.of('\n'), ...extensions]
+    extensions: [
+      EditorState.lineSeparator.of('\n'),
+      EditorView.clipboardInputFilter.of(pastedLineBreaks),
+      ...extensions
+    ]
   })
 }
 

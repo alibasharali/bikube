@@ -396,11 +396,14 @@ test('AC2, AC13: a card window keeps the external editor; editor IPC from it or 
         const windows = BrowserWindow.getAllWindows()
         const card = windows.find((w) => w.webContents.getURL().startsWith('about:'))!
         const main = windows.find((w) => w !== card)!
+        // The subframe the test appended to the main window above.
+        const subframe = main.webContents.mainFrame.frames[0]
+        if (who === 'subframe' && subframe === undefined) throw new Error('no subframe')
         const event =
           who === 'card'
             ? { sender: card.webContents, senderFrame: card.webContents.mainFrame }
             : who === 'subframe'
-              ? { sender: main.webContents, senderFrame: main.webContents.mainFrame.frames[0] }
+              ? { sender: main.webContents, senderFrame: subframe }
               : { sender: main.webContents, senderFrame: main.webContents.mainFrame }
         let answer = 'sent'
         if (channel === 'drafts:list') {

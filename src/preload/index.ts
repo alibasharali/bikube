@@ -150,6 +150,11 @@ const api: BikubeApi = {
     reveal: (folder, path) => ipcRenderer.invoke(IPC.agentSetupReveal, folder, path),
     stats: (folder, extra) => ipcRenderer.invoke(IPC.agentSetupStats, folder, extra)
   },
+  editor: {
+    read: (ref) => ipcRenderer.invoke(IPC.editorRead, ref),
+    stat: (ref) => ipcRenderer.invoke(IPC.editorStat, ref),
+    write: (ref, write) => ipcRenderer.invoke(IPC.editorWrite, ref, write)
+  },
   claudeRetention: {
     read: () => ipcRenderer.invoke(IPC.claudeRetentionRead),
     set: () => ipcRenderer.invoke(IPC.claudeRetentionSet)

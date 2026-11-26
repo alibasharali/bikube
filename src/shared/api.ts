@@ -17,6 +17,13 @@ import type { AgentChoice } from '../core/installed-agents'
 import type { NamedEditor } from '../core/editor-candidates'
 import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
+import type {
+  EditorFileRef,
+  EditorReadResult,
+  EditorStatResult,
+  EditorWrite,
+  EditorWriteResult
+} from '../core/editor-files-types'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
 import type { PullRequestRead } from '../core/pr-status'
@@ -99,6 +106,9 @@ export const IPC = {
   agentSetupOpen: 'agentSetup:open',
   agentSetupReveal: 'agentSetup:reveal',
   agentSetupStats: 'agentSetup:stats',
+  editorRead: 'editor:read',
+  editorStat: 'editor:stat',
+  editorWrite: 'editor:write',
   agentTabSummary: 'agentTab:summary',
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
@@ -433,6 +443,26 @@ export interface ClaudeRetentionApi {
   set(): Promise<SettingsWriteResult>
 }
 
+/**
+ * The file editor's file access (#83 D6, D7, D12, D13), main window's main frame only. Every call
+ * names its file by an `EditorFileRef`, which main checks before anything is read or written:
+ * a malformed one, one outside its folder, an unlisted one or one naming a folder is `refused`.
+ */
+export interface EditorApi {
+  /**
+   * Reads the file (D7): `text` (line endings as `\n`, BOM taken off, both noted) up to 5 MB,
+   * `image` as a `data:` URL up to 20 MB, `binary`, `too-large` with its size, or `missing`.
+   */
+  read(ref: EditorFileRef): Promise<EditorReadResult>
+  /** The file's size and mtime (D13), for a cheap check before any read; `missing` once it's gone. */
+  stat(ref: EditorFileRef): Promise<EditorStatResult>
+  /**
+   * Saves (D12) only while the file still matches `write.base`, else `conflict` and nothing is
+   * written; the line endings and BOM put back, through a `.tmp` beside it with its mode.
+   */
+  write(ref: EditorFileRef, write: EditorWrite): Promise<EditorWriteResult>
+}
+
 export interface AgentSetupApi {
   /**
    * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
@@ -625,6 +655,7 @@ export interface BikubeApi {
   agents: AgentsApi
   editors: EditorsApi
   agentSetup: AgentSetupApi
+  editor: EditorApi
   agentTab: AgentTabApi
   claudeRetention: ClaudeRetentionApi
   update: UpdateApi

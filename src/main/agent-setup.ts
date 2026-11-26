@@ -30,8 +30,11 @@ import { userHome } from './home'
 /** Each folder's running read, shared by requests made during it (#68 D26: never two at once). */
 const reading = new Map<string, Promise<AgentSetupRead>>()
 
-/** The files each folder's last read found (D28): Open file and Reveal accept only these. */
-const listed = new ListedPaths()
+/**
+ * The files each folder's last read found (D28): Open file and Reveal accept only these, and the
+ * file editor's `listed` references (#83 D6).
+ */
+export const listed = new ListedPaths()
 
 /** Each Stats request's running read (D14), by its folders: a request during it shares it. */
 const statsReading = new Map<string, Promise<ClaudeStatsRead>>()

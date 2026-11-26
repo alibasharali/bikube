@@ -18,6 +18,7 @@ import { registerFiles } from './files'
 import { registerAgents } from './agents'
 import { registerEditors } from './editors'
 import { registerAgentSetup } from './agent-setup'
+import { registerEditorFiles } from './editor-files'
 import { registerAgentTab } from './agent-tab'
 import { registerClaudeRetention } from './claude-retention'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
@@ -190,6 +191,7 @@ function startApp(): void {
   registerAgents(() => settings.shell())
   registerEditors(() => settings.shell())
   registerAgentSetup(() => settings.editor())
+  registerEditorFiles()
   registerAgentTab()
   registerClaudeRetention()
   const updates = registerUpdates(() => terminals.sessionCount)

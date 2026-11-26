@@ -370,6 +370,57 @@ describe('writeEditorFile', () => {
     ).toEqual({ ok: false, reason: 'missing' })
   })
 
+  it('recreates a deleted file only when asked and its folder still exists (D11)', async () => {
+    const file = put('src/a.ts', 'a\n')
+    const read = await readText('src/a.ts')
+    rmSync(file)
+    const write = { text: 'mine\n', eol: 'crlf' as const, bom: false, base: read.base }
+    expect(await writeEditorFile(ref('src/a.ts'), write, { listed })).toEqual({
+      ok: false,
+      reason: 'missing'
+    })
+    const result = await writeEditorFile(ref('src/a.ts'), { ...write, recreate: true }, { listed })
+    expect(readFileSync(file, 'utf8')).toBe('mine\r\n')
+    expect(result).toEqual({
+      ok: true,
+      base: { size: 6, mtimeMs: statSync(file).mtimeMs, sha256: sha('mine\r\n') }
+    })
+    // No .tmp is left.
+    expect(readdirSync(join(root, 'src'))).toEqual(['a.ts'])
+    // A file that came back is checked against the base as ever.
+    expect(
+      await writeEditorFile(ref('src/a.ts'), { ...write, recreate: true }, { listed })
+    ).toEqual({ ok: false, reason: 'conflict' })
+    // Its folder gone: nothing is written.
+    rmSync(join(root, 'src'), { recursive: true })
+    expect(
+      await writeEditorFile(ref('src/a.ts'), { ...write, recreate: true }, { listed })
+    ).toEqual({ ok: false, reason: 'failed', message: 'folder not found' })
+    expect(readdirSync(root)).toEqual([])
+  })
+
+  it('recreates nothing outside the folder or for an unlisted file', async () => {
+    const base = { size: 1, mtimeMs: 1, sha256: sha('a') }
+    const write = { text: 'x', eol: 'lf' as const, bom: false, base, recreate: true as const }
+    mkdirSync(join(dir, 'elsewhere'))
+    symlinkSync(join(dir, 'elsewhere'), join(root, 'out'))
+    for (const path of ['../new.txt', 'out/new.txt']) {
+      expect(await writeEditorFile(ref(path), write, { listed }), path).toEqual({
+        ok: false,
+        reason: 'refused'
+      })
+    }
+    expect(readdirSync(join(dir, 'elsewhere'))).toEqual([])
+    const listedRef: EditorFileRef = { kind: 'listed', folder: root, path: join(dir, 'gone.json') }
+    expect(await writeEditorFile(listedRef, write, { listed })).toEqual({
+      ok: false,
+      reason: 'refused'
+    })
+    listed.set(root, [join(dir, 'gone.json')])
+    expect(await writeEditorFile(listedRef, write, { listed })).toMatchObject({ ok: true })
+    expect(readFileSync(join(dir, 'gone.json'), 'utf8')).toBe('x')
+  })
+
   it('gives a failed write its reason and removes its .tmp', async () => {
     const file = put('a.txt', 'a')
     const read = await readText('a.txt')

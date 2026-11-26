@@ -415,8 +415,7 @@ test('AC4: typing shows the dirty dot, Mod+S saves with the CRLF line endings ke
   await expect(rowDirty()).toHaveCount(0)
   await expect.poll(() => readFileSync(join(folder, 'crlf.ts'), 'utf8')).toBe('onex\r\ntwo\r\n')
 
-  // Undoing back to the saved text is dirty again (it differs from the disk), and typing it back
-  // clean.
+  // Removing the saved x makes the tab dirty (it differs from the saved text); typing it back makes it clean.
   await page.keyboard.press('Backspace')
   await expect(tabDirty()).toBeVisible()
   await page.keyboard.type('x')

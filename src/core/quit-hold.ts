@@ -7,6 +7,8 @@ export interface QuitState {
   syncBusy: boolean
   /** Whether transcript backups (#80 D9) are queued or being copied. */
   transcriptsBusy?: boolean
+  /** Whether an editor tab is dirty, whose draft (#83 D11) the window sends at quit. */
+  unsavedDrafts?: boolean
 }
 
 /** Whether to hold a quit and, when held, whether it waits for the shells to exit too. */
@@ -17,11 +19,21 @@ export type QuitHold = { hold: false } | { hold: true; shells: boolean }
  * exit, and for the sync folder's flush) or the sync folder is busy (waiting for its flush). A
  * later one (the caller SIGKILLs any shells left) is held once more only while the sync folder is
  * still busy; a third goes through. The first is also held while transcript backups are copied
- * (#80 D9), which the caller waits for within `QUIT_SAVE_WAIT_MS`. Each hold is bounded by the
+ * (#80 D9) or while an editor tab is dirty (#83 D11: its draft is sent at quit), which the caller
+ * waits for within `QUIT_SAVE_WAIT_MS`. Each hold is bounded by the
  * caller (`QUIT_WAIT_MS`).
  */
-export function quitHold({ holds, liveShells, syncBusy, transcriptsBusy }: QuitState): QuitHold {
-  if (holds === 0 && (liveShells || syncBusy || transcriptsBusy === true)) {
+export function quitHold({
+  holds,
+  liveShells,
+  syncBusy,
+  transcriptsBusy,
+  unsavedDrafts
+}: QuitState): QuitHold {
+  if (
+    holds === 0 &&
+    (liveShells || syncBusy || transcriptsBusy === true || unsavedDrafts === true)
+  ) {
     return { hold: true, shells: liveShells }
   }
   if (holds === 1 && syncBusy) return { hold: true, shells: false }

@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import type {
+  EditorDraft,
+  EditorFileBase,
   EditorFileRef,
   EditorReadResult,
   EditorWrite,
@@ -289,5 +291,244 @@ describe('Markdown Preview / Edit and the text it renders (#83 D10)', () => {
     const state = EditorState.create({ doc: '# changed\n' })
     files.edited('w', '/real/README.md', state.update({ changes: { from: 0, insert: 'x' } }).state)
     expect(files.text('w', '/real/README.md')).toBe('x# changed\n')
+  })
+})
+
+describe('drafts (#83 D11)', () => {
+  const sha = (c: string): string => c.repeat(64)
+  const fileRead = (body: string, s: string, mtimeMs = 1): EditorReadResult => ({
+    kind: 'text',
+    text: body,
+    eol: 'crlf',
+    bom: true,
+    base: { size: body.length, mtimeMs, sha256: sha(s) },
+    realPath: '/real/a.ts'
+  })
+  const setup = (): {
+    files: ReturnType<typeof createEditorFiles>
+    disk: { read: EditorReadResult }
+    calls: string[]
+    saved: EditorDraft[]
+    type: (text: string) => void
+  } => {
+    const disk = { read: fileRead('a\n', 'a') }
+    const calls: string[] = []
+    const saved: EditorDraft[] = []
+    const files = createEditorFiles(
+      async () => disk.read,
+      {
+        stat: async () =>
+          disk.read.kind === 'text'
+            ? { kind: 'file', size: disk.read.base.size, mtimeMs: disk.read.base.mtimeMs }
+            : { kind: 'missing' },
+        write: async (_ref, write) => {
+          if (disk.read.kind !== 'text' && !write.recreate) return { ok: false, reason: 'missing' }
+          disk.read = fileRead(write.text, 's', 9)
+          return { ok: true, base: (disk.read as { base: EditorFileBase }).base }
+        }
+      },
+      {
+        save: (draft) => {
+          calls.push(`save ${draft.text}`)
+          saved.push(draft)
+        },
+        delete: (workspaceId, realPath) => calls.push(`delete ${workspaceId} ${realPath}`),
+        dirty: (count) => calls.push(`dirty ${count}`)
+      }
+    )
+    const type = (text: string): void => {
+      const doc = files.doc('w', '/real/a.ts')!
+      const state = doc.state ?? EditorState.create({ doc: files.text('w', '/real/a.ts') ?? '' })
+      files.edited(
+        'w',
+        '/real/a.ts',
+        state.update({ changes: { from: 0, to: state.doc.length, insert: text } }).state
+      )
+    }
+    return { files, disk, calls, saved, type }
+  }
+  const draftOf = (text: string, over: Partial<EditorDraft> = {}): EditorDraft => ({
+    workspaceId: 'w',
+    ref: ref('a.ts'),
+    realPath: '/real/a.ts',
+    text,
+    eol: 'crlf',
+    bom: true,
+    base: { size: 2, mtimeMs: 1, sha256: sha('a') },
+    ...over
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('saves a dirty tab’s draft 2 s after its last edit, and deletes it once clean', async () => {
+    vi.useFakeTimers()
+    const { files, calls, saved, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('d\n')
+    vi.advanceTimersByTime(1500)
+    type('dr\n')
+    vi.advanceTimersByTime(1999)
+    expect(calls).toEqual(['dirty 1'])
+    vi.advanceTimersByTime(1)
+    expect(saved).toEqual([draftOf('dr\n')])
+    type('a\n')
+    expect(calls.slice(2)).toEqual(['delete w /real/a.ts', 'dirty 0'])
+    vi.advanceTimersByTime(5000)
+    expect(saved).toHaveLength(1)
+  })
+
+  it('a clean edit before the 2 s writes no draft and deletes none', async () => {
+    vi.useFakeTimers()
+    const { files, calls, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('d\n')
+    type('a\n')
+    vi.advanceTimersByTime(5000)
+    expect(calls).toEqual(['dirty 1', 'dirty 0'])
+  })
+
+  it('flushes every dirty tab’s pending draft at once (the quit save)', async () => {
+    vi.useFakeTimers()
+    const { files, saved, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('d\n')
+    files.flushDrafts()
+    expect(saved).toEqual([draftOf('d\n')])
+    // Written already: nothing more at the 2 s, nor at a second flush.
+    vi.advanceTimersByTime(5000)
+    files.flushDrafts()
+    expect(saved).toHaveLength(1)
+  })
+
+  it('saving, closing or discarding deletes the draft', async () => {
+    const { files, calls, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('d\n')
+    files.flushDrafts()
+    expect(await files.save('w', '/real/a.ts')).toBe(true)
+    expect(calls).toContain('delete w /real/a.ts')
+    calls.length = 0
+    type('e\n')
+    files.flushDrafts()
+    files.close('w', '/real/a.ts')
+    expect(calls).toEqual(['dirty 1', 'save e\n', 'delete w /real/a.ts', 'dirty 0'])
+  })
+
+  it('restores a draft as a dirty tab without showing the editor; a gone workspace’s is deleted', async () => {
+    const { files, calls } = setup()
+    const shown = vi.fn()
+    files.onShow(shown)
+    await files.restore([draftOf('draft\n'), draftOf('x', { workspaceId: 'gone' })], ['w'])
+    expect(calls).toContain('delete gone /real/a.ts')
+    expect(workspaceTabs(files.get(), 'w').tabs.map((t) => t.id)).toEqual(['/real/a.ts'])
+    expect(files.text('w', '/real/a.ts')).toBe('draft\n')
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: true, notice: null, saveError: null })
+    expect(shown).not.toHaveBeenCalled()
+    // Its draft is on disk already: a flush writes nothing, and typing back the file's text cleans it.
+    files.flushDrafts()
+    expect(calls.filter((c) => c.startsWith('save'))).toEqual([])
+    const doc = files.doc('w', '/real/a.ts')!
+    const state = EditorState.create({ doc: 'a\n' })
+    files.edited('w', '/real/a.ts', state)
+    expect(doc.state).toBe(state)
+    expect(files.status('w', '/real/a.ts').dirty).toBe(false)
+    expect(calls).toContain('delete w /real/a.ts')
+  })
+
+  it('a draft whose file changed meanwhile shows the bar', async () => {
+    const { files, disk } = setup()
+    disk.read = fileRead('changed\n', 'c', 5)
+    await files.restore([draftOf('draft\n')], ['w'])
+    expect(files.status('w', '/real/a.ts')).toMatchObject({ dirty: true, notice: 'changed' })
+    // Keep mine takes the disk as the base; the tab stays dirty (its draft differs).
+    await files.keepMine('w', '/real/a.ts')
+    expect(files.status('w', '/real/a.ts')).toMatchObject({ dirty: true, notice: null })
+  })
+
+  it('a draft whose file is gone shows Deleted on disk; Save writes it again', async () => {
+    const { files, disk } = setup()
+    disk.read = { kind: 'missing' }
+    await files.restore([draftOf('draft\n')], ['w'])
+    expect(files.status('w', '/real/a.ts')).toEqual({
+      dirty: true,
+      notice: 'deleted',
+      saveError: null
+    })
+    expect(await files.save('w', '/real/a.ts')).toBe(true)
+    expect(disk.read).toMatchObject({ kind: 'text', text: 'draft\n' })
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: false, notice: null, saveError: null })
+  })
+})
+
+describe('a save racing a check (#83 D12, D13)', () => {
+  it('waits for a check that started before it, so an outside rewrite of the same bytes saves', async () => {
+    const sha = 'a'.repeat(64)
+    let diskMtime = 1
+    const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+      let resolve = (): void => {}
+      const promise = new Promise<void>((r) => (resolve = r))
+      return { promise, resolve }
+    }
+    const statGate = deferred()
+    const writeGate = deferred()
+    let stats = 0
+    const files = createEditorFiles(
+      async () => ({
+        kind: 'text',
+        text: 'a\n',
+        eol: 'lf',
+        bom: false,
+        base: { size: 2, mtimeMs: diskMtime, sha256: sha },
+        realPath: '/real/a.ts'
+      }),
+      {
+        stat: async () => {
+          // The check's stat is slow, and answers after the outside rewrite.
+          if (stats++ === 0) await statGate.promise
+          return { kind: 'file', size: 2, mtimeMs: diskMtime }
+        },
+        write: async (_ref, write) => {
+          await writeGate.promise
+          return write.base.mtimeMs === diskMtime
+            ? { ok: true, base: { size: 3, mtimeMs: 9, sha256: 'b'.repeat(64) } }
+            : { ok: false, reason: 'conflict' }
+        }
+      }
+    )
+    const flush = async (): Promise<void> => {
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+    }
+    await files.open('w', ref('a.ts'))
+    files.edited('w', '/real/a.ts', EditorState.create({ doc: 'ax\n' }))
+    const check = files.check()
+    const saved = files.save('w', '/real/a.ts')
+    await flush()
+    // Rewritten outside with the same bytes: a new mtime, the same hash.
+    diskMtime = 2
+    statGate.resolve()
+    await flush()
+    writeGate.resolve()
+    await check
+    expect(await saved).toBe(true)
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: false, notice: null, saveError: null })
+  })
+})
+
+describe('checks (#83 D13)', () => {
+  it('a check with no tab open never blocks the next one', async () => {
+    let stats = 0
+    const files = createEditorFiles(async () => text('/real/a'), {
+      stat: async () => {
+        stats++
+        return { kind: 'file', size: 2, mtimeMs: 1 }
+      },
+      write: async () => ({ ok: true, base })
+    })
+    await files.check()
+    await files.open('w', ref('a'))
+    await files.check()
+    expect(stats).toBe(1)
   })
 })

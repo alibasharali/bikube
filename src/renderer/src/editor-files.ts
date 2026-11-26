@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { EditorState } from '@codemirror/state'
 import type {
+  EditorDraft,
   EditorFileRef,
   EditorReadResult,
   EditorStatResult,
@@ -37,6 +38,11 @@ import { isMarkdownPath } from '../../core/markdown-render'
 export interface EditorDoc {
   read: Exclude<EditorReadResult, { kind: 'refused' }>
   state: EditorState | null
+  /**
+   * The tab's text before its editor first shows, when it isn't what it read: a draft restored
+   * at launch (D11).
+   */
+  text?: string
 }
 
 type Reader = (ref: EditorFileRef) => Promise<EditorReadResult>
@@ -46,6 +52,16 @@ export interface EditorIo {
   stat(ref: EditorFileRef): Promise<EditorStatResult>
   write(ref: EditorFileRef, write: EditorWrite): Promise<EditorWriteResult>
 }
+
+/** Where dirty tabs' drafts go (D11): main's drafts store, and how many tabs are dirty. */
+export interface EditorDraftsIo {
+  save(draft: EditorDraft): void
+  delete(workspaceId: string, realPath: string): void
+  dirty(count: number): void
+}
+
+/** A dirty tab's draft is saved this long after its last edit (D11). */
+export const DRAFT_DELAY_MS = 2000
 
 /**
  * What a tab shows about its edits and its file (D12, D13): its dirty dot, the `changed on disk`
@@ -129,6 +145,13 @@ export interface EditorFiles {
   setMode(workspaceId: string, id: string, mode: MarkdownMode): void
   /** The tab's text now, dirty or not (D10's Preview); null for a tab that holds none. */
   text(workspaceId: string, id: string): string | null
+  /** Saves every dirty tab's draft not yet written, now (D11: at `app:quitting`). */
+  flushDrafts(): void
+  /**
+   * Reopens each draft of these workspaces as a dirty tab, the editor not shown (D11), deleting
+   * the others' drafts; then checks the files against the drafts' bases (D13).
+   */
+  restore(drafts: readonly EditorDraft[], workspaceIds: readonly string[]): Promise<void>
 }
 
 /**
@@ -136,7 +159,11 @@ export interface EditorFiles {
  * and each tab's document. Opening a file asks main to read it first, since a tab is its real
  * path, then shows the editor view through what App registered (`onShow`).
  */
-export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
+export function createEditorFiles(
+  read: Reader,
+  io?: EditorIo,
+  drafts?: EditorDraftsIo
+): EditorFiles {
   let memory: EditorTabsMemory = NO_TABS
   const docs = new Map<string, EditorDoc>()
   const statuses = new Map<string, EditorDocStatus>()
@@ -144,6 +171,14 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
   const editing = new Set<string>()
   const views = new Map<string, LiveEditor>()
   const saving = new Set<string>()
+  /** Each tab's running check (D13): a save waits for it, so it never replaces the base mid-save. */
+  const checks = new Map<string, Promise<void>>()
+  /** Tabs whose draft is on disk, and those with one due (D11). */
+  const drafted = new Set<string>()
+  const draftTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** Restored drafts whose file no longer holds their base: dirty whatever their text (D11). */
+  const baseUnknown = new Set<string>()
+  let dirtyReported = 0
   const listeners = new Set<() => void>()
   let show: ((workspaceId: string) => void) | null = null
   let checking: Promise<void> | null = null
@@ -153,7 +188,28 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
     const at = k.indexOf('\n')
     return [k.slice(0, at), k.slice(at + 1)]
   }
+  const dropDraft = (k: string): void => {
+    const timer = draftTimers.get(k)
+    if (timer !== undefined) clearTimeout(timer)
+    draftTimers.delete(k)
+    if (!drafted.delete(k)) return
+    const [workspaceId, id] = split(k)
+    drafts?.delete(workspaceId, id)
+  }
+  /** Drafts of tabs closed or clean go (D11); main hears how many tabs are dirty. */
+  const syncDrafts = (): void => {
+    for (const k of new Set([...drafted, ...draftTimers.keys()])) {
+      if (!docs.has(k) || !statusOf(k).dirty) dropDraft(k)
+    }
+    let dirty = 0
+    for (const k of docs.keys()) if (statusOf(k).dirty) dirty++
+    if (dirty !== dirtyReported) {
+      dirtyReported = dirty
+      drafts?.dirty(dirty)
+    }
+  }
   const notify = (): void => {
+    syncDrafts()
     for (const listener of [...listeners]) listener()
   }
   const set = (next: EditorTabsMemory): void => {
@@ -166,6 +222,7 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
         docs.delete(k)
         statuses.delete(k)
         editing.delete(k)
+        baseUnknown.delete(k)
       }
     }
     notify()
@@ -188,23 +245,54 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
     const [workspaceId, id] = split(k)
     return memory[workspaceId]?.tabs.find((t) => t.id === id)?.ref ?? null
   }
-  /** The tab's text now: its view's, else its kept state's, else what it read. */
+  /** The tab's text now: its view's, else its kept state's, else a draft's, else what it read. */
   const textOf = (k: string, doc: EditorDoc): string | null => {
     if (doc.read.kind !== 'text') return null
     const state = views.get(k)?.state ?? doc.state
-    return state ? state.doc.toString() : doc.read.text
+    return state ? state.doc.toString() : (doc.text ?? doc.read.text)
   }
   const refreshDirty = (k: string): void => {
     const doc = docs.get(k)
     const text = doc ? textOf(k, doc) : null
     if (!doc || doc.read.kind !== 'text' || text === null) return
-    setStatus(k, { dirty: isDirty(text, doc.read.text) })
+    setStatus(k, { dirty: baseUnknown.has(k) || isDirty(text, doc.read.text) })
+  }
+  /** Writes the dirty tab's draft now (D11). */
+  const writeDraft = (k: string): void => {
+    const timer = draftTimers.get(k)
+    if (timer !== undefined) clearTimeout(timer)
+    draftTimers.delete(k)
+    const doc = docs.get(k)
+    const ref = refOf(k)
+    const text = doc ? textOf(k, doc) : null
+    if (!drafts || !doc || !ref || doc.read.kind !== 'text' || text === null) return
+    if (!statusOf(k).dirty) return
+    const [workspaceId, id] = split(k)
+    const { eol, bom, base } = doc.read
+    drafts.save({ workspaceId, ref, realPath: id, text, eol, bom, base })
+    drafted.add(k)
+  }
+  /** The dirty tab's draft, 2 s after its last change (D11). */
+  const scheduleDraft = (k: string): void => {
+    if (!drafts || !statusOf(k).dirty) return
+    const timer = draftTimers.get(k)
+    if (timer !== undefined) clearTimeout(timer)
+    draftTimers.set(
+      k,
+      setTimeout(() => {
+        draftTimers.delete(k)
+        writeDraft(k)
+      }, DRAFT_DELAY_MS)
+    )
   }
   /** Changes the tab's text to `next` by its differing middle, keeping the cursor line and scroll. */
   const applyText = (k: string, doc: EditorDoc, next: string): void => {
     const view = views.get(k)
     const state = view?.state ?? doc.state
-    if (!state) return
+    if (!state) {
+      if (doc.text !== undefined) doc.text = next
+      return
+    }
     const change = replacement(state.doc.toString(), next)
     if (!change) return
     if (view) view.dispatch({ changes: change })
@@ -216,6 +304,7 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
     doc: EditorDoc,
     result: Extract<CheckOutcome, { kind: 'reload' }>['read']
   ): void => {
+    baseUnknown.delete(k)
     if (result.kind === 'text' && doc.read.kind === 'text') {
       doc.read = result
       applyText(k, doc, result.text)
@@ -244,8 +333,18 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       setStatus(k, { notice: 'deleted' })
     }
   }
+  /** One tab's check (D13), kept while it runs so a save can wait for it. */
+  const checkOne = (k: string): Promise<void> => {
+    const running = checkFile(k)
+    checks.set(k, running)
+    const forget = (): void => {
+      if (checks.get(k) === running) checks.delete(k)
+    }
+    running.then(forget, forget)
+    return running
+  }
   /** One tab's check (D13): stat, then a read when size or mtime changed. */
-  const checkOne = async (k: string): Promise<void> => {
+  const checkFile = async (k: string): Promise<void> => {
     const doc = docs.get(k)
     const ref = refOf(k)
     if (!io || !doc || !ref || doc.read.kind !== 'text') return
@@ -349,6 +448,7 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       if (!doc) return
       doc.state = state
       refreshDirty(k)
+      scheduleDraft(k)
     },
     async save(workspaceId: string, id: string): Promise<boolean> {
       const k = key(workspaceId, id)
@@ -357,7 +457,10 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       if (!io || !doc || !ref || doc.read.kind !== 'text' || saving.has(k)) return false
       saving.add(k)
       try {
-        // Checked first (D13): a file changed outside shows the bar, and nothing is written.
+        // A check that started before the save ends first, so it can't replace the base while the
+        // save's write is out; then the save's own check (D13): a file changed outside shows the
+        // bar, and nothing is written.
+        await checks.get(k)?.catch(() => undefined)
         await checkOne(k)
         if (docs.get(k) !== doc || doc.read.kind !== 'text') return false
         const status = statusOf(k)
@@ -365,15 +468,19 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
         if (!status.dirty) return status.notice !== 'deleted'
         const text = textOf(k, doc) ?? ''
         const before = doc.read
+        // D11's `Deleted on disk` bar: Save writes the file again where its folder still exists.
+        const recreate = status.notice === 'deleted'
         const result = await io.write(ref, {
           text,
           eol: before.eol,
           bom: before.bom,
-          base: before.base
+          base: before.base,
+          ...(recreate && { recreate: true as const })
         })
         if (docs.get(k) !== doc || doc.read !== before) return false
         if (result.ok) {
           doc.read = { ...before, text, base: result.base }
+          baseUnknown.delete(k)
           setStatus(k, { notice: null, saveError: null })
           refreshDirty(k)
           return true
@@ -414,19 +521,24 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       if (result.kind !== 'text') return
       // The disk version becomes the base; the tab keeps its text, dirty against it.
       doc.read = { ...result, text: result.text }
+      baseUnknown.delete(k)
       setStatus(k, { notice: null })
       refreshDirty(k)
+      // Its draft now names the new base.
+      scheduleDraft(k)
     },
     check(): Promise<void> {
       if (checking) return checking
-      checking = (async () => {
-        try {
-          for (const k of [...docs.keys()]) if (!saving.has(k)) await checkOne(k)
-        } finally {
-          checking = null
-        }
+      const run = (async () => {
+        for (const k of [...docs.keys()]) if (!saving.has(k)) await checkOne(k)
       })()
-      return checking
+      // Forgotten once done; with no tab it is done before it is even kept.
+      checking = run
+      const forget = (): void => {
+        if (checking === run) checking = null
+      }
+      run.then(forget, forget)
+      return run
     },
     askClose(workspaceId: string, ids: readonly string[]): void {
       if (question) return
@@ -472,16 +584,58 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
     text(workspaceId: string, id: string): string | null {
       const doc = docs.get(key(workspaceId, id))
       return doc ? textOf(key(workspaceId, id), doc) : null
+    },
+    flushDrafts(): void {
+      for (const k of docs.keys()) {
+        if (statusOf(k).dirty && (draftTimers.has(k) || !drafted.has(k))) writeDraft(k)
+      }
+    },
+    async restore(list: readonly EditorDraft[], workspaceIds: readonly string[]): Promise<void> {
+      const kept = new Set(workspaceIds)
+      for (const draft of list) {
+        if (!kept.has(draft.workspaceId)) {
+          drafts?.delete(draft.workspaceId, draft.realPath)
+          continue
+        }
+        const k = key(draft.workspaceId, draft.realPath)
+        if (docs.has(k)) continue
+        const result = await read(draft.ref)
+        if (docs.has(k) || !kept.has(draft.workspaceId)) continue
+        // The file's text is the tab's base only while it still holds the draft's base; else the
+        // check below shows what happened to it, and the tab stays dirty until it is resolved.
+        const known = result.kind === 'text' && result.base.sha256 === draft.base.sha256
+        const { eol, bom, base, realPath, text } = draft
+        const baseText = known ? result.text : ''
+        const next = openTab(memory, draft.workspaceId, { id: realPath, ref: draft.ref })
+        docs.set(k, {
+          read: { kind: 'text', text: baseText, eol, bom, base, realPath },
+          state: null,
+          text
+        })
+        if (!known) baseUnknown.add(k)
+        drafted.add(k)
+        statuses.set(k, { ...CLEAN, dirty: !known || isDirty(text, baseText) })
+        set(next)
+      }
+      await files.check()
     }
   }
   return files
 }
 
 /** The app's open files, read, checked and saved through main (D6). */
-export const editorFiles: EditorFiles = createEditorFiles((ref) => window.bikube.editor.read(ref), {
-  stat: (ref) => window.bikube.editor.stat(ref),
-  write: (ref, write) => window.bikube.editor.write(ref, write)
-})
+export const editorFiles: EditorFiles = createEditorFiles(
+  (ref) => window.bikube.editor.read(ref),
+  {
+    stat: (ref) => window.bikube.editor.stat(ref),
+    write: (ref, write) => window.bikube.editor.write(ref, write)
+  },
+  {
+    save: (draft) => window.bikube.drafts.save(draft),
+    delete: (workspaceId, realPath) => window.bikube.drafts.delete(workspaceId, realPath),
+    dirty: (count) => window.bikube.drafts.dirty(count)
+  }
+)
 
 export function useEditorTabs(): EditorTabsMemory {
   return useSyncExternalStore(editorFiles.subscribe, editorFiles.get)

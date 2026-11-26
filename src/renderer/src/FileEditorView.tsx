@@ -293,6 +293,29 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
           </div>
         </div>
       )}
+      {status.notice === 'deleted' && status.dirty && (
+        <div className="file-editor-bar" role="status" data-testid="file-editor-bar">
+          <span className="file-editor-bar-text">Deleted on disk</span>
+          <div className="file-editor-bar-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="file-editor-bar-save"
+              onClick={() => void editorFiles.save(workspace.id, tab.id)}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="file-editor-bar-discard"
+              onClick={() => editorFiles.close(workspace.id, tab.id)}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
       {status.notice === 'deleted' && !status.dirty && (
         <div className="file-editor-bar" role="status" data-testid="file-editor-bar">
           <span className="file-editor-bar-text">Deleted on disk</span>
@@ -444,7 +467,7 @@ function CodeEditor({
     const state =
       doc.state ??
       EditorState.create({
-        doc: doc.read.text,
+        doc: doc.text ?? doc.read.text,
         extensions: [
           lineNumbers(),
           highlightActiveLineGutter(),

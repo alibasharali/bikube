@@ -18,6 +18,7 @@ import type { NamedEditor } from '../core/editor-candidates'
 import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
 import type {
+  EditorDraft,
   EditorFileRef,
   EditorReadResult,
   EditorStatResult,
@@ -109,6 +110,10 @@ export const IPC = {
   editorRead: 'editor:read',
   editorStat: 'editor:stat',
   editorWrite: 'editor:write',
+  draftsSave: 'drafts:save',
+  draftsDelete: 'drafts:delete',
+  draftsList: 'drafts:list',
+  draftsDirty: 'drafts:dirty',
   agentTabSummary: 'agentTab:summary',
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
@@ -463,6 +468,22 @@ export interface EditorApi {
   write(ref: EditorFileRef, write: EditorWrite): Promise<EditorWriteResult>
 }
 
+/**
+ * Dirty editor tabs' drafts on this machine (#83 D11), in `<userData>/drafts`, main window's main
+ * frame only. Saves and deletes are sent in order, so those sent as the app quits are on disk
+ * before `scrollback.quitSaved`.
+ */
+export interface DraftsApi {
+  /** Replaces the tab's draft (its workspace id and real path name it). */
+  save(draft: EditorDraft): void
+  /** Removes the tab's draft, if any. */
+  delete(workspaceId: string, realPath: string): void
+  /** Every draft kept (D11's restore at launch). */
+  list(): Promise<EditorDraft[]>
+  /** How many tabs are dirty now: while any is, a quit waits for the window's quit saves. */
+  dirty(count: number): void
+}
+
 export interface AgentSetupApi {
   /**
    * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
@@ -656,6 +677,7 @@ export interface BikubeApi {
   editors: EditorsApi
   agentSetup: AgentSetupApi
   editor: EditorApi
+  drafts: DraftsApi
   agentTab: AgentTabApi
   claudeRetention: ClaudeRetentionApi
   update: UpdateApi

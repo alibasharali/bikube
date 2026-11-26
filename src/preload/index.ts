@@ -155,6 +155,12 @@ const api: BikubeApi = {
     stat: (ref) => ipcRenderer.invoke(IPC.editorStat, ref),
     write: (ref, write) => ipcRenderer.invoke(IPC.editorWrite, ref, write)
   },
+  drafts: {
+    save: (draft) => ipcRenderer.send(IPC.draftsSave, draft),
+    delete: (workspaceId, realPath) => ipcRenderer.send(IPC.draftsDelete, workspaceId, realPath),
+    list: () => ipcRenderer.invoke(IPC.draftsList),
+    dirty: (count) => ipcRenderer.send(IPC.draftsDirty, count)
+  },
   claudeRetention: {
     read: () => ipcRenderer.invoke(IPC.claudeRetentionRead),
     set: () => ipcRenderer.invoke(IPC.claudeRetentionSet)

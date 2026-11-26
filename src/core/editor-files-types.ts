@@ -53,6 +53,26 @@ export interface EditorWrite {
   eol: EditorEol
   bom: boolean
   base: EditorFileBase
+  /**
+   * D11's `Deleted on disk` bar's Save: a file that is gone is written again, only where its
+   * folder still exists (and still passes D6's checks); a file that is there is checked as ever.
+   */
+  recreate?: true
+}
+
+/**
+ * A dirty tab's unsaved text kept on this machine (D11): its workspace, its file's reference and
+ * tab id (the real path), its text with the line ending and BOM it is written back with, and the
+ * file as the tab last read or saved it, so the next launch's check finds a change.
+ */
+export interface EditorDraft {
+  workspaceId: string
+  ref: EditorFileRef
+  realPath: string
+  text: string
+  eol: EditorEol
+  bom: boolean
+  base: EditorFileBase
 }
 
 /**

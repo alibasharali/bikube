@@ -12,6 +12,7 @@ import { startInstalledAgents } from './installed-agents'
 import { startInstalledEditors } from './installed-editors'
 import { listenForBoardRequests } from './board-requests'
 import { startTranscriptBackups } from './transcript-backups'
+import { startEditorDrafts } from './editor-drafts'
 import { loadGhosttyConfig } from './ghostty'
 import { loadHomeDir } from './home'
 import { loadSettingsStore, settingsStore } from './settings'
@@ -40,6 +41,7 @@ void Promise.all([
   followAppFont()
   listenForBoardRequests()
   startTranscriptBackups()
+  startEditorDrafts()
   listenForSyncBoards()
   startAttention()
   startInstalledAgents()

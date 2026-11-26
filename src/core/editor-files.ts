@@ -12,6 +12,7 @@ import { constants } from 'node:fs'
 import {
   access,
   chmod,
+  link,
   readFile,
   realpath,
   rename,
@@ -37,6 +38,7 @@ import { isTreePath } from './file-tree'
 
 interface FileStats {
   isFile(): boolean
+  isDirectory(): boolean
   size: number
   mtimeMs: number
   mode: number
@@ -52,9 +54,21 @@ export interface EditorFs {
   chmod(path: string, mode: number): Promise<void>
   rename(from: string, to: string): Promise<void>
   unlink(path: string): Promise<void>
+  /** For D11's recreate, which never replaces a file that appeared meanwhile; Node's by default. */
+  link?(existing: string, path: string): Promise<void>
 }
 
-const nodeFs: EditorFs = { access, realpath, stat, readFile, writeFile, chmod, rename, unlink }
+const nodeFs: EditorFs = {
+  access,
+  realpath,
+  stat,
+  readFile,
+  writeFile,
+  chmod,
+  rename,
+  unlink,
+  link
+}
 
 export interface EditorFileDeps {
   /** The files Agent setup's last read of each folder listed (D6's `listed` references). */
@@ -89,15 +103,17 @@ export function parseEditorFileRef(value: unknown): EditorFileRef | null {
 /** A save's request checked for shape (D12); null for anything else, text over 5 MB included. */
 export function parseEditorWrite(value: unknown): EditorWrite | null {
   if (typeof value !== 'object' || value === null) return null
-  const { text, eol, bom, base } = value as Record<string, unknown>
+  const { text, eol, bom, base, recreate } = value as Record<string, unknown>
   if (typeof text !== 'string' || text.length > EDITOR_TEXT_LIMIT) return null
+  if (recreate !== undefined && recreate !== true) return null
   if ((eol !== 'lf' && eol !== 'crlf') || typeof bom !== 'boolean') return null
   if (typeof base !== 'object' || base === null) return null
   const { size, mtimeMs, sha256 } = base as Record<string, unknown>
   if (typeof size !== 'number' || !Number.isFinite(size)) return null
   if (typeof mtimeMs !== 'number' || !Number.isFinite(mtimeMs)) return null
   if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) return null
-  return { text, eol, bom, base: { size, mtimeMs, sha256 } }
+  const write: EditorWrite = { text, eol, bom, base: { size, mtimeMs, sha256 } }
+  return recreate === true ? { ...write, recreate } : write
 }
 
 /**
@@ -142,6 +158,45 @@ async function resolveRef(
   } catch (error) {
     return isMissing(error) ? 'missing' : 'refused'
   }
+}
+
+/**
+ * Where a file `ref` names that is gone would be written again (D11's recreate): its parent
+ * folder's real path and its name, the parent inside the folder by real path for a folder
+ * reference and still listed for a listed one; `no-folder` when the parent is gone, `refused`
+ * when the request is malformed or escapes.
+ */
+async function resolveNewFile(
+  value: unknown,
+  deps: EditorFileDeps
+): Promise<string | 'no-folder' | 'refused'> {
+  const fs = deps.fs ?? nodeFs
+  const ref = parseEditorFileRef(value)
+  if (!ref) return 'refused'
+  let named: string
+  let rootReal: string | null = null
+  if (ref.kind === 'folder') {
+    named = resolve(ref.folder, ref.path)
+    if (!within(ref.folder, named) || named === resolve(ref.folder)) return 'refused'
+    try {
+      rootReal = await fs.realpath(ref.folder)
+    } catch {
+      return 'refused'
+    }
+  } else {
+    if (!deps.listed.has(ref.folder, ref.path)) return 'refused'
+    named = ref.path
+  }
+  let parent: string
+  try {
+    parent = await fs.realpath(dirname(named))
+    if (!(await fs.stat(parent)).isDirectory()) return 'refused'
+  } catch (error) {
+    return isMissing(error) ? 'no-folder' : 'refused'
+  }
+  const target = join(parent, basename(named))
+  if (rootReal !== null && (!within(rootReal, target) || target === rootReal)) return 'refused'
+  return target
 }
 
 const sha256 = (data: Uint8Array): string => createHash('sha256').update(data).digest('hex')
@@ -220,6 +275,48 @@ export async function statEditorFile(
 const sameBase = (a: EditorFileBase, b: EditorFileBase): boolean =>
   a.size === b.size && a.mtimeMs === b.mtimeMs && a.sha256 === b.sha256
 
+/** The bytes a save writes: the text with its line endings and BOM back. */
+function fileBytes(write: EditorWrite): Buffer {
+  const lf = write.text.replace(/\r\n/g, '\n')
+  const body = Buffer.from(write.eol === 'crlf' ? lf.replace(/\n/g, '\r\n') : lf, 'utf8')
+  return write.bom ? Buffer.concat([Buffer.from(BOM), body]) : body
+}
+
+/**
+ * Writes a file that is gone again (D11's `Deleted on disk` Save) where its folder still exists:
+ * a `.tmp` beside it with the default mode (the umask applies), linked into place, so a file that
+ * appeared meanwhile is never replaced (`conflict`), then the `.tmp` removed.
+ */
+async function recreateEditorFile(
+  value: unknown,
+  write: EditorWrite,
+  deps: EditorFileDeps
+): Promise<EditorWriteResult> {
+  const fs = deps.fs ?? nodeFs
+  const target = await resolveNewFile(value, deps)
+  if (target === 'refused') return { ok: false, reason: 'refused' }
+  if (target === 'no-folder') return { ok: false, reason: 'failed', message: 'folder not found' }
+  const data = fileBytes(write)
+  const tmp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString('hex')}.tmp`)
+  try {
+    await fs.writeFile(tmp, data, { mode: 0o666, flag: 'wx' })
+    await (fs.link ?? link)(tmp, target)
+  } catch (error) {
+    await fs.unlink(tmp).catch(() => {})
+    if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') {
+      return { ok: false, reason: 'conflict' }
+    }
+    return { ok: false, reason: 'failed', message: writeFailureReason(error) }
+  }
+  await fs.unlink(tmp).catch(() => {})
+  try {
+    const written = await fs.stat(target)
+    return { ok: true, base: baseOf(data, written.mtimeMs) }
+  } catch (error) {
+    return { ok: false, reason: 'failed', message: writeFailureReason(error) }
+  }
+}
+
 /** A write failure as `Couldn't save <name>: <reason>` ends (D12). */
 export function writeFailureReason(error: unknown): string {
   const { code, message } = (error ?? {}) as NodeJS.ErrnoException
@@ -253,7 +350,11 @@ export async function writeEditorFile(
   const write = parseEditorWrite(request)
   if (!write) return { ok: false, reason: 'refused' }
   const found = await resolveRef(value, deps)
-  if (found === 'missing') return { ok: false, reason: 'missing' }
+  if (found === 'missing') {
+    return write.recreate
+      ? recreateEditorFile(value, write, deps)
+      : { ok: false, reason: 'missing' }
+  }
   if (found === 'refused') return { ok: false, reason: 'refused' }
   const { real, stats } = found
   // A rename needs only the folder's write access: a file the user can't write stays as it is.
@@ -275,9 +376,7 @@ export async function writeEditorFile(
     if (isMissing(error)) return { ok: false, reason: 'missing' }
     return { ok: false, reason: 'failed', message: writeFailureReason(error) }
   }
-  const lf = write.text.replace(/\r\n/g, '\n')
-  const body = Buffer.from(write.eol === 'crlf' ? lf.replace(/\n/g, '\r\n') : lf, 'utf8')
-  const data = write.bom ? Buffer.concat([Buffer.from(BOM), body]) : body
+  const data = fileBytes(write)
   const mode = stats.mode & 0o7777
   const tmp = join(dirname(real), `.${basename(real)}.${randomBytes(6).toString('hex')}.tmp`)
   try {

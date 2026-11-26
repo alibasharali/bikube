@@ -10,6 +10,7 @@ import { SMALL_ICON } from './icons'
 import StatusIcon from './StatusIcon'
 import { baseName, tabPath, type EditorTab } from '../../core/editor-tabs'
 import FileIcon from './FileIcon'
+import DirtyDot from './DirtyDot'
 import { homeDir } from './home'
 import { useRedrawClock } from './status-times'
 
@@ -27,6 +28,7 @@ interface WorkspaceTerminalsProps {
   agentSetup?: { current: boolean; onOpen: () => void } | null
   /** The workspace's open files (#83 D4), a row each after the rest, in tab order. */
   files?: {
+    workspaceId: string
     tabs: readonly EditorTab[]
     /** The workspace's folder, for each row's tooltip path. */
     folder: string
@@ -68,6 +70,7 @@ function WorkspaceTerminals({
         fileTabs.map((tab) => (
           <FileRow
             key={tab.id}
+            workspaceId={files.workspaceId}
             tab={tab}
             folder={files.folder}
             current={tab.id === files.currentId}
@@ -109,15 +112,17 @@ function AgentSetupRow({
 }
 
 /**
- * An open file (#83 D4): its icon and name, its path as the tooltip; no number, no status. A
- * click shows its tab in the editor.
+ * An open file (#83 D4): its icon and name, a dot while dirty, its path as the tooltip; no number,
+ * no status. A click shows its tab in the editor.
  */
 function FileRow({
+  workspaceId,
   tab,
   folder,
   current,
   onOpen
 }: {
+  workspaceId: string
   tab: EditorTab
   folder: string
   current: boolean
@@ -140,6 +145,7 @@ function FileRow({
           <FileIcon name={name} kind="file" />
         </span>
         <span className="workspace-terminal-title">{name}</span>
+        <DirtyDot workspaceId={workspaceId} id={tab.id} testId="workspace-file-dirty" />
       </button>
     </li>
   )

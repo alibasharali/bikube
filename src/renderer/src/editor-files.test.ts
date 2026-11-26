@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { EditorFileRef, EditorReadResult } from '../../core/editor-files-types'
+import { EditorState } from '@codemirror/state'
+import type {
+  EditorFileRef,
+  EditorReadResult,
+  EditorWrite,
+  EditorWriteResult
+} from '../../core/editor-files-types'
 import { activeTab, workspaceTabs } from '../../core/editor-tabs'
 import { createEditorFiles } from './editor-files'
 
@@ -80,5 +86,149 @@ describe('the editor files store (#83 D3)', () => {
     // Another tab opened: the tab list changes, and open tabs' documents stay.
     await files.open('w', ref('y'))
     expect(files.doc('w', '/real/a\nb')).not.toBeNull()
+  })
+})
+
+describe('saving, closing and changes on disk (#83 D12, D13)', () => {
+  const sha = (c: string): string => c.repeat(64)
+  const textRead = (body: string, s: string, mtimeMs = 1): EditorReadResult => ({
+    kind: 'text',
+    text: body,
+    eol: 'crlf',
+    bom: false,
+    base: { size: body.length, mtimeMs, sha256: sha(s) },
+    realPath: '/real/a.ts'
+  })
+  /** A store over one file whose disk state the test sets; writes are recorded. */
+  const setup = (): {
+    files: ReturnType<typeof createEditorFiles>
+    disk: { read: EditorReadResult; writeResult: EditorWriteResult | null }
+    writes: EditorWrite[]
+    type: (text: string) => void
+  } => {
+    const disk = {
+      read: textRead('a\n', 'a') as EditorReadResult,
+      writeResult: null as EditorWriteResult | null
+    }
+    const writes: EditorWrite[] = []
+    const files = createEditorFiles(async () => disk.read, {
+      stat: async () =>
+        disk.read.kind === 'text'
+          ? { kind: 'file', size: disk.read.base.size, mtimeMs: disk.read.base.mtimeMs }
+          : { kind: 'missing' },
+      write: async (_ref, write) => {
+        writes.push(write)
+        const result = disk.writeResult ?? {
+          ok: true as const,
+          base: { size: write.text.length, mtimeMs: 9, sha256: sha('s') }
+        }
+        if (result.ok) disk.read = { ...textRead(write.text, 's', 9) }
+        return result
+      }
+    })
+    const type = (text: string): void => {
+      const doc = files.doc('w', '/real/a.ts')!
+      const state =
+        doc.state ?? EditorState.create({ doc: doc.read.kind === 'text' ? doc.read.text : '' })
+      files.edited(
+        'w',
+        '/real/a.ts',
+        state.update({ changes: { from: 0, to: state.doc.length, insert: text } }).state
+      )
+    }
+    return { files, disk, writes, type }
+  }
+
+  it('is dirty while the text differs from what it read, and clean once saved', async () => {
+    const { files, writes, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('ax\n')
+    expect(files.status('w', '/real/a.ts').dirty).toBe(true)
+    expect(files.dirtyCount('w')).toBe(1)
+    type('a\n')
+    expect(files.status('w', '/real/a.ts').dirty).toBe(false)
+    type('ax\n')
+    expect(await files.save('w', '/real/a.ts')).toBe(true)
+    expect(writes).toEqual([
+      { text: 'ax\n', eol: 'crlf', bom: false, base: { size: 2, mtimeMs: 1, sha256: sha('a') } }
+    ])
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: false, notice: null, saveError: null })
+  })
+
+  it('a save after an outside write writes nothing and shows the bar', async () => {
+    const { files, disk, writes, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('mine\n')
+    disk.read = textRead('changed\n', 'c', 2)
+    expect(await files.save('w', '/real/a.ts')).toBe(false)
+    expect(writes).toEqual([])
+    expect(files.status('w', '/real/a.ts').notice).toBe('changed')
+    // Keep mine: the disk version is the base, and the next save writes over it.
+    await files.keepMine('w', '/real/a.ts')
+    expect(files.status('w', '/real/a.ts')).toMatchObject({ dirty: true, notice: null })
+    expect(await files.save('w', '/real/a.ts')).toBe(true)
+    expect(writes.map((w) => [w.text, w.base.sha256])).toEqual([['mine\n', sha('c')]])
+  })
+
+  it('a check reloads a clean tab and shows a dirty one the bar; Reload drops the edits', async () => {
+    const { files, disk, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('a\n')
+    disk.read = textRead('changed\n', 'c', 2)
+    await files.check()
+    expect(files.doc('w', '/real/a.ts')!.state!.doc.toString()).toBe('changed\n')
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: false, notice: null, saveError: null })
+
+    type('mine\n')
+    disk.read = textRead('again\n', 'd', 3)
+    await files.check()
+    expect(files.status('w', '/real/a.ts')).toMatchObject({ dirty: true, notice: 'changed' })
+    expect(files.doc('w', '/real/a.ts')!.state!.doc.toString()).toBe('mine\n')
+    await files.reload('w', '/real/a.ts')
+    expect(files.doc('w', '/real/a.ts')!.state!.doc.toString()).toBe('again\n')
+    expect(files.status('w', '/real/a.ts')).toEqual({ dirty: false, notice: null, saveError: null })
+
+    disk.read = { kind: 'missing' }
+    await files.check()
+    expect(files.status('w', '/real/a.ts').notice).toBe('deleted')
+  })
+
+  it('a failed save keeps the tab dirty with the reason', async () => {
+    const { files, disk, type } = setup()
+    await files.open('w', ref('a.ts'))
+    type('x\n')
+    disk.writeResult = { ok: false, reason: 'failed', message: 'permission denied' }
+    expect(await files.save('w', '/real/a.ts')).toBe(false)
+    expect(files.status('w', '/real/a.ts')).toEqual({
+      dirty: true,
+      notice: null,
+      saveError: 'permission denied'
+    })
+  })
+
+  it('closing asks for each dirty tab in turn, stopping at Cancel', async () => {
+    const files = createEditorFiles(async (r) => text(`/real/${r.path}`), {
+      stat: async () => ({ kind: 'file', size: 2, mtimeMs: 1 }),
+      write: async () => ({ ok: true, base })
+    })
+    for (const p of ['a', 'b', 'c']) await files.open('w', ref(p))
+    const dirty = (id: string): void => {
+      const state = EditorState.create({ doc: 'a\n' })
+      files.edited('w', id, state.update({ changes: { from: 0, insert: 'x' } }).state)
+    }
+    dirty('/real/a')
+    dirty('/real/c')
+    files.askClose('w', ['/real/a', '/real/b', '/real/c'])
+    expect(files.closeQuestion()).toMatchObject({ id: '/real/a', name: 'a' })
+    await files.answerClose('discard')
+    // b was clean: closed at once; c asks.
+    expect(workspaceTabs(files.get(), 'w').tabs.map((t) => t.id)).toEqual(['/real/c'])
+    expect(files.closeQuestion()).toMatchObject({ id: '/real/c' })
+    await files.answerClose('cancel')
+    expect(files.closeQuestion()).toBeNull()
+    expect(workspaceTabs(files.get(), 'w').tabs.map((t) => t.id)).toEqual(['/real/c'])
+    files.askClose('w', ['/real/c'])
+    await files.answerClose('save')
+    expect(workspaceTabs(files.get(), 'w').tabs).toEqual([])
   })
 })

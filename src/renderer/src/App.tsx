@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
+import { unsavedFilesLine } from '../../core/editor-sync'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
@@ -47,7 +48,8 @@ import {
 } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import AgentSetupPage from './AgentSetupPage'
-import { editorFiles, useEditorTabs } from './editor-files'
+import { editorFiles, useDirtyCount, useEditorTabs } from './editor-files'
+import { startEditorChecks } from './editor-checks'
 import FileEditorView from './FileEditorView'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
@@ -177,12 +179,32 @@ function App(): React.JSX.Element {
     },
     [activeId, setViews]
   )
-  // The view's close button (D9): every tab closed, and the board.
+  // The view's close button (D9): every tab closed, asking for each dirty one first (D12).
   const closeEditor = useCallback(() => {
     if (!activeId) return
-    editorFiles.closeAll(activeId)
-    setViews((v) => forgetView(v, activeId))
-  }, [activeId, setViews])
+    editorFiles.askClose(
+      activeId,
+      workspaceTabs(editorFiles.get(), activeId).tabs.map((t) => t.id)
+    )
+  }, [activeId])
+  // A workspace's last tab closed (its ×, Close pane, the close button): its board (D14).
+  useEffect(
+    () =>
+      editorFiles.subscribe(() =>
+        setViews((v) => {
+          let next = v
+          for (const id of Object.keys(v)) {
+            if (showsFiles(v, id) && workspaceTabs(editorFiles.get(), id).tabs.length === 0) {
+              next = forgetView(next, id)
+            }
+          }
+          return next
+        })
+      ),
+    [setViews]
+  )
+  // Open files are checked for changes on disk (D13).
+  useEffect(() => startEditorChecks(), [])
   // A deleted workspace's tabs close (D3).
   const workspaceKey = workspaces.map((w) => w.id).join('\n')
   useEffect(() => {
@@ -709,6 +731,8 @@ function DeleteWorkspaceDialog({
   onCancel: () => void
 }): React.JSX.Element {
   const running = useRunningCount(workspace.cards)
+  // Its open files' unsaved edits go with it (#83 D12).
+  const unsaved = unsavedFilesLine(useDirtyCount(workspace.id))
   return (
     <ConfirmDialog
       title="Delete workspace"
@@ -717,6 +741,7 @@ function DeleteWorkspaceDialog({
         running,
         workspace.cards.filter((c) => c.worktree).length
       )}
+      detail={unsaved ?? undefined}
       confirmLabel="Delete"
       onCancel={onCancel}
       onConfirm={onConfirm}

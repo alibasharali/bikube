@@ -330,6 +330,7 @@ function Sidebar({
                   }
                   numbers={numbers}
                   files={{
+                    workspaceId: w.id,
                     tabs: workspaceTabs(editorTabs, w.id).tabs,
                     folder: w.directory,
                     currentId: fileShown?.workspaceId === w.id ? fileShown.tabId : null,

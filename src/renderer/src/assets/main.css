@@ -7172,6 +7172,44 @@ button.dev-server-chip:focus-visible {
   text-align: center;
 }
 
+/* A tab's or sidebar row's unsaved edits (#83 D4, D9). */
+.file-dirty-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.workspace-file .file-dirty-dot {
+  margin-left: auto;
+}
+
+/* The file changed or went on disk (#83 D13): a strip under the header, never a dialog. */
+.file-editor-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.file-editor-bar-text {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.file-editor-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* An open file's sidebar row (#83 D4): its file icon in place of a terminal's logo. */
 .workspace-file .workspace-terminal-kind {
   opacity: 1;

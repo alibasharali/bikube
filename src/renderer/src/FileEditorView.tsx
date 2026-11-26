@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { formatSize, type EditorFileRef } from '../../core/editor-files-types'
+import { isSaveKey, saveChangesQuestion, saveFailedLine } from '../../core/editor-sync'
 import { baseName, tabLabels, tabPath, workspaceTabs, type EditorTab } from '../../core/editor-tabs'
 import { keymapAction } from '../../core/keymap'
 import { openInEditorLabel } from '../../core/open-in-editor'
@@ -18,8 +19,19 @@ import {
 import type { Workspace } from '../../core/workspace-store'
 import { registerCardViewActions } from './card-view-actions'
 import { editorLook, useEditorLookStyle } from './editor-look'
-import { editorFiles, useEditorTabs, type EditorDoc } from './editor-files'
+import {
+  closeActiveTab,
+  editorFiles,
+  saveActiveTab,
+  useCloseQuestion,
+  useEditorStatus,
+  useEditorTabs,
+  type CloseQuestion,
+  type EditorDoc
+} from './editor-files'
+import DirtyDot from './DirtyDot'
 import FileIcon from './FileIcon'
+import Modal from './Modal'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
 import { currentKeymap, useSettings } from './settings'
@@ -50,20 +62,31 @@ function FileEditorView({
   const labels = tabLabels(tabs)
   const home = homeDir()
 
-  // The Back shortcut and the palette's Back row return to the board (D14).
-  const actions = useRef({ onBack })
+  // The Back shortcut and the palette's Back row return to the board; Close pane closes the tab
+  // in front, asking first when it is dirty (D14). Mod+S saves it (D12), before CodeMirror and the
+  // app's other handlers see the key.
+  const actions = useRef({ onBack, workspaceId: workspace.id })
   useEffect(() => {
-    actions.current = { onBack }
+    actions.current = { onBack, workspaceId: workspace.id }
   })
   useEffect(() => {
     const run = (action: string): void => {
       if (action === 'back') actions.current.onBack()
+      else if (action === 'closePane') closeActiveTab(actions.current.workspaceId)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (keymapAction(event, currentKeymap()) !== 'back' || dialogOpenIn(view)) return
+      if (isSaveKey(event, window.bikube.platform)) {
+        if (dialogOpenIn(view)) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat) void saveActiveTab(actions.current.workspaceId)
+        return
+      }
+      const action = keymapAction(event, currentKeymap())
+      if ((action !== 'back' && action !== 'closePane') || dialogOpenIn(view)) return
       event.preventDefault()
       event.stopPropagation()
-      if (!event.repeat) run('back')
+      if (!event.repeat) run(action)
     }
     view.addEventListener('keydown', onKeyDown, true)
     const unregister = registerCardViewActions(run)
@@ -96,6 +119,7 @@ function FileEditorView({
                 {labels[i].detail !== null && (
                   <span className="file-editor-tab-detail">{labels[i].detail}</span>
                 )}
+                <DirtyDot workspaceId={workspace.id} id={tab.id} testId="file-editor-tab-dirty" />
               </button>
               <button
                 type="button"
@@ -103,10 +127,7 @@ function FileEditorView({
                 data-testid="file-editor-tab-close"
                 aria-label={`Close ${labels[i].name}`}
                 title={`Close ${labels[i].name}`}
-                onClick={() => {
-                  editorFiles.close(workspace.id, tab.id)
-                  if (tabs.length === 1) onClose()
-                }}
+                onClick={() => editorFiles.askClose(workspace.id, [tab.id])}
               >
                 <X {...SMALL_ICON} />
               </button>
@@ -130,13 +151,64 @@ function FileEditorView({
         </Tooltip>
       </div>
       {active && <OpenFile key={active.id} workspace={workspace} tab={active} />}
+      <SaveChangesQuestion workspaceId={workspace.id} />
     </section>
+  )
+}
+
+/** `Save changes to <name>?` before a dirty tab closes (D12), for this workspace's tabs. */
+function SaveChangesQuestion({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
+  const question = useCloseQuestion()
+  if (!question || question.workspaceId !== workspaceId) return null
+  return <SaveChangesDialog key={question.id} question={question} />
+}
+
+function SaveChangesDialog({ question }: { question: CloseQuestion }): React.JSX.Element {
+  const answer = (choice: 'save' | 'discard' | 'cancel') => (): void =>
+    void editorFiles.answerClose(choice)
+  return (
+    <Modal
+      title="Unsaved changes"
+      onClose={answer('cancel')}
+      testId="save-changes-dialog"
+      initialFocus='[data-testid="save-changes-save"]'
+    >
+      <p className="modal-message">{saveChangesQuestion(question.name)}</p>
+      <div className="modal-actions">
+        <button
+          type="button"
+          className="btn"
+          data-testid="save-changes-cancel"
+          onClick={answer('cancel')}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-testid="save-changes-discard"
+          onClick={answer('discard')}
+        >
+          Discard
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="save-changes-save"
+          onClick={answer('save')}
+        >
+          Save
+        </button>
+      </div>
+    </Modal>
   )
 }
 
 /** The active tab: its header line and its file. */
 function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }): React.JSX.Element {
   const doc = editorFiles.doc(workspace.id, tab.id)
+  const status = useEditorStatus(workspace.id, tab.id)
+  const name = baseName(tab.id)
   const { editor } = useSettings()
   const [openError, setOpenError] = useState<{ text: string; note: boolean } | null>(null)
   const path = tabPath(tab.ref, workspace.directory, homeDir())
@@ -183,7 +255,50 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
           </button>
         </div>
       )}
-      <div className="file-editor-body" role="tabpanel" aria-label={baseName(tab.id)}>
+      {status.saveError !== null && (
+        <div className="files-error" role="alert" data-testid="file-editor-save-error">
+          <span className="files-error-text">{saveFailedLine(name, status.saveError)}</span>
+        </div>
+      )}
+      {status.notice === 'changed' && (
+        <div className="file-editor-bar" role="status" data-testid="file-editor-bar">
+          <span className="file-editor-bar-text">{name} changed on disk</span>
+          <div className="file-editor-bar-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="file-editor-reload"
+              onClick={() => void editorFiles.reload(workspace.id, tab.id)}
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="file-editor-keep-mine"
+              onClick={() => void editorFiles.keepMine(workspace.id, tab.id)}
+            >
+              Keep mine
+            </button>
+          </div>
+        </div>
+      )}
+      {status.notice === 'deleted' && !status.dirty && (
+        <div className="file-editor-bar" role="status" data-testid="file-editor-bar">
+          <span className="file-editor-bar-text">Deleted on disk</span>
+          <div className="file-editor-bar-actions">
+            <button
+              type="button"
+              className="btn btn-small"
+              data-testid="file-editor-bar-close"
+              onClick={() => editorFiles.askClose(workspace.id, [tab.id])}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="file-editor-body" role="tabpanel" aria-label={name}>
         {doc && <FileBody workspaceId={workspace.id} tab={tab} doc={doc} />}
       </div>
     </>
@@ -242,6 +357,12 @@ function languageFor(name: string): LanguageDescription | null {
 /** Every text tab's language: empty until its support has loaded. */
 const language = new Compartment()
 
+/** Read-only while a clean tab's file is deleted on disk (D13). */
+const readOnly = new Compartment()
+
+const readOnlyExtension = (on: boolean): Extension =>
+  on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []
+
 /** Whether `state` still has no language support. */
 function needsLanguage(state: EditorState): boolean {
   const current = language.get(state)
@@ -262,7 +383,14 @@ function CodeEditor({
   doc: EditorDoc
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
+  const live = useRef<EditorView | null>(null)
   const style = useEditorLookStyle()
+  const { dirty, notice } = useEditorStatus(workspaceId, tab.id)
+  const locked = notice === 'deleted' && !dirty
+  const lockedNow = useRef(locked)
+  useEffect(() => {
+    lockedNow.current = locked
+  })
   useEffect(() => {
     if (doc.read.kind !== 'text' || !host.current) return
     const state =
@@ -275,26 +403,44 @@ function CodeEditor({
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language.of([]),
+          readOnly.of(readOnlyExtension(lockedNow.current)),
           editorLook
         ]
       })
-    const editor = new EditorView({ state, parent: host.current })
-    let live = true
+    // Every edit reaches the store: the tab's dirty dot, and its text for a save (D12).
+    const editor = new EditorView({
+      state,
+      parent: host.current,
+      dispatchTransactions: (transactions, view) => {
+        view.update(transactions)
+        if (transactions.some((t) => t.docChanged)) {
+          editorFiles.edited(workspaceId, tab.id, view.state)
+        }
+      }
+    })
+    live.current = editor
+    const detach = editorFiles.attach(workspaceId, tab.id, editor)
+    let shown = true
     if (needsLanguage(state)) {
       void languageFor(baseName(tab.id))
         ?.load()
         .then((support) => {
-          if (live && needsLanguage(editor.state))
+          if (shown && needsLanguage(editor.state))
             editor.dispatch({ effects: language.reconfigure(support) })
         })
         .catch(() => undefined)
     }
     return () => {
-      live = false
+      shown = false
+      detach()
+      live.current = null
       editorFiles.keepState(workspaceId, tab.id, editor.state)
       editor.destroy()
     }
   }, [workspaceId, tab.id, doc])
+  useEffect(() => {
+    live.current?.dispatch({ effects: readOnly.reconfigure(readOnlyExtension(locked)) })
+  }, [locked, doc])
   return (
     <div
       ref={host}

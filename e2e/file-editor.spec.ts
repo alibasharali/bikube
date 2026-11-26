@@ -10,7 +10,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { backToBoard, expectCardOpen, NEW_SHELL } from './card-view'
+import { backToBoard, expectCardOpen, NEW_SHELL, SHORTCUTS } from './card-view'
 import { launchApp, newDataDir, removeDataDirs } from './launch'
 import { plainCards } from './plain-cards'
 
@@ -369,4 +369,162 @@ test('AC2, AC13: a card window keeps the external editor; editor IPC from it or 
     'own text'
   ])
   expect(readFileSync(target, 'utf8')).toBe('# Notes\n')
+})
+
+const darwin = process.platform === 'darwin'
+/** Mod+S (D12): fixed, not in Settings. */
+const SAVE = darwin ? 'Meta+s' : 'Control+s'
+const code = (): Locator => editor().locator('.cm-content')
+const tabDirty = (): Locator => editor().getByTestId('file-editor-tab-dirty')
+const rowDirty = (): Locator => fileRows().getByTestId('workspace-file-dirty')
+const bar = (): Locator => editor().getByTestId('file-editor-bar')
+const question = (): Locator => page.getByTestId('save-changes-dialog')
+
+/** Puts the cursor at the end of line `n` (1-based) of the open file. */
+async function cursorToLineEnd(n: number): Promise<void> {
+  await code()
+    .locator('.cm-line')
+    .nth(n - 1)
+    .click()
+  await page.keyboard.press('End')
+}
+
+/** Puts the cursor at the start of the open file. */
+async function cursorToStart(): Promise<void> {
+  await code().locator('.cm-line').first().click()
+  await page.keyboard.press(darwin ? 'Meta+ArrowUp' : 'Control+Home')
+}
+
+test('AC4: typing shows the dirty dot, Mod+S saves with the CRLF line endings kept', async () => {
+  writeFileSync(join(folder, 'crlf.ts'), 'one\r\ntwo\r\n')
+  await launch()
+  await openFromFiles('crlf.ts')
+  await expect(code()).toContainText('one')
+  await expect(tabDirty()).toHaveCount(0)
+  await expect(rowDirty()).toHaveCount(0)
+
+  await cursorToLineEnd(1)
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toBeVisible()
+  await expect(rowDirty()).toBeVisible()
+
+  await page.keyboard.press(SAVE)
+  await expect(tabDirty()).toHaveCount(0)
+  await expect(rowDirty()).toHaveCount(0)
+  await expect.poll(() => readFileSync(join(folder, 'crlf.ts'), 'utf8')).toBe('onex\r\ntwo\r\n')
+
+  // Undoing back to the saved text is dirty again (it differs from the disk), and typing it back
+  // clean.
+  await page.keyboard.press('Backspace')
+  await expect(tabDirty()).toBeVisible()
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toHaveCount(0)
+})
+
+test('AC5: Close pane on a dirty tab asks; Cancel keeps it, Discard closes it unchanged', async () => {
+  await launch()
+  const file = join(folder, 'src', 'a.ts')
+  await openFromFiles('src/a.ts')
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toBeVisible()
+
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(question()).toContainText('Save changes to a.ts?')
+  await question().getByTestId('save-changes-cancel').click()
+  await expect(question()).toHaveCount(0)
+  await expect(tabs()).toHaveCount(1)
+  await expect(tabDirty()).toBeVisible()
+
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await question().getByTestId('save-changes-discard').click()
+  await expect(editor()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(fileRows()).toHaveCount(0)
+  expect(readFileSync(file, 'utf8')).toBe("export const a = 'hello'\n")
+
+  // Save in the question writes it, then closes; a clean tab closes with no question.
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await fileRows().nth(0).click()
+  await cursorToStart()
+  await page.keyboard.type('y')
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await question().getByTestId('save-changes-save').click()
+  await expect(tabs()).toHaveCount(1)
+  await expect.poll(() => readFileSync(file, 'utf8')).toBe("yexport const a = 'hello'\n")
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(question()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(fileRows()).toHaveCount(0)
+})
+
+test('AC6: a clean tab reloads silently; a dirty one shows the bar with Keep mine and Reload', async () => {
+  await launch()
+  const file = join(folder, 'src', 'a.ts')
+  await openFromFiles('src/a.ts')
+  await expect(code()).toHaveText("export const a = 'hello'")
+
+  // Clean: the disk text within 4 s, with no bar.
+  writeFileSync(file, 'changed\n')
+  await expect(code()).toHaveText('changed', { timeout: 4000 })
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toHaveCount(0)
+
+  // Dirty: the bar, once; Keep mine then Mod+S writes the tab's text.
+  await cursorToStart()
+  await page.keyboard.type('x')
+  writeFileSync(file, 'outside text\n')
+  await expect(bar()).toHaveText(/a\.ts changed on disk/, { timeout: 4000 })
+  await expect(code()).toHaveText('xchanged')
+  await bar().getByTestId('file-editor-keep-mine').click()
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toBeVisible()
+  await page.keyboard.press(SAVE)
+  await expect(tabDirty()).toHaveCount(0)
+  await expect.poll(() => readFileSync(file, 'utf8')).toBe('xchanged\n')
+
+  // Reload: the disk text, the dot gone.
+  await cursorToStart()
+  await page.keyboard.type('y')
+  writeFileSync(file, 'from the disk\n')
+  await expect(bar()).toBeVisible({ timeout: 4000 })
+  await bar().getByTestId('file-editor-reload').click()
+  await expect(code()).toHaveText('from the disk')
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toHaveCount(0)
+
+  // A save right after an outside write, before any check: nothing written, the bar.
+  await cursorToStart()
+  await page.keyboard.type('z')
+  writeFileSync(file, 'sneaky write\n')
+  await page.keyboard.press(SAVE)
+  await expect(bar()).toBeVisible()
+  await expect(tabDirty()).toBeVisible()
+  await page.waitForTimeout(300)
+  expect(readFileSync(file, 'utf8')).toBe('sneaky write\n')
+})
+
+test('D12: deleting a workspace with dirty tabs names its unsaved files', async () => {
+  await launch()
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await backToBoard(page)
+  await page.getByTestId('workspace-toolbar').getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await expect(page.getByTestId('confirm-detail')).toHaveCount(0)
+  await page.getByTestId('confirm-cancel').click()
+
+  await fileRows().nth(0).click()
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await fileRows().nth(1).click()
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await backToBoard(page)
+  await page.getByTestId('workspace-toolbar').getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-detail')).toHaveText('2 unsaved files will be discarded')
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('empty-state')).toBeVisible()
+  expect(readFileSync(join(folder, 'b.md'), 'utf8')).toBe('# Notes\n')
 })

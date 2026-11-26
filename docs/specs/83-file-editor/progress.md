@@ -25,5 +25,5 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 ## Verification
 
 - Full checks: green except the known root-only updater test (typecheck, lint, Vitest 2382/2383, build, check-stack, prettier)
-- running
-- UX review: todo
+- done: verifier ALL PASS (AC1–AC13)
+- UX review: done (CLEAN; polish only)

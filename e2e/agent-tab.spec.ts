@@ -854,17 +854,72 @@ test('#75 AC10, AC11: What changed for the last prompt, the whole session and an
   )
 })
 
-test('#75 AC12: clicking a changed file opens it with the folder, as the Files tab does', async () => {
+/** A fake `code` on the fake login PATH logging each run; returns what it logged so far. */
+function fakeCode(): () => string[] {
   const log = join(root, 'editor.log')
   const code = join(fake.home, 'bin', 'code')
   writeFileSync(code, `#!/bin/sh\n{ echo "run code"; printf '%s\\n' "$@"; } >> '${log}'\n`)
   chmodSync(code, 0o755)
+  return () => (existsSync(log) ? readFileSync(log, 'utf8').trimEnd().split('\n') : [])
+}
+
+const editorView = (): Locator => page.getByTestId('file-editor')
+
+test('#83 AC10: a changed file inside the folder opens in the editor, no external editor', async () => {
+  // Outside the temp folders, whose files Files and artifacts leaves out (#79 D7).
+  outsideHome()
+  repo = join(fake.home, '..', 'repo')
+  mkdirSync(repo)
+  const runs = fakeCode()
+  mkdirSync(join(repo, 'src'), { recursive: true })
+  writeFileSync(join(repo, 'src', 'x.ts'), 'export const x = 1\n')
+  writeFileSync(join(repo, 'report.html'), '<p>report</p>\n')
+  await launch()
+  await createWorkspace(repo, 'repo')
+  await recordOpenPath(app!)
+  await agentTab().click()
+  await claudeCard('agent', [
+    userPrompt('Add x', 100),
+    toolUse(
+      'x1',
+      'Edit',
+      { file_path: join(repo, 'src/x.ts'), old_string: '1', new_string: '2' },
+      101
+    ),
+    bashResult('x1', 'The file has been updated.', 102),
+    ...writeFile('w1', join(repo, 'report.html'), 103)
+  ])
+  await expect.poll(shownChanges).toEqual(['./ report.html New +1 −0', 'src x.ts Edited +1 −1'])
+
+  // A Files and artifacts row inside the folder opens in the editor, not with the default app.
+  await outputRows().filter({ hasText: 'report.html' }).getByTestId('agent-output-open').click()
+  await expect(editorView()).toBeVisible()
+  await expect(editorView().getByTestId('file-editor-tab')).toHaveText(['report.html'])
+  await expect(editorView().locator('.cm-content')).toHaveText('<p>report</p>')
+
+  // The card again, then its What changed row.
+  await backToBoard(page)
+  await boardCard(page, 'agent').getByTestId('card-open').click()
+  await expectCardOpen(page, 'agent')
+  await changeRows().getByRole('button', { name: 'x.ts' }).click()
+  await expect(editorView()).toBeVisible()
+  await expect(editorView().getByTestId('file-editor-tab')).toHaveText(['report.html', 'x.ts'])
+  await expect(editorView().getByTestId('file-editor-path')).toHaveText('src/x.ts')
+  await expect(editorView().locator('.cm-content')).toHaveText('export const x = 1')
+  await expect(
+    page.getByTestId('sidebar').getByTestId('workspace-file').filter({ hasText: 'x.ts' })
+  ).toHaveCount(1)
+  await page.waitForTimeout(500)
+  expect(runs()).toEqual([])
+  expect(await openedPaths(app!)).toEqual([])
+})
+
+test("#75 AC12: in a card window a changed file opens with the folder, as that window's Files tab does", async () => {
+  const runs = fakeCode()
   mkdirSync(join(repo, 'docs'), { recursive: true })
   mkdirSync(join(repo, 'src'), { recursive: true })
   writeFileSync(join(repo, 'docs', 'x.md'), 'one\ntwo\n')
   writeFileSync(join(repo, 'src', 'c.ts'), 'c\n')
-  const runs = (): string[] =>
-    existsSync(log) ? readFileSync(log, 'utf8').trimEnd().split('\n') : []
 
   await launch()
   await createWorkspace(repo, 'repo')
@@ -888,11 +943,24 @@ test('#75 AC12: clicking a changed file opens it with the folder, as the Files t
   await expect.poll(shownChanges).toEqual(['src c.ts Deleted ', '/tmp elsewhere.txt Edited +1 −1'])
   await expect(changeRows().getByRole('button')).toHaveCount(0)
 
-  await changes().getByTestId('agent-changes-view').selectOption({ label: '#2 Rename b' })
-  const file = changeRows().filter({ hasText: 'x.md' }).getByRole('button', { name: 'x.md' })
-  await file.click()
+  // A card window has no editor view (#83 D2): there the row runs Settings > Editor.
+  const opened = app!.waitForEvent('window')
+  await page.getByTestId('titlebar-open-in-window').click()
+  const window = await opened
+  await expect(window.getByTestId('card-view')).toHaveAttribute('aria-label', 'agent')
+  const windowChanges = window
+    .getByTestId('side-panel')
+    .getByTestId('agent-tab-group')
+    .filter({ hasText: 'What changed' })
+  await windowChanges.getByTestId('agent-changes-view').selectOption({ label: '#2 Rename b' })
+  await windowChanges
+    .getByTestId('agent-change')
+    .filter({ hasText: 'x.md' })
+    .getByRole('button', { name: 'x.md' })
+    .click()
   await expect.poll(runs).toEqual(['run code', repo, join(repo, 'docs', 'x.md')])
-  await expect(changes().getByTestId('agent-changes-open-error')).toHaveCount(0)
+  await expect(windowChanges.getByTestId('agent-changes-open-error')).toHaveCount(0)
+  await expect(page.getByTestId('file-editor')).toHaveCount(0)
 })
 
 // #77: What changed and Commands show their first 10 rows, the rest behind Show all.

@@ -12,7 +12,7 @@ import type {
   EditorWriteResult
 } from '../core/editor-files-types'
 import { IPC } from '../shared/api'
-import { listed } from './agent-setup'
+import { listed, loadListing } from './agent-setup'
 import { appWindow } from './card-windows'
 
 /**
@@ -43,12 +43,12 @@ const writing = new Map<string, Promise<unknown>>()
 export function registerEditorFiles(): void {
   ipcMain.handle(IPC.editorRead, (event, ref: unknown): Promise<EditorReadResult> => {
     fromMainWindow(event, IPC.editorRead)
-    return readEditorFile(ref, { listed })
+    return readEditorFile(ref, { listed, loadListing })
   })
 
   ipcMain.handle(IPC.editorStat, (event, ref: unknown): Promise<EditorStatResult> => {
     fromMainWindow(event, IPC.editorStat)
-    return statEditorFile(ref, { listed })
+    return statEditorFile(ref, { listed, loadListing })
   })
 
   ipcMain.handle(
@@ -60,7 +60,9 @@ export function registerEditorFiles(): void {
       // One queue per named file however it is spelled (`a/../b.txt` and `b.txt`).
       const key = parsed.kind === 'folder' ? resolve(parsed.folder, parsed.path) : parsed.path
       const before = writing.get(key) ?? Promise.resolve()
-      const next = before.catch(() => undefined).then(() => writeEditorFile(ref, write, { listed }))
+      const next = before
+        .catch(() => undefined)
+        .then(() => writeEditorFile(ref, write, { listed, loadListing }))
       writing.set(key, next)
       next
         .finally(() => {

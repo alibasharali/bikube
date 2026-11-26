@@ -4,6 +4,7 @@
  * with a `Doc` or `Page` badge when known. No Node imports.
  */
 
+import { normalizePath } from './agent-file-changes'
 import type { AgentOutput } from './agent-summary'
 import { portableDirectory } from './sync-file'
 
@@ -43,4 +44,15 @@ export function outputRows(outputs: AgentOutput[] | undefined, home: string): Ou
             badge: output.type ? BADGES[output.type] : null
           }
     )
+}
+
+/**
+ * `path` relative to `folder` when it is an absolute, normalized path inside it, else null: such a
+ * file opens in the editor, any other the way it did before (#83 D5).
+ */
+export function pathInFolder(folder: string, path: string): string | null {
+  if (!folder.startsWith('/') || !path.startsWith('/') || normalizePath(path) !== path) return null
+  const root = normalizePath(folder)
+  const prefix = root === '/' ? '/' : `${root}/`
+  return path.startsWith(prefix) && path.length > prefix.length ? path.slice(prefix.length) : null
 }

@@ -72,7 +72,13 @@ const nodeFs: EditorFs = {
 
 export interface EditorFileDeps {
   /** The files Agent setup's last read of each folder listed (D6's `listed` references). */
-  listed: Pick<ListedPaths, 'has'>
+  listed: Pick<ListedPaths, 'has' | 'knows'>
+  /**
+   * Reads Agent setup for a folder with no listing yet, filling `listed` (main's `agentSetup:read`
+   * path): after a restart a restored draft's listed reference is checked against a fresh read
+   * rather than refused (D11). Called once per folder until it has a listing; a failure refuses.
+   */
+  loadListing?: (folder: string) => Promise<void>
   fs?: EditorFs
 }
 
@@ -117,6 +123,25 @@ export function parseEditorWrite(value: unknown): EditorWrite | null {
 }
 
 /**
+ * Whether Agent setup's last read of the listed reference's folder listed its path (D6), reading
+ * the folder first when it has no listing yet (`loadListing`); a failed read refuses.
+ */
+async function isListed(
+  ref: Extract<EditorFileRef, { kind: 'listed' }>,
+  deps: EditorFileDeps
+): Promise<boolean> {
+  const folder = resolve(ref.folder)
+  if (!deps.listed.knows(folder) && deps.loadListing) {
+    try {
+      await deps.loadListing(folder)
+    } catch {
+      return false
+    }
+  }
+  return deps.listed.has(ref.folder, ref.path)
+}
+
+/**
  * The real path of the file `ref` names (D6), `missing` when it doesn't exist, `refused` when the
  * reference is malformed, escapes its folder, isn't listed or names anything but a regular file.
  * Nothing is read before the checks pass.
@@ -145,7 +170,7 @@ async function resolveRef(
     }
     if (!within(rootReal, real)) return 'refused'
   } else {
-    if (!deps.listed.has(ref.folder, ref.path)) return 'refused'
+    if (!(await isListed(ref, deps))) return 'refused'
     try {
       real = await fs.realpath(ref.path)
     } catch (error) {
@@ -184,7 +209,7 @@ async function resolveNewFile(
       return 'refused'
     }
   } else {
-    if (!deps.listed.has(ref.folder, ref.path)) return 'refused'
+    if (!(await isListed(ref, deps))) return 'refused'
     named = ref.path
   }
   let parent: string

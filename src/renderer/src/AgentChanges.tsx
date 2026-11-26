@@ -10,18 +10,20 @@ import {
   type ChangesShown
 } from '../../core/agent-changes'
 import type { AgentSummary } from '../../core/agent-summary'
-import { isOpenNote, openErrorLine } from '../../core/open-result'
+import { isOpenNote, openErrorLine, type OpenResult } from '../../core/open-result'
 import { SMALL_ICON } from './icons'
 import { ShowAllButton } from './ShowAllButton'
 
 /**
  * What changed (#75 D9): the view select, `<n> files · +a −r`, the files grouped by folder with
- * their badges and sizes, a file inside the folder opening through the Files tab's `files:open`;
+ * their badges and sizes, a file inside the folder opening in the editor (`openInEditor`, #83 D5)
+ * or, without one (a card window), through the Files tab's `files:open`;
  * `groups` is `shown`'s cut unless every file shows (#77 C1, C3).
  */
 export function ChangesList({
   summary,
   folder,
+  openInEditor,
   view,
   onView,
   shown,
@@ -32,6 +34,8 @@ export function ChangesList({
 }: {
   summary: AgentSummary
   folder: string
+  /** Opens a path relative to `folder` in the editor; absent in a card window. */
+  openInEditor?: (path: string) => Promise<OpenResult>
   view: ChangeView
   onView: (view: ChangeView) => void
   shown: ChangesShown
@@ -46,7 +50,8 @@ export function ChangesList({
   const open = (path: string): void => {
     const at = ++opens.current
     setOpenError(null)
-    void window.bikube.files.open(folder, path).then((result) => {
+    const request = openInEditor ? openInEditor(path) : window.bikube.files.open(folder, path)
+    void request.then((result) => {
       if (at !== opens.current) return
       const text = openErrorLine(path, result)
       setOpenError(text === null ? null : { text, note: isOpenNote(result) })

@@ -1,6 +1,6 @@
 import { FolderOpen, Link, X } from 'lucide-react'
 import { useRef, useState } from 'react'
-import type { OutputRow } from '../../core/agent-outputs-view'
+import { pathInFolder, type OutputRow } from '../../core/agent-outputs-view'
 import { isOpenNote, listedFileErrorLine, type OpenResult } from '../../core/open-result'
 import FileIcon from './FileIcon'
 import { SMALL_ICON } from './icons'
@@ -9,10 +9,13 @@ import { ShowAllButton } from './ShowAllButton'
 /**
  * Files and artifacts (#79 D3, D4, D11): the session's documents and claude.ai links, newest
  * first; a file opens with the default app and reveals in the file manager through main, which
- * acts only on what the session's last summary listed (D10); an artifact opens its link.
+ * acts only on what the session's last summary listed (D10), except that in the main window a file
+ * inside the card's or shell's folder opens in the editor (#83 D5); an artifact opens its link.
  */
 export function OutputsList({
   sessionId,
+  folder,
+  openInEditor,
   rows,
   more,
   all,
@@ -20,6 +23,10 @@ export function OutputsList({
 }: {
   /** The session the summary was read for: main checks a path against its last summary. */
   sessionId: string
+  /** The card's or shell's folder: a file inside it opens in the editor. */
+  folder: string
+  /** Opens a path relative to `folder` in the editor; absent in a card window. */
+  openInEditor?: (path: string) => Promise<OpenResult>
   /** The rows shown: the newest 10 unless every row shows (D3). */
   rows: OutputRow[]
   /** The rows the cut leaves out. */
@@ -38,7 +45,15 @@ export function OutputsList({
       setOpenError(text === null ? null : { text, note: isOpenNote(result) })
     })
   }
-  const open = (path: string): void => act(path, window.bikube.agentTab.openOutput(sessionId, path))
+  const open = (path: string): void => {
+    const inside = openInEditor ? pathInFolder(folder, path) : null
+    act(
+      path,
+      openInEditor && inside !== null
+        ? openInEditor(inside)
+        : window.bikube.agentTab.openOutput(sessionId, path)
+    )
+  }
   const reveal = (path: string): void =>
     act(
       path,

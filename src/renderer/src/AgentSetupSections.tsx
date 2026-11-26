@@ -40,7 +40,7 @@ import {
   type PluginEntry
 } from '../../core/agent-setup-snapshot'
 import type { ConfigRow, McpServerRow } from '../../core/agent-setup-rows'
-import { isOpenNote, listedFileErrorLine } from '../../core/open-result'
+import { isOpenNote, listedFileErrorLine, type OpenResult } from '../../core/open-result'
 import type { Workspace } from '../../core/workspace-store'
 import {
   keepConversations,
@@ -52,6 +52,7 @@ import {
   useClaudeVersion
 } from './agent-setup-data'
 import { SectionIcon } from './agent-setup-icons'
+import { editorFiles } from './editor-files'
 import { useClaudeRetention } from './claude-retention'
 import { SMALL_ICON } from './icons'
 import { useSettings } from './settings'
@@ -147,14 +148,17 @@ const FileActionsContext = createContext<FileActionsScope | null>(null)
 
 /**
  * Gives the rows inside it their Open file and Reveal (D27) for the workspace folder `folder`, and
- * shows the last open's or reveal's failure as the Files tab does (`Couldn't open <file name>:
+ * shows the last open's or reveal's failure (Open file opens the listed file in a tab of
+ * `workspaceId`'s editor, editable, as a `listed` reference, #83 D5, D6) as the Files tab does (`Couldn't open <file name>:
  * <reason>`), a refused one as `file not found`.
  */
 export function FileActionsProvider({
+  workspaceId,
   folder,
   snapshot,
   children
 }: {
+  workspaceId: string
   folder: string
   snapshot: AgentSetupSnapshot
   children: React.ReactNode
@@ -171,11 +175,16 @@ export function FileActionsProvider({
       open: (file) => {
         const at = ++opens.current
         setError(null)
-        void window.bikube.agentSetup.openFile(folder, file).then((result) => {
-          if (at !== opens.current) return
-          const text = listedFileErrorLine(file, result)
-          setError(text === null ? null : { text, note: isOpenNote(result) })
-        })
+        void editorFiles
+          .open(workspaceId, { kind: 'listed', folder, path: file })
+          .then((opened): OpenResult =>
+            opened === 'opened' ? { ok: true } : { ok: false, reason: 'refused' }
+          )
+          .then((result) => {
+            if (at !== opens.current) return
+            const text = listedFileErrorLine(file, result)
+            setError(text === null ? null : { text, note: isOpenNote(result) })
+          })
       },
       reveal: (file) => {
         const at = ++opens.current
@@ -190,7 +199,7 @@ export function FileActionsProvider({
         })
       }
     }),
-    [folder, paths]
+    [workspaceId, folder, paths]
   )
   return (
     <FileActionsContext.Provider value={scope}>

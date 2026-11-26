@@ -185,6 +185,51 @@ describe('readEditorFile', () => {
     rmSync(settings)
     expect(await readEditorFile(listedRef, { listed })).toEqual({ kind: 'missing' })
   })
+
+  it("reads a folder's setup first when it has no listing yet (a draft after a restart)", async () => {
+    const settings = join(dir, 'settings.json')
+    writeFileSync(settings, '{}\n')
+    const loads: string[] = []
+    const loadListing = async (folder: string): Promise<void> => {
+      loads.push(folder)
+      listed.set(folder, [settings])
+    }
+    const listedRef: EditorFileRef = { kind: 'listed', folder: `${root}/`, path: settings }
+    expect(await readEditorFile(listedRef, { listed, loadListing })).toMatchObject({
+      kind: 'text'
+    })
+    expect(await statEditorFile(listedRef, { listed, loadListing })).toMatchObject({
+      kind: 'file'
+    })
+    // Read once: the folder's listing then stands until its next read, even when it lists nothing.
+    expect(loads).toEqual([root])
+    listed.set(root, [])
+    expect(await readEditorFile(listedRef, { listed, loadListing })).toEqual({ kind: 'refused' })
+    expect(loads).toEqual([root])
+  })
+
+  it('refuses a listed file whose first read failed, and loads nothing for a malformed one', async () => {
+    const settings = join(dir, 'settings.json')
+    writeFileSync(settings, '{}\n')
+    const loads: string[] = []
+    const failing = async (folder: string): Promise<void> => {
+      loads.push(folder)
+      throw new Error('not a directory')
+    }
+    expect(
+      await readEditorFile(
+        { kind: 'listed', folder: root, path: settings },
+        { listed, loadListing: failing }
+      )
+    ).toEqual({ kind: 'refused' })
+    expect(
+      await readEditorFile(
+        { kind: 'listed', folder: root, path: `${root}/../settings.json` },
+        { listed, loadListing: failing }
+      )
+    ).toEqual({ kind: 'refused' })
+    expect(loads).toEqual([root])
+  })
 })
 
 describe('statEditorFile', () => {

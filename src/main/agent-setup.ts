@@ -49,6 +49,42 @@ const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
 }
 
 /**
+ * Reads `folder`'s Claude Code setup (an existing directory), filling `listed` with the files it
+ * found; one read per folder however it is spelled (`/a` and `/a/`), shared by requests made
+ * during it.
+ */
+function readFolderSetup(requested: string): Promise<AgentSetupRead> {
+  const folder = resolve(requested)
+  let read = reading.get(folder)
+  if (!read) {
+    const home = userHome()
+    read = Promise.all([
+      readAgentSetup({ folder, home, bikubeSettings: claudeSettingsPath() }),
+      // #80 D7: the warning follows D3's read, which tells a link from a file.
+      readClaudeRetention(home)
+    ])
+      .then(([snapshot, claudeRetention]): AgentSetupRead => {
+        listed.set(folder, snapshot.paths)
+        return { ok: true, snapshot: { ...snapshot, claudeRetention } }
+      })
+      .finally(() => reading.delete(folder))
+    reading.set(folder, read)
+  }
+  return read
+}
+
+/**
+ * Fills `listed` for a folder no Agent setup read has listed yet (#83 D6, D11): a draft restored
+ * after a restart names a listed file before the page has read its folder again. Throws for a
+ * folder that isn't an existing directory, which the editor then refuses.
+ */
+export async function loadListing(folder: string): Promise<void> {
+  if (!(await isDirectory(folder))) throw new Error('not a directory')
+  const read = await readFolderSetup(folder)
+  if (!read.ok) throw new Error('not read')
+}
+
+/**
  * The Agent setup page's reads (#68 D8, D13, D26, D28): `agentSetup:read` reads a workspace
  * folder's Claude Code setup with the user's home (`BIKUBE_HOME_DIR`, else the OS home, as sync
  * does) and Bikube's own Claude Code settings file; `agentSetup:claudeVersion` runs
@@ -85,24 +121,7 @@ export function registerAgentSetup(
     if (typeof requested !== 'string' || !(await isDirectory(requested))) {
       return { ok: false, reason: 'not-directory' }
     }
-    // One read per folder however it is spelled (`/a` and `/a/`).
-    const folder = resolve(requested)
-    let read = reading.get(folder)
-    if (!read) {
-      const home = userHome()
-      read = Promise.all([
-        readAgentSetup({ folder, home, bikubeSettings: claudeSettingsPath() }),
-        // #80 D7: the warning follows D3's read, which tells a link from a file.
-        readClaudeRetention(home)
-      ])
-        .then(([snapshot, claudeRetention]): AgentSetupRead => {
-          listed.set(folder, snapshot.paths)
-          return { ok: true, snapshot: { ...snapshot, claudeRetention } }
-        })
-        .finally(() => reading.delete(folder))
-      reading.set(folder, read)
-    }
-    return read
+    return readFolderSetup(requested)
   })
 
   ipcMain.handle(

@@ -9,6 +9,7 @@ import {
 } from '../../core/side-panel'
 import type { Card } from '../../core/workspace-store'
 import AgentTab from './AgentTab'
+import { editorFiles } from './editor-files'
 import FilesTab from './FilesTab'
 import { PanelTabs, PanelToggle } from './PanelTabs'
 import { setPanelDragWidth, usePanelWidth, useWindowWidth } from './panel-width'
@@ -140,7 +141,18 @@ function SidePanel({
           <FilesTab
             folder={folder}
             ssh={ssh}
-            onOpenFile={(path) => window.bikube.files.open(folder, path)}
+            onOpenFile={
+              // The main window opens a file in its editor (#83 D5); a card window, which has
+              // none, in the external editor.
+              view === window
+                ? (path) =>
+                    editorFiles
+                      .open(workspaceId, { kind: 'folder', folder, path })
+                      .then((opened) =>
+                        opened === 'opened' ? { ok: true } : { ok: false, reason: 'refused' }
+                      )
+                : (path) => window.bikube.files.open(folder, path)
+            }
           />
         )}
         {tab === 'shells' && workspace && (

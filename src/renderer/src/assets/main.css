@@ -6990,3 +6990,165 @@ button.dev-server-chip:focus-visible {
   max-width: 100%;
   white-space: normal;
 }
+
+/* The file editor (#83 D2, D8, D9): the tab strip, the header line, then the file on the
+   terminal's background. The chrome uses the app theme's tokens; the code the terminal's look. */
+.file-editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.file-editor-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The tabs scroll sideways inside the strip when they don't fit. */
+.file-editor-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.file-editor-tab {
+  flex: none;
+  display: flex;
+  align-items: center;
+  max-width: 240px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--text-muted);
+}
+
+.file-editor-tab:hover {
+  background: var(--surface-hover);
+}
+
+.file-editor-tab.active {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.file-editor-tab-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.file-editor-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-editor-tab-detail {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* × shows on hover, on keyboard focus and on the active tab (D9). */
+.file-editor-tab-close {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+}
+
+.file-editor-tab:hover .file-editor-tab-close,
+.file-editor-tab:focus-within .file-editor-tab-close,
+.file-editor-tab.active .file-editor-tab-close {
+  opacity: 1;
+}
+
+.file-editor-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.file-editor-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.file-editor-open-external {
+  flex: none;
+  white-space: nowrap;
+}
+
+.file-editor-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* CodeMirror fills the body and scrolls inside it. */
+.file-editor-code {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--editor-bg);
+}
+
+.file-editor-picture {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  overflow: auto;
+}
+
+.file-editor-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.file-editor-message {
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  text-align: center;
+}
+
+/* An open file's sidebar row (#83 D4): its file icon in place of a terminal's logo. */
+.workspace-file .workspace-terminal-kind {
+  opacity: 1;
+}

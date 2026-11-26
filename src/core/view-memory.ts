@@ -1,10 +1,11 @@
 /**
  * Each workspace's view for this run of the app (#31 D19): the card open at full size in it, its
- * Agent setup page (#68 D3), or none for its board. Which workspaces have Agent setup open (listed
+ * Agent setup page (#68 D3), its file editor (#83 D2: which tabs are open is App's), or none for its board. Which workspaces have Agent setup open (listed
  * in the sidebar until closed) is App's `openSetups`, apart from what each shows. Runtime only: never saved or synced, so after
  * a restart every workspace shows its board.
  */
-export type WorkspaceViewEntry = { kind: 'card'; cardId: string } | { kind: 'agentSetup' }
+export type WorkspaceViewEntry =
+  { kind: 'card'; cardId: string } | { kind: 'agentSetup' } | { kind: 'files' }
 
 export type ViewMemory = Readonly<Record<string, WorkspaceViewEntry>>
 
@@ -23,6 +24,11 @@ export function showsAgentSetup(views: ViewMemory, workspaceId: string): boolean
   return Object.hasOwn(views, workspaceId) && views[workspaceId].kind === 'agentSetup'
 }
 
+/** Whether `workspaceId`'s view is its file editor (#83 D2). */
+export function showsFiles(views: ViewMemory, workspaceId: string): boolean {
+  return Object.hasOwn(views, workspaceId) && views[workspaceId].kind === 'files'
+}
+
 /** Opening a card on a board replaces that workspace's remembered card or Agent setup. */
 export function rememberCard(views: ViewMemory, workspaceId: string, cardId: string): ViewMemory {
   return { ...views, [workspaceId]: { kind: 'card', cardId } }
@@ -31,6 +37,11 @@ export function rememberCard(views: ViewMemory, workspaceId: string, cardId: str
 /** Opening Agent setup replaces that workspace's remembered card, as opening a card would (D2). */
 export function rememberAgentSetup(views: ViewMemory, workspaceId: string): ViewMemory {
   return { ...views, [workspaceId]: { kind: 'agentSetup' } }
+}
+
+/** Opening a file shows the file editor in place of the card or Agent setup (#83 D2). */
+export function rememberFiles(views: ViewMemory, workspaceId: string): ViewMemory {
+  return { ...views, [workspaceId]: { kind: 'files' } }
 }
 
 /** The workspace goes back to its board: Back, or its open card stopped. */
@@ -69,8 +80,8 @@ export function selectWorkspace(
 /**
  * The views once `workspaceId` becomes active, however that happened: its remembered card is
  * kept only while it is still one of `cardIds` (null when the workspace is gone) and running, so
- * a workspace never comes back to a Stopped or missing card. Agent setup is kept while the
- * workspace exists.
+ * a workspace never comes back to a Stopped or missing card. Agent setup and the file editor are
+ * kept while the workspace exists.
  */
 export function enterWorkspace(
   views: ViewMemory,
@@ -79,7 +90,7 @@ export function enterWorkspace(
   isRunning: (cardId: string) => boolean
 ): ViewMemory {
   if (!Object.hasOwn(views, workspaceId)) return views
-  if (showsAgentSetup(views, workspaceId)) {
+  if (showsAgentSetup(views, workspaceId) || showsFiles(views, workspaceId)) {
     return cardIds === null ? forgetView(views, workspaceId) : views
   }
   const cardId = openedCard(views, workspaceId)

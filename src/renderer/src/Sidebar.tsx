@@ -30,6 +30,7 @@ import {
 } from './workspace-drag'
 import WorkspaceBadge from './WorkspaceBadge'
 import WorkspaceTerminals from './WorkspaceTerminals'
+import { workspaceTabs, type EditorTabsMemory } from '../../core/editor-tabs'
 
 interface SidebarProps {
   workspaces: Workspace[]
@@ -54,6 +55,12 @@ interface SidebarProps {
   onOpenAgentSetup: (id: string) => void
   /** The numbers a held modifier would pick with a digit, shown on the rows. */
   heldNumbers: HeldNumbers
+  /** Every workspace's open files (#83 D3), each a row under its workspace (D4). */
+  editorTabs: EditorTabsMemory
+  /** The file editor's tab in front, its row marked current; null while none shows. */
+  fileShown: { workspaceId: string; tabId: string } | null
+  /** Shows a file's tab in its workspace's editor, from its row. */
+  onOpenFileTab: (workspaceId: string, tabId: string) => void
 }
 
 /**
@@ -76,6 +83,9 @@ function Sidebar({
   agentSetupIds,
   agentSetupShown,
   onOpenAgentSetup,
+  editorTabs,
+  fileShown,
+  onOpenFileTab,
   heldNumbers
 }: SidebarProps): React.JSX.Element {
   // Where a workspace dragged over the list would land (#32 D4), or null.
@@ -319,6 +329,12 @@ function Sidebar({
                       : null
                   }
                   numbers={numbers}
+                  files={{
+                    tabs: workspaceTabs(editorTabs, w.id).tabs,
+                    folder: w.directory,
+                    currentId: fileShown?.workspaceId === w.id ? fileShown.tabId : null,
+                    onOpen: (tabId) => onOpenFileTab(w.id, tabId)
+                  }}
                 />
               )}
             </li>

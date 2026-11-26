@@ -60,6 +60,7 @@ function makeRepo(dir: string): void {
 }
 
 test.beforeEach(() => {
+  filesPage = undefined
   dataDir = newDataDir()
   root = mkdtempSync(join(tmpdir(), 'bikube-panel-'))
   repo = join(root, 'repo')
@@ -470,7 +471,13 @@ test.describe('over SSH', () => {
 
 // The Files tab's tree (#55 S2): the card's folder, lazily listed, ignored entries dimmed.
 
-const filesTab = (): Locator => panel().getByTestId('files-tab')
+/**
+ * The window whose Files tab the tests use: the main window, or the card window a test about the
+ * external editor opens (#83 D5: the main window opens files in its own editor).
+ */
+let filesPage: Page | undefined
+const filesTab = (): Locator =>
+  (filesPage ?? page).getByTestId('side-panel').getByTestId('files-tab')
 /** The tree's row for `path` (relative, `''` for the root row). */
 const row = (path: string): Locator =>
   filesTab().locator(`[data-testid=files-row][data-path="${path}"]`)
@@ -757,6 +764,20 @@ function editorEnv(commands: string[]): Record<string, string> {
 }
 
 /** `recordOpenPath` (`e2e/editors.ts`) on this test's app. */
+/**
+ * Opens `repo` with card `c1` in its own window, whose Files tab runs the external editor on a
+ * double-click or Enter (#83 D5); the tests then use that window's Files tab.
+ */
+async function openC1InWindow(launchEnv?: Record<string, string>): Promise<void> {
+  await openC1(launchEnv)
+  await backToBoard(page)
+  const opened = app!.waitForEvent('window')
+  await boardCard(page, 'c1').getByTestId('card-menu').click()
+  await page.getByTestId('card-menu-open-window').click()
+  filesPage = await opened
+  await expect(filesTab()).toBeVisible()
+}
+
 const recordOpenPath = (error = ''): Promise<void> => recordOpenPathIn(app!, error)
 const openedPaths = (): Promise<string[]> => openedPathsIn(app!)
 
@@ -765,8 +786,8 @@ const editorRuns = (): string[] =>
   existsSync(editorLog()) ? readFileSync(editorLog(), 'utf8').trimEnd().split('\n') : []
 const openError = (): Locator => filesTab().getByTestId('files-open-error')
 
-test('#55 AC13: double-click or Enter opens a file in VS Code with the folder; a folder only toggles', async () => {
-  await openC1(editorEnv(['code']))
+test('#55 AC13: in a card window, double-click or Enter opens a file in VS Code with the folder; a folder only toggles', async () => {
+  await openC1InWindow(editorEnv(['code']))
   await row('src').dblclick()
   await expect(row('src/a.ts')).toBeVisible()
   await expect(row('src')).toHaveAttribute('aria-expanded', 'true')
@@ -780,7 +801,7 @@ test('#55 AC13: double-click or Enter opens a file in VS Code with the folder; a
   // Enter on the selected file does the same.
   await row('src/b.ts').click()
   await expect(row('src/b.ts')).toHaveAttribute('aria-selected', 'true')
-  await page.keyboard.press('Enter')
+  await filesPage!.keyboard.press('Enter')
   await expect
     .poll(editorRuns)
     .toEqual([
@@ -802,7 +823,7 @@ test('#55 AC13: double-click or Enter opens a file in VS Code with the folder; a
 
 test('#55 AC14: a custom command from Settings > Editor opens the file; a missing editor shows why', async () => {
   test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
-  await openC1(editorEnv(['fake-editor']))
+  await openC1InWindow(editorEnv(['fake-editor']))
   await recordOpenPath()
   // VS Code is the default, and it isn't installed here: the default app opens it (#70 D3).
   await row('src').dblclick()
@@ -847,7 +868,7 @@ test("#70 AC1: VS Code's bundle CLI opens the file when no code is on the login 
   test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
   const env = editorEnv([])
   fakeEditor(bundleCode())
-  await openC1(env)
+  await openC1InWindow(env)
   await recordOpenPath()
   await row('src').dblclick()
   await row('src/a.ts').dblclick()
@@ -860,7 +881,7 @@ test("#70 AC1: VS Code's bundle CLI opens the file when no code is on the login 
 
 test('#70 AC4: an editor found nowhere opens the file with the default app, with a note; its failure the error', async () => {
   test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
-  await openC1(editorEnv([]))
+  await openC1InWindow(editorEnv([]))
   await recordOpenPath()
   await row('src').dblclick()
   await row('src/a.ts').dblclick()
@@ -913,4 +934,6 @@ test('#55 D13: a deleted file opens nothing', async () => {
   await page.waitForTimeout(500)
   expect(editorRuns()).toEqual([])
   await expect(openError()).toHaveCount(0)
+  // Nor in the editor (#83 D5).
+  await expect(page.getByTestId('file-editor')).toHaveCount(0)
 })

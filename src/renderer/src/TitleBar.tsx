@@ -14,6 +14,8 @@ import { portableDirectory as displayPath } from '../../core/sync-file'
 import { windowTitle } from '../../core/window-title'
 import { listedShellCards } from '../../core/workspace-shells'
 import type { Card, Workspace } from '../../core/workspace-store'
+import { baseName, type EditorTab } from '../../core/editor-tabs'
+import FileIcon from './FileIcon'
 import { BranchChip } from './BranchMenu'
 import { ToolIcon } from './AgentLogo'
 import { StartupTag } from './CardItem'
@@ -42,6 +44,7 @@ function TitleBar({
   card,
   isShell = false,
   agentSetup = false,
+  file = null,
   onNewShell,
   onBack
 }: {
@@ -49,6 +52,8 @@ function TitleBar({
   onNewShell: () => void
   /** The workspace shows its Agent setup page (#68 D3). */
   agentSetup?: boolean
+  /** The file editor's tab in front (#83 D2), else null. */
+  file?: EditorTab | null
   /** The open terminal is one of the workspace's shells, not a card. */
   isShell?: boolean
   collapsed: boolean
@@ -57,9 +62,13 @@ function TitleBar({
   workspace: Workspace | null | undefined
   card: Card | null
 }): React.JSX.Element {
-  const title = windowTitle(workspace, card ?? (agentSetup ? { title: AGENT_SETUP } : null))
-  // Back goes to the board from an open card or the Agent setup page alike.
-  const away = card !== null || agentSetup
+  const fileName = file ? baseName(file.id) : null
+  const title = windowTitle(
+    workspace,
+    card ?? (agentSetup ? { title: AGENT_SETUP } : fileName ? { title: fileName } : null)
+  )
+  // Back goes to the board from an open card, the Agent setup page or the file editor alike.
+  const away = card !== null || agentSetup || fileName !== null
   // The branch where what is shown runs, and where the branch menu acts (#33 D2): an open worktree
   // card's own directory, else the workspace's folder. Local workspaces only (D11).
   const local = workspace && workspace.host === undefined ? workspace : null
@@ -103,6 +112,15 @@ function TitleBar({
                 <Blocks {...ICON} className="titlebar-agent-setup-icon" />
                 <span className="titlebar-current" data-testid="titlebar-agent-setup-title">
                   {AGENT_SETUP}
+                </span>
+              </>
+            )}
+            {fileName !== null && (
+              <>
+                <ChevronRight {...ICON} className="titlebar-separator" />
+                <FileIcon name={fileName} kind="file" />
+                <span className="titlebar-current" data-testid="titlebar-file">
+                  {fileName}
                 </span>
               </>
             )}

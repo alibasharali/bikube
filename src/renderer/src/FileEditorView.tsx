@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
@@ -26,11 +26,14 @@ import {
   useCloseQuestion,
   useEditorStatus,
   useEditorTabs,
+  useMarkdownMode,
   type CloseQuestion,
-  type EditorDoc
+  type EditorDoc,
+  type MarkdownMode
 } from './editor-files'
 import DirtyDot from './DirtyDot'
 import FileIcon from './FileIcon'
+import MarkdownPreview from './MarkdownPreview'
 import Modal from './Modal'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
@@ -208,6 +211,7 @@ function SaveChangesDialog({ question }: { question: CloseQuestion }): React.JSX
 function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }): React.JSX.Element {
   const doc = editorFiles.doc(workspace.id, tab.id)
   const status = useEditorStatus(workspace.id, tab.id)
+  const mode = useMarkdownMode(workspace.id, tab.id)
   const name = baseName(tab.id)
   const { editor } = useSettings()
   const [openError, setOpenError] = useState<{ text: string; note: boolean } | null>(null)
@@ -228,6 +232,12 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
         <span className="file-editor-path" data-testid="file-editor-path" title={path}>
           {path}
         </span>
+        {mode !== null && doc?.read.kind === 'text' && (
+          <MarkdownModeToggle
+            mode={mode}
+            onChange={(next) => editorFiles.setMode(workspace.id, tab.id, next)}
+          />
+        )}
         <button
           type="button"
           className="btn btn-small file-editor-open-external"
@@ -299,9 +309,38 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
         </div>
       )}
       <div className="file-editor-body" role="tabpanel" aria-label={name}>
-        {doc && <FileBody workspaceId={workspace.id} tab={tab} doc={doc} />}
+        {doc && <FileBody workspaceId={workspace.id} tab={tab} doc={doc} mode={mode} />}
       </div>
     </>
+  )
+}
+
+const MODE_LABELS: Record<MarkdownMode, string> = { preview: 'Preview', edit: 'Edit' }
+
+/** A Markdown tab's Preview / Edit (D9, D10): a segmented pair in the header line. */
+function MarkdownModeToggle({
+  mode,
+  onChange
+}: {
+  mode: MarkdownMode
+  onChange: (mode: MarkdownMode) => void
+}): React.JSX.Element {
+  const id = useId()
+  return (
+    <div className="segmented file-editor-mode" role="radiogroup" aria-label="Markdown view">
+      {(['preview', 'edit'] as const).map((m) => (
+        <label key={m} className="radio" data-testid={`file-editor-mode-${m}`}>
+          <input
+            type="radio"
+            name={`${id}-mode`}
+            value={m}
+            checked={mode === m}
+            onChange={() => onChange(m)}
+          />
+          {MODE_LABELS[m]}
+        </label>
+      ))}
+    </div>
   )
 }
 
@@ -316,14 +355,23 @@ function openInExternalEditor(ref: EditorFileRef): Promise<OpenResult> {
 function FileBody({
   workspaceId,
   tab,
-  doc
+  doc,
+  mode
 }: {
   workspaceId: string
   tab: EditorTab
   doc: EditorDoc
+  /** A Markdown tab's Preview or Edit (D10), null for another file. */
+  mode: MarkdownMode | null
 }): React.JSX.Element {
   const { read } = doc
-  if (read.kind === 'text') return <CodeEditor workspaceId={workspaceId} tab={tab} doc={doc} />
+  if (read.kind === 'text') {
+    return mode === 'preview' ? (
+      <MarkdownPreview workspaceId={workspaceId} tab={tab} />
+    ) : (
+      <CodeEditor workspaceId={workspaceId} tab={tab} doc={doc} />
+    )
+  }
   if (read.kind === 'image') {
     return (
       <div className="file-editor-picture">

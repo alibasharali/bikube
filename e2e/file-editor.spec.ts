@@ -169,6 +169,8 @@ test('AC3: tabs and sidebar rows, a row bringing the editor back after a card, B
 
   await fileRows().nth(1).click()
   await expect(activeTab()).toContainText('b.md')
+  // A Markdown file opens in Preview (D10); its source in Edit.
+  await editor().getByTestId('file-editor-mode-edit').click()
   await expect(editor().locator('.cm-content')).toHaveText('# Notes')
   await expect(fileRows().nth(1)).toHaveAttribute('aria-current', 'true')
 
@@ -519,6 +521,8 @@ test('D12: deleting a workspace with dirty tabs names its unsaved files', async 
   await cursorToStart()
   await page.keyboard.type('x')
   await fileRows().nth(1).click()
+  // b.md opens in Preview (D10): typed into in Edit.
+  await editor().getByTestId('file-editor-mode-edit').click()
   await cursorToStart()
   await page.keyboard.type('x')
   await backToBoard(page)
@@ -527,4 +531,98 @@ test('D12: deleting a workspace with dirty tabs names its unsaved files', async 
   await page.getByTestId('confirm-delete').click()
   await expect(page.getByTestId('empty-state')).toBeVisible()
   expect(readFileSync(join(folder, 'b.md'), 'utf8')).toBe('# Notes\n')
+})
+
+test('AC7: a README in Preview: its elements, links, picture, and Edit reflected back', async () => {
+  const readme = [
+    '# Title',
+    '',
+    '| a | b |',
+    '|---|---|',
+    '| 1 | 2 |',
+    '',
+    '- [x] done',
+    '',
+    '```ts',
+    "const answer = 'yes'",
+    '```',
+    '',
+    '<b>raw</b>',
+    '',
+    'Visit https://example.com today.',
+    '',
+    '[Docs](./docs/b.md) and [up](#title)',
+    '',
+    '![shot](./img.png)',
+    ''
+  ].join('\n')
+  writeFileSync(join(folder, 'README.md'), readme)
+  mkdirSync(join(folder, 'docs'))
+  writeFileSync(join(folder, 'docs', 'b.md'), '# B\n')
+  writeFileSync(join(folder, 'img.png'), PNG)
+  await launch()
+  await app!.evaluate(({ shell }) => {
+    const opened: string[] = []
+    ;(globalThis as { openedLinks?: string[] }).openedLinks = opened
+    shell.openExternal = async (url: string) => {
+      opened.push(url)
+    }
+  })
+  const openedLinks = (): Promise<string[]> =>
+    app!.evaluate(() => [...((globalThis as { openedLinks?: string[] }).openedLinks ?? [])])
+
+  await openFromFiles('README.md')
+  const preview = editor().getByTestId('file-editor-preview')
+  await expect(preview).toBeVisible()
+  await expect(editor().locator('.cm-content')).toHaveCount(0)
+  await expect(editor().getByTestId('file-editor-mode-preview').locator('input')).toBeChecked()
+  await expect(preview.locator('h1')).toHaveText('Title')
+  await expect(preview.locator('table')).toHaveCount(1)
+  const box = preview.locator('input[type=checkbox]')
+  await expect(box).toBeChecked()
+  await expect(box).toBeDisabled()
+  // The fenced block in the editor's syntax colours: a keyword and a string differ.
+  const block = preview.locator('pre code[data-highlighted=true]')
+  await expect(block).toHaveCount(1)
+  const colour = (text: string): Promise<string> =>
+    block
+      .locator('span', { hasText: text })
+      .first()
+      .evaluate((s) => getComputedStyle(s).color)
+  expect(await colour('const')).not.toBe(await colour("'yes'"))
+  // Raw HTML shows as text.
+  await expect(preview).toContainText('<b>raw</b>')
+  await expect(preview.locator('b')).toHaveCount(0)
+  // The picture, read through main.
+  const img = preview.locator('img')
+  await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/)
+  await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(1)
+
+  // The https link opens outside; nothing navigates.
+  await preview.locator('a', { hasText: 'https://example.com' }).click()
+  await expect.poll(openedLinks).toEqual(['https://example.com/'])
+  await expect(preview).toBeVisible()
+  // A relative file opens in a tab.
+  await preview.locator('a', { hasText: 'Docs' }).click()
+  await expect(tabs()).toHaveCount(2)
+  await expect(activeTab()).toContainText('b.md')
+  await expect(editor().getByTestId('file-editor-preview').locator('h1')).toHaveText('B')
+  await tabs().nth(0).click()
+  await expect(preview.locator('h1')).toHaveText('Title')
+
+  // Edit shows the source; an edit there shows in Preview after switching back.
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await expect(preview).toHaveCount(0)
+  await expect(code()).toContainText('# Title')
+  await cursorToLineEnd(1)
+  await page.keyboard.type(' Two')
+  await expect(tabDirty()).toBeVisible()
+  await editor().getByTestId('file-editor-mode-preview').click()
+  await expect(preview.locator('h1')).toHaveText('Title Two')
+  // Preview / Edit is per tab: b.md still in Preview, README back in Preview after it.
+  await tabs().nth(1).click()
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+  await tabs().nth(0).click()
+  await expect(preview.locator('h1')).toHaveText('Title Two')
+  expect(await openedLinks()).toEqual(['https://example.com/'])
 })

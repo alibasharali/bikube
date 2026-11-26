@@ -18,7 +18,7 @@ import { effectiveSettings, settingsStore, useEffectiveSettings } from './settin
 const v = (name: string): string => `var(--editor-${name})`
 
 /** Keywords magenta, strings green, numbers and constants yellow, comments bright black, functions blue, types and tags cyan. */
-const highlight = HighlightStyle.define([
+export const editorHighlightStyle = HighlightStyle.define([
   {
     tag: [
       t.keyword,
@@ -75,7 +75,7 @@ const theme = EditorView.theme({
 })
 
 /** The editor's theme and syntax colours, for every text tab's state. */
-export const editorLook: Extension = [theme, syntaxHighlighting(highlight)]
+export const editorLook: Extension = [theme, syntaxHighlighting(editorHighlightStyle)]
 
 /** The custom properties the theme reads, from the terminal's palette and font. */
 export function editorLookStyle(

@@ -7172,6 +7172,165 @@ button.dev-server-chip:focus-visible {
   text-align: center;
 }
 
+/* A Markdown tab's Preview / Edit (#83 D9, D10): a compact segmented pair in the header line. */
+.segmented.file-editor-mode {
+  flex: none;
+  padding: 2px;
+}
+
+.segmented.file-editor-mode .radio {
+  flex: none;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+}
+
+/* A Markdown tab's Preview (#83 D10): prose on the app's tokens, scrolling inside the body;
+   code blocks on the editor's background in its font and syntax colours (D8). */
+.markdown-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.markdown-body {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: var(--space-6) 0 var(--space-3);
+  line-height: 1.25;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-body h1 {
+  font-size: 1.8em;
+}
+
+.markdown-body h2 {
+  font-size: 1.4em;
+}
+
+.markdown-body h3 {
+  font-size: 1.15em;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+  margin: 0 0 var(--space-4);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: var(--space-6);
+}
+
+.markdown-body a {
+  color: var(--accent);
+}
+
+.markdown-body blockquote {
+  padding: 0 var(--space-4);
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.markdown-body hr {
+  margin: var(--space-6) 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-body code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--editor-bg);
+  color: var(--editor-fg);
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+  font-family: var(--editor-font);
+  font-size: var(--editor-font-size);
+  line-height: 1.4;
+}
+
+/* Tables wider than the preview scroll inside their own box. */
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  width: max-content;
+  overflow-x: auto;
+  border-collapse: collapse;
+  overflow-wrap: normal;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+}
+
+.markdown-body th {
+  background: var(--surface-raised);
+  font-weight: 600;
+}
+
+.markdown-body img {
+  max-width: 100%;
+}
+
+.markdown-image-alt {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.markdown-body .markdown-task-item {
+  list-style: none;
+}
+
+.markdown-body .markdown-task {
+  margin: 0 var(--space-1) 0 calc(-1 * var(--space-6) + var(--space-2));
+  vertical-align: middle;
+}
+
 /* A tab's or sidebar row's unsaved edits (#83 D4, D9). */
 .file-dirty-dot {
   flex: none;

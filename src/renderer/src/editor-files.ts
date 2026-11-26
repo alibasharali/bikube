@@ -28,6 +28,7 @@ import {
   type CheckOutcome,
   type EditorNotice
 } from '../../core/editor-sync'
+import { isMarkdownPath } from '../../core/markdown-render'
 
 /**
  * What an open tab holds (#83 D3, D7): main's read, and once shown as text its CodeMirror state,
@@ -72,6 +73,9 @@ export interface CloseQuestion {
 }
 
 export type CloseAnswer = 'save' | 'discard' | 'cancel'
+
+/** How a Markdown tab shows (D10): rendered, or its source in the editor. */
+export type MarkdownMode = 'preview' | 'edit'
 
 export interface EditorFiles {
   get(): EditorTabsMemory
@@ -119,6 +123,12 @@ export interface EditorFiles {
   /** The question being asked, or null. */
   closeQuestion(): CloseQuestion | null
   answerClose(answer: CloseAnswer): Promise<void>
+  /** A Markdown tab's Preview or Edit (D10), Preview when opened; null for any other tab. */
+  mode(workspaceId: string, id: string): MarkdownMode | null
+  /** Switches a Markdown tab to Preview or Edit (D10; D14's Find, D15's palette rows). */
+  setMode(workspaceId: string, id: string, mode: MarkdownMode): void
+  /** The tab's text now, dirty or not (D10's Preview); null for a tab that holds none. */
+  text(workspaceId: string, id: string): string | null
 }
 
 /**
@@ -130,6 +140,8 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
   let memory: EditorTabsMemory = NO_TABS
   const docs = new Map<string, EditorDoc>()
   const statuses = new Map<string, EditorDocStatus>()
+  /** Markdown tabs switched to Edit; the others show Preview. */
+  const editing = new Set<string>()
   const views = new Map<string, LiveEditor>()
   const saving = new Set<string>()
   const listeners = new Set<() => void>()
@@ -153,6 +165,7 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       if (!memory[workspaceId]?.tabs.some((t) => t.id === id)) {
         docs.delete(k)
         statuses.delete(k)
+        editing.delete(k)
       }
     }
     notify()
@@ -209,6 +222,8 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       statuses.set(k, statusOf(k))
       setStatus(k, { notice: null, saveError: null })
       refreshDirty(k)
+      // A Preview redraws from the new text, which may have changed no status.
+      notify()
       return
     }
     // No longer text (or text again): the tab shows what it now is.
@@ -441,6 +456,22 @@ export function createEditorFiles(read: Reader, io?: EditorIo): EditorFiles {
       close(workspaceId, id)
       closeNext(workspaceId, rest)
       if (!question) notify()
+    },
+    mode(workspaceId: string, id: string): MarkdownMode | null {
+      const k = key(workspaceId, id)
+      if (!docs.has(k) || !isMarkdownPath(id)) return null
+      return editing.has(k) ? 'edit' : 'preview'
+    },
+    setMode(workspaceId: string, id: string, mode: MarkdownMode): void {
+      const k = key(workspaceId, id)
+      if (files.mode(workspaceId, id) === null || files.mode(workspaceId, id) === mode) return
+      if (mode === 'edit') editing.add(k)
+      else editing.delete(k)
+      notify()
+    },
+    text(workspaceId: string, id: string): string | null {
+      const doc = docs.get(key(workspaceId, id))
+      return doc ? textOf(key(workspaceId, id), doc) : null
     }
   }
   return files
@@ -464,6 +495,16 @@ export function useEditorStatus(workspaceId: string, id: string): EditorDocStatu
 /** The dirty-tab question in front (D12), or null. */
 export function useCloseQuestion(): CloseQuestion | null {
   return useSyncExternalStore(editorFiles.subscribe, editorFiles.closeQuestion)
+}
+
+/** A Markdown tab's Preview or Edit (D10), null for another tab. */
+export function useMarkdownMode(workspaceId: string, id: string): MarkdownMode | null {
+  return useSyncExternalStore(editorFiles.subscribe, () => editorFiles.mode(workspaceId, id))
+}
+
+/** The tab's text now (D10's Preview), redrawn as it changes. */
+export function useEditorText(workspaceId: string, id: string): string | null {
+  return useSyncExternalStore(editorFiles.subscribe, () => editorFiles.text(workspaceId, id))
 }
 
 /** How many of the workspace's tabs are dirty (D12). */

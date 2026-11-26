@@ -232,3 +232,62 @@ describe('saving, closing and changes on disk (#83 D12, D13)', () => {
     expect(workspaceTabs(files.get(), 'w').tabs).toEqual([])
   })
 })
+
+describe('Markdown Preview / Edit and the text it renders (#83 D10)', () => {
+  const md = (realPath: string, body = '# a\n'): EditorReadResult => text(realPath, body)
+
+  it('a Markdown tab opens in Preview, kept per tab while it is open; others have no mode', async () => {
+    const files = createEditorFiles(async (r) => md(`/real/${r.path}`))
+    await files.open('w', ref('README.md'))
+    await files.open('w', ref('x.MARKDOWN'))
+    await files.open('w', ref('a.ts'))
+    expect(files.mode('w', '/real/README.md')).toBe('preview')
+    expect(files.mode('w', '/real/x.MARKDOWN')).toBe('preview')
+    expect(files.mode('w', '/real/a.ts')).toBeNull()
+    const changed = vi.fn()
+    files.subscribe(changed)
+    files.setMode('w', '/real/README.md', 'edit')
+    expect(changed).toHaveBeenCalledTimes(1)
+    files.setMode('w', '/real/README.md', 'edit')
+    files.setMode('w', '/real/a.ts', 'edit')
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(files.mode('w', '/real/README.md')).toBe('edit')
+    expect(files.mode('w', '/real/x.MARKDOWN')).toBe('preview')
+    // Opened again while open, it keeps its mode; closed and opened, Preview again.
+    await files.open('w', ref('README.md'))
+    expect(files.mode('w', '/real/README.md')).toBe('edit')
+    files.close('w', '/real/README.md')
+    expect(files.mode('w', '/real/README.md')).toBeNull()
+    await files.open('w', ref('README.md'))
+    expect(files.mode('w', '/real/README.md')).toBe('preview')
+  })
+
+  it('gives the tab’s current text, dirty or not, and tells when a reload changes it', async () => {
+    let body = '# a\n'
+    const read = (r: EditorFileRef): EditorReadResult => ({
+      kind: 'text',
+      text: body,
+      eol: 'lf',
+      bom: false,
+      base: { size: body.length, mtimeMs: body.length, sha256: body },
+      realPath: `/real/${r.path}`
+    })
+    const files = createEditorFiles(async (r) => read(r), {
+      stat: async () => ({ kind: 'file', size: body.length, mtimeMs: body.length }),
+      write: async () => ({ ok: false, reason: 'refused' })
+    })
+    await files.open('w', ref('README.md'))
+    expect(files.text('w', '/real/README.md')).toBe('# a\n')
+    expect(files.text('w', '/nope')).toBeNull()
+    // A silent reload of a tab never shown in the editor: the preview hears of it.
+    const changed = vi.fn()
+    files.subscribe(changed)
+    body = '# changed\n'
+    await files.check()
+    expect(files.text('w', '/real/README.md')).toBe('# changed\n')
+    expect(changed).toHaveBeenCalled()
+    const state = EditorState.create({ doc: '# changed\n' })
+    files.edited('w', '/real/README.md', state.update({ changes: { from: 0, insert: 'x' } }).state)
+    expect(files.text('w', '/real/README.md')).toBe('x# changed\n')
+  })
+})

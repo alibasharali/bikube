@@ -13,7 +13,7 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 | S5 Markdown preview | done | `d575cc2..fc4ddd1` | CLEAN | `src/core/markdown-render.ts` (`renderMarkdown`, `markdownLink`, `resolveRelative`, `isMarkdownPath`); `MarkdownPreview.tsx`; store `MarkdownMode`, `mode/setMode/text`, hooks `useMarkdownMode`, `useEditorText`; `editorHighlightStyle`; test ids `file-editor-preview`, `file-editor-mode-preview`, `file-editor-mode-edit` |
 | S6 Drafts | done | `b1e0b49..30ffd9f` | CLEAN (listed-ref draft after restart carried into S7) | `EditorDraft`; `EditorWrite.recreate`; `DraftsStore` (`save/delete/list/prune/draftFileName`); IPC `drafts:save/delete/list/dirty` → `window.bikube.drafts`; `quitHold` `unsavedDrafts`; store `createEditorFiles(read, io?, drafts?)`, `flushDrafts()`, `restore()`, `DRAFT_DELAY_MS`; test ids `file-editor-bar-save`, `file-editor-bar-discard`; e2e `e2e/file-editor-drafts.spec.ts` |
 | S7 Agent tab and Agent setup | done | `f567b7d..df9438d` | CLEAN | `pathInFolder` (`agent-outputs-view.ts`); `ListedPaths.knows`; `EditorFileDeps.loadListing` + main `loadListing` (a listed ref's folder read once when unlisted); `FileActionsProvider` `workspaceId`; `ChangesList`/`OutputsList` `openInEditor?` |
-| S8 Shortcuts, palette, wrap | todo | | | |
+| S8 Shortcuts, palette, wrap | done | `26feb3d..fe9a2e5` | CLEAN | `PaletteItems.files` (`FileRow`), `PaletteInput.files/editor/externalEditor`, actions `saveFile`, `closeTab`, `markdownMode`, `toggleWrap`, `openInEditor` (left out of `orchestratorPaletteRows`); preference `editorWrap`; `editor-view-actions.ts`; test id `file-editor-wrap` |
 
 ## Rulings
 
@@ -24,5 +24,6 @@ Ledger for the orchestrator. Survives compaction and session restarts: the `item
 
 ## Verification
 
-- todo
+- Full checks: green except the known root-only updater test (typecheck, lint, Vitest 2382/2383, build, check-stack, prettier)
+- running
 - UX review: todo

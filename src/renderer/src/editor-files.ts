@@ -54,15 +54,20 @@ export function createEditorFiles(read: Reader): EditorFiles {
   const listeners = new Set<() => void>()
   let show: ((workspaceId: string) => void) | null = null
   const key = (workspaceId: string, id: string): string => `${workspaceId}\n${id}`
+  const notify = (): void => {
+    for (const listener of [...listeners]) listener()
+  }
   const set = (next: EditorTabsMemory): void => {
     if (next === memory) return
     memory = next
-    // Documents of tabs no longer open go.
+    // Documents of tabs no longer open go. A workspace id holds no newline; a real path may.
     for (const k of [...docs.keys()]) {
-      const [workspaceId, id] = k.split('\n')
+      const at = k.indexOf('\n')
+      const workspaceId = k.slice(0, at)
+      const id = k.slice(at + 1)
       if (!memory[workspaceId]?.tabs.some((t) => t.id === id)) docs.delete(k)
     }
-    for (const listener of [...listeners]) listener()
+    notify()
   }
   return {
     get: (): EditorTabsMemory => memory,
@@ -88,10 +93,12 @@ export function createEditorFiles(read: Reader): EditorFiles {
       const k = key(workspaceId, id)
       const held = docs.get(k)
       // An open text or picture keeps its tab's document; a tab that showed no file reads again.
-      if (!held || (held.read.kind !== 'text' && held.read.kind !== 'image')) {
-        docs.set(k, { read: result, state: null })
-      }
+      const reread = !held || (held.read.kind !== 'text' && held.read.kind !== 'image')
+      if (reread) docs.set(k, { read: result, state: null })
+      const before = memory
       set(openTab(memory, workspaceId, { id, ref }))
+      // The tab already in front shows its new read too.
+      if (reread && memory === before) notify()
       show?.(workspaceId)
       return 'opened'
     },

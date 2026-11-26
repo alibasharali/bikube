@@ -59,4 +59,26 @@ describe('the editor files store (#83 D3)', () => {
     expect(files.doc('v', '/real/c')).toBeNull()
     expect(files.get()).toEqual({})
   })
+
+  it('a file reopened in front after it read missing shows its new read', async () => {
+    let result: EditorReadResult = { kind: 'missing' }
+    const files = createEditorFiles(async () => result)
+    await files.open('w', ref('new.ts'))
+    const changed = vi.fn()
+    files.subscribe(changed)
+    result = text('/repo/new.ts')
+    await files.open('w', ref('new.ts'))
+    expect(files.doc('w', '/repo/new.ts')?.read).toEqual(text('/repo/new.ts'))
+    expect(changed).toHaveBeenCalled()
+  })
+
+  it('a tab whose real path holds a newline keeps its document', async () => {
+    const files = createEditorFiles(async (r) =>
+      text(r.path === 'x' ? '/real/a\nb' : '/real/other')
+    )
+    await files.open('w', ref('x'))
+    // Another tab opened: the tab list changes, and open tabs' documents stay.
+    await files.open('w', ref('y'))
+    expect(files.doc('w', '/real/a\nb')).not.toBeNull()
+  })
 })

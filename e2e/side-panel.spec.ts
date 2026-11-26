@@ -763,7 +763,6 @@ function editorEnv(commands: string[]): Record<string, string> {
   return { ...inherited, SHELL: '/bin/sh', HOME: home, BIKUBE_HOME_DIR: home }
 }
 
-/** `recordOpenPath` (`e2e/editors.ts`) on this test's app. */
 /**
  * Opens `repo` with card `c1` in its own window, whose Files tab runs the external editor on a
  * double-click or Enter (#83 D5); the tests then use that window's Files tab.
@@ -778,6 +777,7 @@ async function openC1InWindow(launchEnv?: Record<string, string>): Promise<void>
   await expect(filesTab()).toBeVisible()
 }
 
+/** `recordOpenPath` (`e2e/editors.ts`) on this test's app. */
 const recordOpenPath = (error = ''): Promise<void> => recordOpenPathIn(app!, error)
 const openedPaths = (): Promise<string[]> => openedPathsIn(app!)
 

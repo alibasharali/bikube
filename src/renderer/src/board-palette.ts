@@ -21,7 +21,7 @@ export function onBoardPalette(palette: BoardPalette): () => void {
 
 /** The palette's rows now; none while no app answers. */
 export function boardPaletteItems(): PaletteItems {
-  return handler?.items() ?? { cards: [], shells: [], actions: [] }
+  return handler?.items() ?? { cards: [], shells: [], files: [], actions: [] }
 }
 
 /** Runs an action row as the palette would. */

@@ -71,7 +71,84 @@ const theme = EditorView.theme({
     border: 'none'
   },
   '.cm-activeLine': { backgroundColor: 'transparent' },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: v('fg') }
+  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: v('fg') },
+  // Find's search panel (#83 D14): the app's chrome, on its tokens, above the code.
+  '.cm-panels': {
+    backgroundColor: 'var(--surface)',
+    color: 'var(--text)',
+    fontFamily: 'var(--font-ui)',
+    fontSize: 'var(--text-sm)'
+  },
+  '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
+  '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
+  '.cm-search': {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 'var(--space-1) var(--space-2)',
+    padding: 'var(--space-1) var(--space-6) var(--space-1) var(--space-2)'
+  },
+  '.cm-search br': { display: 'none' },
+  '.cm-search label': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--space-1)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--text)'
+  },
+  '.cm-search input[type=checkbox]': { margin: 0, accentColor: 'var(--accent)' },
+  '.cm-textfield': {
+    minWidth: 0,
+    minHeight: '24px',
+    margin: 0,
+    padding: '0 var(--space-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundColor: 'var(--bg)',
+    color: 'var(--text)',
+    font: 'inherit'
+  },
+  '.cm-textfield:focus': { outline: '2px solid var(--accent)', outlineOffset: '-1px' },
+  '.cm-button': {
+    minHeight: '24px',
+    margin: 0,
+    padding: '0 var(--space-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    backgroundImage: 'none',
+    backgroundColor: 'var(--surface-raised)',
+    color: 'var(--text)',
+    font: 'inherit',
+    cursor: 'pointer'
+  },
+  '.cm-button:hover': { backgroundColor: 'var(--surface-hover)' },
+  '.cm-button:active': { backgroundImage: 'none' },
+  '.cm-search button[name=close]': {
+    top: 'var(--space-1)',
+    right: 'var(--space-1)',
+    width: '24px',
+    height: '24px',
+    padding: 0,
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    background: 'transparent',
+    color: 'var(--text-muted)',
+    fontSize: 'var(--text-md)',
+    cursor: 'pointer'
+  },
+  '.cm-search button[name=close]:hover': {
+    backgroundColor: 'var(--surface-hover)',
+    color: 'var(--text)'
+  },
+  // Matches on the code's background: outlined in the accent, the current one filled too.
+  '.cm-searchMatch': {
+    backgroundColor: 'var(--accent-soft)',
+    outline: '1px solid var(--accent)'
+  },
+  '.cm-searchMatch.cm-searchMatch-selected': {
+    backgroundColor: 'var(--accent-soft)',
+    outline: '2px solid var(--accent)'
+  }
 })
 
 /** The editor's theme and syntax colours, for every text tab's state. */

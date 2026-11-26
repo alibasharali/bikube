@@ -1,13 +1,21 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { WrapText, X } from 'lucide-react'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { formatSize, type EditorFileRef } from '../../core/editor-files-types'
 import { isSaveKey, saveChangesQuestion, saveFailedLine } from '../../core/editor-sync'
-import { baseName, tabLabels, tabPath, workspaceTabs, type EditorTab } from '../../core/editor-tabs'
+import {
+  activeTab,
+  baseName,
+  tabLabels,
+  tabPath,
+  workspaceTabs,
+  type EditorTab
+} from '../../core/editor-tabs'
 import { keymapAction } from '../../core/keymap'
 import { openInEditorLabel } from '../../core/open-in-editor'
 import {
@@ -37,7 +45,8 @@ import MarkdownPreview from './MarkdownPreview'
 import Modal from './Modal'
 import { homeDir } from './home'
 import { ICON, SMALL_ICON } from './icons'
-import { currentKeymap, useSettings } from './settings'
+import { registerOpenInEditor } from './editor-view-actions'
+import { currentKeymap, settingsStore, useSettings } from './settings'
 import Tooltip from './Tooltip'
 import { dialogOpenIn, useViewWindow } from './view-window'
 
@@ -66,8 +75,8 @@ function FileEditorView({
   const home = homeDir()
 
   // The Back shortcut and the palette's Back row return to the board; Close pane closes the tab
-  // in front, asking first when it is dirty (D14). Mod+S saves it (D12), before CodeMirror and the
-  // app's other handlers see the key.
+  // in front, asking first when it is dirty; Find opens its search panel (D14). Mod+S saves it
+  // (D12), before CodeMirror and the app's other handlers see the key.
   const actions = useRef({ onBack, workspaceId: workspace.id })
   useEffect(() => {
     actions.current = { onBack, workspaceId: workspace.id }
@@ -76,6 +85,7 @@ function FileEditorView({
     const run = (action: string): void => {
       if (action === 'back') actions.current.onBack()
       else if (action === 'closePane') closeActiveTab(actions.current.workspaceId)
+      else if (action === 'find') findInActiveTab(actions.current.workspaceId)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
       if (isSaveKey(event, window.bikube.platform)) {
@@ -86,7 +96,8 @@ function FileEditorView({
         return
       }
       const action = keymapAction(event, currentKeymap())
-      if ((action !== 'back' && action !== 'closePane') || dialogOpenIn(view)) return
+      if ((action !== 'back' && action !== 'closePane' && action !== 'find') || dialogOpenIn(view))
+        return
       event.preventDefault()
       event.stopPropagation()
       if (!event.repeat) run(action)
@@ -159,6 +170,28 @@ function FileEditorView({
   )
 }
 
+/** The CodeMirror view showing now (one at a time: main window only), and its tab. */
+let shownEditor: { workspaceId: string; id: string; view: EditorView } | null = null
+/** A tab whose Find switched it from Preview to Edit: its search panel opens once it shows. */
+let findPending: string | null = null
+
+/**
+ * Find in the editor (D14): the tab in front's search panel, which takes the keyboard; a Markdown
+ * tab in Preview first switches to Edit. Nothing for a tab that holds no text.
+ */
+function findInActiveTab(workspaceId: string): void {
+  const tab = activeTab(editorFiles.get(), workspaceId)
+  if (!tab || editorFiles.doc(workspaceId, tab.id)?.read.kind !== 'text') return
+  if (editorFiles.mode(workspaceId, tab.id) === 'preview') {
+    findPending = tab.id
+    editorFiles.setMode(workspaceId, tab.id, 'edit')
+    return
+  }
+  if (shownEditor?.workspaceId === workspaceId && shownEditor.id === tab.id) {
+    openSearchPanel(shownEditor.view)
+  }
+}
+
 /** `Save changes to <name>?` before a dirty tab closes (D12), for this workspace's tabs. */
 function SaveChangesQuestion({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
   const question = useCloseQuestion()
@@ -213,7 +246,7 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
   const status = useEditorStatus(workspace.id, tab.id)
   const mode = useMarkdownMode(workspace.id, tab.id)
   const name = baseName(tab.id)
-  const { editor } = useSettings()
+  const { editor, editorWrap } = useSettings()
   const [openError, setOpenError] = useState<{ text: string; note: boolean } | null>(null)
   const path = tabPath(tab.ref, workspace.directory, homeDir())
   const openExternal = (): void => {
@@ -226,6 +259,12 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
       setOpenError(text === null ? null : { text, note: isOpenNote(result) })
     })
   }
+  // The palette's Open in <editor> row runs the header's button (D15).
+  const openNow = useRef(openExternal)
+  useEffect(() => {
+    openNow.current = openExternal
+  })
+  useEffect(() => registerOpenInEditor(() => openNow.current()), [])
   return (
     <>
       <div className="file-editor-header">
@@ -237,6 +276,20 @@ function OpenFile({ workspace, tab }: { workspace: Workspace; tab: EditorTab }):
             mode={mode}
             onChange={(next) => editorFiles.setMode(workspace.id, tab.id, next)}
           />
+        )}
+        {doc?.read.kind === 'text' && (
+          <Tooltip label="Wrap" description="Wraps long lines at the editor's width">
+            <button
+              type="button"
+              className="icon-btn file-editor-wrap"
+              data-testid="file-editor-wrap"
+              aria-label="Wrap"
+              aria-pressed={editorWrap}
+              onClick={() => settingsStore.update({ editorWrap: !editorWrap })}
+            >
+              <WrapText {...ICON} />
+            </button>
+          </Tooltip>
         )}
         <button
           type="button"
@@ -428,6 +481,11 @@ function languageFor(name: string): LanguageDescription | null {
 /** Every text tab's language: empty until its support has loaded. */
 const language = new Compartment()
 
+/** Soft wrap, the header's Wrap (D8): Settings' `editorWrap`. */
+const wrapping = new Compartment()
+
+const wrapExtension = (on: boolean): Extension => (on ? EditorView.lineWrapping : [])
+
 /** Read-only while a clean tab's file is deleted on disk (D13). */
 const readOnly = new Compartment()
 
@@ -457,6 +515,11 @@ function CodeEditor({
   const live = useRef<EditorView | null>(null)
   const style = useEditorLookStyle()
   const { dirty, notice } = useEditorStatus(workspaceId, tab.id)
+  const { editorWrap } = useSettings()
+  const wrapNow = useRef(editorWrap)
+  useEffect(() => {
+    wrapNow.current = editorWrap
+  })
   const locked = notice === 'deleted' && !dirty
   const lockedNow = useRef(locked)
   useEffect(() => {
@@ -472,8 +535,11 @@ function CodeEditor({
           lineNumbers(),
           highlightActiveLineGutter(),
           history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+          // Find's panel at the editor's top, themed with the app's tokens (D14).
+          search({ top: true }),
           language.of([]),
+          wrapping.of(wrapExtension(wrapNow.current)),
           readOnly.of(readOnlyExtension(lockedNow.current)),
           editorLook
         ]
@@ -490,19 +556,28 @@ function CodeEditor({
       }
     })
     live.current = editor
+    // A kept state may have been wrapped otherwise when it last showed.
+    editor.dispatch({ effects: wrapping.reconfigure(wrapExtension(wrapNow.current)) })
+    const shown = { workspaceId, id: tab.id, view: editor }
+    shownEditor = shown
+    if (findPending === tab.id) {
+      findPending = null
+      openSearchPanel(editor)
+    }
     const detach = editorFiles.attach(workspaceId, tab.id, editor)
-    let shown = true
+    let showing = true
     if (needsLanguage(state)) {
       void languageFor(baseName(tab.id))
         ?.load()
         .then((support) => {
-          if (shown && needsLanguage(editor.state))
+          if (showing && needsLanguage(editor.state))
             editor.dispatch({ effects: language.reconfigure(support) })
         })
         .catch(() => undefined)
     }
     return () => {
-      shown = false
+      showing = false
+      if (shownEditor === shown) shownEditor = null
       detach()
       live.current = null
       editorFiles.keepState(workspaceId, tab.id, editor.state)
@@ -512,6 +587,9 @@ function CodeEditor({
   useEffect(() => {
     live.current?.dispatch({ effects: readOnly.reconfigure(readOnlyExtension(locked)) })
   }, [locked, doc])
+  useEffect(() => {
+    live.current?.dispatch({ effects: wrapping.reconfigure(wrapExtension(editorWrap)) })
+  }, [editorWrap, doc])
   return (
     <div
       ref={host}

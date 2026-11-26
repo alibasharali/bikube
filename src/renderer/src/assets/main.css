@@ -7109,6 +7109,7 @@ button.dev-server-chip:focus-visible {
 .file-editor-header {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
@@ -7117,8 +7118,9 @@ button.dev-server-chip:focus-visible {
   background: var(--surface);
 }
 
+/* In a narrow main area the controls wrap below the path rather than push the view wider. */
 .file-editor-path {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7130,6 +7132,16 @@ button.dev-server-chip:focus-visible {
 .file-editor-open-external {
   flex: none;
   white-space: nowrap;
+}
+
+/* Wrap (#83 D8): pressed while long lines wrap, as the Files tab's Changed only. */
+.file-editor-wrap {
+  flex: none;
+}
+
+.file-editor-wrap[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .file-editor-body {

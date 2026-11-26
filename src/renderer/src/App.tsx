@@ -48,7 +48,14 @@ import {
 } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import AgentSetupPage from './AgentSetupPage'
-import { editorFiles, useDirtyCount, useEditorTabs } from './editor-files'
+import {
+  closeActiveTab,
+  editorFiles,
+  saveActiveTab,
+  useDirtyCount,
+  useEditorTabs
+} from './editor-files'
+import { runOpenInEditor } from './editor-view-actions'
 import { startEditorChecks } from './editor-checks'
 import FileEditorView from './FileEditorView'
 import CardView from './CardView'
@@ -460,6 +467,17 @@ function App(): React.JSX.Element {
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
       else if (action.id === 'appTheme') settingsStore.update({ appTheme: action.appTheme })
       else if (action.id === 'sidebarLayout') settingsStore.update({ sidebarLayout: action.layout })
+      // The file editor's rows (#83 D15), for the tab in front of the active workspace.
+      else if (action.id === 'saveFile') {
+        if (activeId) void saveActiveTab(activeId)
+      } else if (action.id === 'closeTab') {
+        if (activeId) closeActiveTab(activeId)
+      } else if (action.id === 'markdownMode') {
+        const tab = activeId ? activeTab(editorFiles.get(), activeId) : null
+        if (activeId && tab) editorFiles.setMode(activeId, tab.id, action.mode)
+      } else if (action.id === 'toggleWrap') {
+        settingsStore.update({ editorWrap: !settingsStore.get().editorWrap })
+      } else if (action.id === 'openInEditor') runOpenInEditor()
       else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
       // The active workspace's view; its board shows in it, closing the card open there.
       else if (action.id === 'workspaceView') {
@@ -486,16 +504,23 @@ function App(): React.JSX.Element {
     active && openCard
       ? { kind: openOnBoard ? 'card' : 'shell', workspaceId: active.id, cardId: openCard.id }
       : null
-  const paletteFor = useRef({ view: paletteView, agentSetup })
+  // The workspace whose file editor is in front (#83 D15): its rows and tab actions.
+  const editorFor = !openCard && !agentSetup && filesShown ? activeId : null
+  const paletteFor = useRef({ view: paletteView, agentSetup, editorFor })
   useEffect(() => {
-    paletteFor.current = { view: paletteView, agentSetup }
+    paletteFor.current = { view: paletteView, agentSetup, editorFor }
   })
   // The Orchestrator's `board palette` (#81 D23): the rows the palette would show now, each run
   // at once exactly as picking it would, whatever the user is looking at.
   useEffect(
     () =>
       onBoardPalette({
-        items: () => currentPaletteItems(paletteFor.current.view, paletteFor.current.agentSetup),
+        items: () =>
+          currentPaletteItems(
+            paletteFor.current.view,
+            paletteFor.current.agentSetup,
+            paletteFor.current.editorFor
+          ),
         run: (action) => runAction.current(action)
       }),
     []
@@ -662,8 +687,10 @@ function App(): React.JSX.Element {
         <CommandPalette
           open={paletteView}
           agentSetup={agentSetup}
+          editorFor={editorFor}
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}
+          onOpenFile={(row) => showFileTab(row.workspaceId, row.tabId)}
           onRunAction={onRunAction}
         />
       )}

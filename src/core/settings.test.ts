@@ -893,6 +893,29 @@ describe('the sidebar layout preference (#79 D1)', () => {
   })
 })
 
+describe('the editor Wrap preference (#83 D8)', () => {
+  const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
+  const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }
+
+  it('defaults to off, writing no key for it', () => {
+    expect(parseSettingsFile(file({ theme: 'dark' }), 'linux').settings.editorWrap).toBe(false)
+    expect(JSON.parse(serializeSettings(base)).settings).not.toHaveProperty('editorWrap')
+  })
+
+  it('writes on and reads it back', () => {
+    const text = serializeSettings({ ...base, editorWrap: true })
+    expect(JSON.parse(text).settings.editorWrap).toBe(true)
+    expect(parseSettingsFile(text, 'linux').settings.editorWrap).toBe(true)
+  })
+
+  it('drops a value that is not a boolean', () => {
+    expect(validateSettings({ ...base, editorWrap: 'yes' }, 'linux')).toBeNull()
+    const parsed = parseSettingsFile(file({ ...base, editorWrap: 'yes' }), 'linux')
+    expect(parsed.settings.editorWrap).toBe(false)
+    expect(parsed.replaced).toEqual(['editorWrap'])
+  })
+})
+
 describe('the Offer to keep Claude Code conversations preference (#80 D6)', () => {
   const file = (settings: unknown): string => JSON.stringify({ version: 1, settings })
   const base: Settings = { theme: 'dark', fontSize: 13, fontFamily: 'Menlo', ...NEW_FIELDS }

@@ -60,7 +60,7 @@ const editorRuns = (): string[] =>
  * Launches with a login shell (`/bin/sh -l`) whose PATH is a fake `bin` holding a fake `code`
  * that logs its arguments, and the system folders, so a real editor never runs.
  */
-async function launch(): Promise<void> {
+async function launch(dataDir = newDataDir(), create = true): Promise<void> {
   const home = join(root, 'home')
   const bin = join(root, 'bin')
   mkdirSync(home, { recursive: true })
@@ -74,9 +74,10 @@ async function launch(): Promise<void> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
   ;({ app, page } = await launchApp({
-    dataDir: newDataDir(),
+    dataDir,
     env: { ...env, SHELL: '/bin/sh', HOME: home, BIKUBE_HOME_DIR: home }
   }))
+  if (!create) return
   await page.getByTestId('workspace-add').click()
   await plainCards(page)
   await page.getByTestId('workspace-directory').fill(folder)
@@ -624,4 +625,268 @@ test('AC7: a README in Preview: its elements, links, picture, and Edit reflected
   await tabs().nth(0).click()
   await expect(preview.locator('h1')).toHaveText('Title Two')
   expect(await openedLinks()).toEqual(['https://example.com/'])
+})
+
+/** The command palette's shortcut (#40 D1). */
+const PALETTE = darwin ? 'Meta+K' : 'Control+Shift+P'
+/** Find's default shortcut (#35 D2). */
+const FIND = darwin ? 'Meta+f' : 'Control+Shift+F'
+const palette = (): Locator => page.getByTestId('command-palette')
+const paletteLabels = (): Promise<string[]> =>
+  palette().getByTestId('palette-row-title').allInnerTexts()
+
+/** Whether the focused element is in the open terminal (a temporary shell). */
+const terminalFocused = (): Promise<boolean> =>
+  page.evaluate(
+    () => document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
+  )
+
+test('AC11: Find in the editor, Back, the palette rows and file rows; board palette lists none', async () => {
+  writeFileSync(join(folder, 'notes.md'), '# Notes\n\nfoo bar foo\n')
+  await launch()
+  await openFromFiles('notes.md')
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+
+  // The palette lists the editor's rows; a Markdown tab in Preview offers Edit.
+  await page.keyboard.press(PALETTE)
+  await expect(palette()).toBeVisible()
+  const shown = await paletteLabels()
+  for (const label of [
+    'Save file',
+    'Close tab',
+    'Toggle wrap',
+    'Open in VS Code',
+    'Markdown: Edit'
+  ]) {
+    expect(shown).toContain(label)
+  }
+  expect(shown).not.toContain('Markdown: Preview')
+  await page.keyboard.press('Escape')
+  await expect(palette()).toHaveCount(0)
+
+  // Find in Preview switches to Edit and opens the search panel inside the editor.
+  await page.keyboard.press(FIND)
+  const panel = editor().locator('.cm-search')
+  await expect(panel).toBeVisible()
+  await expect(editor().getByTestId('file-editor-preview')).toHaveCount(0)
+  await expect(editor().getByTestId('file-editor-mode-edit').locator('input')).toBeChecked()
+  await page.keyboard.type('foo')
+  await expect(editor().locator('.cm-searchMatch')).toHaveCount(2)
+
+  // Back: the board.
+  await page.keyboard.press(SHORTCUTS.back)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(editor()).toHaveCount(0)
+
+  // From the board an open file's row opens its tab; no editor rows there.
+  await page.keyboard.press(PALETTE)
+  const fromBoard = await paletteLabels()
+  expect(fromBoard).not.toContain('Save file')
+  const fileRow = palette().locator('[data-section=files] [data-testid=palette-row]')
+  await expect(fileRow).toHaveCount(1)
+  await expect(fileRow).toContainText('notes.md')
+  await expect(fileRow).toContainText('proj')
+  await fileRow.click()
+  await expect(editor()).toBeVisible()
+  await expect(activeTab()).toContainText('notes.md')
+
+  // Picking Markdown: Preview from the palette switches the tab back.
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-input').fill('Markdown')
+  await palette().getByTestId('palette-row').filter({ hasText: 'Markdown: Preview' }).click()
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+
+  // board palette, run while the editor is in front: none of the editor's rows or file rows.
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(terminalFocused).toBe(true)
+  const listed = join(root, 'palette.txt')
+  await page.keyboard.type(
+    `sleep 3; "$BIKUBE_BIN/board" palette list > ${listed} 2>&1; echo "rc=$?" > ${listed}.rc`
+  )
+  await page.keyboard.press('Enter')
+  await fileRows().first().click()
+  await expect(editor()).toBeVisible()
+  await expect.poll(() => existsSync(`${listed}.rc`), { timeout: 10_000 }).toBe(true)
+  const labels = readFileSync(listed, 'utf8').trimEnd().split('\n')
+  expect(readFileSync(`${listed}.rc`, 'utf8'), labels.join('\n')).toBe('rc=0\n')
+  expect(labels).toContain('Open Settings')
+  for (const label of [
+    'Save file',
+    'Close tab',
+    'Toggle wrap',
+    'Open in VS Code',
+    'Markdown: Edit',
+    'Markdown: Preview',
+    'Back to board',
+    'Find',
+    'notes.md'
+  ]) {
+    expect(labels).not.toContain(label)
+  }
+})
+
+/** Whether the editor's own scroller scrolls sideways. */
+const scrollsSideways = (): Promise<boolean> =>
+  editor()
+    .locator('.cm-scroller')
+    .evaluate((el) => el.scrollWidth > el.clientWidth)
+
+test('AC12: Wrap wraps a 300-character line and is saved as editorWrap across a restart', async () => {
+  writeFileSync(join(folder, 'long.ts'), `const s = '${'x'.repeat(300)}'\n`)
+  const dataDir = newDataDir()
+  await launch(dataDir)
+  await openFromFiles('long.ts')
+  const wrap = editor().getByTestId('file-editor-wrap')
+  await expect(wrap).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(scrollsSideways).toBe(true)
+
+  await wrap.click()
+  await expect(wrap).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(scrollsSideways).toBe(false)
+  const settingsFile = join(dataDir, 'bikube-settings.json')
+  await expect
+    .poll(() => (existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : ''))
+    .toContain('"editorWrap":true')
+
+  await app!.close()
+  await launch(dataDir, false)
+  expect(readFileSync(settingsFile, 'utf8')).toContain('"editorWrap":true')
+  await openFromFiles('long.ts')
+  await expect(editor().getByTestId('file-editor-wrap')).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(scrollsSideways).toBe(false)
+
+  // Toggle wrap in the palette turns it off again, and the key goes.
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-row').filter({ hasText: 'Toggle wrap' }).click()
+  await expect(editor().getByTestId('file-editor-wrap')).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(scrollsSideways).toBe(true)
+  await expect.poll(() => readFileSync(settingsFile, 'utf8')).not.toContain('editorWrap')
+})
+
+/** The WCAG contrast of the computed colour of `selector`'s text on what is under it. */
+function textContrast(selector: string): Promise<number> {
+  return editor().evaluate((root, sel) => {
+    const el = root.querySelector(sel) as HTMLElement
+    const rgb = (c: string): number[] => (c.match(/[\d.]+/g) ?? []).map(Number)
+    const lum = ([r, g, b]: number[]): number => {
+      const ch = (v: number): number => {
+        const s = v / 255
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+      }
+      return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+    }
+    // The first opaque background from the element up, with any translucent ones over it.
+    const layers: number[][] = []
+    for (let at: HTMLElement | null = el; at; at = at.parentElement) {
+      const bg = rgb(getComputedStyle(at).backgroundColor)
+      const alpha = bg.length > 3 ? bg[3] : 1
+      if (alpha === 0) continue
+      layers.push([...bg.slice(0, 3), alpha])
+      if (alpha === 1) break
+    }
+    let under = layers.pop()!.slice(0, 3)
+    for (const [r, g, b, a] of layers.reverse()) {
+      under = [r * a + under[0] * (1 - a), g * a + under[1] * (1 - a), b * a + under[2] * (1 - a)]
+    }
+    const fg = rgb(getComputedStyle(el).color).slice(0, 3)
+    const [hi, lo] = [lum(fg), lum(under)].sort((a, b) => b - a)
+    return (hi + 0.05) / (lo + 0.05)
+  }, selector)
+}
+
+/** The editor's background, and `--terminal-bg` as a computed colour. */
+const backgrounds = (): Promise<{ editor: string; terminal: string }> =>
+  editor().evaluate((root) => {
+    const probe = document.createElement('div')
+    probe.style.background = 'var(--terminal-bg)'
+    document.body.append(probe)
+    const terminal = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return {
+      editor: getComputedStyle(root.querySelector('.cm-editor')!).backgroundColor,
+      terminal
+    }
+  })
+
+/** Runs the palette row labelled `label`. */
+async function runPaletteRow(label: string): Promise<void> {
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-input').fill(label)
+  await palette().getByTestId('palette-row').filter({ hasText: label }).first().click()
+  await expect(palette()).toHaveCount(0)
+}
+
+test('AC12: the editor on --terminal-bg with readable tabs and header in Dark, Light and Nord; 320 px', async () => {
+  await launch()
+  // The page follows the Theme setting, as in the app (Playwright pins light otherwise).
+  await page.emulateMedia({ colorScheme: null })
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await expect(code()).toContainText('# Notes')
+
+  const body = (): Promise<string> =>
+    page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  for (const [step, theme] of [
+    ['Theme: Dark', 'dark'],
+    ['Theme: Light', 'light'],
+    ['App theme: Nord', 'nord light'],
+    ['Theme: Dark', 'nord dark']
+  ] as const) {
+    const before = await body()
+    await runPaletteRow(step)
+    await expect.poll(body).not.toBe(before)
+    await expect
+      .poll(async () => (await backgrounds()).editor, theme)
+      .toBe((await backgrounds()).terminal)
+    // Tab and header text hold D5's ratios on what is under them.
+    for (const selector of [
+      '[data-testid=file-editor-tab][aria-selected=true] .file-editor-tab-name',
+      '[data-testid=file-editor-tab][aria-selected=false] .file-editor-tab-name',
+      '[data-testid=file-editor-path]'
+    ]) {
+      expect(await textContrast(selector), `${theme} ${selector}`).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+
+  // At a 320 px main area nothing scrolls sideways but the editor's own content.
+  writeFileSync(join(folder, 'long.ts'), `const s = '${'x'.repeat(300)}'\n`)
+  await openFromFiles('long.ts')
+  await runPaletteRow('Toggle panel')
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await page.getByTestId('sidebar-toggle').click()
+  // The sidebar collapses with a transition.
+  await page.waitForTimeout(500)
+  const sidebar = await page
+    .getByTestId('sidebar')
+    .evaluate((el) => el.getBoundingClientRect().width)
+  await app!.evaluate(
+    ({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0]?.setSize(width, 700),
+    Math.ceil(320 + sidebar)
+  )
+  await expect
+    .poll(() => page.locator('main.main').evaluate((el) => Math.round(el.clientWidth)))
+    .toBeLessThanOrEqual(330)
+  await expect.poll(scrollsSideways).toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [
+          document.documentElement,
+          ...document.querySelectorAll(
+            'main.main, .file-editor, .file-editor-strip, .file-editor-tabs, .file-editor-header'
+          )
+        ]
+          .filter((el) => el.scrollWidth > el.clientWidth)
+          .map((el) => el.className || el.tagName)
+      )
+    )
+    .toEqual([])
+  // The header's controls are all inside the main area.
+  const main = (await page.locator('main.main').boundingBox())!
+  for (const id of ['file-editor-wrap', 'file-editor-open-external']) {
+    const box = (await editor().getByTestId(id).boundingBox())!
+    expect(box.x + box.width, id).toBeLessThanOrEqual(main.x + main.width + 0.5)
+  }
 })

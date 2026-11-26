@@ -17,6 +17,14 @@ import type { AgentChoice } from '../core/installed-agents'
 import type { NamedEditor } from '../core/editor-candidates'
 import type { KeptOutput } from '../core/kept-output'
 import type { OpenResult } from '../core/open-result'
+import type {
+  EditorDraft,
+  EditorFileRef,
+  EditorReadResult,
+  EditorStatResult,
+  EditorWrite,
+  EditorWriteResult
+} from '../core/editor-files-types'
 import type { FolderListing } from '../core/file-tree'
 import type { FolderStatus } from '../core/git-status'
 import type { PullRequestRead } from '../core/pr-status'
@@ -99,6 +107,13 @@ export const IPC = {
   agentSetupOpen: 'agentSetup:open',
   agentSetupReveal: 'agentSetup:reveal',
   agentSetupStats: 'agentSetup:stats',
+  editorRead: 'editor:read',
+  editorStat: 'editor:stat',
+  editorWrite: 'editor:write',
+  draftsSave: 'drafts:save',
+  draftsDelete: 'drafts:delete',
+  draftsList: 'drafts:list',
+  draftsDirty: 'drafts:dirty',
   agentTabSummary: 'agentTab:summary',
   agentTabSessionSummary: 'agentTab:sessionSummary',
   agentTabOpenOutput: 'agentTab:openOutput',
@@ -433,6 +448,42 @@ export interface ClaudeRetentionApi {
   set(): Promise<SettingsWriteResult>
 }
 
+/**
+ * The file editor's file access (#83 D6, D7, D12, D13), main window's main frame only. Every call
+ * names its file by an `EditorFileRef`, which main checks before anything is read or written:
+ * a malformed one, one outside its folder, an unlisted one or one naming a folder is `refused`.
+ */
+export interface EditorApi {
+  /**
+   * Reads the file (D7): `text` (line endings as `\n`, BOM taken off, both noted) up to 5 MB,
+   * `image` as a `data:` URL up to 20 MB, `binary`, `too-large` with its size, or `missing`.
+   */
+  read(ref: EditorFileRef): Promise<EditorReadResult>
+  /** The file's size and mtime (D13), for a cheap check before any read; `missing` once it's gone. */
+  stat(ref: EditorFileRef): Promise<EditorStatResult>
+  /**
+   * Saves (D12) only while the file still matches `write.base`, else `conflict` and nothing is
+   * written; the line endings and BOM put back, through a `.tmp` beside it with its mode.
+   */
+  write(ref: EditorFileRef, write: EditorWrite): Promise<EditorWriteResult>
+}
+
+/**
+ * Dirty editor tabs' drafts on this machine (#83 D11), in `<userData>/drafts`, main window's main
+ * frame only. Saves and deletes are sent in order, so those sent as the app quits are on disk
+ * before `scrollback.quitSaved`.
+ */
+export interface DraftsApi {
+  /** Replaces the tab's draft (its workspace id and real path name it). */
+  save(draft: EditorDraft): void
+  /** Removes the tab's draft, if any. */
+  delete(workspaceId: string, realPath: string): void
+  /** Every draft kept (D11's restore at launch). */
+  list(): Promise<EditorDraft[]>
+  /** How many tabs are dirty now: while any is, a quit waits for the window's quit saves. */
+  dirty(count: number): void
+}
+
 export interface AgentSetupApi {
   /**
    * Everything the Agent setup page shows for the workspace folder `folder` (#68 D8, D28): read by
@@ -625,6 +676,8 @@ export interface BikubeApi {
   agents: AgentsApi
   editors: EditorsApi
   agentSetup: AgentSetupApi
+  editor: EditorApi
+  drafts: DraftsApi
   agentTab: AgentTabApi
   claudeRetention: ClaudeRetentionApi
   update: UpdateApi

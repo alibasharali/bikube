@@ -37,6 +37,15 @@ describe('quitHold (#18 D2, #26 D5)', () => {
     ).toEqual({ hold: false })
   })
 
+  it('holds the first quit while an editor tab is dirty, for its draft (#83 D11)', () => {
+    expect(quitHold({ holds: 0, liveShells: false, syncBusy: false, unsavedDrafts: true })).toEqual(
+      { hold: true, shells: false }
+    )
+    expect(quitHold({ holds: 1, liveShells: false, syncBusy: false, unsavedDrafts: true })).toEqual(
+      { hold: false }
+    )
+  })
+
   it('lets a third quit through whatever is still busy', () => {
     expect(quitHold({ holds: 2, liveShells: true, syncBusy: true })).toEqual({ hold: false })
   })

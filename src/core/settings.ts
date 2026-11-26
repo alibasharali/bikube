@@ -198,6 +198,8 @@ export interface Preferences {
    * shipped guide; '' for none. At most 20,000 characters, trailing whitespace trimmed.
    */
   orchestratorInstructions: string
+  /** The file editor's lines wrap at its width (#83 D8), its header's Wrap toggle. */
+  editorWrap: boolean
 }
 
 export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
@@ -238,7 +240,8 @@ export const PREFERENCE_DEFAULTS: Readonly<Preferences> = Object.freeze({
   viewChosen: false,
   columnCardLimit: COLUMN_CARD_LIMIT,
   sidebarLayout: 'nested',
-  orchestratorInstructions: ''
+  orchestratorInstructions: '',
+  editorWrap: false
 })
 
 const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean'
@@ -308,7 +311,8 @@ const PREFERENCE_CHECKS: { [K in keyof Preferences]: (v: unknown) => v is Prefer
   columnCardLimit: isColumnCardLimit,
   sidebarLayout: oneOf(SIDEBAR_LAYOUTS),
   orchestratorInstructions: (v): v is string =>
-    typeof v === 'string' && v.length <= MAX_ORCHESTRATOR_INSTRUCTIONS && v === v.trimEnd()
+    typeof v === 'string' && v.length <= MAX_ORCHESTRATOR_INSTRUCTIONS && v === v.trimEnd(),
+  editorWrap: isBoolean
 }
 
 export const PREFERENCE_KEYS = Object.keys(PREFERENCE_CHECKS) as (keyof Preferences)[]

@@ -18,6 +18,8 @@ import { registerFiles } from './files'
 import { registerAgents } from './agents'
 import { registerEditors } from './editors'
 import { registerAgentSetup } from './agent-setup'
+import { registerEditorFiles } from './editor-files'
+import { registerDrafts, workspaceIds } from './drafts'
 import { registerAgentTab } from './agent-tab'
 import { registerClaudeRetention } from './claude-retention'
 import { enableGlobalShortcutsPortal, registerGlobalShortcut } from './global-shortcut'
@@ -190,6 +192,10 @@ function startApp(): void {
   registerAgents(() => settings.shell())
   registerEditors(() => settings.shell())
   registerAgentSetup(() => settings.editor())
+  registerEditorFiles()
+  // Dirty editor tabs' drafts of workspaces on neither board go (#83 D11).
+  const drafts = registerDrafts()
+  void sync.launched.then(() => drafts.store.prune(workspaceIds(localBoard, state.load())))
   registerAgentTab()
   registerClaudeRetention()
   const updates = registerUpdates(() => terminals.sessionCount)
@@ -230,7 +236,8 @@ function startApp(): void {
       holds,
       liveShells: terminals.sessionCount > 0,
       syncBusy,
-      transcriptsBusy: transcripts.busy()
+      transcriptsBusy: transcripts.busy(),
+      unsavedDrafts: drafts.unsaved()
     })
     busyAtLastQuit = syncBusy
     if (!hold.hold) return
@@ -238,7 +245,8 @@ function startApp(): void {
     event.preventDefault()
     // The transcript backups the renderer sent before `quitSaved` (#80 D9) are copied with async
     // fs: they finish before the shells stop, within the same wait, and a quit with no shell is
-    // held for them (and those sent earlier) as well.
+    // held for them (and those sent earlier) as well. Dirty editor tabs' drafts (#83 D11) are
+    // written as they arrive, before `quitSaved`; a quit with no shell is held for them too.
     const saved = boundedWait(
       (told ? quitSaved : Promise.resolve()).then(() => transcripts.idle()),
       QUIT_SAVE_WAIT_MS

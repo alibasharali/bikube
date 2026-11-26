@@ -1382,6 +1382,7 @@ describe('board palette (#81 D23, AC12)', () => {
   const items: PaletteItems = {
     cards: [],
     shells: [],
+    files: [],
     actions: [
       action('back', 'Back to board'),
       action('agentSetup', 'Agent setup'),

@@ -213,7 +213,7 @@ function answerDriving(
   }
   if (command.command === 'palette') {
     const rows = orchestratorPaletteRows(
-      answers.palette?.() ?? { cards: [], shells: [], actions: [] }
+      answers.palette?.() ?? { cards: [], shells: [], files: [], actions: [] }
     )
     if (command.action === 'list') {
       return { ok: true, output: rows.map((row) => `${row.label}\n`).join('') }

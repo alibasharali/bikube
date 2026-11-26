@@ -17,6 +17,11 @@ export class ListedPaths {
     this.byFolder.set(resolve(folder), new Set(paths))
   }
 
+  /** Whether `folder` has been read at all (an absolute path); its listing may be empty. */
+  knows(folder: string): boolean {
+    return isAbsolute(folder) && this.byFolder.has(resolve(folder))
+  }
+
   /** Whether `folder`'s last read listed `path`, an absolute path as the read gave it. */
   has(folder: unknown, path: unknown): path is string {
     if (typeof folder !== 'string' || !isAbsolute(folder)) return false

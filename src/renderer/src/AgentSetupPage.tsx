@@ -362,7 +362,12 @@ function LocalAgentSetup({ workspace }: { workspace: Workspace }): React.JSX.Ele
           // Stats read the transcripts on their own, not the snapshot (D14).
           <StatsSection workspace={workspace} />
         ) : SectionView && snapshot ? (
-          <FileActionsProvider key={folder} folder={folder} snapshot={snapshot}>
+          <FileActionsProvider
+            key={folder}
+            workspaceId={workspace.id}
+            folder={folder}
+            snapshot={snapshot}
+          >
             <SectionView
               workspace={workspace}
               snapshot={snapshot}

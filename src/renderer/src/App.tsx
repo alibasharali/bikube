@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { workspaceDeleteMessage } from '../../core/card-deletes'
+import { unsavedFilesLine } from '../../core/editor-sync'
 import { keymapAction, terminalShortcut, workspaceShortcut } from '../../core/keymap'
 import type { PaletteAction } from '../../core/palette'
 import { syncStatusText } from '../../core/sync-status'
@@ -11,10 +12,13 @@ import {
   openedCard,
   rememberAgentSetup,
   rememberCard,
+  rememberFiles,
   selectWorkspace,
   showsAgentSetup,
+  showsFiles,
   type ViewMemory
 } from '../../core/view-memory'
+import { activeTab, workspaceTabs } from '../../core/editor-tabs'
 import { nextWaitingCard } from '../../core/waiting'
 import { showViewPrompt } from '../../core/view-prompt'
 import { onOpenRequest, setLookingAt, waitingQueue } from './attention'
@@ -44,6 +48,16 @@ import {
 } from './card-windows'
 import { isCardViewAction, runCardViewAction } from './card-view-actions'
 import AgentSetupPage from './AgentSetupPage'
+import {
+  closeActiveTab,
+  editorFiles,
+  saveActiveTab,
+  useDirtyCount,
+  useEditorTabs
+} from './editor-files'
+import { runOpenInEditor } from './editor-view-actions'
+import { startEditorChecks } from './editor-checks'
+import FileEditorView from './FileEditorView'
 import CardView from './CardView'
 import CommandPalette from './CommandPalette'
 import ConfirmDialog from './ConfirmDialog'
@@ -145,6 +159,64 @@ function App(): React.JSX.Element {
     setOpenSetups((open) => open.filter((id) => id !== activeId))
     setViews((v) => forgetView(v, activeId))
   }, [activeId, setViews])
+  // The file editor (#83 D2, D3): each workspace's open files, its view while one is in front.
+  const editorTabs = useEditorTabs()
+  const filesShown =
+    activeId !== null &&
+    showsFiles(views, activeId) &&
+    workspaceTabs(editorTabs, activeId).tabs.length > 0
+  const shownFile = filesShown ? activeTab(editorTabs, activeId) : null
+  // A file opened anywhere shows its workspace's editor with its tab in front.
+  useEffect(
+    () =>
+      editorFiles.onShow((workspaceId) => {
+        setViews((v) => rememberFiles(v, workspaceId))
+        if (workspaceId !== workspaceStore.getState().activeId) {
+          workspaceStore.selectWorkspace(workspaceId)
+        }
+      }),
+    [setViews]
+  )
+  // A file's sidebar row (D4): its workspace active, its tab in front.
+  const showFileTab = useCallback(
+    (workspaceId: string, tabId: string) => {
+      editorFiles.select(workspaceId, tabId)
+      setViews((v) => rememberFiles(v, workspaceId))
+      if (workspaceId !== activeId) workspaceStore.selectWorkspace(workspaceId)
+    },
+    [activeId, setViews]
+  )
+  // The view's close button (D9): every tab closed, asking for each dirty one first (D12).
+  const closeEditor = useCallback(() => {
+    if (!activeId) return
+    editorFiles.askClose(
+      activeId,
+      workspaceTabs(editorFiles.get(), activeId).tabs.map((t) => t.id)
+    )
+  }, [activeId])
+  // A workspace's last tab closed (its ×, Close pane, the close button): its board (D14).
+  useEffect(
+    () =>
+      editorFiles.subscribe(() =>
+        setViews((v) => {
+          let next = v
+          for (const id of Object.keys(v)) {
+            if (showsFiles(v, id) && workspaceTabs(editorFiles.get(), id).tabs.length === 0) {
+              next = forgetView(next, id)
+            }
+          }
+          return next
+        })
+      ),
+    [setViews]
+  )
+  // Open files are checked for changes on disk (D13).
+  useEffect(() => startEditorChecks(), [])
+  // A deleted workspace's tabs close (D3).
+  const workspaceKey = workspaces.map((w) => w.id).join('\n')
+  useEffect(() => {
+    editorFiles.keep(workspaceKey.split('\n').filter(Boolean))
+  }, [workspaceKey])
   // Agent setup has no side panel (D1): Toggle panel does nothing while it is in front.
   const agentSetupShown = useRef(false)
   useEffect(() => {
@@ -395,6 +467,17 @@ function App(): React.JSX.Element {
       else if (action.id === 'theme') settingsStore.update({ theme: action.theme })
       else if (action.id === 'appTheme') settingsStore.update({ appTheme: action.appTheme })
       else if (action.id === 'sidebarLayout') settingsStore.update({ sidebarLayout: action.layout })
+      // The file editor's rows (#83 D15), for the tab in front of the active workspace.
+      else if (action.id === 'saveFile') {
+        if (activeId) void saveActiveTab(activeId)
+      } else if (action.id === 'closeTab') {
+        if (activeId) closeActiveTab(activeId)
+      } else if (action.id === 'markdownMode') {
+        const tab = activeId ? activeTab(editorFiles.get(), activeId) : null
+        if (activeId && tab) editorFiles.setMode(activeId, tab.id, action.mode)
+      } else if (action.id === 'toggleWrap') {
+        settingsStore.update({ editorWrap: !settingsStore.get().editorWrap })
+      } else if (action.id === 'openInEditor') runOpenInEditor()
       else if (action.id === 'switchWorkspace') onSelectWorkspace(action.workspaceId)
       // The active workspace's view; its board shows in it, closing the card open there.
       else if (action.id === 'workspaceView') {
@@ -421,16 +504,23 @@ function App(): React.JSX.Element {
     active && openCard
       ? { kind: openOnBoard ? 'card' : 'shell', workspaceId: active.id, cardId: openCard.id }
       : null
-  const paletteFor = useRef({ view: paletteView, agentSetup })
+  // The workspace whose file editor is in front (#83 D15): its rows and tab actions.
+  const editorFor = !openCard && !agentSetup && filesShown ? activeId : null
+  const paletteFor = useRef({ view: paletteView, agentSetup, editorFor })
   useEffect(() => {
-    paletteFor.current = { view: paletteView, agentSetup }
+    paletteFor.current = { view: paletteView, agentSetup, editorFor }
   })
   // The Orchestrator's `board palette` (#81 D23): the rows the palette would show now, each run
   // at once exactly as picking it would, whatever the user is looking at.
   useEffect(
     () =>
       onBoardPalette({
-        items: () => currentPaletteItems(paletteFor.current.view, paletteFor.current.agentSetup),
+        items: () =>
+          currentPaletteItems(
+            paletteFor.current.view,
+            paletteFor.current.agentSetup,
+            paletteFor.current.editorFor
+          ),
         run: (action) => runAction.current(action)
       }),
     []
@@ -494,6 +584,7 @@ function App(): React.JSX.Element {
         card={active ? openCard : null}
         isShell={openIsShell}
         agentSetup={agentSetup}
+        file={openCard ? null : shownFile}
         onNewShell={() => openNewShell.current()}
         onBack={closeCard}
       />
@@ -515,6 +606,9 @@ function App(): React.JSX.Element {
             showAgentSetup(id)
             if (id !== activeId) workspaceStore.selectWorkspace(id)
           }}
+          editorTabs={editorTabs}
+          fileShown={shownFile && activeId ? { workspaceId: activeId, tabId: shownFile.id } : null}
+          onOpenFileTab={showFileTab}
           heldNumbers={held}
         />
         <main className="main">
@@ -535,6 +629,26 @@ function App(): React.JSX.Element {
               onBack={closeCard}
               onClose={closeAgentSetup}
             />
+          ) : active && filesShown ? (
+            // The editor in place of the board, the side panel beside it (#83 D2, D8).
+            <div className="board-layout">
+              <div className="board-main">
+                <FileEditorView
+                  key={active.id}
+                  workspace={active}
+                  onBack={closeCard}
+                  onClose={closeEditor}
+                />
+              </div>
+              {sidePanelOpen && (
+                <SidePanel
+                  folder={active.directory}
+                  ssh={active.host !== undefined}
+                  workspaceId={active.id}
+                  onOpenShell={onOpenCard}
+                />
+              )}
+            </div>
           ) : active ? (
             // The side panel beside the board shows the workspace's folder (#57 D1, D2), from the
             // window's top; the toolbar and the board share the column left of it.
@@ -573,8 +687,10 @@ function App(): React.JSX.Element {
         <CommandPalette
           open={paletteView}
           agentSetup={agentSetup}
+          editorFor={editorFor}
           onClose={() => setPaletteOpen(false)}
           onOpenTerminal={(row) => onPaletteOpen(row.workspaceId, row.cardId)}
+          onOpenFile={(row) => showFileTab(row.workspaceId, row.tabId)}
           onRunAction={onRunAction}
         />
       )}
@@ -642,6 +758,8 @@ function DeleteWorkspaceDialog({
   onCancel: () => void
 }): React.JSX.Element {
   const running = useRunningCount(workspace.cards)
+  // Its open files' unsaved edits go with it (#83 D12).
+  const unsaved = unsavedFilesLine(useDirtyCount(workspace.id))
   return (
     <ConfirmDialog
       title="Delete workspace"
@@ -650,6 +768,7 @@ function DeleteWorkspaceDialog({
         running,
         workspace.cards.filter((c) => c.worktree).length
       )}
+      detail={unsaved ?? undefined}
       confirmLabel="Delete"
       onCancel={onCancel}
       onConfirm={onConfirm}

@@ -11,6 +11,7 @@ import {
   filterPalette,
   paletteItems,
   type ActionRow,
+  type FileRow,
   type PaletteAction,
   type PaletteItems,
   type PaletteRow,
@@ -20,6 +21,7 @@ import { shellCards } from '../../core/workspace-shells'
 import type { WorkspaceState } from '../../core/workspace-store'
 import { useWaitingQueue } from './attention'
 import { cardTerminals, useCardRunState, usePaneLayout } from './card-terminals'
+import { useEditorTabs } from './editor-files'
 import Modal from './Modal'
 import { paletteInput, rowStatus, type OpenTerminal } from './palette-input'
 import ShortcutKeys from './ShortcutKeys'
@@ -31,9 +33,13 @@ interface CommandPaletteProps {
   open: OpenTerminal | null
   /** Whether the active workspace shows its Agent setup page (#68 D2). */
   agentSetup?: boolean
+  /** The workspace whose file editor is in front (#83 D15), or null. */
+  editorFor?: string | null
   onClose: () => void
   /** Opens a card or shell row (D7); the palette is closed first. */
   onOpenTerminal: (row: TerminalRow) => void
+  /** Opens an open file's row: its tab in front (#83 D15); the palette is closed first. */
+  onOpenFile: (row: FileRow) => void
   /** Runs an action row (D6); the palette is closed first. */
   onRunAction: (action: PaletteAction) => void
 }
@@ -42,11 +48,16 @@ interface CommandPaletteProps {
 const SECTIONS: { key: keyof PaletteItems; title: string }[] = [
   { key: 'cards', title: 'Cards' },
   { key: 'shells', title: 'Shells' },
+  { key: 'files', title: 'Files' },
   { key: 'actions', title: 'Actions' }
 ]
 
 const rowKey = (row: PaletteRow): string =>
-  row.kind === 'action' ? `action:${JSON.stringify(row.action)}` : `${row.kind}:${row.cardId}`
+  row.kind === 'action'
+    ? `action:${JSON.stringify(row.action)}`
+    : row.kind === 'file'
+      ? `file:${row.workspaceId}:${row.tabId}`
+      : `${row.kind}:${row.cardId}`
 
 /** Every card's and shell's id in `state`. */
 function terminalIds(state: WorkspaceState): string[] {
@@ -87,8 +98,10 @@ function useStatusKey(ids: string[]): string {
 function CommandPalette({
   open,
   agentSetup = false,
+  editorFor = null,
   onClose,
   onOpenTerminal,
+  onOpenFile,
   onRunAction
 }: CommandPaletteProps): React.JSX.Element {
   const state = useWorkspaceState()
@@ -102,18 +115,42 @@ function CommandPalette({
   const statusKey = useStatusKey(ids)
   // Next waiting card follows the queue live (#41 D7).
   const waiting = useWaitingQueue()
+  // Open files' rows follow the tabs (#83 D15).
+  const files = useEditorTabs()
 
   const items = useMemo(
     () =>
       filterPalette(
         paletteItems(
-          paletteInput({ state, open, agentSetup, runState, layout, settings, waiting })
+          paletteInput({
+            state,
+            open,
+            agentSetup,
+            editorFor,
+            files,
+            runState,
+            layout,
+            settings,
+            waiting
+          })
         ),
         query
       ),
     // statusKey: the rows re-read every status when one changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state, open, agentSetup, runState, layout, settings, query, statusKey, waiting]
+    [
+      state,
+      open,
+      agentSetup,
+      editorFor,
+      files,
+      runState,
+      layout,
+      settings,
+      query,
+      statusKey,
+      waiting
+    ]
   )
   const sections = SECTIONS.map(({ key, title }) => ({
     key,
@@ -142,6 +179,7 @@ function CommandPalette({
     if (!row) return
     onClose()
     if (row.kind === 'action') onRunAction(row.action)
+    else if (row.kind === 'file') onOpenFile(row)
     else onOpenTerminal(row)
   }
 
@@ -233,6 +271,8 @@ function CommandPalette({
                 >
                   {row.kind === 'action' ? (
                     <ActionRowContent row={row} />
+                  ) : row.kind === 'file' ? (
+                    <FileRowContent row={row} />
                   ) : (
                     <TerminalRowContent row={row} />
                   )}
@@ -258,6 +298,20 @@ function TerminalRowContent({ row }: { row: TerminalRow }): React.JSX.Element {
       </span>
       <span className="palette-row-meta" data-testid="palette-row-meta">
         {meta.join(' · ')}
+      </span>
+    </>
+  )
+}
+
+/** An open file's row (#83 D15): its name, then its workspace. */
+function FileRowContent({ row }: { row: FileRow }): React.JSX.Element {
+  return (
+    <>
+      <span className="palette-row-title" data-testid="palette-row-title">
+        {row.title}
+      </span>
+      <span className="palette-row-meta" data-testid="palette-row-meta">
+        {row.workspaceName}
       </span>
     </>
   )

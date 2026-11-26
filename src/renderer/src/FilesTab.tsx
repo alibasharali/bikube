@@ -1,11 +1,23 @@
-import { ChevronDown, ChevronRight, CornerDownRight, FileDiff, RotateCw, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  CornerDownRight,
+  Ellipsis,
+  ExternalLink,
+  FileDiff,
+  RotateCw,
+  X
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeLetter } from '../../core/git-status'
+import { openInEditorLabel } from '../../core/open-in-editor'
 import { isOpenNote, openErrorLine, type OpenResult } from '../../core/open-result'
 import FileIcon from './FileIcon'
 import { changedRows, onDisk, treeKey, visibleRows, type TreeRow } from '../../core/tree-rows'
 import { refreshTree, setChangedOnly, toggleFolder, useFolderTree } from './file-tree'
-import { SMALL_ICON } from './icons'
+import { MENU_ICON, SMALL_ICON } from './icons'
+import MenuButton from './MenuButton'
+import { useSettings } from './settings'
 import { anyWindowFocused, onAnyWindowFocus } from './window-focus'
 
 /** How often the shown folder is read again while the tab shows and the window is focused (D12). */
@@ -54,7 +66,8 @@ function Row({
   focusable,
   folder,
   onSelect,
-  onActivate
+  onActivate,
+  onOpenExternal
 }: {
   row: TreeRow
   selected: boolean
@@ -62,11 +75,16 @@ function Row({
   folder: string
   onSelect: () => void
   onActivate: () => void
+  /** A file still on disk: its ⋯ menu's Open in <editor> (#83 D5); none for anything else. */
+  onOpenExternal?: () => void
 }): React.JSX.Element {
   const expandable = row.kind === 'root' || row.kind === 'folder'
   const item = expandable || row.kind === 'file'
+  const { editor } = useSettings()
+  const element = useRef<HTMLDivElement>(null)
   return (
     <div
+      ref={element}
       className="files-row"
       data-testid="files-row"
       data-path={row.path}
@@ -84,6 +102,16 @@ function Row({
       style={{ paddingLeft: `calc(var(--space-2) + ${row.depth * 12}px)` }}
       onClick={item ? onSelect : undefined}
       onDoubleClick={item ? onActivate : undefined}
+      onContextMenu={
+        onOpenExternal
+          ? (event) => {
+              // A right-click selects the row and opens its ⋯ menu (#83 D5).
+              event.preventDefault()
+              onSelect()
+              element.current?.querySelector<HTMLElement>('[data-testid="files-row-menu"]')?.click()
+            }
+          : undefined
+      }
     >
       <span
         className="files-chevron"
@@ -122,6 +150,39 @@ function Row({
           {row.change}
         </span>
       )}
+      {onOpenExternal && (
+        // Its clicks and keys are the menu's: they neither select nor open the row.
+        <span
+          className="files-row-menu-wrap"
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <MenuButton
+            className="files-row-menu"
+            label={`Actions for ${row.name}`}
+            menuLabel={`${row.name} actions`}
+            testId="files-row-menu"
+            fixed
+            icon={<Ellipsis {...SMALL_ICON} />}
+            buttonClassName="icon-btn files-row-menu-btn"
+            tabIndex={focusable ? 0 : -1}
+          >
+            {(run) => (
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                data-testid="files-row-open-external"
+                onClick={run(onOpenExternal)}
+              >
+                <ExternalLink {...MENU_ICON} />
+                {openInEditorLabel(editor)}
+              </button>
+            )}
+          </MenuButton>
+        </span>
+      )}
     </div>
   )
 }
@@ -133,16 +194,19 @@ function Row({
  * it shows. Over SSH it only says files aren't
  * available (D6): nothing is listed and no git runs. `onOpenFile` opens a file's path (relative to
  * `folder`) on double-click or Enter (D13), never a deleted one; when it fails, an error line
- * shows until the next open or its dismiss button.
+ * shows until the next open or its dismiss button. A file's ⋯ menu (and right-click) runs
+ * `onOpenExternal`, Settings > Editor, in either window (#83 D5), its result on the same line.
  */
 function FilesTab({
   folder,
   ssh,
-  onOpenFile = async () => ({ ok: true })
+  onOpenFile = async () => ({ ok: true }),
+  onOpenExternal = (path) => window.bikube.files.open(folder, path)
 }: {
   folder: string
   ssh: boolean
   onOpenFile?: (path: string) => Promise<OpenResult>
+  onOpenExternal?: (path: string) => Promise<OpenResult>
 }): React.JSX.Element {
   if (ssh) {
     return (
@@ -151,15 +215,24 @@ function FilesTab({
       </div>
     )
   }
-  return <LocalFiles key={folder} folder={folder} onOpenFile={onOpenFile} />
+  return (
+    <LocalFiles
+      key={folder}
+      folder={folder}
+      onOpenFile={onOpenFile}
+      onOpenExternal={onOpenExternal}
+    />
+  )
 }
 
 function LocalFiles({
   folder,
-  onOpenFile
+  onOpenFile,
+  onOpenExternal
 }: {
   folder: string
   onOpenFile: (path: string) => Promise<OpenResult>
+  onOpenExternal: (path: string) => Promise<OpenResult>
 }): React.JSX.Element {
   useRefresh(folder)
   const { expanded, listings, status, changedOnly } = useFolderTree(folder)
@@ -178,12 +251,12 @@ function LocalFiles({
   const opens = useRef(0)
 
   // A deleted file does nothing (D13); one still on disk opens, whatever its letter.
-  const open = (path: string): void => {
+  const open = (path: string, opener = onOpenFile): void => {
     const row = rows.find((r) => r.path === path)
     if (row?.kind !== 'file' || !onDisk(row, listings)) return
     const at = ++opens.current
     setOpenError(null)
-    void onOpenFile(path).then((result) => {
+    void opener(path).then((result) => {
       if (at !== opens.current) return
       const text = openErrorLine(path, result)
       setOpenError(text === null ? null : { text, note: isOpenNote(result) })
@@ -284,6 +357,11 @@ function LocalFiles({
             focusable={row.path === (shownSelected ?? '')}
             onSelect={() => select(row.path, false)}
             onActivate={() => activate(row)}
+            onOpenExternal={
+              row.kind === 'file' && onDisk(row, listings)
+                ? () => open(row.path, onOpenExternal)
+                : undefined
+            }
           />
         ))}
       </div>

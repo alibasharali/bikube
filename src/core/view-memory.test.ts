@@ -7,8 +7,10 @@ import {
   openedCard,
   rememberAgentSetup,
   rememberCard,
+  rememberFiles,
   selectWorkspace,
   showsAgentSetup,
+  showsFiles,
   type ViewMemory
 } from './view-memory'
 
@@ -100,5 +102,31 @@ describe('view memory (#31 D19, AC17, AC18)', () => {
     expect(showsAgentSetup(forgetView(views, 'alpha'), 'alpha')).toBe(false)
     // A card going to its own window leaves it alone.
     expect(forgetCards(views, ['alpha'])).toBe(views)
+  })
+
+  it('the file editor is a workspace’s view as Agent setup is (#83 D2)', () => {
+    let views = rememberFiles(rememberCard(NO_VIEWS, 'alpha', 'api'), 'alpha')
+    expect(showsFiles(views, 'alpha')).toBe(true)
+    expect(openedCard(views, 'alpha')).toBeNull()
+    expect(showsAgentSetup(views, 'alpha')).toBe(false)
+    expect(showsFiles(views, 'beta')).toBe(false)
+    // Kept while its workspace exists, through another workspace and back.
+    const away = selectWorkspace(views, 'alpha', 'beta')
+    expect(
+      showsFiles(
+        enterWorkspace(away, 'alpha', [], () => false),
+        'alpha'
+      )
+    ).toBe(true)
+    expect(showsFiles(enterWorkspace(views, 'alpha', null, running), 'alpha')).toBe(false)
+    // Back, the workspace's own row, or a card or Agent setup opened replace it.
+    expect(showsFiles(forgetView(views, 'alpha'), 'alpha')).toBe(false)
+    expect(showsFiles(selectWorkspace(views, 'alpha', 'alpha'), 'alpha')).toBe(false)
+    expect(showsFiles(rememberAgentSetup(views, 'alpha'), 'alpha')).toBe(false)
+    views = rememberCard(views, 'alpha', 'web')
+    expect(showsFiles(views, 'alpha')).toBe(false)
+    expect(forgetCards(rememberFiles(NO_VIEWS, 'alpha'), ['alpha'])).toEqual({
+      alpha: { kind: 'files' }
+    })
   })
 })

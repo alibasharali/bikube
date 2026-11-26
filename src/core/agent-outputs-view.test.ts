@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { outputRows } from './agent-outputs-view'
+import { outputRows, pathInFolder } from './agent-outputs-view'
 import type { AgentOutput } from './agent-summary'
 
 const HOME = '/Users/me'
@@ -73,5 +73,21 @@ describe("Files and artifacts' rows (#79 D3, D4, D11)", () => {
 
   it('is empty without outputs', () => {
     expect(outputRows(undefined, HOME)).toEqual([])
+  })
+})
+
+describe("Files and artifacts' rows opening in the editor (#83 D5)", () => {
+  it('gives a file inside the folder as its path relative to it', () => {
+    expect(pathInFolder('/repo', '/repo/docs/a.md')).toBe('docs/a.md')
+    expect(pathInFolder('/repo/', '/repo/a.md')).toBe('a.md')
+  })
+
+  it('leaves out anything outside the folder, the folder itself and unnormalized paths', () => {
+    expect(pathInFolder('/repo', '/repo-other/a.md')).toBeNull()
+    expect(pathInFolder('/repo', '/Users/me/Downloads/a.pdf')).toBeNull()
+    expect(pathInFolder('/repo', '/repo')).toBeNull()
+    expect(pathInFolder('/repo', '/repo/../etc/passwd')).toBeNull()
+    expect(pathInFolder('/repo', '~/repo/a.md')).toBeNull()
+    expect(pathInFolder('', '/a.md')).toBeNull()
   })
 })

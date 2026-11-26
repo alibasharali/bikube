@@ -1,0 +1,973 @@
+import { expect, test, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { backToBoard, expectCardOpen, NEW_SHELL, SHORTCUTS } from './card-view'
+import { launchApp, newDataDir, removeDataDirs } from './launch'
+import { plainCards } from './plain-cards'
+
+// The file editor (#83): a file opened from the main window's Files tab shows in the workspace's
+// editor view, one tab per file, with a sidebar row each; pictures, binary and too-large files
+// show what they are with Open in <editor>.
+
+let app: ElectronApplication | undefined
+let page: Page
+let root: string
+let folder: string
+
+/** A plain PNG: 1×1, one pixel. */
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+)
+
+test.beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'bikube-editor-'))
+  folder = join(root, 'proj')
+  const files: Record<string, string | Buffer> = {
+    'src/a.ts': "export const a = 'hello'\n",
+    'b.md': '# Notes\n',
+    'pic.png': PNG,
+    'bin.dat': Buffer.from([0x61, 0x00, 0x62]),
+    'big.log': Buffer.alloc(6 * 1024 * 1024, 'x')
+  }
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(folder, path)), { recursive: true })
+    writeFileSync(join(folder, path), body)
+  }
+})
+
+test.afterEach(async () => {
+  await app?.close().catch(() => {})
+  app = undefined
+  removeDataDirs()
+  rmSync(root, { recursive: true, force: true })
+})
+
+const editorLog = (): string => join(root, 'editors.log')
+const editorRuns = (): string[] =>
+  existsSync(editorLog()) ? readFileSync(editorLog(), 'utf8').trimEnd().split('\n') : []
+
+/**
+ * Launches with a login shell (`/bin/sh -l`) whose PATH is a fake `bin` holding a fake `code`
+ * that logs its arguments, and the system folders, so a real editor never runs.
+ */
+async function launch(dataDir = newDataDir(), create = true): Promise<void> {
+  const home = join(root, 'home')
+  const bin = join(root, 'bin')
+  mkdirSync(home, { recursive: true })
+  mkdirSync(bin, { recursive: true })
+  writeFileSync(join(home, '.profile'), `PATH='${bin}':/usr/bin:/bin; export PATH\n`)
+  writeFileSync(
+    join(bin, 'code'),
+    `#!/bin/sh\n{ echo "run $(basename "$0")"; printf '%s\\n' "$@"; } >> '${editorLog()}'\n`
+  )
+  chmodSync(join(bin, 'code'), 0o755)
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value
+  ;({ app, page } = await launchApp({
+    dataDir,
+    env: { ...env, SHELL: '/bin/sh', HOME: home, BIKUBE_HOME_DIR: home }
+  }))
+  if (!create) return
+  await page.getByTestId('workspace-add').click()
+  await plainCards(page)
+  await page.getByTestId('workspace-directory').fill(folder)
+  await page.getByTestId('workspace-name').fill('proj')
+  await page.getByTestId('workspace-submit').click()
+  await expect(page.getByTestId('workspace-dialog')).toHaveCount(0)
+}
+
+const filesTab = (): Locator => page.getByTestId('side-panel').getByTestId('files-tab')
+const row = (path: string): Locator =>
+  filesTab().locator(`[data-testid=files-row][data-path="${path}"]`)
+const editor = (): Locator => page.getByTestId('file-editor')
+const tabs = (): Locator => editor().getByTestId('file-editor-tab')
+const activeTab = (): Locator =>
+  editor().locator('[data-testid=file-editor-tab][aria-selected=true]')
+const fileRows = (): Locator => page.getByTestId('sidebar').getByTestId('workspace-file')
+
+/** Opens `path` from the Files tab with a double-click, expanding `src` first when needed. */
+async function openFromFiles(path: string): Promise<void> {
+  if (path.startsWith('src/') && (await row('src/a.ts').count()) === 0) await row('src').dblclick()
+  await row(path).dblclick()
+}
+
+/** The computed colour of the first token span in the editor whose text is `text`. */
+const tokenColour = (text: string): Promise<string> =>
+  editor()
+    .locator('.cm-content span', { hasText: text })
+    .first()
+    .evaluate((span) => getComputedStyle(span).color)
+
+test('AC1: a double-click or Enter in the Files tab opens the file in the editor, not VS Code', async () => {
+  await launch()
+  // The terminal's font, as its xterm has it.
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  const font = await page.evaluate(() => {
+    const host = document.querySelector('[data-testid=card-view] [data-testid=terminal]') as
+      (HTMLElement & { __xterm?: { options: { fontFamily: string; fontSize: number } } }) | null
+    return { family: host!.__xterm!.options.fontFamily, size: host!.__xterm!.options.fontSize }
+  })
+  await backToBoard(page)
+
+  await openFromFiles('src/a.ts')
+  await expect(editor()).toBeVisible()
+  await expect(page.getByTestId('board')).toHaveCount(0)
+  await expect(tabs()).toHaveCount(1)
+  await expect(activeTab()).toContainText('a.ts')
+  await expect(editor().locator('.cm-content')).toHaveText("export const a = 'hello'")
+  await expect(
+    editor().locator('.cm-lineNumbers .cm-gutterElement', { hasText: '1' })
+  ).toBeVisible()
+  // TypeScript's highlighting, loaded lazily: a keyword and a string in different colours.
+  await expect.poll(() => tokenColour('const')).not.toBe(await tokenColour('hello'))
+  const keyword = await tokenColour('const')
+  expect(keyword).not.toBe(await tokenColour("'hello'"))
+  const content = await editor()
+    .locator('.cm-content')
+    .evaluate((e) => ({
+      family: getComputedStyle(e).fontFamily,
+      size: getComputedStyle(e).fontSize
+    }))
+  expect(content.size).toBe(`${font.size}px`)
+  expect(content.family.replace(/\s+/g, '')).toBe(font.family.replace(/\s+/g, ''))
+
+  // Its sidebar row, under the workspace, marked current.
+  await expect(fileRows()).toHaveText(['a.ts'])
+  await expect(fileRows().first()).toHaveAttribute('aria-current', 'true')
+  await expect(fileRows().first()).toHaveAttribute('title', 'src/a.ts')
+
+  // Enter on the selected file in the tree does the same: the one tab, in front.
+  await row('src/a.ts').click()
+  await page.keyboard.press('Enter')
+  await expect(tabs()).toHaveCount(1)
+  await page.waitForTimeout(500)
+  expect(editorRuns()).toEqual([])
+})
+
+test('AC3: tabs and sidebar rows, a row bringing the editor back after a card, Back to the board', async () => {
+  await launch()
+  await openFromFiles('src/a.ts')
+  await expect(activeTab()).toContainText('a.ts')
+  await openFromFiles('b.md')
+  await expect(activeTab()).toContainText('b.md')
+  await openFromFiles('src/a.ts')
+  await expect(tabs()).toHaveCount(2)
+  await expect(tabs()).toContainText(['a.ts', 'b.md'])
+  await expect(activeTab()).toContainText('a.ts')
+  await expect(fileRows()).toHaveText(['a.ts', 'b.md'])
+  await expect(fileRows().nth(0)).toHaveAttribute('aria-current', 'true')
+
+  await fileRows().nth(1).click()
+  await expect(activeTab()).toContainText('b.md')
+  // A Markdown file opens in Preview (D10); its source in Edit.
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await expect(editor().locator('.cm-content')).toHaveText('# Notes')
+  await expect(fileRows().nth(1)).toHaveAttribute('aria-current', 'true')
+
+  // A card opened, then a's row: the editor back with both tabs.
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect(editor()).toHaveCount(0)
+  await expect(fileRows().nth(0)).not.toHaveAttribute('aria-current', 'true')
+  await fileRows().nth(0).click()
+  await expect(editor()).toBeVisible()
+  await expect(tabs()).toHaveCount(2)
+  await expect(activeTab()).toContainText('a.ts')
+
+  // Back: the board, both rows still listed.
+  await backToBoard(page)
+  await expect(editor()).toHaveCount(0)
+  await expect(fileRows()).toHaveText(['a.ts', 'b.md'])
+
+  // The view's close button closes every tab: the board, no rows.
+  await fileRows().nth(1).click()
+  await editor().getByTestId('file-editor-close').click()
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(fileRows()).toHaveCount(0)
+})
+
+test('AC8: a picture, a binary and a too-large file, each with Open in VS Code', async () => {
+  await launch()
+  const openExternal = editor().getByTestId('file-editor-open-external')
+
+  await openFromFiles('pic.png')
+  const image = editor().getByTestId('file-editor-image')
+  await expect(image).toBeVisible()
+  expect(await image.getAttribute('src')).toMatch(/^data:image\/png;base64,/)
+  await expect(openExternal).toHaveText('Open in VS Code')
+  await openExternal.click()
+  await expect.poll(editorRuns).toEqual(['run code', folder, join(folder, 'pic.png')])
+
+  await openFromFiles('bin.dat')
+  await expect(editor().getByTestId('file-editor-message')).toHaveText('Binary file')
+  await openExternal.click()
+  await expect
+    .poll(() => editorRuns().slice(3))
+    .toEqual(['run code', folder, join(folder, 'bin.dat')])
+
+  await openFromFiles('big.log')
+  await expect(editor().getByTestId('file-editor-message')).toHaveText(
+    'Too large to open here (6.0 MB)'
+  )
+  await openExternal.click()
+  await expect
+    .poll(() => editorRuns().slice(6))
+    .toEqual(['run code', folder, join(folder, 'big.log')])
+})
+
+test('AC2: a file row ⋯ menu, by hover or right-click, opens it in VS Code with no tab', async () => {
+  await launch()
+  await row('src').dblclick()
+  const a = row('src/a.ts')
+  await expect(a).toBeVisible()
+  const menuButton = a.getByTestId('files-row-menu')
+  // Folders have none; the menu is there for files only.
+  await expect(row('src').getByTestId('files-row-menu')).toHaveCount(0)
+
+  // Hover shows the ⋯; its item reads Settings > Editor's choice.
+  const opacity = (button: Locator): Promise<string> =>
+    button.evaluate((e) => getComputedStyle(e).opacity)
+  await page.mouse.move(0, 0)
+  await expect.poll(() => opacity(menuButton)).toBe('0')
+  await a.hover()
+  await expect.poll(() => opacity(menuButton)).toBe('1')
+  await menuButton.click()
+  const item = page.getByTestId('files-row-open-external')
+  await expect(item).toHaveText('Open in VS Code')
+  await item.click()
+  await expect.poll(editorRuns).toEqual(['run code', folder, join(folder, 'src', 'a.ts')])
+  await expect(editor()).toHaveCount(0)
+  await expect(fileRows()).toHaveCount(0)
+
+  // A right-click opens the same menu.
+  await row('b.md').click({ button: 'right' })
+  await expect(row('b.md').getByTestId('files-row-menu')).toHaveAttribute('aria-expanded', 'true')
+  await page.getByTestId('files-row-open-external').click()
+  await expect.poll(() => editorRuns().slice(3)).toEqual(['run code', folder, join(folder, 'b.md')])
+  await expect(editor()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+
+  // From the keyboard: Tab from the focused row reaches its ⋯; Enter opens the menu, not the file.
+  await row('b.md').click()
+  await page.keyboard.press('Tab')
+  await expect(row('b.md').getByTestId('files-row-menu')).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('files-row-open-external')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(row('b.md').getByTestId('files-row-menu')).toBeFocused()
+  await expect(page.getByTestId('files-row-open-external')).toHaveCount(0)
+  await page.waitForTimeout(300)
+  await expect(editor()).toHaveCount(0)
+})
+
+test('AC2, AC13: a card window keeps the external editor; editor IPC from it or a subframe is refused', async () => {
+  await launch()
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  const opened = app!.waitForEvent('window')
+  await page.getByTestId('titlebar-open-in-window').click()
+  const cardPage = await opened
+  const cardRow = (path: string): Locator =>
+    cardPage.getByTestId('side-panel').locator(`[data-testid=files-row][data-path="${path}"]`)
+  await expect(cardRow('b.md')).toBeVisible()
+
+  // A double-click runs VS Code there: the card window has no editor view (D2, D5).
+  await cardRow('b.md').dblclick()
+  await expect.poll(editorRuns).toEqual(['run code', folder, join(folder, 'b.md')])
+  // Its ⋯ menu is the same.
+  await cardRow('pic.png').click({ button: 'right' })
+  await cardPage.getByTestId('files-row-open-external').click()
+  await expect
+    .poll(() => editorRuns().slice(3))
+    .toEqual(['run code', folder, join(folder, 'pic.png')])
+  await expect(page.getByTestId('file-editor')).toHaveCount(0)
+  await expect(fileRows()).toHaveCount(0)
+
+  // Main's own editor handlers, asked from the card window's frame and from a subframe of the
+  // main window: each refused before anything is read or written (D6, AC13). A card window has
+  // no preload, so the request is handed to the registered handler with that frame as sender.
+  await page.evaluate(() => {
+    const frame = document.createElement('iframe')
+    frame.setAttribute('data-testid', 'e2e-subframe')
+    frame.srcdoc = '<p>sub</p>'
+    document.body.append(frame)
+  })
+  await expect
+    .poll(() =>
+      app!.evaluate(({ BrowserWindow }) => {
+        const main = BrowserWindow.getAllWindows().find(
+          (w) => !w.webContents.getURL().startsWith('about:')
+        )
+        return main?.webContents.mainFrame.frames.length ?? 0
+      })
+    )
+    .toBeGreaterThan(0)
+  const target = join(folder, 'b.md')
+  const answers = await app!.evaluate(
+    async ({ BrowserWindow, ipcMain }, { folder, target }) => {
+      const handlers = (
+        ipcMain as unknown as {
+          _invokeHandlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
+        }
+      )._invokeHandlers
+      const windows = BrowserWindow.getAllWindows()
+      const card = windows.find((w) => w.webContents.getURL().startsWith('about:'))!
+      const main = windows.find((w) => w !== card)!
+      const senders = [
+        { sender: card.webContents, senderFrame: card.webContents.mainFrame },
+        { sender: main.webContents, senderFrame: main.webContents.mainFrame.frames[0] }
+      ]
+      const ref = { kind: 'folder', folder, path: 'b.md' }
+      const write = {
+        text: 'gone',
+        eol: 'lf',
+        bom: false,
+        base: { size: 0, mtimeMs: 0, sha256: '' }
+      }
+      const calls: [string, unknown[]][] = [
+        ['editor:read', [ref]],
+        ['editor:stat', [ref]],
+        ['editor:write', [ref, write]],
+        ['editor:read', [{ kind: 'listed', folder, path: target }]]
+      ]
+      const out: string[] = []
+      for (const event of senders) {
+        for (const [channel, args] of calls) {
+          try {
+            await handlers.get(channel)!(event, ...args)
+            out.push(`${channel} answered`)
+          } catch (error) {
+            out.push(String((error as Error).message))
+          }
+        }
+      }
+      // The main window's own frame is answered, so the refusals above are the sender check's.
+      const own = (await handlers.get('editor:read')!(
+        { sender: main.webContents, senderFrame: main.webContents.mainFrame },
+        ref
+      )) as { kind: string }
+      out.push(`own ${own.kind}`)
+      return out
+    },
+    { folder, target }
+  )
+  expect(answers).toEqual([
+    ...['editor:read', 'editor:stat', 'editor:write', 'editor:read'].map(
+      (channel) => `${channel} rejected: untrusted sender`
+    ),
+    ...['editor:read', 'editor:stat', 'editor:write', 'editor:read'].map(
+      (channel) => `${channel} rejected: untrusted sender`
+    ),
+    'own text'
+  ])
+  expect(readFileSync(target, 'utf8')).toBe('# Notes\n')
+
+  // The drafts channels (D11) the same way: from the card window's frame or the subframe a save,
+  // a delete or a dirty count does nothing, and a list is refused.
+  type Who = 'card' | 'subframe' | 'main'
+  const draft = {
+    workspaceId: 'w-e2e',
+    ref: { kind: 'folder', folder, path: 'b.md' },
+    realPath: target,
+    text: 'draft',
+    eol: 'lf',
+    bom: false,
+    base: { size: 8, mtimeMs: 0, sha256: '0'.repeat(64) }
+  }
+  const drafts = (
+    who: Who,
+    channel: string,
+    args: unknown[]
+  ): Promise<{ answer: string; dirty: number; userData: string }> =>
+    app!.evaluate(
+      async ({ app: electronApp, BrowserWindow, ipcMain }, { who, channel, args }) => {
+        const windows = BrowserWindow.getAllWindows()
+        const card = windows.find((w) => w.webContents.getURL().startsWith('about:'))!
+        const main = windows.find((w) => w !== card)!
+        // The subframe the test appended to the main window above.
+        const subframe = main.webContents.mainFrame.frames[0]
+        if (who === 'subframe' && subframe === undefined) throw new Error('no subframe')
+        const event =
+          who === 'card'
+            ? { sender: card.webContents, senderFrame: card.webContents.mainFrame }
+            : who === 'subframe'
+              ? { sender: main.webContents, senderFrame: subframe }
+              : { sender: main.webContents, senderFrame: main.webContents.mainFrame }
+        let answer = 'sent'
+        if (channel === 'drafts:list') {
+          const handlers = (
+            ipcMain as unknown as {
+              _invokeHandlers: Map<string, (event: unknown, ...args: unknown[]) => unknown>
+            }
+          )._invokeHandlers
+          try {
+            const list = (await handlers.get(channel)!(event, ...args)) as unknown[]
+            answer = `listed ${list.length}`
+          } catch (error) {
+            answer = String((error as Error).message)
+          }
+        } else {
+          for (const listener of ipcMain.listeners(channel)) {
+            ;(listener as (event: unknown, ...args: unknown[]) => void)(event, ...args)
+          }
+        }
+        const dirty = (globalThis as unknown as { __bikubeDraftsDirty: () => number })
+          .__bikubeDraftsDirty
+        return { answer, dirty: dirty(), userData: electronApp.getPath('userData') }
+      },
+      { who, channel, args }
+    )
+  const untrusted: Who[] = ['card', 'subframe']
+  const { userData } = await drafts('main', 'drafts:dirty', [0])
+  const draftFiles = (): string[] =>
+    existsSync(join(userData, 'drafts')) ? readdirSync(join(userData, 'drafts')) : []
+  for (const who of untrusted) {
+    expect((await drafts(who, 'drafts:save', [draft])).answer).toBe('sent')
+    expect(await drafts(who, 'drafts:dirty', [3])).toMatchObject({ dirty: 0 })
+    expect((await drafts(who, 'drafts:list', [])).answer).toBe(
+      'drafts:list rejected: untrusted sender'
+    )
+  }
+  expect(draftFiles()).toEqual([])
+  // The main window's own frame is answered.
+  await drafts('main', 'drafts:save', [draft])
+  expect(draftFiles()).toHaveLength(1)
+  expect((await drafts('main', 'drafts:list', [])).answer).toBe('listed 1')
+  for (const who of untrusted) {
+    await drafts(who, 'drafts:delete', ['w-e2e', target])
+  }
+  expect(draftFiles()).toHaveLength(1)
+  await drafts('main', 'drafts:delete', ['w-e2e', target])
+  expect(draftFiles()).toEqual([])
+  expect(await drafts('main', 'drafts:dirty', [2])).toMatchObject({ dirty: 2 })
+  expect(await drafts('main', 'drafts:dirty', [0])).toMatchObject({ dirty: 0 })
+})
+
+const darwin = process.platform === 'darwin'
+/** Mod+S (D12): fixed, not in Settings. */
+const SAVE = darwin ? 'Meta+s' : 'Control+s'
+const code = (): Locator => editor().locator('.cm-content')
+const tabDirty = (): Locator => editor().getByTestId('file-editor-tab-dirty')
+const rowDirty = (): Locator => fileRows().getByTestId('workspace-file-dirty')
+const bar = (): Locator => editor().getByTestId('file-editor-bar')
+const question = (): Locator => page.getByTestId('save-changes-dialog')
+
+/** Puts the cursor at the end of line `n` (1-based) of the open file. */
+async function cursorToLineEnd(n: number): Promise<void> {
+  await code()
+    .locator('.cm-line')
+    .nth(n - 1)
+    .click()
+  await page.keyboard.press('End')
+}
+
+/** Puts the cursor at the start of the open file. */
+async function cursorToStart(): Promise<void> {
+  await code().locator('.cm-line').first().click()
+  await page.keyboard.press(darwin ? 'Meta+ArrowUp' : 'Control+Home')
+}
+
+test('AC4: typing shows the dirty dot, Mod+S saves with the CRLF line endings kept', async () => {
+  writeFileSync(join(folder, 'crlf.ts'), 'one\r\ntwo\r\n')
+  await launch()
+  await openFromFiles('crlf.ts')
+  await expect(code()).toContainText('one')
+  await expect(tabDirty()).toHaveCount(0)
+  await expect(rowDirty()).toHaveCount(0)
+
+  await cursorToLineEnd(1)
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toBeVisible()
+  await expect(rowDirty()).toBeVisible()
+
+  await page.keyboard.press(SAVE)
+  await expect(tabDirty()).toHaveCount(0)
+  await expect(rowDirty()).toHaveCount(0)
+  await expect.poll(() => readFileSync(join(folder, 'crlf.ts'), 'utf8')).toBe('onex\r\ntwo\r\n')
+
+  // Removing the saved x makes the tab dirty (it differs from the saved text); typing it back makes it clean.
+  await page.keyboard.press('Backspace')
+  await expect(tabDirty()).toBeVisible()
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toHaveCount(0)
+})
+
+test('AC5: Close pane on a dirty tab asks; Cancel keeps it, Discard closes it unchanged', async () => {
+  await launch()
+  const file = join(folder, 'src', 'a.ts')
+  await openFromFiles('src/a.ts')
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await expect(tabDirty()).toBeVisible()
+
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(question()).toContainText('Save changes to a.ts?')
+  await question().getByTestId('save-changes-cancel').click()
+  await expect(question()).toHaveCount(0)
+  await expect(tabs()).toHaveCount(1)
+  await expect(tabDirty()).toBeVisible()
+
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await question().getByTestId('save-changes-discard').click()
+  await expect(editor()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(fileRows()).toHaveCount(0)
+  expect(readFileSync(file, 'utf8')).toBe("export const a = 'hello'\n")
+
+  // Save in the question writes it, then closes; a clean tab closes with no question.
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await fileRows().nth(0).click()
+  await cursorToStart()
+  await page.keyboard.type('y')
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await question().getByTestId('save-changes-save').click()
+  await expect(tabs()).toHaveCount(1)
+  await expect.poll(() => readFileSync(file, 'utf8')).toBe("yexport const a = 'hello'\n")
+  await page.keyboard.press(SHORTCUTS.closePane)
+  await expect(question()).toHaveCount(0)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(fileRows()).toHaveCount(0)
+})
+
+test('AC6: a clean tab reloads silently; a dirty one shows the bar with Keep mine and Reload', async () => {
+  await launch()
+  const file = join(folder, 'src', 'a.ts')
+  await openFromFiles('src/a.ts')
+  await expect(code()).toHaveText("export const a = 'hello'")
+
+  // Clean: the disk text within 4 s, with no bar.
+  writeFileSync(file, 'changed\n')
+  await expect(code()).toHaveText('changed', { timeout: 4000 })
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toHaveCount(0)
+
+  // Dirty: the bar, once; Keep mine then Mod+S writes the tab's text.
+  await cursorToStart()
+  await page.keyboard.type('x')
+  writeFileSync(file, 'outside text\n')
+  await expect(bar()).toHaveText(/a\.ts changed on disk/, { timeout: 4000 })
+  await expect(code()).toHaveText('xchanged')
+  await bar().getByTestId('file-editor-keep-mine').click()
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toBeVisible()
+  await page.keyboard.press(SAVE)
+  await expect(tabDirty()).toHaveCount(0)
+  await expect.poll(() => readFileSync(file, 'utf8')).toBe('xchanged\n')
+
+  // Reload: the disk text, the dot gone.
+  await cursorToStart()
+  await page.keyboard.type('y')
+  writeFileSync(file, 'from the disk\n')
+  await expect(bar()).toBeVisible({ timeout: 4000 })
+  await bar().getByTestId('file-editor-reload').click()
+  await expect(code()).toHaveText('from the disk')
+  await expect(bar()).toHaveCount(0)
+  await expect(tabDirty()).toHaveCount(0)
+
+  // A save right after an outside write, before any check: nothing written, the bar.
+  await cursorToStart()
+  await page.keyboard.type('z')
+  writeFileSync(file, 'sneaky write\n')
+  await page.keyboard.press(SAVE)
+  await expect(bar()).toBeVisible()
+  await expect(tabDirty()).toBeVisible()
+  await page.waitForTimeout(300)
+  expect(readFileSync(file, 'utf8')).toBe('sneaky write\n')
+})
+
+test('D12: deleting a workspace with dirty tabs names its unsaved files', async () => {
+  await launch()
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await backToBoard(page)
+  await page.getByTestId('workspace-toolbar').getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
+  await expect(page.getByTestId('confirm-detail')).toHaveCount(0)
+  await page.getByTestId('confirm-cancel').click()
+
+  await fileRows().nth(0).click()
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await fileRows().nth(1).click()
+  // b.md opens in Preview (D10): typed into in Edit.
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await cursorToStart()
+  await page.keyboard.type('x')
+  await backToBoard(page)
+  await page.getByTestId('workspace-toolbar').getByTestId('workspace-delete').click()
+  await expect(page.getByTestId('confirm-detail')).toHaveText('2 unsaved files will be discarded')
+  await page.getByTestId('confirm-delete').click()
+  await expect(page.getByTestId('empty-state')).toBeVisible()
+  expect(readFileSync(join(folder, 'b.md'), 'utf8')).toBe('# Notes\n')
+})
+
+test('AC7: a README in Preview: its elements, links, picture, and Edit reflected back', async () => {
+  const readme = [
+    '# Title',
+    '',
+    '| a | b |',
+    '|---|---|',
+    '| 1 | 2 |',
+    '',
+    '- [x] done',
+    '',
+    '```ts',
+    "const answer = 'yes'",
+    '```',
+    '',
+    '<b>raw</b>',
+    '',
+    'Visit https://example.com today.',
+    '',
+    '[Docs](./docs/b.md) and [up](#title)',
+    '',
+    '![shot](./img.png)',
+    ''
+  ].join('\n')
+  writeFileSync(join(folder, 'README.md'), readme)
+  mkdirSync(join(folder, 'docs'))
+  writeFileSync(join(folder, 'docs', 'b.md'), '# B\n')
+  writeFileSync(join(folder, 'img.png'), PNG)
+  await launch()
+  await app!.evaluate(({ shell }) => {
+    const opened: string[] = []
+    ;(globalThis as { openedLinks?: string[] }).openedLinks = opened
+    shell.openExternal = async (url: string) => {
+      opened.push(url)
+    }
+  })
+  const openedLinks = (): Promise<string[]> =>
+    app!.evaluate(() => [...((globalThis as { openedLinks?: string[] }).openedLinks ?? [])])
+
+  await openFromFiles('README.md')
+  const preview = editor().getByTestId('file-editor-preview')
+  await expect(preview).toBeVisible()
+  await expect(editor().locator('.cm-content')).toHaveCount(0)
+  await expect(editor().getByTestId('file-editor-mode-preview').locator('input')).toBeChecked()
+  await expect(preview.locator('h1')).toHaveText('Title')
+  await expect(preview.locator('table')).toHaveCount(1)
+  const box = preview.locator('input[type=checkbox]')
+  await expect(box).toBeChecked()
+  await expect(box).toBeDisabled()
+  // The fenced block in the editor's syntax colours: a keyword and a string differ.
+  const block = preview.locator('pre code[data-highlighted=true]')
+  await expect(block).toHaveCount(1)
+  const colour = (text: string): Promise<string> =>
+    block
+      .locator('span', { hasText: text })
+      .first()
+      .evaluate((s) => getComputedStyle(s).color)
+  expect(await colour('const')).not.toBe(await colour("'yes'"))
+  // Raw HTML shows as text.
+  await expect(preview).toContainText('<b>raw</b>')
+  await expect(preview.locator('b')).toHaveCount(0)
+  // The picture, read through main.
+  const img = preview.locator('img')
+  await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/)
+  await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBe(1)
+
+  // The https link opens outside; nothing navigates.
+  await preview.locator('a', { hasText: 'https://example.com' }).click()
+  await expect.poll(openedLinks).toEqual(['https://example.com/'])
+  await expect(preview).toBeVisible()
+  // A relative file opens in a tab.
+  await preview.locator('a', { hasText: 'Docs' }).click()
+  await expect(tabs()).toHaveCount(2)
+  await expect(activeTab()).toContainText('b.md')
+  await expect(editor().getByTestId('file-editor-preview').locator('h1')).toHaveText('B')
+  await tabs().nth(0).click()
+  await expect(preview.locator('h1')).toHaveText('Title')
+
+  // Edit shows the source; an edit there shows in Preview after switching back.
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await expect(preview).toHaveCount(0)
+  await expect(code()).toContainText('# Title')
+  await cursorToLineEnd(1)
+  await page.keyboard.type(' Two')
+  await expect(tabDirty()).toBeVisible()
+  await editor().getByTestId('file-editor-mode-preview').click()
+  await expect(preview.locator('h1')).toHaveText('Title Two')
+  // Preview / Edit is per tab: b.md still in Preview, README back in Preview after it.
+  await tabs().nth(1).click()
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+  await tabs().nth(0).click()
+  await expect(preview.locator('h1')).toHaveText('Title Two')
+  expect(await openedLinks()).toEqual(['https://example.com/'])
+})
+
+/** The command palette's shortcut (#40 D1). */
+const PALETTE = darwin ? 'Meta+K' : 'Control+Shift+P'
+/** Find's default shortcut (#35 D2). */
+const FIND = darwin ? 'Meta+f' : 'Control+Shift+F'
+const palette = (): Locator => page.getByTestId('command-palette')
+const paletteLabels = (): Promise<string[]> =>
+  palette().getByTestId('palette-row-title').allInnerTexts()
+
+/** Whether the focused element is in the open terminal (a temporary shell). */
+const terminalFocused = (): Promise<boolean> =>
+  page.evaluate(
+    () => document.activeElement?.closest('[data-testid=card-view] [data-testid=terminal]') != null
+  )
+
+test('AC11: Find in the editor, Back, the palette rows and file rows; board palette lists none', async () => {
+  writeFileSync(join(folder, 'notes.md'), '# Notes\n\nfoo bar foo\n')
+  await launch()
+  await openFromFiles('notes.md')
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+
+  // The palette lists the editor's rows; a Markdown tab in Preview offers Edit.
+  await page.keyboard.press(PALETTE)
+  await expect(palette()).toBeVisible()
+  const shown = await paletteLabels()
+  for (const label of [
+    'Save file',
+    'Close tab',
+    'Toggle wrap',
+    'Open in VS Code',
+    'Markdown: Edit'
+  ]) {
+    expect(shown).toContain(label)
+  }
+  expect(shown).not.toContain('Markdown: Preview')
+  await page.keyboard.press('Escape')
+  await expect(palette()).toHaveCount(0)
+
+  // Find in Preview switches to Edit and opens the search panel inside the editor.
+  await page.keyboard.press(FIND)
+  const panel = editor().locator('.cm-search')
+  await expect(panel).toBeVisible()
+  await expect(editor().getByTestId('file-editor-preview')).toHaveCount(0)
+  await expect(editor().getByTestId('file-editor-mode-edit').locator('input')).toBeChecked()
+  await page.keyboard.type('foo')
+  await expect(editor().locator('.cm-searchMatch')).toHaveCount(2)
+
+  // Back: the board.
+  await page.keyboard.press(SHORTCUTS.back)
+  await expect(page.getByTestId('board')).toBeVisible()
+  await expect(editor()).toHaveCount(0)
+
+  // From the board an open file's row opens its tab; no editor rows there.
+  await page.keyboard.press(PALETTE)
+  const fromBoard = await paletteLabels()
+  expect(fromBoard).not.toContain('Save file')
+  const fileRow = palette().locator('[data-section=files] [data-testid=palette-row]')
+  await expect(fileRow).toHaveCount(1)
+  await expect(fileRow).toContainText('notes.md')
+  await expect(fileRow).toContainText('proj')
+  await fileRow.click()
+  await expect(editor()).toBeVisible()
+  await expect(activeTab()).toContainText('notes.md')
+
+  // Picking Markdown: Preview from the palette switches the tab back.
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-input').fill('Markdown')
+  await palette().getByTestId('palette-row').filter({ hasText: 'Markdown: Preview' }).click()
+  await expect(editor().getByTestId('file-editor-preview')).toBeVisible()
+
+  // board palette, run while the editor is in front: none of the editor's rows or file rows.
+  await page.keyboard.press(NEW_SHELL)
+  await expectCardOpen(page, 'Terminal 1')
+  await expect.poll(terminalFocused).toBe(true)
+  const listed = join(root, 'palette.txt')
+  await page.keyboard.type(
+    `sleep 3; "$BIKUBE_BIN/board" palette list > ${listed} 2>&1; echo "rc=$?" > ${listed}.rc`
+  )
+  await page.keyboard.press('Enter')
+  await fileRows().first().click()
+  await expect(editor()).toBeVisible()
+  await expect.poll(() => existsSync(`${listed}.rc`), { timeout: 10_000 }).toBe(true)
+  const labels = readFileSync(listed, 'utf8').trimEnd().split('\n')
+  expect(readFileSync(`${listed}.rc`, 'utf8'), labels.join('\n')).toBe('rc=0\n')
+  expect(labels).toContain('Open Settings')
+  for (const label of [
+    'Save file',
+    'Close tab',
+    'Toggle wrap',
+    'Open in VS Code',
+    'Markdown: Edit',
+    'Markdown: Preview',
+    'Back to board',
+    'Find',
+    'notes.md'
+  ]) {
+    expect(labels).not.toContain(label)
+  }
+})
+
+/** Whether the editor's own scroller scrolls sideways. */
+const scrollsSideways = (): Promise<boolean> =>
+  editor()
+    .locator('.cm-scroller')
+    .evaluate((el) => el.scrollWidth > el.clientWidth)
+
+test('AC12: Wrap wraps a 300-character line and is saved as editorWrap across a restart', async () => {
+  writeFileSync(join(folder, 'long.ts'), `const s = '${'x'.repeat(300)}'\n`)
+  const dataDir = newDataDir()
+  await launch(dataDir)
+  await openFromFiles('long.ts')
+  const wrap = editor().getByTestId('file-editor-wrap')
+  await expect(wrap).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(scrollsSideways).toBe(true)
+
+  await wrap.click()
+  await expect(wrap).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(scrollsSideways).toBe(false)
+  const settingsFile = join(dataDir, 'bikube-settings.json')
+  await expect
+    .poll(() => (existsSync(settingsFile) ? readFileSync(settingsFile, 'utf8') : ''))
+    .toContain('"editorWrap":true')
+
+  await app!.close()
+  await launch(dataDir, false)
+  expect(readFileSync(settingsFile, 'utf8')).toContain('"editorWrap":true')
+  await openFromFiles('long.ts')
+  await expect(editor().getByTestId('file-editor-wrap')).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(scrollsSideways).toBe(false)
+
+  // Toggle wrap in the palette turns it off again, and the key goes.
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-row').filter({ hasText: 'Toggle wrap' }).click()
+  await expect(editor().getByTestId('file-editor-wrap')).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(scrollsSideways).toBe(true)
+  await expect.poll(() => readFileSync(settingsFile, 'utf8')).not.toContain('editorWrap')
+})
+
+/** The WCAG contrast of the computed colour of `selector`'s text on what is under it. */
+function textContrast(selector: string): Promise<number> {
+  return editor().evaluate((root, sel) => {
+    const el = root.querySelector(sel) as HTMLElement
+    const rgb = (c: string): number[] => (c.match(/[\d.]+/g) ?? []).map(Number)
+    const lum = ([r, g, b]: number[]): number => {
+      const ch = (v: number): number => {
+        const s = v / 255
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+      }
+      return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+    }
+    // The first opaque background from the element up, with any translucent ones over it.
+    const layers: number[][] = []
+    for (let at: HTMLElement | null = el; at; at = at.parentElement) {
+      const bg = rgb(getComputedStyle(at).backgroundColor)
+      const alpha = bg.length > 3 ? bg[3] : 1
+      if (alpha === 0) continue
+      layers.push([...bg.slice(0, 3), alpha])
+      if (alpha === 1) break
+    }
+    let under = layers.pop()!.slice(0, 3)
+    for (const [r, g, b, a] of layers.reverse()) {
+      under = [r * a + under[0] * (1 - a), g * a + under[1] * (1 - a), b * a + under[2] * (1 - a)]
+    }
+    const fg = rgb(getComputedStyle(el).color).slice(0, 3)
+    const [hi, lo] = [lum(fg), lum(under)].sort((a, b) => b - a)
+    return (hi + 0.05) / (lo + 0.05)
+  }, selector)
+}
+
+/** The editor's background, and `--terminal-bg` as a computed colour. */
+const backgrounds = (): Promise<{ editor: string; terminal: string }> =>
+  editor().evaluate((root) => {
+    const probe = document.createElement('div')
+    probe.style.background = 'var(--terminal-bg)'
+    document.body.append(probe)
+    const terminal = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return {
+      editor: getComputedStyle(root.querySelector('.cm-editor')!).backgroundColor,
+      terminal
+    }
+  })
+
+/** Runs the palette row labelled `label`. */
+async function runPaletteRow(label: string): Promise<void> {
+  await page.keyboard.press(PALETTE)
+  await palette().getByTestId('palette-input').fill(label)
+  await palette().getByTestId('palette-row').filter({ hasText: label }).first().click()
+  await expect(palette()).toHaveCount(0)
+}
+
+test('AC12: the editor on --terminal-bg with readable tabs and header in Dark, Light and Nord; 320 px', async () => {
+  await launch()
+  // The page follows the Theme setting, as in the app (Playwright pins light otherwise).
+  await page.emulateMedia({ colorScheme: null })
+  await openFromFiles('src/a.ts')
+  await openFromFiles('b.md')
+  await editor().getByTestId('file-editor-mode-edit').click()
+  await expect(code()).toContainText('# Notes')
+
+  const body = (): Promise<string> =>
+    page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  for (const [step, theme] of [
+    ['Theme: Dark', 'dark'],
+    ['Theme: Light', 'light'],
+    ['App theme: Nord', 'nord light'],
+    ['Theme: Dark', 'nord dark']
+  ] as const) {
+    const before = await body()
+    await runPaletteRow(step)
+    await expect.poll(body).not.toBe(before)
+    await expect
+      .poll(async () => (await backgrounds()).editor, theme)
+      .toBe((await backgrounds()).terminal)
+    // Tab and header text hold D5's ratios on what is under them.
+    for (const selector of [
+      '[data-testid=file-editor-tab][aria-selected=true] .file-editor-tab-name',
+      '[data-testid=file-editor-tab][aria-selected=false] .file-editor-tab-name',
+      '[data-testid=file-editor-path]'
+    ]) {
+      expect(await textContrast(selector), `${theme} ${selector}`).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+
+  // At a 320 px main area nothing scrolls sideways but the editor's own content.
+  writeFileSync(join(folder, 'long.ts'), `const s = '${'x'.repeat(300)}'\n`)
+  await openFromFiles('long.ts')
+  await runPaletteRow('Toggle panel')
+  await expect(page.getByTestId('side-panel')).toHaveCount(0)
+  await page.getByTestId('sidebar-toggle').click()
+  // The sidebar collapses with a transition.
+  await page.waitForTimeout(500)
+  const sidebar = await page
+    .getByTestId('sidebar')
+    .evaluate((el) => el.getBoundingClientRect().width)
+  await app!.evaluate(
+    ({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0]?.setSize(width, 700),
+    Math.ceil(320 + sidebar)
+  )
+  await expect
+    .poll(() => page.locator('main.main').evaluate((el) => Math.round(el.clientWidth)))
+    .toBeLessThanOrEqual(330)
+  await expect.poll(scrollsSideways).toBe(true)
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [
+          document.documentElement,
+          ...document.querySelectorAll(
+            'main.main, .file-editor, .file-editor-strip, .file-editor-tabs, .file-editor-header'
+          )
+        ]
+          .filter((el) => el.scrollWidth > el.clientWidth)
+          .map((el) => el.className || el.tagName)
+      )
+    )
+    .toEqual([])
+  // The header's controls are all inside the main area.
+  const main = (await page.locator('main.main').boundingBox())!
+  for (const id of ['file-editor-wrap', 'file-editor-open-external']) {
+    const box = (await editor().getByTestId(id).boundingBox())!
+    expect(box.x + box.width, id).toBeLessThanOrEqual(main.x + main.width + 0.5)
+  }
+})

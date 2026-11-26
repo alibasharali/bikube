@@ -8,6 +8,10 @@ import { useCardStatus } from './card-terminals'
 import { useInWindow } from './card-windows'
 import { SMALL_ICON } from './icons'
 import StatusIcon from './StatusIcon'
+import { baseName, tabPath, type EditorTab } from '../../core/editor-tabs'
+import FileIcon from './FileIcon'
+import DirtyDot from './DirtyDot'
+import { homeDir } from './home'
 import { useRedrawClock } from './status-times'
 
 interface WorkspaceTerminalsProps {
@@ -22,6 +26,16 @@ interface WorkspaceTerminalsProps {
   numbers: ReadonlyMap<string, number> | null
   /** The workspace's Agent setup row while that page is its view (#68 D3), else null. */
   agentSetup?: { current: boolean; onOpen: () => void } | null
+  /** The workspace's open files (#83 D4), a row each after the rest, in tab order. */
+  files?: {
+    workspaceId: string
+    tabs: readonly EditorTab[]
+    /** The workspace's folder, for each row's tooltip path. */
+    folder: string
+    /** The tab in front in the editor on screen, its row marked current; else null. */
+    currentId: string | null
+    onOpen: (tabId: string) => void
+  }
 }
 
 /**
@@ -35,9 +49,11 @@ function WorkspaceTerminals({
   currentId,
   onOpen,
   numbers,
-  agentSetup = null
+  agentSetup = null,
+  files
 }: WorkspaceTerminalsProps): React.JSX.Element | null {
-  if (terminals.length === 0 && !agentSetup) return null
+  const fileTabs = files?.tabs ?? []
+  if (terminals.length === 0 && !agentSetup && fileTabs.length === 0) return null
   return (
     <ul className="workspace-terminals" data-testid="workspace-terminals">
       {terminals.map((row) => (
@@ -50,6 +66,17 @@ function WorkspaceTerminals({
         />
       ))}
       {agentSetup && <AgentSetupRow {...agentSetup} />}
+      {files &&
+        fileTabs.map((tab) => (
+          <FileRow
+            key={tab.id}
+            workspaceId={files.workspaceId}
+            tab={tab}
+            folder={files.folder}
+            current={tab.id === files.currentId}
+            onOpen={() => files.onOpen(tab.id)}
+          />
+        ))}
     </ul>
   )
 }
@@ -79,6 +106,46 @@ function AgentSetupRow({
           <Blocks {...SMALL_ICON} />
         </span>
         <span className="workspace-terminal-title">Agent setup</span>
+      </button>
+    </li>
+  )
+}
+
+/**
+ * An open file (#83 D4): its icon and name, a dot while dirty, its path as the tooltip; no number,
+ * no status. A click shows its tab in the editor.
+ */
+function FileRow({
+  workspaceId,
+  tab,
+  folder,
+  current,
+  onOpen
+}: {
+  workspaceId: string
+  tab: EditorTab
+  folder: string
+  current: boolean
+  onOpen: () => void
+}): React.JSX.Element {
+  const name = baseName(tab.id)
+  return (
+    <li>
+      <button
+        type="button"
+        className={
+          current ? 'workspace-terminal workspace-file active' : 'workspace-terminal workspace-file'
+        }
+        data-testid="workspace-file"
+        aria-current={current ? 'true' : undefined}
+        title={tabPath(tab.ref, folder, homeDir())}
+        onClick={onOpen}
+      >
+        <span className="workspace-terminal-kind">
+          <FileIcon name={name} kind="file" />
+        </span>
+        <span className="workspace-terminal-title">{name}</span>
+        <DirtyDot workspaceId={workspaceId} id={tab.id} testId="workspace-file-dirty" />
       </button>
     </li>
   )

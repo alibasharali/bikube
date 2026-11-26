@@ -749,3 +749,92 @@ describe('orchestratorPaletteRows and findPaletteRow (#81 D23, AC12)', () => {
     expect(findPaletteRow(rows, '')).toBeUndefined()
   })
 })
+
+describe('paletteItems file editor rows (#83 D15, AC11)', () => {
+  const alpha = workspace('a', 'Alpha', [card('c1', 'build')])
+  const beta = workspace('b', 'Beta', [])
+  const state: WorkspaceState = { workspaces: [alpha, beta], activeId: 'a' }
+  const tab = (
+    id: string
+  ): { id: string; ref: { kind: 'folder'; folder: string; path: string } } => ({
+    id,
+    ref: { kind: 'folder', folder: '/tmp', path: id.slice(5) }
+  })
+  const files = {
+    a: { tabs: [tab('/tmp/src/a.ts'), tab('/tmp/README.md')], activeId: '/tmp/README.md' },
+    b: { tabs: [tab('/tmp/b.md')], activeId: '/tmp/b.md' }
+  }
+  const labels = (i: PaletteInput): string[] => paletteItems(i).actions.map((r) => r.label)
+  const EDITOR_ROWS = ['Save file', 'Close tab', 'Toggle wrap', 'Open in VS Code']
+
+  it("lists every open file after the shells, the active workspace's first, by its name", () => {
+    const items = paletteItems(input({ ...state, activeId: 'b' }, { files }))
+    expect(items.files.map((r) => [r.title, r.workspaceName, r.tabId])).toEqual([
+      ['b.md', 'Beta', '/tmp/b.md'],
+      ['a.ts', 'Alpha', '/tmp/src/a.ts'],
+      ['README.md', 'Alpha', '/tmp/README.md']
+    ])
+    expect(items.files[0]).toMatchObject({ kind: 'file', workspaceId: 'b' })
+    expect(paletteItems(input(state)).files).toEqual([])
+  })
+
+  it('matches a file row by its name and workspace', () => {
+    const items = paletteItems(input(state, { files }))
+    expect(filterPalette(items, 'beta').files.map((r) => r.title)).toEqual(['b.md'])
+    expect(filterPalette(items, 'a.ts').files.map((r) => r.title)).toEqual(['a.ts'])
+  })
+
+  it("lists the editor's rows while its view shows, Markdown's other mode for a Markdown tab", () => {
+    const md = labels(
+      input(state, { files, editor: { markdown: 'preview', text: true }, externalEditor: 'vscode' })
+    )
+    for (const label of [
+      ...EDITOR_ROWS,
+      'Markdown: Edit',
+      'Back to board',
+      'Find',
+      'Toggle panel'
+    ]) {
+      expect(md).toContain(label)
+    }
+    expect(md).not.toContain('Markdown: Preview')
+    const edit = labels(input(state, { files, editor: { markdown: 'edit', text: true } }))
+    expect(edit).toContain('Markdown: Preview')
+    expect(edit).not.toContain('Markdown: Edit')
+    const ts = labels(
+      input(state, { files, editor: { markdown: null, text: true }, externalEditor: 'zed' })
+    )
+    expect(ts).toContain('Open in Zed')
+    expect(ts.filter((l) => l.startsWith('Markdown:'))).toEqual([])
+    const picture = labels(input(state, { files, editor: { markdown: null, text: false } }))
+    expect(picture).not.toContain('Find')
+    expect(picture).toContain('Toggle wrap')
+    const rows = paletteItems(input(state, { files, editor: { markdown: null, text: true } }))
+    expect(rows.actions.find((r) => r.label === 'Save file')).toMatchObject({
+      action: { id: 'saveFile' },
+      shortcut: 'Ctrl+S'
+    })
+    expect(rows.actions.find((r) => r.label === 'Close tab')).toMatchObject({
+      action: { id: 'closeTab' },
+      shortcut: defaultKeymap('linux').closePane
+    })
+  })
+
+  it('lists none of them on the board', () => {
+    const shown = labels(input(state, { files }))
+    for (const label of [...EDITOR_ROWS, 'Markdown: Edit', 'Markdown: Preview']) {
+      expect(shown).not.toContain(label)
+    }
+  })
+
+  it("leaves the editor's rows and the file rows out of board palette", () => {
+    const shown = orchestratorPaletteRows(
+      paletteItems(input(state, { files, editor: { markdown: 'preview', text: true } }))
+    ).map((r) => r.label)
+    for (const label of [...EDITOR_ROWS, 'Markdown: Edit', 'Back to board', 'Find']) {
+      expect(shown).not.toContain(label)
+    }
+    for (const name of ['a.ts', 'README.md', 'b.md']) expect(shown).not.toContain(name)
+    expect(shown).toContain('Toggle panel')
+  })
+})

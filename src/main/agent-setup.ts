@@ -30,8 +30,11 @@ import { userHome } from './home'
 /** Each folder's running read, shared by requests made during it (#68 D26: never two at once). */
 const reading = new Map<string, Promise<AgentSetupRead>>()
 
-/** The files each folder's last read found (D28): Open file and Reveal accept only these. */
-const listed = new ListedPaths()
+/**
+ * The files each folder's last read found (D28): Open file and Reveal accept only these, and the
+ * file editor's `listed` references (#83 D6).
+ */
+export const listed = new ListedPaths()
 
 /** Each Stats request's running read (D14), by its folders: a request during it shares it. */
 const statsReading = new Map<string, Promise<ClaudeStatsRead>>()
@@ -43,6 +46,42 @@ const fromMainFrame = (event: IpcMainInvokeEvent, channel: string): void => {
   if (event.senderFrame === null || event.senderFrame !== event.sender.mainFrame) {
     throw new Error(`${channel} rejected: untrusted sender`)
   }
+}
+
+/**
+ * Reads `folder`'s Claude Code setup (an existing directory), filling `listed` with the files it
+ * found; one read per folder however it is spelled (`/a` and `/a/`), shared by requests made
+ * during it.
+ */
+function readFolderSetup(requested: string): Promise<AgentSetupRead> {
+  const folder = resolve(requested)
+  let read = reading.get(folder)
+  if (!read) {
+    const home = userHome()
+    read = Promise.all([
+      readAgentSetup({ folder, home, bikubeSettings: claudeSettingsPath() }),
+      // #80 D7: the warning follows D3's read, which tells a link from a file.
+      readClaudeRetention(home)
+    ])
+      .then(([snapshot, claudeRetention]): AgentSetupRead => {
+        listed.set(folder, snapshot.paths)
+        return { ok: true, snapshot: { ...snapshot, claudeRetention } }
+      })
+      .finally(() => reading.delete(folder))
+    reading.set(folder, read)
+  }
+  return read
+}
+
+/**
+ * Fills `listed` for a folder no Agent setup read has listed yet (#83 D6, D11): a draft restored
+ * after a restart names a listed file before the page has read its folder again. Throws for a
+ * folder that isn't an existing directory, which the editor then refuses.
+ */
+export async function loadListing(folder: string): Promise<void> {
+  if (!(await isDirectory(folder))) throw new Error('not a directory')
+  const read = await readFolderSetup(folder)
+  if (!read.ok) throw new Error('not read')
 }
 
 /**
@@ -82,24 +121,7 @@ export function registerAgentSetup(
     if (typeof requested !== 'string' || !(await isDirectory(requested))) {
       return { ok: false, reason: 'not-directory' }
     }
-    // One read per folder however it is spelled (`/a` and `/a/`).
-    const folder = resolve(requested)
-    let read = reading.get(folder)
-    if (!read) {
-      const home = userHome()
-      read = Promise.all([
-        readAgentSetup({ folder, home, bikubeSettings: claudeSettingsPath() }),
-        // #80 D7: the warning follows D3's read, which tells a link from a file.
-        readClaudeRetention(home)
-      ])
-        .then(([snapshot, claudeRetention]): AgentSetupRead => {
-          listed.set(folder, snapshot.paths)
-          return { ok: true, snapshot: { ...snapshot, claudeRetention } }
-        })
-        .finally(() => reading.delete(folder))
-      reading.set(folder, read)
-    }
-    return read
+    return readFolderSetup(requested)
   })
 
   ipcMain.handle(

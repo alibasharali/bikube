@@ -25,6 +25,7 @@ import { AGENT_TAB_MESSAGES, agentTabSubject, type AgentSummaryRead } from '../.
 import { commandSteps } from '../../core/command-layout'
 import type { Card, Workspace } from '../../core/workspace-store'
 import type { ClaudeUsage } from '../../core/claude-usage-types'
+import type { OpenResult } from '../../core/open-result'
 import { hasUsage } from '../../core/usage-format'
 import {
   AGENT_TAB_GROUPS,
@@ -36,11 +37,13 @@ import { useCardRunState, useCardStatus } from './card-terminals'
 import { ChangesList } from './AgentChanges'
 import { OutputsList } from './AgentOutputs'
 import { ContextBar } from './CardLines'
+import { editorFiles } from './editor-files'
 import { homeDir } from './home'
 import { SMALL_ICON } from './icons'
 import { ShowAllButton } from './ShowAllButton'
 import { useShellAgent } from './shell-agents'
 import { useCardUsage } from './usage'
+import { useViewWindow } from './view-window'
 
 /** How long after an answer the tab asks again while it shows (D5). */
 const POLL_MS = 1000
@@ -79,6 +82,19 @@ function AgentTab({
   const sessionId = subject.kind === 'conversation' ? subject.sessionId : null
   const shell = subject.kind === 'conversation' && subject.shell === true
   const read = useAgentSummary(folder, sessionId, shell)
+  // The main window opens a file inside the folder in its editor (#83 D5); a card window, which
+  // has none (D2), the way it did before.
+  const view = useViewWindow()
+  const workspaceId = workspace?.id
+  const openInEditor =
+    view === window && workspaceId !== undefined && folder !== null
+      ? (path: string): Promise<OpenResult> =>
+          editorFiles
+            .open(workspaceId, { kind: 'folder', folder, path })
+            .then((opened) =>
+              opened === 'opened' ? { ok: true } : { ok: false, reason: 'refused' }
+            )
+      : undefined
 
   let body: React.ReactNode
   if (subject.kind === 'message') body = <Message text={subject.text} />
@@ -98,6 +114,7 @@ function AgentTab({
             summary={read.summary}
             folder={folder ?? ''}
             sessionId={sessionId ?? ''}
+            openInEditor={openInEditor}
             usage={shell ? shellReport?.usage : cardUsage}
             activity={activity}
             running={running}
@@ -184,6 +201,7 @@ function AgentView({
   summary,
   folder,
   sessionId,
+  openInEditor,
   usage,
   activity,
   running
@@ -193,6 +211,11 @@ function AgentView({
   folder: string
   /** The session the summary was read for: Files and artifacts' opens name it (#79 D10). */
   sessionId: string
+  /**
+   * Opens a file by its path relative to `folder` in the editor (#83 D5); absent in a card
+   * window, whose rows open as before.
+   */
+  openInEditor: ((path: string) => Promise<OpenResult>) | undefined
   /** The card's usage as the board card shows it, or the shell's kept usage (D7, D3a). */
   usage: ClaudeUsage | undefined
   /** The card's or shell's activity (#31), for the main agent's status (D8). */
@@ -247,6 +270,7 @@ function AgentView({
               <ChangesList
                 summary={summary}
                 folder={folder}
+                openInEditor={openInEditor}
                 view={changeView}
                 onView={(view) => {
                   setChangeView(view)
@@ -262,6 +286,8 @@ function AgentView({
             {group.id === 'outputs' && (
               <OutputsList
                 sessionId={sessionId}
+                folder={folder}
+                openInEditor={openInEditor}
                 rows={shownOutputs}
                 more={Math.max(0, outputs.length - SHOWN_OUTPUTS)}
                 all={allOutputs}

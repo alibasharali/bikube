@@ -1,0 +1,29 @@
+# Progress #83 File editor
+
+Ledger for the orchestrator. Survives compaction and session restarts: the `item` skill resumes from here. Commit with each slice.
+
+## Slices
+
+| Slice | Status | Commits | Review | Interfaces for later slices |
+|---|---|---|---|---|
+| S1 Stack and file access | done | `a4edfbe..122b707` | fixed r1 (read-only files) | `src/core/editor-files-types.ts`: `EditorFileRef {kind:'folder'\|'listed', folder, path}`, `EditorFileBase {size,mtimeMs,sha256}`, `EditorReadResult` (text{text LF,eol,bom,base,realPath} / image{dataUrl,base,realPath} / binary / too-large{size} / missing / refused), `EditorStatResult`, `EditorWrite {text,eol,bom,base}`, `EditorWriteResult` (ok{base} / conflict / missing / refused / failed{message}), `formatSize`, `imageMimeType`, limits; core `src/core/editor-files.ts`; main `src/main/editor-files.ts` (main window main frame only, `listed` from agent-setup.ts); `window.bikube.editor.read/stat/write` |
+| S2 Editor view, tabs and sidebar rows | done | `6bce713..ece3ff3` | fixed r1 | view memory `{kind:'files'}` (`rememberFiles`, `showsFiles`); `src/core/editor-tabs.ts` (`EditorTab {id: realPath, ref}`, `WorkspaceTabs`, `openTab/selectTab/closeTab/closeWorkspaceTabs/keepWorkspaces/activeTab/tabLabels/tabPath`); renderer store `src/renderer/src/editor-files.ts` (`editorFiles`, `useEditorTabs`, `open/doc/keepState/select/close/closeAll/keep/onShow`; `EditorDoc {read, state}`); `FileEditorView.tsx` (Back via `registerCardViewActions`; Close pane not wired); `editor-look.ts` (`--editor-*`); `src/core/open-in-editor.ts` `openInEditorLabel`; test ids `file-editor`, `file-editor-tab`, `file-editor-tab-close`, `file-editor-close`, `file-editor-path`, `file-editor-open-external`, `file-editor-image`, `file-editor-message`, `workspace-file`; e2e `e2e/file-editor.spec.ts` |
+| S3 Files tab row menu | done | `9ae5979..fffc627` | CLEAN | `FilesTab` prop `onOpenExternal(path)`; `MenuButton` `tabIndex`; test ids `files-row-menu`, `files-row-open-external`; AC13 e2e via `ipcMain._invokeHandlers` in `e2e/file-editor.spec.ts` |
+| S4 Save, close and changed on disk | done | `40bcba2..cea0892` | FIX (e2e comment + save/check race) carried into S6's brief | `src/core/editor-sync.ts` (`isDirty`, `statStep`, `checkOutcome`, `replacement`, `isSaveKey`, `unsavedFilesLine`, `saveChangesQuestion`, `saveFailedLine`, `EditorNotice`); store `createEditorFiles(read, io?)` + `status`, `dirtyCount`, `attach`, `edited`, `save`, `reload`, `keepMine`, `check`, `askClose`, `closeQuestion`, `answerClose`; hooks `useEditorStatus`, `useCloseQuestion`, `useDirtyCount`; palette: `saveActiveTab(ws)`, `closeActiveTab(ws)`; `startEditorChecks()`; dirty+deleted bar left to S6; test ids `file-editor-tab-dirty`, `workspace-file-dirty`, `file-editor-bar`, `file-editor-reload`, `file-editor-keep-mine`, `file-editor-bar-close`, `file-editor-save-error`, `save-changes-dialog` (`-save`/`-discard`/`-cancel`) |
+| S5 Markdown preview | done | `d575cc2..fc4ddd1` | CLEAN | `src/core/markdown-render.ts` (`renderMarkdown`, `markdownLink`, `resolveRelative`, `isMarkdownPath`); `MarkdownPreview.tsx`; store `MarkdownMode`, `mode/setMode/text`, hooks `useMarkdownMode`, `useEditorText`; `editorHighlightStyle`; test ids `file-editor-preview`, `file-editor-mode-preview`, `file-editor-mode-edit` |
+| S6 Drafts | done | `b1e0b49..30ffd9f` | CLEAN (listed-ref draft after restart carried into S7) | `EditorDraft`; `EditorWrite.recreate`; `DraftsStore` (`save/delete/list/prune/draftFileName`); IPC `drafts:save/delete/list/dirty` → `window.bikube.drafts`; `quitHold` `unsavedDrafts`; store `createEditorFiles(read, io?, drafts?)`, `flushDrafts()`, `restore()`, `DRAFT_DELAY_MS`; test ids `file-editor-bar-save`, `file-editor-bar-discard`; e2e `e2e/file-editor-drafts.spec.ts` |
+| S7 Agent tab and Agent setup | done | `f567b7d..df9438d` | CLEAN | `pathInFolder` (`agent-outputs-view.ts`); `ListedPaths.knows`; `EditorFileDeps.loadListing` + main `loadListing` (a listed ref's folder read once when unlisted); `FileActionsProvider` `workspaceId`; `ChangesList`/`OutputsList` `openInEditor?` |
+| S8 Shortcuts, palette, wrap | done | `26feb3d..fe9a2e5` | CLEAN | `PaletteItems.files` (`FileRow`), `PaletteInput.files/editor/externalEditor`, actions `saveFile`, `closeTab`, `markdownMode`, `toggleWrap`, `openInEditor` (left out of `orchestratorPaletteRows`); preference `editorWrap`; `editor-view-actions.ts`; test id `file-editor-wrap` |
+
+## Rulings
+
+- 2026-11-26 S1 (orchestrator, reading D12's failed write): saving a file the user can't write (e.g. 0444) fails with `permission denied` instead of being replaced through tmp+rename.
+- 2026-11-26 S2 (orchestrator): tab lists live in the renderer store `editor-files.ts` rather than App state (D3's behaviour unchanged), since the Files tab inside a card view opens files and CodeMirror state must outlive the view.
+- 2026-11-26 S5 (orchestrator): a listed (Agent setup) Markdown file's relative links do nothing and its relative images show alt text (no folder to check them against); http/https and #anchor links still work.
+- 2026-11-26 S1: AC13's e2e (editor IPC refused from a card window) is owned by S3, which handles card windows.
+
+## Verification
+
+- Full checks: green except the known root-only updater test (typecheck, lint, Vitest 2382/2383, build, check-stack, prettier)
+- done: verifier ALL PASS (AC1–AC13)
+- UX review: done (CLEAN; polish only)

@@ -1042,6 +1042,19 @@ async function recordRevealed(): Promise<void> {
 const revealedPaths = (): Promise<string[]> =>
   app!.evaluate(() => [...((globalThis as { revealedPaths?: string[] }).revealedPaths ?? [])])
 
+const fileEditor = (): Locator => page.getByTestId('file-editor')
+
+/**
+ * Clicks row `name`'s Open file, which opens it in the editor (#83 D5), then the editor header's
+ * Open in <editor>, Settings > Editor as Open file ran it before #83; then Agent setup again.
+ */
+async function openExternally(name: string): Promise<void> {
+  await row(name).hover()
+  await row(name).getByRole('button', { name: 'Open file' }).click()
+  await expect(fileEditor()).toBeVisible()
+  await fileEditor().getByTestId('file-editor-open-external').click()
+}
+
 test("#70 AC1: a skill's Open file runs VS Code's bundle CLI when no code is on the login PATH", async () => {
   // A real VS Code at a system path would come first; CI has none.
   test.skip(installedOutsideHome('vscode'), 'a real VS Code is installed here')
@@ -1055,11 +1068,10 @@ test("#70 AC1: a skill's Open file runs VS Code's bundle CLI when no code is on 
   const folder = await openWith(ac4Fixtures, shell)
   const skill = join(folder, '.claude', 'skills', 'review', 'SKILL.md')
   await tab('Skills').click()
-  await row('review').hover()
-  await row('review').getByRole('button', { name: 'Open file' }).click()
+  await openExternally('review')
   await expect.poll(editorRuns).toEqual(['run bundle', folder, skill])
   await page.waitForTimeout(500)
-  await expect(panel().getByTestId('agent-setup-open-error')).toHaveCount(0)
+  await expect(fileEditor().getByTestId('file-editor-open-error')).toHaveCount(0)
 })
 
 test("#70 AC4: a skill's Open file with VS Code found nowhere opens it with the default app, with a note", async () => {
@@ -1068,9 +1080,8 @@ test("#70 AC4: a skill's Open file with VS Code found nowhere opens it with the 
   await recordOpenPath(app!)
   const skill = join(folder, '.claude', 'skills', 'review', 'SKILL.md')
   await tab('Skills').click()
-  await row('review').hover()
-  await row('review').getByRole('button', { name: 'Open file' }).click()
-  const note = panel().getByTestId('agent-setup-open-error')
+  await openExternally('review')
+  const note = fileEditor().getByTestId('file-editor-open-error')
   await expect(note).toHaveText('Opened SKILL.md with the default app: code not found')
   await expect(note).toHaveAttribute('role', 'status')
   expect(await openedPaths(app!)).toEqual([skill])
@@ -1090,19 +1101,8 @@ test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Revea
   const open = review.getByRole('button', { name: 'Open file' })
   const reveal = review.getByRole('button', { name: 'Reveal' })
   await expect(open).toBeVisible()
-  // A project skill opens with the workspace, as the Files tab opens its files.
-  await open.click()
-  await expect.poll(editorRuns).toEqual(['run code', folder, skill])
-  await expect(panel().getByTestId('agent-setup-open-error')).toHaveCount(0)
   await reveal.click()
   await expect.poll(revealedPaths).toEqual([skill])
-  // A user skill, outside the workspace, opens with its own folder.
-  const notesFolder = join(home, '.claude', 'skills', 'notes')
-  await row('notes').hover()
-  await row('notes').getByRole('button', { name: 'Open file' }).click()
-  await expect
-    .poll(editorRuns)
-    .toEqual(['run code', folder, skill, 'run code', notesFolder, join(notesFolder, 'SKILL.md')])
 
   // AC19: hidden until hovered or focused, the buttons are in the Tab order: from the control
   // before them, Tab shows and focuses Open file, then Reveal, then the next row's Open file.
@@ -1122,6 +1122,28 @@ test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Revea
   await page.keyboard.press('Tab')
   await expect(row('notes').getByRole('button', { name: 'Open file' })).toBeFocused()
   await expect.poll(() => opacity(open)).toBe('0')
+
+  // Open file opens the skill in the editor (#83 D5); the editor's Open in VS Code runs code
+  // with the workspace for a project skill, as the Files tab opens its files.
+  await openExternally('review')
+  await expect(fileEditor().getByTestId('file-editor-path')).toHaveText(
+    '.claude/skills/review/SKILL.md'
+  )
+  await expect.poll(editorRuns).toEqual(['run code', folder, skill])
+  await expect(fileEditor().getByTestId('file-editor-open-error')).toHaveCount(0)
+  // A user skill, outside the workspace, with its own folder.
+  const notesFolder = join(home, '.claude', 'skills', 'notes')
+  await setupRow('Proj').click()
+  await expect(agentSetup()).toBeVisible()
+  await openExternally('notes')
+  await expect(fileEditor().getByTestId('file-editor-path')).toHaveText(
+    '~/.claude/skills/notes/SKILL.md'
+  )
+  await expect
+    .poll(editorRuns)
+    .toEqual(['run code', folder, skill, 'run code', notesFolder, join(notesFolder, 'SKILL.md')])
+  await setupRow('Proj').click()
+  await expect(agentSetup()).toBeVisible()
 
   // Paths the read didn't list, asked for from the page: nothing runs, nothing is shown.
   const notes = join(folder, 'notes.md')
@@ -1175,6 +1197,148 @@ test("AC17: a skill's Open file runs code with the workspace and SKILL.md, Revea
   await expect(actions('~/.claude/settings.json')).toHaveCount(1)
   await expect(actions('claude-settings.json')).toHaveCount(0)
   await expect(actions('.claude/settings.local.json')).toHaveCount(0)
+})
+
+test('#83 AC10: Open file opens ~/.claude/settings.json in the editor; Mod+S saves it, after a restart too', async () => {
+  const settings = join(home, '.claude', 'settings.json')
+  const folder = await openWith(() => write(settings, '{}\n'))
+  const save = darwin ? 'Meta+s' : 'Control+s'
+  const code = (): Locator => fileEditor().locator('.cm-content')
+  const typeAtStart = async (text: string): Promise<void> => {
+    await code().locator('.cm-line').first().click()
+    await page.keyboard.press(darwin ? 'Meta+ArrowUp' : 'Control+Home')
+    await page.keyboard.type(text)
+  }
+  await tab('Status').click()
+  const file = statusFile('~/.claude/settings.json')
+  await file.hover()
+  await file.getByRole('button', { name: 'Open file' }).click()
+  await expect(fileEditor()).toBeVisible()
+  await expect(fileEditor().getByTestId('file-editor-tab')).toHaveText(['settings.json'])
+  await expect(fileEditor().getByTestId('file-editor-path')).toHaveText('~/.claude/settings.json')
+  await expect(code()).toHaveText('{}')
+  await typeAtStart(' ')
+  await expect(fileEditor().getByTestId('file-editor-tab-dirty')).toBeVisible()
+  await page.keyboard.press(save)
+  await expect(fileEditor().getByTestId('file-editor-tab-dirty')).toHaveCount(0)
+  await expect.poll(() => readFileSync(settings, 'utf8')).toBe(' {}\n')
+  expect(editorRuns()).toEqual([])
+
+  // A path the read didn't list, asked for from the page: refused, nothing read or written.
+  const secret = join(home, '.ssh', 'id_test')
+  write(secret, 'secret\n')
+  const asked = await page.evaluate(
+    async ([dir, path]) => {
+      const editor = (
+        window as unknown as {
+          bikube: {
+            editor: {
+              read: (ref: unknown) => Promise<unknown>
+              stat: (ref: unknown) => Promise<unknown>
+              write: (ref: unknown, write: unknown) => Promise<unknown>
+            }
+          }
+        }
+      ).bikube.editor
+      const ref = { kind: 'listed', folder: dir, path }
+      return [
+        await editor.read(ref),
+        await editor.stat(ref),
+        await editor.write(ref, {
+          text: 'x',
+          eol: 'lf',
+          bom: false,
+          base: { size: 7, mtimeMs: 0, sha256: '0'.repeat(64) }
+        })
+      ]
+    },
+    [folder, secret] as const
+  )
+  expect(asked).toEqual([
+    { kind: 'refused' },
+    { kind: 'refused' },
+    { ok: false, reason: 'refused' }
+  ])
+  expect(readFileSync(secret, 'utf8')).toBe('secret\n')
+
+  // A draft of the listed file, restored after a restart, saves before Agent setup reads its
+  // folder again: main reads the folder's setup for it first (D6, D11).
+  await typeAtStart('x')
+  await expect(fileEditor().getByTestId('file-editor-tab-dirty')).toBeVisible()
+  await app!.close()
+  app = undefined
+  await launch()
+  await expect(board()).toBeVisible()
+  const fileRow = page.getByTestId('sidebar').getByTestId('workspace-file')
+  await expect(fileRow).toHaveText(['settings.json'])
+  await fileRow.click()
+  await expect(code()).toHaveText('x {}')
+  await expect(fileEditor().getByTestId('file-editor-bar')).toHaveCount(0)
+  await page.keyboard.press(save)
+  await expect(fileEditor().getByTestId('file-editor-tab-dirty')).toHaveCount(0)
+  await expect(fileEditor().getByTestId('file-editor-save-error')).toHaveCount(0)
+  await expect.poll(() => readFileSync(settings, 'utf8')).toBe('x {}\n')
+})
+
+test('#83 AC10, D11: a deleted listed file under a dirty tab shows Deleted on disk, in the run and after a restart; Save writes it again', async () => {
+  const settings = join(home, '.claude', 'settings.json')
+  await openWith(() => write(settings, '{}\n'))
+  const save = darwin ? 'Meta+s' : 'Control+s'
+  const code = (): Locator => fileEditor().locator('.cm-content')
+  const bar = (): Locator => fileEditor().getByTestId('file-editor-bar')
+  const dirty = (): Locator => fileEditor().getByTestId('file-editor-tab-dirty')
+  const typeAtStart = async (text: string): Promise<void> => {
+    await code().locator('.cm-line').first().click()
+    await page.keyboard.press(darwin ? 'Meta+ArrowUp' : 'Control+Home')
+    await page.keyboard.type(text)
+  }
+  const openSettings = async (): Promise<void> => {
+    await setupRow('Proj').click()
+    await tab('Status').click()
+    const file = statusFile('~/.claude/settings.json')
+    await file.hover()
+    await file.getByRole('button', { name: 'Open file' }).click()
+    await expect(fileEditor()).toBeVisible()
+  }
+  await tab('Status').click()
+  const file = statusFile('~/.claude/settings.json')
+  await file.hover()
+  await file.getByRole('button', { name: 'Open file' }).click()
+  await expect(code()).toHaveText('{}')
+
+  // In the run: deleted while dirty, after Agent setup read the folder again without it.
+  await typeAtStart('a')
+  await expect(dirty()).toBeVisible()
+  rmSync(settings)
+  await setupRow('Proj').click()
+  await tab('Status').click()
+  await expect(
+    statusFile('~/.claude/settings.json').getByTestId('agent-setup-file-actions')
+  ).toHaveCount(0)
+  await page.getByTestId('sidebar').getByTestId('workspace-file').click()
+  await expect(bar()).toContainText('Deleted on disk', { timeout: 4000 })
+  await bar().getByTestId('file-editor-bar-save').click()
+  await expect(bar()).toHaveCount(0)
+  await expect(dirty()).toHaveCount(0)
+  expect(readFileSync(settings, 'utf8')).toBe('a{}\n')
+
+  // After a restart: the draft's file deleted while the app was closed; Mod+S writes it again.
+  await openSettings()
+  await typeAtStart('b')
+  await expect(dirty()).toBeVisible()
+  await app!.close()
+  app = undefined
+  rmSync(settings)
+  await launch()
+  await expect(board()).toBeVisible()
+  await page.getByTestId('sidebar').getByTestId('workspace-file').click()
+  await expect(code()).toHaveText('ba{}')
+  await expect(bar()).toContainText('Deleted on disk', { timeout: 4000 })
+  await page.keyboard.press(save)
+  await expect(bar()).toHaveCount(0)
+  await expect(dirty()).toHaveCount(0)
+  await expect(fileEditor().getByTestId('file-editor-save-error')).toHaveCount(0)
+  expect(readFileSync(settings, 'utf8')).toBe('ba{}\n')
 })
 
 // #72: the Sandbox section, from the three settings files.
@@ -1285,14 +1449,19 @@ test('#72 AC1–AC5, AC7: Sandbox shows the facts by precedence and the lists me
   // Read-only.
   await expect(panel().locator('input, select, textarea, [role="switch"]')).toHaveCount(0)
 
-  // AC7: the Project entry's Open file and Reveal name the workspace's .claude/settings.json.
+  // AC7: the Project entry's Reveal and Open file name the workspace's .claude/settings.json,
+  // which Open file shows in the editor (#83 D5).
   const projectFile = join(folder, '.claude', 'settings.json')
   const npm = allowed.getByTestId('agent-setup-row').first()
   await npm.hover()
-  await npm.getByRole('button', { name: 'Open file' }).click()
-  await expect.poll(editorRuns).toEqual(['run code', folder, projectFile])
   await npm.getByRole('button', { name: 'Reveal' }).click()
   await expect.poll(revealedPaths).toEqual([projectFile])
+  await npm.getByRole('button', { name: 'Open file' }).click()
+  await expect(fileEditor().getByTestId('file-editor-path')).toHaveText('.claude/settings.json')
+  await fileEditor().getByTestId('file-editor-open-external').click()
+  await expect.poll(editorRuns).toEqual(['run code', folder, projectFile])
+  await setupRow('Proj').click()
+  await expect(panel()).toHaveAttribute('data-section', 'sandbox')
 
   // AC4: the search keeps the matching entries; the facts all stay.
   await page.getByTestId('agent-setup-search').fill('github')

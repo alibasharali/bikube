@@ -28,6 +28,8 @@ interface MenuButtonProps {
   buttonClassName?: string
   /** Makes the button a toggle too (`aria-pressed`), as a filter chip with a menu (#71 D4). */
   pressed?: boolean
+  /** The button's `tabIndex`, as a roving tree row's own button (-1 while its row isn't the tab stop). */
+  tabIndex?: number
 }
 
 /** A ⋯ button with a menu. Esc closes and returns focus; click outside or Tab closes. */
@@ -41,7 +43,8 @@ function MenuButton({
   children,
   icon,
   buttonClassName = 'icon-btn',
-  pressed
+  pressed,
+  tabIndex
 }: MenuButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<React.CSSProperties | undefined>(undefined)
@@ -155,6 +158,7 @@ function MenuButton({
         aria-expanded={open}
         aria-pressed={pressed}
         aria-label={label}
+        tabIndex={tabIndex}
         onClick={toggle}
       >
         {icon ?? <Ellipsis {...ICON} />}

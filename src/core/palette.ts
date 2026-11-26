@@ -6,7 +6,9 @@
 import { ACTIVITY_LABELS, type Activity } from './activity'
 import { APP_THEMES, type AppThemeId } from './app-themes'
 import { SHORTCUT_LABELS, type Keymap } from './keymap'
-import type { SidebarLayout, Theme } from './settings'
+import type { Editor, SidebarLayout, Theme } from './settings'
+import { baseName, type EditorTabsMemory } from './editor-tabs'
+import { openInEditorLabel } from './open-in-editor'
 import { MAX_PANES } from './split-tree'
 import { nextWaitingCard } from './waiting'
 import { shellCards } from './workspace-shells'
@@ -90,6 +92,17 @@ export interface TerminalRow {
   activityText?: string
 }
 
+/** An open file's row (#83 D15): its tab, by the file's name, with its workspace. */
+export interface FileRow {
+  kind: 'file'
+  workspaceId: string
+  /** The tab's id, the file's absolute real path. */
+  tabId: string
+  /** The file's name. */
+  title: string
+  workspaceName: string
+}
+
 /** What an action row does when run (D6). */
 export type PaletteAction =
   | { id: 'back' }
@@ -121,6 +134,11 @@ export type PaletteAction =
   | { id: 'workspaceView'; view: WorkspaceView }
   | { id: 'agentSetup' }
   | { id: 'sidebarLayout'; layout: SidebarLayout }
+  | { id: 'saveFile' }
+  | { id: 'closeTab' }
+  | { id: 'markdownMode'; mode: 'preview' | 'edit' }
+  | { id: 'toggleWrap' }
+  | { id: 'openInEditor' }
 
 /** An action row (D6): its label and, when it has one, its shortcut as D7 text. */
 export interface ActionRow {
@@ -130,13 +148,22 @@ export interface ActionRow {
   shortcut?: string
 }
 
-export type PaletteRow = TerminalRow | ActionRow
+export type PaletteRow = TerminalRow | FileRow | ActionRow
 
-/** The palette's three sections, in D2's order. */
+/** The palette's sections, in D2's order, the open files after the shells (#83 D15). */
 export interface PaletteItems {
   cards: TerminalRow[]
   shells: TerminalRow[]
+  files: FileRow[]
   actions: ActionRow[]
+}
+
+/** The file editor's view in front of the active workspace (#83 D15). */
+export interface EditorViewInput {
+  /** A Markdown tab's mode, null for any other file. */
+  markdown: 'preview' | 'edit' | null
+  /** Whether the tab in front shows text, where Find searches. */
+  text: boolean
 }
 
 /** The card or shell open at full size. */
@@ -180,6 +207,12 @@ export interface PaletteInput {
    * `conversation` once it has one to start anew.
    */
   orchestrator?: { conversation: boolean }
+  /** Every workspace's open files (#83 D3), each a row; none when absent. */
+  files?: EditorTabsMemory
+  /** The file editor's view, while it is in front of the active workspace (#83 D15). */
+  editor?: EditorViewInput
+  /** Settings > Editor, which Open in <editor> runs (#83 D5); VS Code when absent. */
+  externalEditor?: Editor
 }
 
 const THEME_LABELS: Record<Theme, string> = { system: 'System', dark: 'Dark', light: 'Light' }
@@ -228,6 +261,19 @@ function shellRows(input: PaletteInput, order: Workspace[]): TerminalRow[] {
   )
 }
 
+function fileRows(input: PaletteInput, order: Workspace[]): FileRow[] {
+  const files = input.files ?? {}
+  return order.flatMap((w) =>
+    (Object.hasOwn(files, w.id) ? files[w.id].tabs : []).map((tab) => ({
+      kind: 'file' as const,
+      workspaceId: w.id,
+      tabId: tab.id,
+      title: baseName(tab.id),
+      workspaceName: w.name
+    }))
+  )
+}
+
 type KeymapAction = Exclude<
   PaletteAction['id'],
   | 'moveCard'
@@ -241,6 +287,11 @@ type KeymapAction = Exclude<
   | 'agentSetup'
   | 'sidebarLayout'
   | 'orchestratorNewConversation'
+  | 'saveFile'
+  | 'closeTab'
+  | 'markdownMode'
+  | 'toggleWrap'
+  | 'openInEditor'
 >
 
 /** A row for an action with a configurable shortcut, labelled as Settings labels it. */
@@ -294,6 +345,43 @@ function viewRows(input: PaletteInput, view: OpenView): ActionRow[] {
   return rows
 }
 
+/**
+ * The file editor's rows (#83 D14, D15): Back, the tab in front's save, close, Markdown mode, Wrap
+ * and Open in <editor>, then Toggle panel and, for text, Find. Save is Mod+S, fixed (D12); Close
+ * tab is Close pane's shortcut.
+ */
+function editorRows(input: PaletteInput, editor: EditorViewInput): ActionRow[] {
+  const { keymap } = input
+  const mod = input.platform === 'darwin' ? 'Cmd' : 'Ctrl'
+  const action = (a: PaletteAction, label: string, shortcut?: string): ActionRow => ({
+    kind: 'action',
+    action: a,
+    label,
+    ...(shortcut !== undefined && { shortcut })
+  })
+  const rows = [
+    keymapRow('back', keymap),
+    action({ id: 'saveFile' }, 'Save file', `${mod}+S`),
+    action({ id: 'closeTab' }, 'Close tab', keymap.closePane)
+  ]
+  if (editor.markdown !== null) {
+    const other = editor.markdown === 'preview' ? 'edit' : 'preview'
+    rows.push(
+      action(
+        { id: 'markdownMode', mode: other },
+        other === 'edit' ? 'Markdown: Edit' : 'Markdown: Preview'
+      )
+    )
+  }
+  rows.push(
+    action({ id: 'toggleWrap' }, 'Toggle wrap'),
+    action({ id: 'openInEditor' }, openInEditorLabel(input.externalEditor ?? 'vscode')),
+    keymapRow('togglePanel', keymap)
+  )
+  if (editor.text) rows.push(keymapRow('find', keymap))
+  return rows
+}
+
 function actionRows(input: PaletteInput): ActionRow[] {
   const { state, keymap, view } = input
   const hasActive = state.workspaces.some((w) => w.id === state.activeId)
@@ -301,9 +389,11 @@ function actionRows(input: PaletteInput): ActionRow[] {
   // goes back to the board as a card does (#68 D3).
   const rows = view
     ? viewRows(input, view)
-    : hasActive
-      ? [keymapRow(input.agentSetup ? 'back' : 'togglePanel', keymap)]
-      : []
+    : hasActive && input.editor
+      ? editorRows(input, input.editor)
+      : hasActive
+        ? [keymapRow(input.agentSetup ? 'back' : 'togglePanel', keymap)]
+        : []
   if (hasActive) {
     rows.push({ kind: 'action', action: { id: 'newCard' }, label: 'New card' })
     rows.push(keymapRow('openShell', keymap))
@@ -383,6 +473,7 @@ export function paletteItems(input: PaletteInput): PaletteItems {
   return {
     cards: cardRows(input, order),
     shells: shellRows(input, order),
+    files: fileRows(input, order),
     actions: actionRows(input)
   }
 }
@@ -415,13 +506,18 @@ export function filterPalette(items: PaletteItems, query: string): PaletteItems 
   return {
     cards: filterRows(items.cards, query, terminal),
     shells: filterRows(items.shells, query, terminal),
+    files: filterRows(items.files, query, (row) => [
+      `${row.title} ${row.workspaceName}`,
+      row.title
+    ]),
     actions: filterRows(items.actions, query, (row) => [row.label, row.label])
   }
 }
 
 /**
- * What `board palette` leaves out (#81 D23): the rows acting on the open card or pane. Card and
- * shell rows are left out too (`board open` covers those).
+ * What `board palette` leaves out (#81 D23): the rows acting on the open card or pane, and the
+ * file editor's view rows (#83 D15). Card, shell and file rows are left out too (`board open`
+ * covers the first two).
  */
 const OPEN_VIEW_ACTIONS: ReadonlySet<PaletteAction['id']> = new Set<PaletteAction['id']>([
   'back',
@@ -438,7 +534,12 @@ const OPEN_VIEW_ACTIONS: ReadonlySet<PaletteAction['id']> = new Set<PaletteActio
   'equalizePanes',
   'renameCard',
   'openInWindow',
-  'editDescription'
+  'editDescription',
+  'saveFile',
+  'closeTab',
+  'markdownMode',
+  'toggleWrap',
+  'openInEditor'
 ])
 
 /** The Orchestrator's `board palette list` (#81 D23): `items`' action rows, in order, but D23's. */

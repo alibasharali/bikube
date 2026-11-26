@@ -3,9 +3,11 @@
  * and at once by the Orchestrator's `board palette` (#81 D23), so both list the same rows.
  */
 import { knownRunState, knownStatus, type CardRunState } from '../../core/card-status'
+import { activeTab, type EditorTabsMemory } from '../../core/editor-tabs'
 import { hasOrchestrator } from '../../core/orchestrator'
 import {
   paletteItems,
+  type EditorViewInput,
   type OpenView,
   type PaletteInput,
   type PaletteItems,
@@ -16,6 +18,7 @@ import { MAIN_PANE, paneIds, type PaneLayout } from '../../core/split-tree'
 import type { WorkspaceState } from '../../core/workspace-store'
 import { waitingQueue } from './attention'
 import { cardPanes, cardTerminals, type XtermScreen } from './card-terminals'
+import { editorFiles } from './editor-files'
 import { currentKeymap, settingsStore } from './settings'
 import { workspaceStore } from './store'
 
@@ -59,10 +62,24 @@ interface PaletteSources {
   state: WorkspaceState
   open: OpenTerminal | null
   agentSetup: boolean
+  /** The workspace whose file editor is in front (#83 D15), or null. */
+  editorFor: string | null
+  /** Every workspace's open files (#83 D3). */
+  files: EditorTabsMemory
   runState: CardRunState
   layout: PaneLayout
-  settings: Pick<Settings, 'theme' | 'appTheme' | 'defaultView' | 'sidebarLayout'>
+  settings: Pick<Settings, 'theme' | 'appTheme' | 'defaultView' | 'sidebarLayout' | 'editor'>
   waiting: readonly string[]
+}
+
+/** The file editor's view as its palette rows read it: the tab in front (#83 D15). */
+function editorView(files: EditorTabsMemory, workspaceId: string | null): EditorViewInput | null {
+  const tab = workspaceId ? activeTab(files, workspaceId) : null
+  if (!workspaceId || !tab) return null
+  return {
+    markdown: editorFiles.mode(workspaceId, tab.id),
+    text: editorFiles.doc(workspaceId, tab.id)?.read.kind === 'text'
+  }
 }
 
 /** The palette's input for the user's current view (#40 D5, D6). */
@@ -70,6 +87,8 @@ export function paletteInput({
   state,
   open,
   agentSetup,
+  editorFor,
+  files,
   runState,
   layout,
   settings,
@@ -77,6 +96,7 @@ export function paletteInput({
 }: PaletteSources): PaletteInput {
   const active = state.workspaces.find((w) => w.id === state.activeId)
   const activeOrchestrator = active && hasOrchestrator(active) ? active : undefined
+  const editor = editorView(files, editorFor)
   return {
     state,
     status: rowStatus,
@@ -89,6 +109,9 @@ export function paletteInput({
     keymap: currentKeymap(),
     platform: window.bikube?.platform ?? '',
     waiting,
+    files,
+    externalEditor: settings.editor,
+    ...(editor && { editor }),
     // The active workspace's Orchestrator, none for an SSH one (#81 D5, D10).
     ...(activeOrchestrator && {
       orchestrator: { conversation: activeOrchestrator.orchestrator !== undefined }
@@ -100,13 +123,19 @@ export function paletteInput({
  * The palette's rows as it would show them now with an empty query, for the view App shows
  * (`board palette`, #81 D23).
  */
-export function currentPaletteItems(open: OpenTerminal | null, agentSetup: boolean): PaletteItems {
+export function currentPaletteItems(
+  open: OpenTerminal | null,
+  agentSetup: boolean,
+  editorFor: string | null
+): PaletteItems {
   const id = open?.cardId ?? ''
   return paletteItems(
     paletteInput({
       state: workspaceStore.getState(),
       open,
       agentSetup,
+      editorFor,
+      files: editorFiles.get(),
       runState: knownRunState(cardTerminals().runState(id)),
       layout: cardPanes().layout(id),
       settings: settingsStore.get(),
